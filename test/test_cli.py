@@ -12,8 +12,10 @@ from loguru import logger as LOG
 
 from infra.did_web_server import DIDWebServer
 from pyscitt import crypto, did
+from pyscitt.cli.governance import CONSTITUTION_MARKER_END, CONSTITUTION_MARKER_START
 from pyscitt.cli.main import main
-from pyscitt.client import Client
+from pyscitt.client import Client, ServiceError
+from pyscitt.governance import ProposalNotAccepted
 
 
 def run(*cmd, **kwargs):
@@ -22,6 +24,8 @@ def run(*cmd, **kwargs):
         flag = k.replace("_", "-")
         if v is True:
             args += [f"--{flag}"]
+        elif v is False:
+            pass
         elif isinstance(v, (str, Path)):
             args += [f"--{flag}={v}"]
         else:
@@ -304,3 +308,160 @@ def test_registration_info(tmp_path: Path):
         "binary_data": binary_data,
         "unicode_data": unicode_data,
     }
+
+
+class TestPatchConstitution:
+    # We make an effort to save and restore the consititution, but if something
+    # goes wrong during these test we may break the service and render it unusable.
+    # Subsequent tests would likely fail if this were the case.
+
+    @pytest.fixture(autouse=True)
+    def original_constitution(self, tmp_path_factory):
+        """
+        Save the original consititution and restore it after the test has run.
+        The fixture provides the core constitution's contents, that is with the
+        SCITT amendments stripped.
+
+        It is marked as autouse, making the save/restore automatic for all tests
+        in this class.
+        """
+        tmp = tmp_path_factory.mktemp("original_constitution")
+        path = tmp / "constitution.js"
+        run("governance", "constitution", output=path, development=True)
+
+        try:
+            core_constitution = path.read_text().split(CONSTITUTION_MARKER_START)[0]
+
+            # Propose a new constitution, truncating anything after the marker.
+            # This provides a consistent starting point for all the tests.
+            core_path = tmp / "core_constitution.js"
+            core_path.write_text(core_constitution)
+            run(
+                "governance",
+                "propose_constitution",
+                constitution_file=core_path,
+                development=True,
+            )
+
+            yield core_constitution
+
+        finally:
+            # Whatever happens in the test, do our best to restore it.
+            run(
+                "governance",
+                "propose_constitution",
+                constitution_file=path,
+                development=True,
+            )
+
+    @pytest.fixture
+    def patch_constitution(self, tmp_path):
+        def f(script, include_markers=True, yes=True):
+            path = tmp_path / "scitt.js"
+            if include_markers:
+                path.write_text(
+                    CONSTITUTION_MARKER_START + script + CONSTITUTION_MARKER_END
+                )
+            else:
+                path.write_text(script)
+
+            run(
+                "governance",
+                "patch_constitution",
+                constitution_file=path,
+                yes=yes,
+                development=True,
+            )
+
+        return f
+
+    def test_patch_constitution(self, tmp_path, patch_constitution):
+        proposal = tmp_path / "proposal.json"
+        proposal.write_text(json.dumps({"actions": [{"name": "my_action"}]}))
+
+        # The my_action action does not exist yet.
+        with pytest.raises(ServiceError, match="my_action: no such action"):
+            run(
+                "governance",
+                "propose_generic",
+                proposal_path=proposal,
+                development=True,
+            )
+
+        patch_constitution(
+            'actions.set("my_action", new Action(function(args) { }, function(args) { }))'
+        )
+
+        run("governance", "propose_generic", proposal_path=proposal, development=True)
+
+        patch_constitution(
+            'actions.set("another_action", new Action(function(args) { }, function(args) { }))'
+        )
+
+        # After patching the constitution again, the my_action action will
+        # fail to run, showing that we actually modified the SCITT constitution,
+        # and didn't just append to it.
+        with pytest.raises(ServiceError, match="my_action: no such action"):
+            run(
+                "governance",
+                "propose_generic",
+                proposal_path=proposal,
+                development=True,
+            )
+
+    def test_invalid_patch(self, patch_constitution):
+        with pytest.raises(RuntimeError, match="does not start with marker"):
+            patch_constitution("", include_markers=False)
+
+        with pytest.raises(RuntimeError, match="does not end with marker"):
+            patch_constitution(CONSTITUTION_MARKER_START, include_markers=False)
+
+        with pytest.raises(RuntimeError, match="does not end with marker"):
+            patch_constitution(
+                CONSTITUTION_MARKER_START + CONSTITUTION_MARKER_END + "// Trailing",
+                include_markers=False,
+            )
+
+    def test_trailing_text(self, original_constitution, patch_constitution, tmp_path):
+        # Write a constitution with the right markers, but with some text after it.
+        # We can't use patch_constitution for this because of its safety rails so
+        # we use the more low-level propose_constitution.
+        tmp_path.joinpath("constitution.js").write_text(
+            original_constitution
+            + CONSTITUTION_MARKER_START
+            + CONSTITUTION_MARKER_END
+            + "// Trailing stuff"
+        )
+
+        run(
+            "governance",
+            "propose_constitution",
+            constitution_file=tmp_path / "constitution.js",
+            development=True,
+        )
+
+        # Allowing this would be bad, as it would risk dropping the trailing text.
+        with pytest.raises(
+            RuntimeError,
+            match="Existing constitution does not end with the right marker",
+        ):
+            patch_constitution("")
+
+    @pytest.mark.skip("Test does not work with sandbox.sh, only cchost")
+    def test_race_condition(self, patch_constitution, monkeypatch):
+        # We want to make two concurrent modifications to the constitution, and
+        # make sure patch_constitution detects this.
+        # The way we do this is by running patch_constitution in interactive mode (yes=False),
+        # but monkeypatch the input() function. The input will always return yes
+        # to proceed, but before doing so it makes it's own change to the constitution
+        def confirm(*args):
+            try:
+                patch_constitution("// Concurrent change")
+            except ProposalNotAccepted:
+                raise RuntimeError("concurrent change not accepted")
+
+            return "yes"
+
+        monkeypatch.setattr("builtins.input", confirm)
+        with pytest.raises(ProposalNotAccepted):
+            patch_constitution("// Main change", yes=False)

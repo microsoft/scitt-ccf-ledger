@@ -25,6 +25,10 @@ class SubmittedProposal:
         return self.state == "Accepted"
 
 
+class ProposalNotAccepted(Exception):
+    ...
+
+
 class GovernanceClient:
     client: "BaseClient"
 
@@ -53,6 +57,7 @@ class GovernanceClient:
             If True and the proposal fails to pass even after a ballot in its favour is cast, an
             exception is raised.
         """
+        assert vote or (not must_pass)
 
         if isinstance(proposal, dict):
             proposal = json.dumps(proposal).encode("ascii")
@@ -63,28 +68,36 @@ class GovernanceClient:
         out = response.json()
         result = SubmittedProposal(out["proposal_id"], out["state"])
         if vote and result.is_open:
-            result = self.vote(result.id)
-
-        if must_pass and not result.is_accepted:
-            raise RuntimeError(f"Proposal {result.id} was not accepted: {result.state}")
+            result = self.vote(result.id, must_pass=must_pass)
 
         return result
 
     def vote(
-        self, proposal_id: str, ballot: Optional[bytes] = None
+        self, proposal_id: str, ballot: Optional[str] = None, must_pass: bool = False
     ) -> SubmittedProposal:
         if ballot is None:
-            ballot = json.dumps(
-                {
-                    "ballot": "export function vote (rawProposal, proposerId){ return true; }"
+            ballot = """
+                export function vote (rawProposal, proposerId) {
+                    return true;
                 }
-            ).encode("ascii")
-
+            """
         response = self.client.post(
-            f"/gov/proposals/{proposal_id}/ballots", content=ballot, sign_request=True
+            f"/gov/proposals/{proposal_id}/ballots",
+            sign_request=True,
+            json={
+                "ballot": ballot,
+            },
         )
+
         out = response.json()
-        return SubmittedProposal(out["proposal_id"], out["state"])
+        result = SubmittedProposal(out["proposal_id"], out["state"])
+
+        if must_pass and not result.is_accepted:
+            raise ProposalNotAccepted(
+                f"Proposal {result.id} was not accepted: {result.state}"
+            )
+
+        return result
 
 
 def set_scitt_configuration_proposal(configuration: dict) -> dict:
@@ -117,6 +130,19 @@ def transition_service_to_open_proposal(next_service_identity: str) -> dict:
             {
                 "name": "transition_service_to_open",
                 "args": {"next_service_identity": next_service_identity},
+            }
+        ]
+    }
+
+
+def set_constitution_proposal(constitution: str):
+    return {
+        "actions": [
+            {
+                "name": "set_constitution",
+                "args": {
+                    "constitution": constitution,
+                },
             }
         ]
     }
