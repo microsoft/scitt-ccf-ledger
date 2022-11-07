@@ -65,4 +65,4 @@ jobs:
           displayName: Run Unit tests
 
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
-        displayName: Run Functional Tests 
+        displayName: Run Functional Tests
