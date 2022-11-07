@@ -1,0 +1,50 @@
+#!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+set -e
+
+if [ "$1" == "-f" ]; then
+  FIX=1
+else
+  FIX=0
+fi
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+ROOT_DIR=$( dirname "$SCRIPT_DIR" )
+pushd "$ROOT_DIR" > /dev/null
+
+echo "-- C/C++ format"
+if [ $FIX -ne 0 ]; then
+  "$SCRIPT_DIR"/check-format.sh -f app
+else
+  "$SCRIPT_DIR"/check-format.sh app
+fi
+
+echo "-- Python dependencies"
+# Virtual Environment w/ dependencies for Python steps
+if [ ! -f "scripts/venv/bin/activate" ]
+then
+  python3.8 -m venv scripts/venv
+fi
+
+source scripts/venv/bin/activate
+pip install --disable-pip-version-check -q -U black isort
+
+echo "-- Python imports"
+if [ $FIX -ne 0 ]; then
+   git ls-files | grep -e '\.py$' | xargs isort
+else
+   git ls-files | grep -e '\.py$' | xargs isort --check
+fi
+
+echo "-- Python format"
+if [ $FIX -ne 0 ]; then
+   git ls-files | grep -e '\.py$' | xargs black
+else
+   git ls-files | grep -e '\.py$' | xargs black --check
+fi
+
+echo "-- Copyright notices headers"
+python3.8 "$SCRIPT_DIR"/notice-check.py

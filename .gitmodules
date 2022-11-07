@@ -1,0 +1,9 @@
+[submodule "3rdparty/attested-fetch"]
+	path = 3rdparty/attested-fetch
+	url = https://github.com/microsoft/attested-fetch.git
+[submodule "app/3rdparty/QCBOR"]
+	path = app/3rdparty/QCBOR
+	url = https://github.com/laurencelundblade/QCBOR
+[submodule "app/3rdparty/t_cose"]
+	path = app/3rdparty/t_cose
+	url = https://github.com/laurencelundblade/t_cose

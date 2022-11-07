@@ -1,0 +1,4 @@
+locust
+httpx
+pytest
+loguru

@@ -1,0 +1,36 @@
+{
+  "enclave": {
+    "file": "/usr/src/app/%ENCLAVE_FILE%",
+    "type": "%ENCLAVE_TYPE%"
+  },
+  "network": {
+    "node_to_node_interface": {
+      "bind_address": "0.0.0.0:8001"
+    },
+    "rpc_interfaces": {
+      "interface_name": {
+        "bind_address": "0.0.0.0:%CCF_PORT%",
+        "published_address": "ccf.dummy.com:12345"
+      }
+    }
+  },
+  "command": {
+    "type": "Start",
+    "service_certificate_file": "/host/service_cert.pem",
+    "start": {
+      "constitution_files": [
+        "/host/constitution/validate.js",
+        "/host/constitution/apply.js",
+        "/host/constitution/resolve.js",
+        "/host/constitution/actions.js",
+        "/host/constitution/scitt.js"
+      ],
+      "members": [
+        {
+          "certificate_file": "/host/member0_cert.pem",
+          "encryption_public_key_file": "/host/member0_enc_pubk.pem"
+        }
+      ]
+    }
+  }
+}

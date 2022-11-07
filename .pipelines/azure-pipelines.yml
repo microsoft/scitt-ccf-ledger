@@ -1,0 +1,141 @@
+trigger:
+  - main
+
+parameters:
+  - name: CCF_VERSION
+    type: string
+    default: 2.0.8
+
+resources:
+  containers:
+    - container: sgx
+      image: mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx
+      options: --device /dev/sgx_enclave:/dev/sgx_enclave --device /dev/sgx_provision:/dev/sgx_provision -v /dev/sgx:/dev/sgx
+
+    - container: ccf
+      image: mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx
+
+variables:
+  # This is used in functional tests to make certain tests mandatory
+  # in CI, but optional during local development. 
+  SCITT_CI: 1
+
+  ACR_REGISTRY: scittoss.azurecr.io
+
+stages:
+  - stage: test
+    jobs:
+      - template: common.yml
+        parameters:
+          Name: test_sgx_no_prefix_tree
+          DisplayName: Test (SGX, no prefix tree)
+          Container: sgx
+          Pool: 1ES-SCITT-SGX
+          Environment:
+            ENCLAVE_TYPE: release
+            ENABLE_PREFIX_TREE: OFF
+
+      - template: common.yml
+        parameters:
+          Name: test_sgx
+          DisplayName: Test (SGX, with prefix tree)
+          Container: sgx
+          Pool: 1ES-SCITT-SGX
+          Environment:
+            ENCLAVE_TYPE: release
+            ENABLE_PREFIX_TREE: ON
+          FunctionalTestArguments: '--enable-prefix-tree'
+
+      - template: common.yml
+        parameters:
+          Name: test_virtual
+          DisplayName: Test (Virtual, with prefix tree)
+          Container: ccf
+          Environment:
+            ENCLAVE_TYPE: virtual
+            ENABLE_PREFIX_TREE: ON
+          FunctionalTestArguments: '--enable-prefix-tree'
+
+      - template: common.yml
+        parameters:
+          Name: test_sgx_docker
+          DisplayName: Test (SGX on Docker, no prefix tree)
+          Container: sgx
+          Pool: 1ES-SCITT-SGX
+          Variant: Docker
+          ImageFilename: scitt-ccf-ledger-release.tar
+          Environment:
+            ENCLAVE_TYPE: release
+            DOCKER: 1
+            DOCKER_IN_DOCKER: 1
+
+      - template: common.yml
+        parameters:
+          Name: test_virtual_docker
+          DisplayName: Test (Virtual on Docker, no prefix tree)
+          Container: ccf
+          Variant: Docker
+          ImageFilename: scitt-ccf-ledger-virtual.tar
+          Environment:
+            ENCLAVE_TYPE: virtual
+            DOCKER: 1
+            DOCKER_IN_DOCKER: 1
+
+      - template: common.yml
+        parameters:
+          Name: test_san
+          DisplayName: Test (Sanitizers, with prefix tree)
+          Container: ccf
+          BuildCCF:
+            Version: ${{ parameters.CCF_VERSION }}
+            CMakeArgs: -DCOMPILE_TARGETS=virtual -DSAN=ON -DCMAKE_BUILD_TYPE=Debug -DLVI_MITIGATIONS=OFF
+          Environment:
+            ENCLAVE_TYPE: virtual
+            CMAKE_BUILD_TYPE: Debug
+            ENABLE_PREFIX_TREE: ON
+          FunctionalTestArguments: '--enable-prefix-tree'
+
+      - job: format
+        displayName: Code Formatting
+        container: ccf
+        steps:
+          - checkout: self
+            submodules: true
+            clean: true
+            lfs: false
+
+          - script: ./scripts/ci-checks.sh
+            displayName: "CI checks"
+  
+  - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
+    - stage: release
+      jobs:
+      - job: docker_push
+        displayName: Publish to ACR
+
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Docker image artifact
+            inputs:
+              buildType: current
+              artifactName: docker-image-test_sgx_docker
+              path: $(Pipeline.Workspace)
+
+          - script: |
+              echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/tags/}"
+            displayName: Get image tag from git tag
+          
+          - script: |
+              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-release.tar
+              docker tag scitt-ccf-ledger-release $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+            displayName: Load Docker image
+
+          - task: Docker@2
+            displayName: Login to ACR
+            inputs:
+              command: login
+              containerRegistry: SCITT Ledger OSS Registry
+
+          - script: |
+              docker push $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+            displayName: Publish to ACR

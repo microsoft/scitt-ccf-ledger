@@ -1,0 +1,68 @@
+parameters:
+  - name: Name
+    type: string
+  - name: DisplayName
+    type: string
+  - name: Container
+    type: string
+  - name: Pool
+    type: string
+    default: ''
+  - name: Environment
+    type: object
+  - name: BuildCCF
+    type: object
+    default: null
+  - name: Variant
+    type: string
+    default: 'Local'
+  - name: ImageFilename
+    type: string
+    default: ''
+  - name: FunctionalTestArguments
+    type: string
+    default: ''
+jobs:
+  - job: ${{ parameters.Name }}
+    displayName: ${{ parameters.DisplayName }}
+    variables: ${{ parameters.Environment }}
+    container: ${{ parameters.Container }}
+    ${{ if parameters.Pool }}:
+      pool: ${{ parameters.Pool }}
+    steps:
+      - checkout: self
+        submodules: true
+        clean: true
+        lfs: false
+
+      - ${{ if parameters.BuildCCF }}:
+        - template: ccf.yml
+          parameters: ${{ parameters.BuildCCF }}
+
+      - ${{ if eq(parameters.Container, 'sgx') }}:
+        - script: |
+            sudo groupadd -fg 119 sgx_prv
+            sudo usermod -a -G sgx_prv $(whoami)
+          displayName: Add sgx_prv group
+
+      - ${{ if eq(parameters.Variant, 'Docker') }}:
+        - script: ./docker/build.sh
+          env:
+            SAVE_IMAGE_PATH: $(Build.ArtifactStagingDirectory)/${{ parameters.ImageFilename }}
+          displayName: Build (Docker)
+
+        - task: PublishPipelineArtifact@1
+          displayName: Publish Docker image artifact
+          inputs:
+            artifactName: docker-image-${{ parameters.Name }}
+            path: $(Build.ArtifactStagingDirectory)/${{ parameters.ImageFilename }}
+
+      - ${{ if eq(parameters.Variant, 'Local') }}:
+        - script: ./build.sh
+          displayName: Build (local)
+
+        - script: ./run_unit_tests.sh
+          displayName: Run Unit tests
+
+      - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
+        displayName: Run Functional Tests

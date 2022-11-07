@@ -1,0 +1,19 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+#pragma once
+
+#include <string>
+
+namespace scitt
+{
+  // clang-format off
+
+  //
+  // @CMAKE_GENERATED_COMMENT@
+  //
+
+  const std::string ATTESTED_FETCH_MRENCLAVE_HEX = "@ATTESTED_FETCH_MRENCLAVE_HEX@";
+
+  // clang-format on
+}
