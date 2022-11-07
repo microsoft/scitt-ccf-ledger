@@ -30,7 +30,7 @@ stages:
           Name: test_sgx_no_prefix_tree
           DisplayName: Test (SGX, no prefix tree)
           Container: sgx
-          Pool: 1ES-SCITT-SGX
+          Pool: 1es-dcv3
           Environment:
             ENCLAVE_TYPE: release
             ENABLE_PREFIX_TREE: OFF
@@ -40,7 +40,7 @@ stages:
           Name: test_sgx
           DisplayName: Test (SGX, with prefix tree)
           Container: sgx
-          Pool: 1ES-SCITT-SGX
+          Pool: 1es-dcv3
           Environment:
             ENCLAVE_TYPE: release
             ENABLE_PREFIX_TREE: ON
@@ -61,7 +61,7 @@ stages:
           Name: test_sgx_docker
           DisplayName: Test (SGX on Docker, no prefix tree)
           Container: sgx
-          Pool: 1ES-SCITT-SGX
+          Pool: 1es-dcv3
           Variant: Docker
           ImageFilename: scitt-ccf-ledger-release.tar
           Environment:
