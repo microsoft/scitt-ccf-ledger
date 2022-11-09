@@ -93,31 +93,33 @@ def propose_constitution(path: Path):
     return GovernanceAction(proposal)
 
 
-CONSTITUTION_MARKER_START = "// ----- SCITT Constitution starts here -----\n"
-CONSTITUTION_MARKER_END = "// ----- SCITT Constitution ends here -----"
+SCITT_CONSTITUTION_MARKER_START = "// ----- SCITT Constitution starts here -----\n"
+SCITT_CONSTITUTION_MARKER_END = "// ----- SCITT Constitution ends here -----"
 
 
-def apply_constitution_patch(constitution: str, patch: str) -> str:
-    if not patch.startswith(CONSTITUTION_MARKER_START):
+def apply_scitt_constitution_update(
+    original_constitution: str, new_scitt_constitution: str
+) -> str:
+    if not new_scitt_constitution.startswith(SCITT_CONSTITUTION_MARKER_START):
         raise RuntimeError(
-            f"New SCITT constitution does not start with marker {repr(CONSTITUTION_MARKER_START)}"
+            f"New SCITT constitution does not start with marker {repr(SCITT_CONSTITUTION_MARKER_START)}"
         )
-    if not patch.rstrip().endswith(CONSTITUTION_MARKER_END):
+    if not new_scitt_constitution.rstrip().endswith(SCITT_CONSTITUTION_MARKER_END):
         raise RuntimeError(
-            f"New SCITT constitution does not end with marker {repr(CONSTITUTION_MARKER_END)}"
+            f"New SCITT constitution does not end with marker {repr(SCITT_CONSTITUTION_MARKER_END)}"
         )
-    if patch.count(CONSTITUTION_MARKER_START) > 1:
+    if new_scitt_constitution.count(SCITT_CONSTITUTION_MARKER_START) > 1:
         raise RuntimeError(f"New SCITT constitution contains multiple start markers")
-    if patch.count(CONSTITUTION_MARKER_END) > 1:
+    if new_scitt_constitution.count(SCITT_CONSTITUTION_MARKER_END) > 1:
         raise RuntimeError(f"New SCITT constitution contains multiple end markers")
 
-    parts = constitution.split(CONSTITUTION_MARKER_START)
+    parts = original_constitution.split(SCITT_CONSTITUTION_MARKER_START)
     if len(parts) == 1:
         print(
             "Did not find any marker in existing constitution. The SCITT constitution will be appended to it"
         )
     elif len(parts) == 2:
-        if not parts[1].rstrip().endswith(CONSTITUTION_MARKER_END):
+        if not parts[1].rstrip().endswith(SCITT_CONSTITUTION_MARKER_END):
             raise RuntimeError(
                 "Existing constitution does not end with the right marker"
             )
@@ -129,13 +131,13 @@ def apply_constitution_patch(constitution: str, patch: str) -> str:
     if not core_constitution.endswith("\n"):
         core_constitution += "\n"
 
-    return core_constitution + patch
+    return core_constitution + new_scitt_constitution
 
 
-def patch_constitution(client: Client, constitution_path: Path, yes: bool):
-    scitt_constitution = constitution_path.read_text()
+def update_scitt_constitution(client: Client, scitt_constitution_path: Path, yes: bool):
+    scitt_constitution = scitt_constitution_path.read_text()
     initial_constitution = client.get_constitution()
-    final_constitution = apply_constitution_patch(
+    final_constitution = apply_scitt_constitution_update(
         initial_constitution, scitt_constitution
     )
 
@@ -158,9 +160,9 @@ def patch_constitution(client: Client, constitution_path: Path, yes: bool):
     proposal = governance.set_constitution_proposal(final_constitution)
 
     # The ballot we submit will only approve the proposal if the constitution
-    # found in the KV still matches the original value we used for the patch.
-    # Otherwise a concurrent change has happened, and we shouldn't be making any
-    # changes.
+    # found in the KV still matches the original value we got before applying the
+    # update. Otherwise a concurrent change has happened, and we shouldn't be making
+    # any changes.
     # Note the use of `repr` to turn the constitution into a valid Javascript
     # string literal, in particular, escaping quotations marks and newlines.
     #
@@ -183,7 +185,7 @@ def activate_member(client: Client):
 
 
 def get_constitution(client: Client, path: Path):
-    path.write_text(client.get("/app/constitution").text)
+    path.write_text(client.get_constitution())
 
 
 def setup_local_development(
@@ -303,7 +305,12 @@ def cli(fn):
     )
     add_client_arguments(p, with_member_auth=True)
     add_proposal_arguments(p)
-    p.add_argument("--constitution-file", type=Path, required=True)
+    p.add_argument(
+        "--constitution-file",
+        type=Path,
+        required=True,
+        help="Path to the new constitution",
+    )
     p.set_defaults(
         func=lambda args: execute_action(
             create_client(args),
@@ -313,17 +320,24 @@ def cli(fn):
     )
 
     p = sub.add_parser(
-        "patch_constitution",
+        "update_scitt_constitution",
         help="Update the SCITT component of the service's constitution",
     )
     add_client_arguments(p, with_member_auth=True)
     add_proposal_arguments(p)
-    p.add_argument("--constitution-file", type=Path, required=True)
+    p.add_argument(
+        "--scitt-constitution-file",
+        type=Path,
+        required=True,
+        help="Path to the scitt.js file which contains the new SCITT component of the constitution",
+    )
     p.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
 
     def func(args):
         client = create_client(args)
-        action = patch_constitution(client, args.constitution_file, args.yes)
+        action = update_scitt_constitution(
+            client, args.scitt_constitution_file, args.yes
+        )
         execute_action(client, action, args)
 
     p.set_defaults(func=func)
