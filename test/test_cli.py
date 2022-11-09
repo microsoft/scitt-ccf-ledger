@@ -459,7 +459,10 @@ class TestUpdateScittConstitution:
         ):
             update_scitt_constitution("")
 
-    @pytest.mark.xfail(reason="Test does not work with sandbox.sh, only cchost", raises=pytest.fail.Exception)
+    @pytest.mark.xfail(
+        reason="Test does not work with sandbox.sh, only cchost",
+        raises=pytest.fail.Exception,
+    )
     def test_race_condition(self, update_scitt_constitution, monkeypatch):
         # We want to make two concurrent modifications to the constitution, and
         # make sure update_scitt_constitution detects this.
