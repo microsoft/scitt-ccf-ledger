@@ -157,7 +157,15 @@ if (BUILD_TESTS)
     GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
     GIT_TAG 8fafda42e732164db58003e542196e94a28481f9
   )
-  FetchContent_MakeAvailable(rapidcheck)
+
+  # We use an explicit GetProperties and Populate rather than the more concise MakeAvailable,
+  # as this allows us to pass EXCLUDE_FROM_ALL to add_subdirectory. This stops RapidCheck
+  # files from being installed with scitt.
+  FetchContent_GetProperties(rapidcheck)
+  if(NOT rapidcheck_POPULATED)
+    FetchContent_Populate(rapidcheck)
+    add_subdirectory(${rapidcheck_SOURCE_DIR} ${rapidcheck_BINARY_DIR} EXCLUDE_FROM_ALL)
+  endif()
 
   # Because CCF libraries are built with libc++,
   # everything else has to be too.
