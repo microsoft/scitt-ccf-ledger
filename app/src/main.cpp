@@ -723,6 +723,24 @@ namespace scitt
         .set_auto_schema<void, Configuration>()
         .install();
 
+      static constexpr auto get_constitution_path = "/constitution";
+      auto get_constitution = [&](EndpointContext& ctx) {
+        auto constitution =
+          ctx.tx.template ro<ccf::Constitution>(ccf::Tables::CONSTITUTION)
+            ->get()
+            .value();
+
+        ctx.rpc_ctx->set_response_body(std::move(constitution));
+        ctx.rpc_ctx->set_response_header(
+          http::headers::CONTENT_TYPE, "application/javascript");
+      };
+      make_endpoint(
+        get_constitution_path,
+        HTTP_GET,
+        error_adapter(get_constitution),
+        no_authn_policy)
+        .install();
+
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);
 #endif

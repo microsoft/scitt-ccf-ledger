@@ -300,6 +300,9 @@ class Client(BaseClient):
         service_id = params.get("serviceId")
         return {service_id: params}
 
+    def get_constitution(self) -> str:
+        return self.get("/app/constitution").text
+
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False, decode=True
     ) -> Submission:

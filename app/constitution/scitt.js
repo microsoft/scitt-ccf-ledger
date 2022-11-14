@@ -1,3 +1,11 @@
+// ----- SCITT Constitution starts here -----
+//
+// The marker above is used by the patch_constitution tool, as a way to split an
+// existing service's constitution in its operator and application halves, and
+// update only the latter.
+//
+// Do not remove it! Do not add anything before it.
+
 actions.set("set_scitt_configuration",
   new Action(
     function(args) {
@@ -24,3 +32,7 @@ actions.set("set_scitt_configuration",
     function(args) {
       ccf.kv["public:ccf.gov.scitt.configuration"].set(getSingletonKvKey(), ccf.jsonCompatibleToBuf(args.configuration));
     }))
+
+// The marker below is used by the patch_constitution tool.
+// Do not remove it! Do not add anything after it.
+// ----- SCITT Constitution ends here -----
