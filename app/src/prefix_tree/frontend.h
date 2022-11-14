@@ -147,29 +147,37 @@ namespace scitt
     {
       auto table = ctx.tx.template rw<PrefixTreeTable>(PREFIX_TREE_TABLE);
 
-      // This get() introduces an important read-dependency on any prior writes
-      // to the prefix tree table, even though we don't ever use its result.
+      auto tree = index->prepare_flush();
+
+      // It's possible for a flush to have been written to the KV, with an
+      // upper bound sequence number that has not been indexed yet. This
+      // happens for example during a leader election, where the old leader may
+      // have flushed the prefix tree, written the tree info to the KV and
+      // replicated these changes to followers. The new leader would see the
+      // up-to-date KV, but its indexer may still be lagging behind the last
+      // flush.
       //
+      // This call to get() also introduces an important read dependency.
       // Without it, the following sequence could happen, where t1 and t2 are
       // two concurrent transactions issuing a flush.
       // - The last tree to have been flushed had upper bound 4.
-      // - t1 calls start_flush(), gets upper bound 7
+      // - t1 calls prepare_flush(), gets upper bound 7
       // - An existing claim with seqno 8 is processed by the indexer
-      // - t2 calls start_flush(), gets upper bound 9
+      // - t2 calls prepare_flush(), gets upper bound 9
       // - t2 gets committed, writing upper bound 9 to the table
       // - t1 gets committed, writing upper bound 7 to the table
-      //
       // Now the in-memory prefix tree includes all claims up to seqno 9, but
       // the ledger claims the tree only goes up to 7.
       //
-      // The read dependency makes sure t1's commit gets rejected, as a
-      // conflicting write has occurred to the table.
-      //
-      // Unfortunately this sequence of events is hard to write tests for until
+      // Unfortunately it is hard to write tests for either scenarios until
       // https://github.com/microsoft/CCF/issues/4263 is fixed.
-      table->get();
-
-      auto tree = index->start_flush();
+      auto previous = table->get();
+      if (previous.has_value() && previous->upper_bound > tree.upper_bound)
+      {
+        throw ServiceUnavailableError(
+          errors::IndexingInProgressRetryLater,
+          "Prefix tree index is still being built.");
+      }
 
       ::timespec time;
       auto result = registry.get_untrusted_host_time_v1(time);

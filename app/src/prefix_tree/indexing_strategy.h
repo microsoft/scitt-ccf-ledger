@@ -91,7 +91,7 @@ namespace scitt
      * digest for this transaction. Only once the transaction is globally
      * committed will the tree be modified.
      */
-    pt::summary<> start_flush() const
+    pt::summary<> prepare_flush() const
     {
       std::shared_lock l1(pending_mutex_);
       std::unique_lock l2(tree_mutex_);
