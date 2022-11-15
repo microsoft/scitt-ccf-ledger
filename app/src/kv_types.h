@@ -77,6 +77,7 @@ namespace scitt
        * human-friendly JOSE names.
        */
       std::optional<std::vector<std::string>> accepted_algorithms;
+      std::optional<std::vector<std::string>> accepted_did_issuers;
 
       std::vector<std::string> get_accepted_algorithms() const
       {
@@ -94,6 +95,22 @@ namespace scitt
             std::string(JOSE_ALGORITHM_PS384),
             std::string(JOSE_ALGORITHM_PS512),
             std::string(JOSE_ALGORITHM_EDDSA)};
+        }
+      }
+      
+      bool is_accepted_issuers(std::string issuer) const
+      {
+        if (!accepted_did_issuers.has_value())
+        {
+          return true;
+        }
+        else if (contains(accepted_did_issuers.value(), issuer))
+        {
+          return true;
+        }
+        else
+        {
+          return false;
         }
       }
 
@@ -120,7 +137,7 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
-  DECLARE_JSON_OPTIONAL_FIELDS(Configuration::Policy, accepted_algorithms);
+  DECLARE_JSON_OPTIONAL_FIELDS(Configuration::Policy, accepted_algorithms, accepted_did_issuers);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
