@@ -6,23 +6,23 @@ parameters:
     type: string
   - name: CMakeArgs
     type: string
+  - name: Platform
+    type: string
 
 steps:
   - script: |
       git clone --single-branch -b ccf-${{ parameters.Version }} https://github.com/microsoft/CCF $(Pipeline.Workspace)/CCF
     displayName: Checkout CCF ${{ parameters.Version }}
 
-  # These are commits from the main branch of CCF to fix ASAN builds, but which
-  # aren't getting backported to 2.x. We can remove them once we upgrade to 3.x.
   - script: |
-      curl -L https://github.com/microsoft/CCF/commit/3c7f7cbaf6b27cff0cae61c02bda4af7fb6fff92.diff | patch -p1
-      curl -L https://github.com/microsoft/CCF/commit/3be424fb8318f130f57feaa2e6b95b4d2defec18.diff | patch -p1
+      curl -L https://github.com/plietar/CCF/commit/728109f495a44e9b54625402ecd09e0017a99d9f.diff | patch -p1
     workingDirectory: $(Pipeline.Workspace)/CCF
     displayName: Patch CCF
 
   - script: |
       cmake -GNinja -B build \
-        -DCMAKE_INSTALL_PREFIX=/opt/ccf \
+        -DCMAKE_INSTALL_PREFIX=/opt/ccf_${{ parameters.Platform }} \
+        -DCOMPILE_TARGET=${{ parameters.Platform }} \
         -DBUILD_TESTS=OFF \
         -DBUILD_UNIT_TESTS=OFF \
         ${{ parameters.CMakeArgs }}
@@ -37,6 +37,6 @@ steps:
     workingDirectory: $(Pipeline.Workspace)/CCF/build
     displayName: Package CCF
 
-  - script: sudo dpkg -i ccf_${{ parameters.Version }}_amd64.deb
+  - script: sudo dpkg -i ccf_${{ parameters.Platform }}_${{ parameters.Version }}_amd64.deb
     workingDirectory: $(Pipeline.Workspace)/CCF/build
     displayName: Install CCF

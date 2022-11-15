@@ -7,15 +7,15 @@
 
 set -ex
 
-ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
+PLATFORM=${PLATFORM:-sgx}
 CCF_DIR=${CCF_DIR:-/opt/ccf}
 # TODO: Don't use /tmp
 SCITT_DIR=/tmp/scitt
 
 CONSTITUTION_DIR=$SCITT_DIR/share/scitt/constitution
 
-if [ "$ENCLAVE_TYPE" != "release" ] && [ "$ENCLAVE_TYPE" != "virtual" ]; then
-    echo "Invalid enclave type: $ENCLAVE_TYPE"
+if [ "$PLATFORM" != "sgx" ] && [ "$PLATFORM" != "virtual" ]; then
+    echo "Invalid platform: $PLATFORM"
     exit 1
 fi
 
@@ -36,5 +36,5 @@ exec python3.8 test/infra/cchost.py \
     --constitution-file $CONSTITUTION_DIR/resolve.js \
     --constitution-file $CONSTITUTION_DIR/actions.js \
     --constitution-file $CONSTITUTION_DIR/scitt.js \
-    --enclave-type "$ENCLAVE_TYPE" \
+    --platform "$PLATFORM" \
     "$@"

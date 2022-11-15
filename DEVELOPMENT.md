@@ -35,15 +35,14 @@ Follow the steps below to setup your development environment:
 
 2. Build scitt-ccf-ledger by running:
     ```sh
-    # release means SGX
-    ENCLAVE_TYPE=<release|virtual> ./build.sh
+    PLATFORM=<sgx|virtual> ./build.sh
     ```
 
 ## Running
 
 1. Start a single-node CCF network running the scitt-ccf-ledger application:
     ```sh
-    ENCLAVE_TYPE=<release|virtual> ./start.sh
+    PLATFORM=<sgx|virtual> ./start.sh
     ```
 
 2. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local

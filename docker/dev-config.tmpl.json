@@ -1,6 +1,7 @@
 {
   "enclave": {
     "file": "/usr/src/app/%ENCLAVE_FILE%",
+    "platform": "%ENCLAVE_PLATFORM%",
     "type": "%ENCLAVE_TYPE%"
   },
   "network": {

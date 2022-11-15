@@ -48,7 +48,7 @@ def match_taskgroup_error(group: aiotools.TaskGroupError, expected: type):
 class CCHost:
     binary: str
     enclave_file: Path
-    enclave_type: str
+    platform: str
     workspace: Path
     constitution: List[Path]
 
@@ -87,7 +87,7 @@ class CCHost:
     def __init__(
         self,
         binary: str,
-        enclave_type: str,
+        platform: str,
         enclave_file: Path,
         workspace: Path,
         constitution: List[Path],
@@ -97,7 +97,7 @@ class CCHost:
         self.binary = binary
         self.listen_rpc_port = rpc_port
         self.listen_node_port = node_port
-        self.enclave_type = enclave_type
+        self.platform = platform
 
         # Make the path absolutes, so they keep working even after we change
         # working directory when running cchost.
@@ -320,15 +320,15 @@ class CCHost:
     def _populate_workspace(self):
         service_cert = self.workspace / "service_cert.pem"
 
-        ENCLAVE_TYPES = {
-            "virtual": "Virtual",
-            "release": "Release",
+        PLATFORMS = {
+            "sgx": {"platform": "SGX", "type": "Release"},
+            "virtual": {"platform": "Virtual", "type": "Virtual"},
         }
 
         config = {
             "enclave": {
                 "file": str(self.enclave_file),
-                "type": ENCLAVE_TYPES[self.enclave_type],
+                **PLATFORMS[self.platform],
             },
             "network": {
                 "rpc_interfaces": {
@@ -367,19 +367,21 @@ class CCHost:
             json.dump(config, f)
 
 
-def get_enclave_path(enclave_type, enclave_package) -> Path:
+def get_enclave_path(platform: str, enclave_package) -> Path:
     ENCLAVE_SUFFIX = {
         "virtual": "virtual.so",
-        "release": "enclave.so.signed",
+        "sgx": "enclave.so.signed",
     }
-    return Path(f"{enclave_package}.{ENCLAVE_SUFFIX[enclave_type]}")
+    return Path(f"{enclave_package}.{ENCLAVE_SUFFIX[platform]}")
+
+
+def get_default_cchost_path(platform: str) -> Path:
+    return Path(f"/opt/ccf_{platform}/bin/cchost")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cchost", default="/opt/ccf/bin/cchost", help="Path to the cchost binary"
-    )
+    parser.add_argument("--cchost", help="Path to the cchost binary")
     parser.add_argument(
         "--port",
         type=int,
@@ -393,9 +395,9 @@ def main():
         help="Port on which cchost will listen for node to node communication. By default, a random port is chosen.",
     )
     parser.add_argument(
-        "--enclave-type",
-        "-e",
+        "--platform",
         default="virtual",
+        choices=["sgx", "virtual"],
         help="Type of enclave used when starting cchost",
     )
     parser.add_argument(
@@ -409,6 +411,7 @@ def main():
         action="append",
         type=Path,
         help="Path to the initial constitution. May be specified multiple times",
+        default=[],
     )
     parser.add_argument(
         "--workspace",
@@ -422,10 +425,11 @@ def main():
         shutil.rmtree(args.workspace)
     args.workspace.mkdir()
 
-    enclave_file = get_enclave_path(args.enclave_type, args.package)
+    enclave_file = get_enclave_path(args.platform, args.package)
+    binary = args.cchost or get_default_cchost_path(args.platform)
     with CCHost(
-        args.cchost,
-        args.enclave_type,
+        binary,
+        args.platform,
         enclave_file,
         workspace=args.workspace,
         constitution=args.constitution_file,
