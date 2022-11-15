@@ -141,3 +141,39 @@ def test_accepted_algorithms(tmp_path: Path):
         submit(alg="ES256", kty="ec", ec_curve="P-256")
         submit(alg="ES384", kty="ec", ec_curve="P-384")
         submit(alg="PS256", kty="rsa")
+
+
+def test_accepted_did_issuers(tmp_path: Path):
+    def not_allowed(f):
+        with pytest.raises(ServiceError, match="InvalidInput: Unsupported did issuer in protected header"):
+            f()
+
+    with SCITTFixture(tmp_path) as fixture:
+
+        def submit(**kwargs):
+            """Sign and submit the claims with a new identity"""
+            identity = fixture.did_web_server.create_identity(**kwargs)
+            claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+            fixture.client.submit_claim(claims)
+
+        # Start with a configuration with no accepted issuers.
+        # The service should reject anything we submit to it.
+        fixture.configure_service({"policy": {"accepted_did_issuers": []}})
+        not_allowed(lambda: submit(alg="ES256", kty="ec", ec_curve="P-256"))
+
+        # Add just one issuers to the policy. Claims signed with this
+        # issuers are accepted.
+        identity = fixture.did_web_server.create_identity(alg="ES256", kty="ec", ec_curve="P-256")
+        claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+        fixture.configure_service({"policy": {"accepted_did_issuers": [identity.issuer]}})
+        fixture.client.submit_claim(claims)
+
+        # Add just one issuers to the policy. Claims signed not with this
+        # issuers are rejected.
+        fixture.configure_service({"policy": {"accepted_did_issuers": ["else"]}})
+        not_allowed(lambda: submit(alg="ES256", kty="ec", ec_curve="P-256"))
+
+        # If no accepted_issuers are defined in the policy, any issuers
+        # is accepted.
+        fixture.configure_service({"policy": {}})
+        submit(alg="ES256", kty="ec", ec_curve="P-256")
