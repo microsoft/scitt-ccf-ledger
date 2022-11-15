@@ -77,7 +77,6 @@ namespace scitt
        * human-friendly JOSE names.
        */
       std::optional<std::vector<std::string>> accepted_algorithms;
-      std::optional<std::vector<std::string>> accepted_did_issuers;
 
       std::vector<std::string> get_accepted_algorithms() const
       {
@@ -95,22 +94,6 @@ namespace scitt
             std::string(JOSE_ALGORITHM_PS384),
             std::string(JOSE_ALGORITHM_PS512),
             std::string(JOSE_ALGORITHM_EDDSA)};
-        }
-      }
-
-      bool is_accepted_issuers(std::string issuer) const
-      {
-        if (!accepted_did_issuers.has_value())
-        {
-          return true;
-        }
-        else if (contains(accepted_did_issuers.value(), issuer))
-        {
-          return true;
-        }
-        else
-        {
-          return false;
         }
       }
 

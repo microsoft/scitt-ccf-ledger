@@ -71,11 +71,6 @@ namespace scitt::verifier
       auto kid = phdr.kid;
       auto x5chain = phdr.x5chain;
 
-      if(issuer.has_value() && !configuration.policy.is_accepted_issuers(issuer.value()))
-      {
-        throw VerificationError("Unsupported did issuer in protected header");
-      }
-      
       PublicKey key;
       if (x5chain.has_value())
       {
