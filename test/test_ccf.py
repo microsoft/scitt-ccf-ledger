@@ -161,7 +161,7 @@ def test_accepted_did_issuers(tmp_path: Path):
         fixture.configure_service({"policy": {"accepted_did_issuers": []}})
         not_allowed(lambda: submit(alg="ES256", kty="ec", ec_curve="P-256"))
 
-        # Add just one issuers to the policy. Claims signed with this
+        # Add just one issuer to the policy. Claims signed with this
         # issuers are accepted.
         identity = fixture.did_web_server.create_identity(alg="ES256", kty="ec", ec_curve="P-256")
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
