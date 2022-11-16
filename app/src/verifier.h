@@ -70,7 +70,9 @@ namespace scitt::verifier
       auto issuer = phdr.issuer;
       auto kid = phdr.kid;
       auto x5chain = phdr.x5chain;
-      if(issuer.has_value() && !configuration.policy.is_accepted_issuers(issuer.value()))
+      if (
+        issuer.has_value() &&
+        !configuration.policy.is_accepted_issuer(issuer.value()))
       {
         throw VerificationError("Unsupported did issuer in protected header");
       }

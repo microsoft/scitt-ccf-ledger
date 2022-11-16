@@ -73,11 +73,14 @@ namespace scitt
        * List of accepted COSE signature algorithms when verifying signatures.
        * The names are case sensitive.
        *
+       * List of accepted DID issuer when verifying signatures.
+       * The names are case sensitive.
+       *
        * Rather than the COSE integer algorithm IDs, we use the equivalent
        * human-friendly JOSE names.
        */
       std::optional<std::vector<std::string>> accepted_algorithms;
-      std::optional<std::vector<std::string>> accepted_did_issuers;
+      std::optional<std::vector<std::string>> accepted_did_issuer;
 
       std::vector<std::string> get_accepted_algorithms() const
       {
@@ -97,21 +100,11 @@ namespace scitt
             std::string(JOSE_ALGORITHM_EDDSA)};
         }
       }
-      
-      bool is_accepted_issuer(std::string issuer) const
+
+      bool is_accepted_issuer(std::string_view issuer) const
       {
-        if (!accepted_did_issuers.has_value())
-        {
-          return true;
-        }
-        else if (contains(accepted_did_issuers.value(), issuer))
-        {
-          return true;
-        }
-        else
-        {
-          return false;
-        }
+        return !accepted_did_issuer.has_value() ||
+          contains(accepted_did_issuer.value(), issuer);
       }
 
       bool operator==(const Policy& other) const = default;
@@ -137,7 +130,8 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
-  DECLARE_JSON_OPTIONAL_FIELDS(Configuration::Policy, accepted_algorithms, accepted_did_issuers);
+  DECLARE_JSON_OPTIONAL_FIELDS(
+    Configuration::Policy, accepted_algorithms, accepted_did_issuer);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
