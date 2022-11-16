@@ -9,6 +9,7 @@ from infra.fixtures import SCITTFixture
 from pyscitt import crypto
 from pyscitt.client import ServiceError
 
+
 def test_accepted_algorithms(tmp_path: Path):
     def not_allowed(f):
         with pytest.raises(ServiceError, match="InvalidInput: Unsupported algorithm"):
@@ -46,7 +47,10 @@ def test_accepted_algorithms(tmp_path: Path):
 
 def test_accepted_did_issuers(tmp_path: Path):
     def not_allowed(f):
-        with pytest.raises(ServiceError, match="InvalidInput: Unsupported did issuer in protected header"):
+        with pytest.raises(
+            ServiceError,
+            match="InvalidInput: Unsupported did issuer in protected header",
+        ):
             f()
 
     with SCITTFixture(tmp_path) as fixture:
@@ -72,10 +76,14 @@ def test_accepted_did_issuers(tmp_path: Path):
 
         # Add just one issuer to the policy. Claims signed with this
         # issuer are accepted.
-        fixture.configure_service({"policy": {"accepted_did_issuer": [identity.issuer]}})
+        fixture.configure_service(
+            {"policy": {"accepted_did_issuer": [identity.issuer]}}
+        )
         fixture.client.submit_claim(claims)
 
         # Add multiple issuers to the policy. Claims signed with this
         # issuer are accepted.
-        fixture.configure_service({"policy": {"accepted_did_issuer": [identity.issuer, "else"]}})
+        fixture.configure_service(
+            {"policy": {"accepted_did_issuer": [identity.issuer, "else"]}}
+        )
         fixture.client.submit_claim(claims)
