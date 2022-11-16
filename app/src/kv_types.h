@@ -98,7 +98,7 @@ namespace scitt
         }
       }
       
-      bool is_accepted_issuers(std::string issuer) const
+      bool is_accepted_issuer(std::string issuer) const
       {
         if (!accepted_did_issuers.has_value())
         {
