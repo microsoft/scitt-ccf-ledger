@@ -74,7 +74,7 @@ namespace scitt::verifier
         issuer.has_value() &&
         !configuration.policy.is_accepted_issuer(issuer.value()))
       {
-        throw VerificationError("Unsupported did issuer in protected header");
+        throw VerificationError("Unsupported DID issuer in protected header");
       }
 
       PublicKey key;
