@@ -72,7 +72,6 @@ namespace scitt
       /**
        * List of accepted COSE signature algorithms when verifying signatures.
        * The names are case sensitive.
-       *
        * Rather than the COSE integer algorithm IDs, we use the equivalent
        * human-friendly JOSE names.
        */
