@@ -106,38 +106,3 @@ def test_default_did_port(tmp_path: Path):
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
         receipt = fixture.client.submit_claim(claims, decode=False).receipt
         crypto.verify_cose_with_receipt(claims, fixture.trust_store, receipt)
-
-
-def test_accepted_algorithms(tmp_path: Path):
-    def not_allowed(f):
-        with pytest.raises(ServiceError, match="InvalidInput: Unsupported algorithm"):
-            f()
-
-    with SCITTFixture(tmp_path) as fixture:
-
-        def submit(**kwargs):
-            """Sign and submit the claims with a new identity"""
-            identity = fixture.did_web_server.create_identity(**kwargs)
-            claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-            fixture.client.submit_claim(claims)
-
-        # Start with a configuration with no accepted algorithms.
-        # The service should reject anything we submit to it.
-        fixture.configure_service({"policy": {"accepted_algorithms": []}})
-        not_allowed(lambda: submit(alg="ES256", kty="ec", ec_curve="P-256"))
-        not_allowed(lambda: submit(alg="ES384", kty="ec", ec_curve="P-384"))
-        not_allowed(lambda: submit(alg="PS256", kty="rsa"))
-
-        # Add just one algorithm to the policy. Claims signed with this
-        # algorithm are accepted but not the others.
-        fixture.configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
-        submit(alg="ES256", kty="ec", ec_curve="P-256")
-        not_allowed(lambda: submit(alg="ES384", kty="ec", ec_curve="P-384"))
-        not_allowed(lambda: submit(alg="PS256", kty="rsa"))
-
-        # If no accepted_algorithms are defined in the policy, any algorithm
-        # is accepted.
-        fixture.configure_service({"policy": {}})
-        submit(alg="ES256", kty="ec", ec_curve="P-256")
-        submit(alg="ES384", kty="ec", ec_curve="P-384")
-        submit(alg="PS256", kty="rsa")

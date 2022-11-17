@@ -70,6 +70,12 @@ namespace scitt::verifier
       auto issuer = phdr.issuer;
       auto kid = phdr.kid;
       auto x5chain = phdr.x5chain;
+      if (
+        issuer.has_value() &&
+        !configuration.policy.is_accepted_issuer(issuer.value()))
+      {
+        throw VerificationError("Unsupported DID issuer in protected header");
+      }
 
       PublicKey key;
       if (x5chain.has_value())
