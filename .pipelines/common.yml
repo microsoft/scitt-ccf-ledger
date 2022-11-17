@@ -41,7 +41,7 @@ jobs:
 
       - ${{ if eq(parameters.Container, 'sgx') }}:
         - script: |
-            sudo groupadd -fg 119 sgx_prv
+            sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv
             sudo usermod -a -G sgx_prv $(whoami)
           displayName: Add sgx_prv group
 
