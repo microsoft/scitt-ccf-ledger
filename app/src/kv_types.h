@@ -72,14 +72,15 @@ namespace scitt
       /**
        * List of accepted COSE signature algorithms when verifying signatures.
        * The names are case sensitive.
-       *
-       * List of accepted DID issuer when verifying signatures.
-       * The names are case sensitive.
-       *
        * Rather than the COSE integer algorithm IDs, we use the equivalent
        * human-friendly JOSE names.
        */
       std::optional<std::vector<std::string>> accepted_algorithms;
+
+      /**
+       * List of accepted DID issuer when verifying signatures.
+       * The names are case sensitive.
+       */
       std::optional<std::vector<std::string>> accepted_did_issuer;
 
       std::vector<std::string> get_accepted_algorithms() const

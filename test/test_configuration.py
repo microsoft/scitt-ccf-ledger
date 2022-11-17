@@ -49,13 +49,11 @@ def test_accepted_did_issuers(tmp_path: Path):
     def not_allowed(f):
         with pytest.raises(
             ServiceError,
-            match="InvalidInput: Unsupported did issuer in protected header",
+            match="InvalidInput: Unsupported DID issuer in protected header",
         ):
             f()
 
     with SCITTFixture(tmp_path) as fixture:
-
-        """Sign and submit the claims with a new identity"""
         identity = fixture.did_web_server.create_identity()
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
