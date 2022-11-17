@@ -59,12 +59,12 @@ def test_accepted_did_issuers(tmp_path: Path):
 
         # Start with a configuration with no accepted issuers.
         # The service should reject anything we submit to it.
-        fixture.configure_service({"policy": {"accepted_did_issuer": []}})
+        fixture.configure_service({"policy": {"accepted_did_issuers": []}})
         not_allowed(lambda: fixture.client.submit_claim(claims))
 
         # Add just one issuer to the policy. Claims signed not with this
         # issuer are rejected.
-        fixture.configure_service({"policy": {"accepted_did_issuer": ["else"]}})
+        fixture.configure_service({"policy": {"accepted_did_issuers": ["else"]}})
         not_allowed(lambda: fixture.client.submit_claim(claims))
 
         # If no accepted_issuers are defined in the policy, any issuers
@@ -75,13 +75,13 @@ def test_accepted_did_issuers(tmp_path: Path):
         # Add just one issuer to the policy. Claims signed with this
         # issuer are accepted.
         fixture.configure_service(
-            {"policy": {"accepted_did_issuer": [identity.issuer]}}
+            {"policy": {"accepted_did_issuers": [identity.issuer]}}
         )
         fixture.client.submit_claim(claims)
 
         # Add multiple issuers to the policy. Claims signed with this
         # issuer are accepted.
         fixture.configure_service(
-            {"policy": {"accepted_did_issuer": [identity.issuer, "else"]}}
+            {"policy": {"accepted_did_issuers": [identity.issuer, "else"]}}
         )
         fixture.client.submit_claim(claims)

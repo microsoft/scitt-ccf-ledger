@@ -81,7 +81,7 @@ namespace scitt
        * List of accepted DID issuer when verifying signatures.
        * The names are case sensitive.
        */
-      std::optional<std::vector<std::string>> accepted_did_issuer;
+      std::optional<std::vector<std::string>> accepted_did_issuers;
 
       std::vector<std::string> get_accepted_algorithms() const
       {
@@ -104,8 +104,8 @@ namespace scitt
 
       bool is_accepted_issuer(std::string_view issuer) const
       {
-        return !accepted_did_issuer.has_value() ||
-          contains(accepted_did_issuer.value(), issuer);
+        return !accepted_did_issuers.has_value() ||
+          contains(accepted_did_issuers.value(), issuer);
       }
 
       bool operator==(const Policy& other) const = default;
@@ -132,7 +132,7 @@ namespace scitt
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Policy, accepted_algorithms, accepted_did_issuer);
+    Configuration::Policy, accepted_algorithms, accepted_did_issuers);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
