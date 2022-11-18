@@ -261,7 +261,7 @@ def test_adhoc_signer(run, tmp_path: Path):
     )
 
 
-@pytest.mark.prefix_tree
+@pytest.mark.needs_prefix_tree
 def test_prefix_tree(run, tmp_path: Path):
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 
@@ -555,10 +555,11 @@ class TestUpdateScittConstitution:
         ):
             update_scitt_constitution("")
 
-    @pytest.mark.xfail(
-        reason="Test does not work with sandbox.sh, only cchost",
-        raises=pytest.fail.Exception,
-    )
+    # sandbox.sh uses a special consitution that accepts proposals without even
+    # waiting for a single vote, so we have no way of detecting this race
+    # condition. The test is therefore disabled when not running with a managed
+    # cchost.
+    @pytest.mark.needs_cchost
     def test_race_condition(self, update_scitt_constitution, monkeypatch):
         # We want to make two concurrent modifications to the constitution, and
         # make sure update_scitt_constitution detects this.

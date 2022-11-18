@@ -7,7 +7,7 @@ from pathlib import Path
 from ..client import Client
 
 CCF_URL_DEFAULT = "https://127.0.0.1:8000"
-CCF_SANDBOX_WORKSPACE = Path("workspace") / "sandbox_common"
+CCF_SANDBOX_WORKSPACE = Path("workspace")
 CCF_MEMBER_KEY_DEFAULT = CCF_SANDBOX_WORKSPACE / "member0_privk.pem"
 CCF_MEMBER_CERT_DEFAULT = CCF_SANDBOX_WORKSPACE / "member0_cert.pem"
 

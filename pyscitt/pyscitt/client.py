@@ -183,6 +183,10 @@ class BaseClient:
             else:
                 kwargs["auth"] = self.member_http_sig
 
+            # Content-length is necessary for signing, even on GET requests.
+            if method == "GET":
+                kwargs.setdefault("headers", {}).setdefault("Content-Length", "0")
+
         default_wait_time = 2
         timeout = 30
         deadline = time.monotonic() + timeout
@@ -366,6 +370,12 @@ class Client(BaseClient):
                 yield tx
 
             link = body.get("nextLink")
+
+    def wait_for_network_open(self):
+        self.get(
+            "/node/network",
+            retry_on=[lambda r: r.is_success and r.json()["service_status"] != "Open"],
+        )
 
     @property
     def governance(self):

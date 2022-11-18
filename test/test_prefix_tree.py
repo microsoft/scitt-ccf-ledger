@@ -8,7 +8,7 @@ from pyscitt import crypto
 from pyscitt.client import ServiceError
 
 
-@pytest.mark.prefix_tree
+@pytest.mark.needs_prefix_tree
 def test_prefix_tree(did_web, client):
     feed = "hello"
     identity = did_web.create_identity()
@@ -77,7 +77,7 @@ def test_prefix_tree(did_web, client):
     reason="Test requires an isolated empty service, which the infrastructure doesn't support yet",
     raises=pytest.fail.Exception,
 )
-@pytest.mark.prefix_tree
+@pytest.mark.needs_prefix_tree
 def test_empty_prefix_tree(client):
     """Before any flush has been committed, fetching the prefix tree receipt returns a graceful error."""
 

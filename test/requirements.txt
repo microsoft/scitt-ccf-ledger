@@ -2,3 +2,4 @@ locust
 httpx
 pytest
 loguru
+aiotools
