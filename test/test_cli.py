@@ -21,35 +21,40 @@ from pyscitt.client import Client, ServiceError
 from pyscitt.governance import ProposalNotAccepted
 
 
-def run(*cmd, **kwargs):
-    args = [str(c) for c in cmd]
-    for k, v in kwargs.items():
-        flag = k.replace("_", "-")
-        if v is True:
-            args += [f"--{flag}"]
-        elif v is False:
-            pass
-        elif isinstance(v, (str, Path)):
-            args += [f"--{flag}={v}"]
-        else:
-            raise TypeError(f"Invalid value: {v}")
+@pytest.fixture
+def run(request):
+    def f(*cmd, _with_service_url=False, _with_member_auth=False, **kwargs):
+        if _with_service_url:
+            kwargs["url"] = request.getfixturevalue("service_url")
+            kwargs["development"] = True
 
-    LOG.info(shlex.join(["scitt"] + args))
-    main(args)
+        if _with_member_auth:
+            paths = request.getfixturevalue("member_auth_path")
+            kwargs["member_cert"] = paths[0]
+            kwargs["member_key"] = paths[1]
+
+        args = [str(c) for c in cmd]
+        for k, v in kwargs.items():
+            flag = k.replace("_", "-")
+            if v is True:
+                args += [f"--{flag}"]
+            elif v is False:
+                pass
+            elif isinstance(v, (str, Path)):
+                args += [f"--{flag}={v}"]
+            else:
+                raise TypeError(f"Invalid value: {v}")
+
+        LOG.info(shlex.join(["scitt"] + args))
+        main(args)
+
+    return f
 
 
-def test_smoke_test(tmp_path: Path):
-    url = os.environ.get("CCF_URL", "https://127.0.0.1:8000")
-    server_args = {
-        "url": url,
-        "development": True,
-    }
-
+def test_smoke_test(run, client, tmp_path: Path):
     trust_store = tmp_path / "store"
     trust_store.mkdir()
-    (trust_store / "service.json").write_text(
-        json.dumps(Client(**server_args).get_parameters())
-    )
+    (trust_store / "service.json").write_text(json.dumps(client.get_parameters()))
 
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 
@@ -64,7 +69,8 @@ def test_smoke_test(tmp_path: Path):
             "governance",
             "propose_configuration",
             configuration=tmp_path / "config.json",
-            **server_args,
+            _with_service_url=True,
+            _with_member_auth=True,
         )
 
         run(
@@ -72,9 +78,11 @@ def test_smoke_test(tmp_path: Path):
             "propose_ca_certs",
             name="did_web_tls_roots",
             ca_certs=tmp_path / "bundle.pem",
-            **server_args,
+            _with_service_url=True,
+            _with_member_auth=True,
         )
 
+        print(server.port)
         run(
             "create-did-web",
             url=f"https://localhost:{server.port}/me",
@@ -91,13 +99,18 @@ def test_smoke_test(tmp_path: Path):
             out=tmp_path / "claims.cose",
         )
 
-        run("submit", tmp_path / "claims.cose", skip_confirmation=True, **server_args)
+        run(
+            "submit",
+            tmp_path / "claims.cose",
+            skip_confirmation=True,
+            _with_service_url=True,
+        )
 
         run(
             "submit",
             tmp_path / "claims.cose",
             receipt=tmp_path / "receipt.cose",
-            **server_args,
+            _with_service_url=True,
         )
 
         run("pretty-receipt", tmp_path / "receipt.cose")
@@ -123,9 +136,7 @@ def test_smoke_test(tmp_path: Path):
         )
 
 
-def test_local_development(tmp_path: Path):
-    url = os.environ.get("CCF_URL", "https://127.0.0.1:8000")
-
+def test_local_development(run, service_url, tmp_path: Path):
     # This is not particularly useful to run tests against, since it uses Mozilla CA roots, meaning
     # we can't issue any DID web that would validate, but at least we check that the command doesn't
     # fail.
@@ -135,12 +146,13 @@ def test_local_development(tmp_path: Path):
     run(
         "governance",
         "local_development",
-        url=url,
         service_trust_store=tmp_path / "trust_store",
+        url=service_url,
+        _with_member_auth=True,
     )
 
 
-def test_create_ssh_did_web(tmp_path: Path):
+def test_create_ssh_did_web(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair(2048)
     ssh_private_key = crypto.private_key_pem_to_ssh(private_key)
     ssh_public_key = crypto.pub_key_pem_to_ssh(public_key)
@@ -180,7 +192,7 @@ def test_create_ssh_did_web(tmp_path: Path):
     )
 
 
-def test_adhoc_signer(tmp_path: Path):
+def test_adhoc_signer(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair(2048)
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "key_pub.pem").write_text(public_key)
@@ -211,13 +223,7 @@ def test_adhoc_signer(tmp_path: Path):
 
 
 @pytest.mark.prefix_tree
-def test_prefix_tree(tmp_path: Path):
-    url = os.environ.get("CCF_URL", "https://127.0.0.1:8000")
-    server_args = {
-        "url": url,
-        "development": True,
-    }
-
+def test_prefix_tree(run, tmp_path: Path):
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 
     with DIDWebServer(tmp_path) as server:
@@ -225,9 +231,10 @@ def test_prefix_tree(tmp_path: Path):
         run(
             "governance",
             "local_development",
-            url=url,
             service_trust_store=tmp_path / "trust_store",
             did_web_ca_certs=tmp_path / "bundle.pem",
+            _with_service_url=True,
+            _with_member_auth=True,
         )
 
         run(
@@ -247,9 +254,13 @@ def test_prefix_tree(tmp_path: Path):
             out=tmp_path / "claims.cose",
         )
 
-        run("submit", tmp_path / "claims.cose", **server_args)
+        run(
+            "submit",
+            tmp_path / "claims.cose",
+            _with_service_url=True,
+        )
 
-        run("prefix-tree", "flush", **server_args)
+        run("prefix-tree", "flush", _with_service_url=True)
 
         # We can either fetch the read receipt by issuer and feed, ...
         run(
@@ -258,7 +269,7 @@ def test_prefix_tree(tmp_path: Path):
             issuer=did.format_did_web("localhost", server.port, "me"),
             feed="hello",
             output=tmp_path / "read_receipt.cbor",
-            **server_args,
+            _with_service_url=True,
         )
 
         # or we can fetch it based on our signed claim.
@@ -268,11 +279,11 @@ def test_prefix_tree(tmp_path: Path):
             claim=tmp_path / "claims.cose",
             service_trust_store=tmp_path / "trust_store",
             output=tmp_path / "read_receipt.cbor",
-            **server_args,
+            _with_service_url=True,
         )
 
 
-def test_registration_info(tmp_path: Path):
+def test_registration_info(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair(2048)
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
@@ -319,7 +330,7 @@ class TestUpdateScittConstitution:
     # Subsequent tests would likely fail if this were the case.
 
     @pytest.fixture(autouse=True)
-    def original_constitution(self, tmp_path_factory):
+    def original_constitution(self, run, tmp_path_factory):
         """
         Save the original constitution and restore it after the test has run.
         The fixture provides the core constitution's contents, that is with the
@@ -330,7 +341,7 @@ class TestUpdateScittConstitution:
         """
         tmp = tmp_path_factory.mktemp("original_constitution")
         path = tmp / "constitution.js"
-        run("governance", "constitution", output=path, development=True)
+        run("governance", "constitution", output=path, _with_service_url=True)
 
         try:
             parts = path.read_text().split(SCITT_CONSTITUTION_MARKER_START)
@@ -344,7 +355,8 @@ class TestUpdateScittConstitution:
                 "governance",
                 "propose_constitution",
                 constitution_file=core_path,
-                development=True,
+                _with_service_url=True,
+                _with_member_auth=True,
             )
 
             yield core_constitution
@@ -355,11 +367,12 @@ class TestUpdateScittConstitution:
                 "governance",
                 "propose_constitution",
                 constitution_file=path,
-                development=True,
+                _with_service_url=True,
+                _with_member_auth=True,
             )
 
     @pytest.fixture
-    def update_scitt_constitution(self, tmp_path):
+    def update_scitt_constitution(self, run, tmp_path):
         def f(script, include_markers=True, yes=True):
             path = tmp_path / "scitt.js"
             if include_markers:
@@ -376,12 +389,13 @@ class TestUpdateScittConstitution:
                 "update_scitt_constitution",
                 scitt_constitution_file=path,
                 yes=yes,
-                development=True,
+                _with_service_url=True,
+                _with_member_auth=True,
             )
 
         return f
 
-    def test_update_scitt_constitution(self, tmp_path, update_scitt_constitution):
+    def test_update_scitt_constitution(self, run, tmp_path, update_scitt_constitution):
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"actions": [{"name": "my_action"}]}))
 
@@ -391,14 +405,21 @@ class TestUpdateScittConstitution:
                 "governance",
                 "propose_generic",
                 proposal_path=proposal,
-                development=True,
+                _with_service_url=True,
+                _with_member_auth=True,
             )
 
         update_scitt_constitution(
             'actions.set("my_action", new Action(function(args) { }, function(args) { }))'
         )
 
-        run("governance", "propose_generic", proposal_path=proposal, development=True)
+        run(
+            "governance",
+            "propose_generic",
+            proposal_path=proposal,
+            _with_service_url=True,
+            _with_member_auth=True,
+        )
 
         update_scitt_constitution(
             'actions.set("another_action", new Action(function(args) { }, function(args) { }))'
@@ -412,7 +433,8 @@ class TestUpdateScittConstitution:
                 "governance",
                 "propose_generic",
                 proposal_path=proposal,
-                development=True,
+                _with_service_url=True,
+                _with_member_auth=True,
             )
 
     def test_invalid_constitution(self, update_scitt_constitution):
@@ -433,7 +455,7 @@ class TestUpdateScittConstitution:
             )
 
     def test_trailing_text(
-        self, original_constitution, update_scitt_constitution, tmp_path
+        self, run, original_constitution, update_scitt_constitution, tmp_path
     ):
         # Write a constitution with the right markers, but with some text after it.
         # We can't use update_scitt_constitution for this because of its safety rails so
@@ -449,7 +471,8 @@ class TestUpdateScittConstitution:
             "governance",
             "propose_constitution",
             constitution_file=tmp_path / "constitution.js",
-            development=True,
+            _with_service_url=True,
+            _with_member_auth=True,
         )
 
         # Allowing this would be bad, as it would risk dropping the trailing text.
