@@ -73,10 +73,9 @@ def test_prefix_tree(did_web, client):
         receipt.verify(first_claims, service_parameters)
 
 
-@pytest.mark.xfail(
-    reason="Test requires an isolated empty service, which the infrastructure doesn't support yet",
-    raises=pytest.fail.Exception,
-)
+# This test only works on an isolated cchost instance, since we require the service to be blank.
+@pytest.mark.isolated_test
+@pytest.mark.needs_cchost
 @pytest.mark.needs_prefix_tree
 def test_empty_prefix_tree(client):
     """Before any flush has been committed, fetching the prefix tree receipt returns a graceful error."""

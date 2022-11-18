@@ -9,6 +9,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 import pytest
+from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
@@ -31,15 +32,38 @@ class ManagedCCHostFixtures:
         self.enclave_file = enclave_file
         self.constitution = constitution
 
+    def pytest_configure(self, config):
+        config.addinivalue_line(
+            "markers",
+            "isolated_test: run this test with its own class-scoped cchost process.",
+        )
+
+    def pytest_collection_modifyitems(self, config, items):
+        # The isolated_test marker cannot be used on functions, only on classes.
+        # The reason is that the `cchost` fixture has a class scope, therefore
+        # only has access to class markers.
+        #
+        # Functions which are defined directly at the module level are an
+        # exception: the class-scoped fixture will have access to markers set on
+        # the function.
+        for item in items:
+            if isinstance(item.parent, pytest.Class):
+                for m in item.own_markers:
+                    if m.name == "isolated_test":
+                        raise pytest.UsageError(
+                            f"'isolated_test' marker may not be used on class method {item.nodeid!r}"
+                        )
+
     @pytest.fixture(scope="session")
-    def cchost(self, tmp_path_factory):
+    def start_cchost(self, tmp_path_factory):
         """
         Start a managed SCITT service, using cchost.
 
-        The service will keep running for the entire test session, and therefore
-        shared among tests.
+        This fixture returns a function, which creates a new service everytime
+        it is called. Test should bot use this fixture directly. Instead the
+        cchost (or client) fixture should be used, which provides access to an
+        already running instance.
         """
-        workspace = tmp_path_factory.mktemp("workspace")
 
         constitution_files = [
             self.constitution / "validate.js",
@@ -49,45 +73,92 @@ class ManagedCCHostFixtures:
             self.constitution / "scitt.js",
         ]
 
-        cchost = CCHost(
-            self.binary,
-            self.enclave_type,
-            self.enclave_file,
-            workspace=workspace,
-            constitution=constitution_files,
-        )
-        with cchost:
-            # There's a bit of setup involved before we can use this service.
-            # When using an external ledger we assume this has been done already,
-            # but in this case we need to do it here.
-            client = Client(
-                f"https://127.0.0.1:{cchost.rpc_port}",
-                development=True,
-                member_auth=(cchost.member_cert, cchost.member_private_key),
-            )
-            client.governance.activate_member()
+        @contextmanager
+        def f():
+            workspace = tmp_path_factory.mktemp("workspace")
 
-            network = client.get("node/network").json()
-            proposal = governance.transition_service_to_open_proposal(
-                network["service_certificate"]
-            )
-            client.governance.propose(proposal, must_pass=True)
-            client.get(
-                "/app/parameters",
-                retry_on=[(HTTPStatus.NOT_FOUND, "FrontendNotOpen")],
+            cchost = CCHost(
+                self.binary,
+                self.enclave_type,
+                self.enclave_file,
+                workspace=workspace,
+                constitution=constitution_files,
             )
 
-            yield cchost
+            with cchost:
+                # There's a bit of setup involved before we can use this service.
+                # When using an external ledger we assume this has been done already,
+                # but in this case we need to do it here.
+                client = Client(
+                    f"https://127.0.0.1:{cchost.rpc_port}",
+                    development=True,
+                    member_auth=(cchost.member_cert, cchost.member_private_key),
+                )
+                client.governance.activate_member()
+
+                network = client.get("node/network").json()
+                proposal = governance.transition_service_to_open_proposal(
+                    network["service_certificate"]
+                )
+                client.governance.propose(proposal, must_pass=True)
+                client.get(
+                    "/app/parameters",
+                    retry_on=[(HTTPStatus.NOT_FOUND, "FrontendNotOpen")],
+                )
+
+                yield cchost
+
+        return f
 
     @pytest.fixture(scope="session")
+    def shared_cchost(self, start_cchost):
+        """
+        Create a cchost process, scoped to the entire test session.
+
+        This fixture should not be used directly in tests. Instead the cchost
+        fixture should be used along with a isolated_test marker.
+        """
+
+        LOG.info("Starting shared cchost process")
+        with start_cchost() as cchost:
+            yield cchost
+
+    @pytest.fixture(scope="class")
+    def isolated_cchost(self, start_cchost, request):
+        """
+        Create a cchost process, scoped to the current test class.
+
+        This fixture should not be used directly in tests. Instead the cchost
+        fixture should be used along with a isolated_test marker.
+        """
+        LOG.info(f"Starting isolated cchost process for {request.node.nodeid!r}")
+        with start_cchost() as cchost:
+            yield cchost
+
+    @pytest.fixture(scope="class")
+    def cchost(self, request):
+        """
+        Get a reference to the cchost instance associated with the current test.
+
+        If the test class has an `isolated_test` marker, the returned instance
+        is only shared with other tests of the same class. Otherwise an instance
+        shared by all non-isolated tests is returned.
+        """
+        marker = request.node.get_closest_marker("isolated_test")
+        if marker is not None:
+            return request.getfixturevalue("isolated_cchost")
+        else:
+            return request.getfixturevalue("shared_cchost")
+
+    @pytest.fixture(scope="class")
     def service_url(self, cchost):
         return f"https://127.0.0.1:{cchost.rpc_port}"
 
-    @pytest.fixture(scope="session")
+    @pytest.fixture(scope="class")
     def member_auth(self, cchost):
         return (cchost.member_cert, cchost.member_private_key)
 
-    @pytest.fixture(scope="session")
+    @pytest.fixture(scope="class")
     def member_auth_path(self, member_auth, tmp_path_factory):
         path = tmp_path_factory.mktemp("member")
         path.joinpath("member0_cert.pem").write_text(member_auth[0])
