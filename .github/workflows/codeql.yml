@@ -35,6 +35,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    # Work-around for https://github.com/actions/runner/issues/2033
+    - name: Fix git safe.directory in container
+      run: mkdir -p /home/runner/work/_temp/_github_home && printf "[safe]\n\tdirectory = /github/workspace" > /home/runner/work/_temp/_github_home/.gitconfig
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
