@@ -245,7 +245,7 @@ class CCHost:
             except json.decoder.JSONDecodeError:
                 LOG.error("Log line is not JSON: {}", line)
             else:
-                # Translate the CCF log message into seomthing usable by loguru.
+                # Translate the CCF log message into something usable by loguru.
                 # We map the filename to function, even though loguru supports filenames,
                 # because the latter isn't printed by default.
                 # We use the presence of an enclave timestamp (e_ts) to distinguish
