@@ -1,6 +1,7 @@
 #!/bin/bash
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the Apache 2.0 License.
+
 set -ex
 
 CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
