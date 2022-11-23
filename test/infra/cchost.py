@@ -45,12 +45,22 @@ def match_taskgroup_error(group: aiotools.TaskGroupError, expected: type):
 
 class CCHost:
     binary: str
-    rpc_port: int
-    node_port: int
     enclave_file: Path
     enclave_type: str
     workspace: Path
     constitution: Path
+
+    # Port numbers which cchost will used to listen for incoming connections.
+    # If 0, a random port number will be assigned by the OS.
+    listen_rpc_port: int
+    listen_node_port: int
+
+    # The effective port number on which cchost is listening. This is equal to
+    # listen_rpc_port, unless the latter was zero in which case this field
+    # reflects the randomly assigned port number.
+    #
+    # This field is only available after the service has started.
+    rpc_port: int
 
     # Cryptographic material of the member
     member_private_key: crypto.Pem
@@ -75,16 +85,16 @@ class CCHost:
     def __init__(
         self,
         binary: str,
-        rpc_port: int,
-        node_port: int,
         enclave_type: str,
         enclave_file: Path,
         workspace: Path,
         constitution: Path,
+        rpc_port: int = 0,
+        node_port: int = 0,
     ):
         self.binary = binary
-        self.rpc_port = rpc_port
-        self.node_port = node_port
+        self.listen_rpc_port = rpc_port
+        self.listen_node_port = node_port
         self.enclave_type = enclave_type
         self.enclave_file = enclave_file.absolute()
         self.workspace = workspace.absolute()
@@ -127,10 +137,11 @@ class CCHost:
 
         try:
             with self.cond:
-                while not self.ready:
+                while not self.ready and self.thread_exception is None:
                     self.cond.wait()
-                    if self.thread_exception is not None:
-                        raise self.thread_exception
+
+                if self.thread_exception is not None:
+                    raise self.thread_exception
 
         except:
             # This is to handle the case where the wait is interrupted,
@@ -176,6 +187,7 @@ class CCHost:
                 raise
 
     async def _start_process(self):
+        LOG.debug("Starting cchost process...")
         process = await asyncio.create_subprocess_exec(
             self.binary,
             "--config",
@@ -185,13 +197,6 @@ class CCHost:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={
-                **os.environ,
-                # This is needed for the attested fetch script to know where
-                # to contact the CCF service. The script is started by cchost,
-                # so it inherits any of cchost's environment variables.
-                "CCF_SERVICE_PORT": str(self.rpc_port),
-            },
         )
 
         # We use two nested task groups. The reason for this is we want the log
@@ -269,19 +274,43 @@ class CCHost:
         """
         Monitor the service and set the `ready` flag once it accepts connections.
         """
-        ssl_ctx = ssl.SSLContext()
+
+        LOG.info("Waiting for cchost process to become ready")
         while True:
-            try:
-                await asyncio.open_connection("127.0.0.1", self.rpc_port, ssl=ssl_ctx)
-                break
-            except OSError:
-                pass
+            port = await self._poll_ready()
+
+            if port is not None:
+                LOG.info(f"cchost is ready and listening on port {port}")
+                self.rpc_port = port
+                with self.cond:
+                    self.ready = True
+                    self.cond.notify_all()
+                return
 
             await asyncio.sleep(0.5)
 
-        with self.cond:
-            self.ready = True
-            self.cond.notify_all()
+    async def _poll_ready(self) -> Optional[int]:
+        """
+        Check if the service is ready yet, by establishing a connection to it.
+
+        Returns the service's port number if it is ready, and None otherwise.
+        """
+        ssl_ctx = ssl.SSLContext()
+        try:
+            # cchost writes its actual RPC port to this file. This works even if
+            # it tried to bind on port 0 and was given a random port by the
+            # kernel.
+            with open(self.workspace / "rpc_addresses.json") as f:
+                addresses = json.load(f)
+                hostname, port = addresses["rpc"].split(":")
+
+            await asyncio.open_connection("127.0.0.1", int(port), ssl=ssl_ctx)
+
+            return int(port)
+        except OSError:
+            # Assume the service is not ready yet. Either we failed to read the
+            # ports file, or we couldn't establish a connection to it.
+            return None
 
     def _populate_workspace(self):
         service_cert = self.workspace / "service_cert.pem"
@@ -297,15 +326,19 @@ class CCHost:
                 "type": ENCLAVE_TYPES[self.enclave_type],
             },
             "network": {
-                "node_to_node_interface": {"bind_address": f"0.0.0.0:{self.node_port}"},
                 "rpc_interfaces": {
-                    "interface_name": {
-                        "bind_address": f"0.0.0.0:{self.rpc_port}",
-                        "published_address": "ccf.dummy.com:12345",
+                    "rpc": {
+                        "bind_address": f"0.0.0.0:{self.listen_rpc_port}",
                     }
+                },
+                "node_to_node_interface": {
+                    "bind_address": f"0.0.0.0:{self.listen_node_port}"
                 },
             },
             "logging": {"format": "Json", "host_level": "Trace"},
+            "output_files": {
+                "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
+            },
             "command": {
                 "type": "Start",
                 "service_certificate_file": str(service_cert),
@@ -360,8 +393,8 @@ def main():
     parser.add_argument(
         "--node-port",
         type=int,
-        default=8001,
-        help="Port on which cchost will listen for node to node communication",
+        default=0,
+        help="Port on which cchost will listen for node to node communication. By default, a random port is chosen.",
     )
     parser.add_argument(
         "--enclave-type",
@@ -396,12 +429,12 @@ def main():
     enclave_file = get_enclave_path(args.enclave_type, args.package)
     with CCHost(
         args.cchost,
-        args.port,
-        args.node_port,
         args.enclave_type,
         enclave_file,
         workspace=args.workspace,
         constitution=args.constitution,
+        rpc_port=args.port,
+        node_port=args.node_port,
     ) as cchost:
         while True:
             signal.pause()

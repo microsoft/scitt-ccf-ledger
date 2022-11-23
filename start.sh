@@ -30,4 +30,5 @@ exec python3.8 test/infra/cchost.py \
     --cchost $CCF_DIR/bin/cchost \
     --package $SCITT_DIR/lib/libscitt \
     --constitution $SCITT_DIR/share/scitt/constitution \
-    --enclave-type "$ENCLAVE_TYPE"
+    --enclave-type "$ENCLAVE_TYPE" \
+    "$@"

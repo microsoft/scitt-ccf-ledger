@@ -25,9 +25,8 @@ from .did_web_server import DIDWebServer
 
 
 class ManagedCCHostFixtures:
-    def __init__(self, binary, port, enclave_type, enclave_file, constitution):
+    def __init__(self, binary, enclave_type, enclave_file, constitution):
         self.binary = binary
-        self.port = port
         self.enclave_type = enclave_type
         self.enclave_file = enclave_file
         self.constitution = constitution
@@ -43,8 +42,6 @@ class ManagedCCHostFixtures:
         workspace = tmp_path_factory.mktemp("workspace")
         cchost = CCHost(
             self.binary,
-            self.port,
-            self.port + 1,
             self.enclave_type,
             self.enclave_file,
             workspace=workspace,
@@ -119,12 +116,6 @@ def pytest_addoption(parser):
         help="Path to the cchost binary. Requires --start-cchost.",
     )
     parser.addoption(
-        "--cchost-port",
-        type=int,
-        default=8000,
-        help="Port on which cchost will listen. Requires --start-cchost.",
-    )
-    parser.addoption(
         "--enclave-type",
         default="virtual",
         help="Type of enclave used when starting cchost. Requires --start-cchost.",
@@ -150,15 +141,12 @@ def pytest_configure(config):
 
     if config.getoption("--start-cchost"):
         binary = config.getoption("--cchost-binary")
-        port = config.getoption("--cchost-port")
         enclave_package = config.getoption("--enclave-package")
         enclave_type = config.getoption("--enclave-type")
         constitution = config.getoption("--constitution")
         enclave_file = get_enclave_path(enclave_type, enclave_package)
         config.pluginmanager.register(
-            ManagedCCHostFixtures(
-                binary, port, enclave_type, enclave_file, constitution
-            )
+            ManagedCCHostFixtures(binary, enclave_type, enclave_file, constitution)
         )
     else:
         config.pluginmanager.register(ExternalLedgerFixtures())

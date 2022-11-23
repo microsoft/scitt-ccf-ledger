@@ -106,11 +106,9 @@ namespace scitt
         ENTRY_TABLE, context, 10000, 20);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
-      auto host_processes = context.get_subsystem<ccf::AbstractHostProcesses>();
-
       auto resolver = std::make_unique<did::UniversalResolver>();
       resolver->register_resolver(
-        std::make_unique<did::web::DidWebResolver>(host_processes));
+        std::make_unique<did::web::DidWebResolver>(context));
 
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
