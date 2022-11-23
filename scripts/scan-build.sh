@@ -51,7 +51,7 @@ CLANG_VERSION=10
 export CCC_CC="clang-$CLANG_VERSION"
 export CCC_CXX="clang++-$CLANG_VERSION"
 
-SCAN="scan-build-$CLANG_VERSION --exclude 3rdparty --exclude test " 
+SCAN="scan-build-$CLANG_VERSION --exclude 3rdparty --exclude test" 
 
 $SCAN cmake -GNinja \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
