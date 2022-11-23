@@ -16,7 +16,7 @@ class TestAuthentication:
             f()
 
     @pytest.fixture(scope="class")
-    def claims(self, client, did_web):
+    def claims(self, did_web):
         identity = did_web.create_identity()
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 

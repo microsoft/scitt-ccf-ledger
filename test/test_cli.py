@@ -46,9 +46,9 @@ def run(request):
 
 
 def test_smoke_test(run, client, tmp_path: Path):
-    trust_store = tmp_path / "store"
-    trust_store.mkdir()
-    (trust_store / "service.json").write_text(json.dumps(client.get_parameters()))
+    trust_store_path = tmp_path / "store"
+    trust_store_path.mkdir()
+    (trust_store_path / "service.json").write_text(json.dumps(client.get_parameters()))
 
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 
@@ -56,6 +56,8 @@ def test_smoke_test(run, client, tmp_path: Path):
         json.dumps({"authentication": {"allow_unauthenticated": True}})
     )
 
+    # We could use the did_web fixture for this, but that sets up certs for us
+    # already, and we want to test the propose_ca_certs command.
     with DIDWebServer(tmp_path) as server:
         (tmp_path / "bundle.pem").write_text(server.cert_bundle)
 
@@ -136,14 +138,14 @@ def test_smoke_test(run, client, tmp_path: Path):
             "--receipt",
             tmp_path / "receipt.cose",
             "--service-trust-store",
-            trust_store,
+            trust_store_path,
         )
 
         run(
             "validate",
             tmp_path / "claims.embedded.cose",
             "--service-trust-store",
-            trust_store,
+            trust_store_path,
         )
 
 
