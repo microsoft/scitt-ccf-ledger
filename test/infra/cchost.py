@@ -50,7 +50,7 @@ class CCHost:
     enclave_file: Path
     enclave_type: str
     workspace: Path
-    constitution: Path
+    constitution: List[Path]
 
     # Port numbers which cchost will used to listen for incoming connections.
     # If 0, a random port number will be assigned by the OS.
@@ -90,7 +90,7 @@ class CCHost:
         enclave_type: str,
         enclave_file: Path,
         workspace: Path,
-        constitution: Path,
+        constitution: List[Path],
         rpc_port: int = 0,
         node_port: int = 0,
     ):
@@ -98,9 +98,12 @@ class CCHost:
         self.listen_rpc_port = rpc_port
         self.listen_node_port = node_port
         self.enclave_type = enclave_type
+
+        # Make the path absolutes, so they keep working even after we change
+        # working directory when running cchost.
         self.enclave_file = enclave_file.absolute()
         self.workspace = workspace.absolute()
-        self.constitution = constitution.absolute()
+        self.constitution = [f.absolute() for f in constitution]
 
         if not self.enclave_file.exists():
             raise ValueError(f"Enclave file at {self.enclave_file} does not exist")
@@ -345,7 +348,7 @@ class CCHost:
                 "type": "Start",
                 "service_certificate_file": str(service_cert),
                 "start": {
-                    "constitution_files": [str(f) for f in self._constitution_files()],
+                    "constitution_files": [str(f) for f in self.constitution],
                     "members": [
                         {
                             "certificate_file": str(
@@ -362,15 +365,6 @@ class CCHost:
 
         with open(self.workspace / "config.json", "w") as f:
             json.dump(config, f)
-
-    def _constitution_files(self) -> List[Path]:
-        return [
-            self.constitution / "validate.js",
-            self.constitution / "apply.js",
-            self.constitution / "resolve.js",
-            self.constitution / "actions.js",
-            self.constitution / "scitt.js",
-        ]
 
 
 def get_enclave_path(enclave_type, enclave_package) -> Path:
@@ -411,10 +405,10 @@ def main():
         help="The enclave package to load",
     )
     parser.add_argument(
-        "--constitution",
+        "--constitution-file",
+        action="append",
         type=Path,
-        default="/tmp/scitt/share/scitt/constitution",
-        help="Path to the directory containing the initial constitution",
+        help="Path to the initial constitution. May be specified multiple times",
     )
     parser.add_argument(
         "--workspace",
@@ -434,7 +428,7 @@ def main():
         args.enclave_type,
         enclave_file,
         workspace=args.workspace,
-        constitution=args.constitution,
+        constitution=args.constitution_file,
         rpc_port=args.port,
         node_port=args.node_port,
     ) as cchost:

@@ -12,6 +12,8 @@ CCF_DIR=${CCF_DIR:-/opt/ccf}
 # TODO: Don't use /tmp
 SCITT_DIR=/tmp/scitt
 
+CONSTITUTION_DIR=$SCITT_DIR/share/scitt/constitution
+
 if [ "$ENCLAVE_TYPE" != "release" ] && [ "$ENCLAVE_TYPE" != "virtual" ]; then
     echo "Invalid enclave type: $ENCLAVE_TYPE"
     exit 1
@@ -29,6 +31,10 @@ exec python3.8 test/infra/cchost.py \
     --port 8000 \
     --cchost $CCF_DIR/bin/cchost \
     --package $SCITT_DIR/lib/libscitt \
-    --constitution $SCITT_DIR/share/scitt/constitution \
+    --constitution-file $CONSTITUTION_DIR/validate.js \
+    --constitution-file $CONSTITUTION_DIR/apply.js \
+    --constitution-file $CONSTITUTION_DIR/resolve.js \
+    --constitution-file $CONSTITUTION_DIR/actions.js \
+    --constitution-file $CONSTITUTION_DIR/scitt.js \
     --enclave-type "$ENCLAVE_TYPE" \
     "$@"

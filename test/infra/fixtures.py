@@ -40,12 +40,21 @@ class ManagedCCHostFixtures:
         shared among tests.
         """
         workspace = tmp_path_factory.mktemp("workspace")
+
+        constitution_files = [
+            self.constitution / "validate.js",
+            self.constitution / "apply.js",
+            self.constitution / "resolve.js",
+            self.constitution / "actions.js",
+            self.constitution / "scitt.js",
+        ]
+
         cchost = CCHost(
             self.binary,
             self.enclave_type,
             self.enclave_file,
             workspace=workspace,
-            constitution=self.constitution,
+            constitution=constitution_files,
         )
         with cchost:
             # There's a bit of setup involved before we can use this service.
