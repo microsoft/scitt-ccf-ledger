@@ -111,14 +111,6 @@ stages:
 
           - script: ./scripts/ci-checks.sh
             displayName: "CI checks"
-
-      - job: scan-build
-        displayName: Scan Build
-        container: ccf
-        steps:
-          - script: ./scripts/scan-build.sh
-            displayName: "CI checks"
-            workingDirectory: build
   
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
