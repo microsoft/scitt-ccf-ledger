@@ -23,27 +23,21 @@ from pyscitt.governance import ProposalNotAccepted
 
 @pytest.fixture
 def run(request):
-    def f(*cmd, _with_service_url=False, _with_member_auth=False, **kwargs):
-        if _with_service_url:
-            kwargs["url"] = request.getfixturevalue("service_url")
-            kwargs["development"] = True
-
-        if _with_member_auth:
-            paths = request.getfixturevalue("member_auth_path")
-            kwargs["member_cert"] = paths[0]
-            kwargs["member_key"] = paths[1]
-
+    def f(*cmd, with_service_url=False, with_member_auth=False):
         args = [str(c) for c in cmd]
-        for k, v in kwargs.items():
-            flag = k.replace("_", "-")
-            if v is True:
-                args += [f"--{flag}"]
-            elif v is False:
-                pass
-            elif isinstance(v, (str, Path)):
-                args += [f"--{flag}={v}"]
-            else:
-                raise TypeError(f"Invalid value: {v}")
+
+        # We necessary, we insert extra flags that depend on the service we are running against.
+        # We request the fixtures dynamically by using `getfixturevalue` rather than as
+        # dependencies of the `run` fixture, to avoid needlessly start a cchost process
+        # if only running "offline" tests.
+        if with_service_url:
+            url = request.getfixturevalue("service_url")
+            args.extend(["--url", url, "--development"])
+
+        if with_member_auth:
+            paths = request.getfixturevalue("member_auth_path")
+            args.extend(["--member-cert", str(paths[0])])
+            args.extend(["--member-key", str(paths[1])])
 
         LOG.info(shlex.join(["scitt"] + args))
         main(args)
@@ -68,49 +62,61 @@ def test_smoke_test(run, client, tmp_path: Path):
         run(
             "governance",
             "propose_configuration",
-            configuration=tmp_path / "config.json",
-            _with_service_url=True,
-            _with_member_auth=True,
+            "--configuration",
+            tmp_path / "config.json",
+            with_service_url=True,
+            with_member_auth=True,
         )
 
         run(
             "governance",
             "propose_ca_certs",
-            name="did_web_tls_roots",
-            ca_certs=tmp_path / "bundle.pem",
-            _with_service_url=True,
-            _with_member_auth=True,
+            "--name",
+            "did_web_tls_roots",
+            "--ca-certs",
+            tmp_path / "bundle.pem",
+            with_service_url=True,
+            with_member_auth=True,
         )
 
         print(server.port)
         run(
             "create-did-web",
-            url=f"https://localhost:{server.port}/me",
-            kty="ec",
-            out_dir=tmp_path / "me",
+            "--url",
+            f"https://localhost:{server.port}/me",
+            "--kty",
+            "ec",
+            "--out-dir",
+            tmp_path / "me",
         )
 
         run(
             "sign",
-            key=tmp_path / "me" / "key.pem",
-            did_doc=tmp_path / "me" / "did.json",
-            claims=tmp_path / "claims.json",
-            content_type="application/json",
-            out=tmp_path / "claims.cose",
+            "--key",
+            tmp_path / "me" / "key.pem",
+            "--did-doc",
+            tmp_path / "me" / "did.json",
+            "--claims",
+            tmp_path / "claims.json",
+            "--content-type",
+            "application/json",
+            "--out",
+            tmp_path / "claims.cose",
+        )
+
+        run(
+            "submit",
+            "--skip-confirmation",
+            tmp_path / "claims.cose",
+            with_service_url=True,
         )
 
         run(
             "submit",
             tmp_path / "claims.cose",
-            skip_confirmation=True,
-            _with_service_url=True,
-        )
-
-        run(
-            "submit",
-            tmp_path / "claims.cose",
-            receipt=tmp_path / "receipt.cose",
-            _with_service_url=True,
+            "--receipt",
+            tmp_path / "receipt.cose",
+            with_service_url=True,
         )
 
         run("pretty-receipt", tmp_path / "receipt.cose")
@@ -118,21 +124,26 @@ def test_smoke_test(run, client, tmp_path: Path):
         run(
             "embed-receipt",
             tmp_path / "claims.cose",
-            receipt=tmp_path / "receipt.cose",
-            out=tmp_path / "claims.embedded.cose",
+            "--receipt",
+            tmp_path / "receipt.cose",
+            "--out",
+            tmp_path / "claims.embedded.cose",
         )
 
         run(
             "validate",
             tmp_path / "claims.cose",
-            receipt=tmp_path / "receipt.cose",
-            service_trust_store=trust_store,
+            "--receipt",
+            tmp_path / "receipt.cose",
+            "--service-trust-store",
+            trust_store,
         )
 
         run(
             "validate",
             tmp_path / "claims.embedded.cose",
-            service_trust_store=trust_store,
+            "--service-trust-store",
+            trust_store,
         )
 
 
@@ -146,9 +157,11 @@ def test_local_development(run, service_url, tmp_path: Path):
     run(
         "governance",
         "local_development",
-        service_trust_store=tmp_path / "trust_store",
-        url=service_url,
-        _with_member_auth=True,
+        "--service-trust-store",
+        tmp_path / "trust_store",
+        "--url",
+        service_url,
+        with_member_auth=True,
     )
 
 
@@ -163,32 +176,46 @@ def test_create_ssh_did_web(run, tmp_path: Path):
 
     run(
         "create-did-web",
-        url=f"https://localhost:1234/me",
-        ssh_key=tmp_path / "id_rsa.pub",
-        out_dir=tmp_path / "me",
+        "--url",
+        f"https://localhost:1234/me",
+        "--ssh-key",
+        tmp_path / "id_rsa.pub",
+        "--out-dir",
+        tmp_path / "me",
     )
 
     run(
         "create-did-web",
-        url=f"https://localhost:1234/",
-        ssh_key=tmp_path / "id_rsa.pub",
-        out_dir=tmp_path / "me",
+        "--url",
+        f"https://localhost:1234/",
+        "--ssh-key",
+        tmp_path / "id_rsa.pub",
+        "--out-dir",
+        tmp_path / "me",
     )
 
     run(
         "create-did-web",
-        url=f"https://localhost:1234",
-        ssh_key=tmp_path / "id_rsa.pub",
-        out_dir=tmp_path / "me",
+        "--url",
+        f"https://localhost:1234",
+        "--ssh-key",
+        tmp_path / "id_rsa.pub",
+        "--out-dir",
+        tmp_path / "me",
     )
 
     run(
         "sign",
-        key=tmp_path / "id_rsa",
-        did_doc=tmp_path / "me" / "did.json",
-        claims=tmp_path / "claims.json",
-        content_type="application/json",
-        out=tmp_path / "claims.cose",
+        "--key",
+        tmp_path / "id_rsa",
+        "--did-doc",
+        tmp_path / "me" / "did.json",
+        "--claims",
+        tmp_path / "claims.json",
+        "--content-type",
+        "application/json",
+        "--out",
+        tmp_path / "claims.cose",
     )
 
 
@@ -203,22 +230,32 @@ def test_adhoc_signer(run, tmp_path: Path):
     # work (which isn't supported by the CLI yet).
     run(
         "sign",
-        key=tmp_path / "key.pem",
-        claims=tmp_path / "claims.json",
-        content_type="application/json",
-        out=tmp_path / "claims.cose",
+        "--key",
+        tmp_path / "key.pem",
+        "--claims",
+        tmp_path / "claims.json",
+        "--content-type",
+        "application/json",
+        "--out",
+        tmp_path / "claims.cose",
     )
 
     # Sign with a DID issuer, but without creating an on-disk DID document first.
     # Also tests how to override the default algorithm.
     run(
         "sign",
-        key=tmp_path / "key.pem",
-        issuer="did:web:example.com",
-        claims=tmp_path / "claims.json",
-        content_type="application/json",
-        alg="PS384",
-        out=tmp_path / "claims.cose",
+        "--key",
+        tmp_path / "key.pem",
+        "--issuer",
+        "did:web:example.com",
+        "--claims",
+        tmp_path / "claims.json",
+        "--content-type",
+        "application/json",
+        "--alg",
+        "PS384",
+        "--out",
+        tmp_path / "claims.cose",
     )
 
 
@@ -231,55 +268,72 @@ def test_prefix_tree(run, tmp_path: Path):
         run(
             "governance",
             "local_development",
-            service_trust_store=tmp_path / "trust_store",
-            did_web_ca_certs=tmp_path / "bundle.pem",
-            _with_service_url=True,
-            _with_member_auth=True,
+            "--service-trust-store",
+            tmp_path / "trust_store",
+            "--did-web-ca-certs",
+            tmp_path / "bundle.pem",
+            with_service_url=True,
+            with_member_auth=True,
         )
 
         run(
             "create-did-web",
-            url=f"https://localhost:{server.port}/me",
-            kty="ec",
-            out_dir=tmp_path / "me",
+            "--url",
+            f"https://localhost:{server.port}/me",
+            "--kty",
+            "ec",
+            "--out-dir",
+            tmp_path / "me",
         )
 
         run(
             "sign",
-            key=tmp_path / "me" / "key.pem",
-            did_doc=tmp_path / "me" / "did.json",
-            claims=tmp_path / "claims.json",
-            feed="hello",
-            content_type="application/json",
-            out=tmp_path / "claims.cose",
+            "--key",
+            tmp_path / "me" / "key.pem",
+            "--did-doc",
+            tmp_path / "me" / "did.json",
+            "--claims",
+            tmp_path / "claims.json",
+            "--feed",
+            "hello",
+            "--content-type",
+            "application/json",
+            "--out",
+            tmp_path / "claims.cose",
         )
 
         run(
             "submit",
             tmp_path / "claims.cose",
-            _with_service_url=True,
+            with_service_url=True,
         )
 
-        run("prefix-tree", "flush", _with_service_url=True)
+        run("prefix-tree", "flush", with_service_url=True)
 
         # We can either fetch the read receipt by issuer and feed, ...
         run(
             "prefix-tree",
             "receipt",
-            issuer=did.format_did_web("localhost", server.port, "me"),
-            feed="hello",
-            output=tmp_path / "read_receipt.cbor",
-            _with_service_url=True,
+            "--issuer",
+            did.format_did_web("localhost", server.port, "me"),
+            "--feed",
+            "hello",
+            "--output",
+            tmp_path / "read_receipt.cbor",
+            with_service_url=True,
         )
 
         # or we can fetch it based on our signed claim.
         run(
             "prefix-tree",
             "receipt",
-            claim=tmp_path / "claims.cose",
-            service_trust_store=tmp_path / "trust_store",
-            output=tmp_path / "read_receipt.cbor",
-            _with_service_url=True,
+            "--claim",
+            tmp_path / "claims.cose",
+            "--service-trust-store",
+            tmp_path / "trust_store",
+            "--output",
+            tmp_path / "read_receipt.cbor",
+            with_service_url=True,
         )
 
 
@@ -305,10 +359,14 @@ def test_registration_info(run, tmp_path: Path):
         "--registration-info=with_default_type=world",
         f"--registration-info=bytes:binary_data=@{binary_path}",
         f"--registration-info=text:unicode_data=@{unicode_path}",
-        key=tmp_path / "key.pem",
-        content_type="application/json",
-        claims=tmp_path / "claims.json",
-        out=tmp_path / "claims.cose",
+        "--key",
+        tmp_path / "key.pem",
+        "--content-type",
+        "application/json",
+        "--claims",
+        tmp_path / "claims.json",
+        "--out",
+        tmp_path / "claims.cose",
     )
 
     data = (tmp_path / "claims.cose").read_bytes()
@@ -341,7 +399,13 @@ class TestUpdateScittConstitution:
         """
         tmp = tmp_path_factory.mktemp("original_constitution")
         path = tmp / "constitution.js"
-        run("governance", "constitution", output=path, _with_service_url=True)
+        run(
+            "governance",
+            "constitution",
+            "--output",
+            path,
+            with_service_url=True,
+        )
 
         try:
             parts = path.read_text().split(SCITT_CONSTITUTION_MARKER_START)
@@ -354,9 +418,10 @@ class TestUpdateScittConstitution:
             run(
                 "governance",
                 "propose_constitution",
-                constitution_file=core_path,
-                _with_service_url=True,
-                _with_member_auth=True,
+                "--constitution-file",
+                core_path,
+                with_service_url=True,
+                with_member_auth=True,
             )
 
             yield core_constitution
@@ -366,9 +431,10 @@ class TestUpdateScittConstitution:
             run(
                 "governance",
                 "propose_constitution",
-                constitution_file=path,
-                _with_service_url=True,
-                _with_member_auth=True,
+                "--constitution-file",
+                path,
+                with_service_url=True,
+                with_member_auth=True,
             )
 
     @pytest.fixture
@@ -387,10 +453,11 @@ class TestUpdateScittConstitution:
             run(
                 "governance",
                 "update_scitt_constitution",
-                scitt_constitution_file=path,
-                yes=yes,
-                _with_service_url=True,
-                _with_member_auth=True,
+                "--scitt-constitution-file",
+                path,
+                *(["--yes"] if yes else []),
+                with_service_url=True,
+                with_member_auth=True,
             )
 
         return f
@@ -404,9 +471,10 @@ class TestUpdateScittConstitution:
             run(
                 "governance",
                 "propose_generic",
-                proposal_path=proposal,
-                _with_service_url=True,
-                _with_member_auth=True,
+                "--proposal-path",
+                proposal,
+                with_service_url=True,
+                with_member_auth=True,
             )
 
         update_scitt_constitution(
@@ -416,9 +484,10 @@ class TestUpdateScittConstitution:
         run(
             "governance",
             "propose_generic",
-            proposal_path=proposal,
-            _with_service_url=True,
-            _with_member_auth=True,
+            "--proposal-path",
+            proposal,
+            with_service_url=True,
+            with_member_auth=True,
         )
 
         update_scitt_constitution(
@@ -432,9 +501,10 @@ class TestUpdateScittConstitution:
             run(
                 "governance",
                 "propose_generic",
-                proposal_path=proposal,
-                _with_service_url=True,
-                _with_member_auth=True,
+                "--proposal-path",
+                proposal,
+                with_service_url=True,
+                with_member_auth=True,
             )
 
     def test_invalid_constitution(self, update_scitt_constitution):
@@ -470,9 +540,10 @@ class TestUpdateScittConstitution:
         run(
             "governance",
             "propose_constitution",
-            constitution_file=tmp_path / "constitution.js",
-            _with_service_url=True,
-            _with_member_auth=True,
+            "--constitution-file",
+            tmp_path / "constitution.js",
+            with_service_url=True,
+            with_member_auth=True,
         )
 
         # Allowing this would be bad, as it would risk dropping the trailing text.
@@ -497,7 +568,6 @@ class TestUpdateScittConstitution:
                 update_scitt_constitution("// Concurrent change")
             except ProposalNotAccepted:
                 raise RuntimeError("concurrent change not accepted")
-
             return "yes"
 
         monkeypatch.setattr("builtins.input", confirm)
