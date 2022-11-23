@@ -117,7 +117,7 @@ stages:
         container: ccf
         steps:
           - script: ./scripts/scan-build.sh
-              displayName: "Scan build"
+            displayName: "Scan build"
 
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
