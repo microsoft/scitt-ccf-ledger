@@ -17,7 +17,7 @@ from typing import List, Optional
 import aiotools
 from loguru import logger as LOG
 
-from pyscitt import crypto, governance
+from pyscitt import crypto
 
 
 class ShutdownRequestException(Exception):
@@ -28,6 +28,8 @@ class UnexpectedExitException(Exception):
     ...
 
 
+# Register some log levels used by cchost that have, by default, no equivalent
+# in loguru.
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
