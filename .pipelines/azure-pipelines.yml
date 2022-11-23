@@ -112,7 +112,7 @@ stages:
           - script: ./scripts/ci-checks.sh
             displayName: "CI checks"
 
-          - script: ../scripts/scan-build.sh
+          - script: ./scripts/scan-build.sh
             displayName: "Scan build"
   
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
