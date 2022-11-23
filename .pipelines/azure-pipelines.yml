@@ -111,6 +111,10 @@ stages:
 
           - script: ./scripts/ci-checks.sh
             displayName: "CI checks"
+
+          - script: ../scripts/scan-build.sh
+            displayName: "Scan build"
+            workingDirectory: build
   
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
