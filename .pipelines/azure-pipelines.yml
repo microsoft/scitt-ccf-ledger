@@ -114,7 +114,6 @@ stages:
 
           - script: ../scripts/scan-build.sh
             displayName: "Scan build"
-            workingDirectory: build
   
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
