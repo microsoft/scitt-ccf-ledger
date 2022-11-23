@@ -165,10 +165,6 @@ def update_scitt_constitution(client: Client, scitt_constitution_path: Path, yes
     # any changes.
     # Note the use of `repr` to turn the constitution into a valid Javascript
     # string literal, in particular, escaping quotations marks and newlines.
-    #
-    # sandbox.sh has the inconvenient property of accepting proposals immediately,
-    # without even a single ballot. This makes this defensive measure ineffective
-    # in this context.
     ballot = f"""
         export function vote (rawProposal, proposerId) {{
             const singletonKey = new ArrayBuffer(8);

@@ -555,11 +555,6 @@ class TestUpdateScittConstitution:
         ):
             update_scitt_constitution("")
 
-    # sandbox.sh uses a special consitution that accepts proposals without even
-    # waiting for a single vote, so we have no way of detecting this race
-    # condition. The test is therefore disabled when not running with a managed
-    # cchost.
-    @pytest.mark.needs_cchost
     def test_race_condition(self, update_scitt_constitution, monkeypatch):
         # We want to make two concurrent modifications to the constitution, and
         # make sure update_scitt_constitution detects this.
