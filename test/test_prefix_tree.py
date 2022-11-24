@@ -79,3 +79,23 @@ def test_prefix_tree(tmp_path: Path):
         receipt.verify(second_claims, fixture.service_parameters)
         with pytest.raises(InvalidSignature):
             receipt.verify(first_claims, fixture.service_parameters)
+
+
+@pytest.mark.xfail(
+    reason="Test requires an isolated empty service, which the infrastructure doesn't support yet",
+    raises=pytest.fail.Exception,
+)
+@pytest.mark.prefix_tree
+def test_empty_prefix_tree(tmp_path):
+    """Before any flush has been committed, fetching the prefix tree receipt returns a graceful error."""
+
+    with SCITTFixture(tmp_path) as fixture:
+        with pytest.raises(
+            ServiceError, match="NoPrefixTree: No prefix tree has been committed yet"
+        ):
+            fixture.client.get_historical("/app/prefix_tree")
+
+        fixture.client.prefix_tree.flush()
+
+        # Now we're okay since we have at least one PT root committed.
+        fixture.client.get_historical("/app/prefix_tree")

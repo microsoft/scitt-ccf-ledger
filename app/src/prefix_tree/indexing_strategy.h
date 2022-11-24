@@ -99,11 +99,25 @@ namespace scitt
       return tree.prepare_flush();
     }
 
-    std::pair<ccf::SeqNo, pt::summary<>> current() const
+    /**
+     * Get the sequence number and summary of the last prefix tree root to have
+     * been indexed. The caller may use the sequence number to fetch a CCF
+     * receipt for the relevant transaction.
+     *
+     * Returns std::nullopt if no prefix tree commit has been indexed yet.
+     */
+    std::optional<std::pair<ccf::SeqNo, pt::summary<>>> current() const
     {
       std::shared_lock l(tree_mutex_);
 
-      return {prefix_tree_seqno_, tree.current()};
+      if (prefix_tree_seqno_ == 0)
+      {
+        return std::nullopt;
+      }
+      else
+      {
+        return {{prefix_tree_seqno_, tree.current()}};
+      }
     }
 
     nlohmann::json debug() const
@@ -269,6 +283,7 @@ namespace scitt
     pt::batched_prefix_tree<std::vector<uint8_t>> tree;
 
     // The seqno of the latest globally committed prefix tree root.
+    // This will be zero until at least one PT flush gets indexed.
     ccf::SeqNo prefix_tree_seqno_ = 0;
 
     // This is the latest seqno witnessed by this indexing strategy.
