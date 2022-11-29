@@ -23,6 +23,18 @@ if [ "$DOCKER" = "1" ]; then
     CCF_NETWORK_PID=$!
     trap "kill $CCF_NETWORK_PID" EXIT
 
+    # wait until the network is ready
+    timeout=120
+    while ! curl -s -f -k $CCF_URL/app/parameters > /dev/null; do
+        echo "Waiting for service to be ready..."
+        sleep 1
+        timeout=$((timeout - 1))
+        if [ $timeout -eq 0 ]; then
+            echo "Service failed to become ready, exiting"
+            exit 1
+        fi
+    done
+
     # Turn off pytest output capture to allow test logs to be interleaved with
     # the docker logs.
     TEST_ARGS="-s"
