@@ -12,8 +12,11 @@ steps:
       git clone --single-branch -b ccf-${{ parameters.Version }} https://github.com/microsoft/CCF $(Pipeline.Workspace)/CCF
     displayName: Checkout CCF ${{ parameters.Version }}
 
-  # This commit is in the main branch of CCF. Once it gets backported to 2.x we can bump the CCF version and stop patching.
-  - script: curl -L https://github.com/microsoft/CCF/commit/3c7f7cbaf6b27cff0cae61c02bda4af7fb6fff92.diff | patch -p1
+  # These are commits from the main branch of CCF to fix ASAN builds, but which
+  # aren't getting backported to 2.x. We can remove them once we upgrade to 3.x.
+  - script: |
+      curl -L https://github.com/microsoft/CCF/commit/3c7f7cbaf6b27cff0cae61c02bda4af7fb6fff92.diff | patch -p1
+      curl -L https://github.com/microsoft/CCF/commit/3be424fb8318f130f57feaa2e6b95b4d2defec18.diff | patch -p1
     workingDirectory: $(Pipeline.Workspace)/CCF
     displayName: Patch CCF
 

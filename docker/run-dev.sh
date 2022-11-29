@@ -18,8 +18,7 @@ CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
 DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$ENCLAVE_TYPE"}
 CONTAINER_NAME=${CONTAINER_NAME:-"scitt-ccf-ledger-dev-$(date +%s)"}
 
-# TODO: remove sandbox_common/ subfolder once start.sh doesn't use sandbox.sh anymore
-WORKSPACE=${WORKSPACE:-"workspace/sandbox_common"}
+WORKSPACE=${WORKSPACE:-"workspace/"}
 
 VOLUME_NAME="${CONTAINER_NAME}-vol"
 

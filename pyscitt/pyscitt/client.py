@@ -367,6 +367,12 @@ class Client(BaseClient):
 
             link = body.get("nextLink")
 
+    def wait_for_network_open(self):
+        self.get(
+            "/node/network",
+            retry_on=[lambda r: r.is_success and r.json()["service_status"] != "Open"],
+        )
+
     @property
     def governance(self):
         return GovernanceClient(self)

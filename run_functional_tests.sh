@@ -5,14 +5,7 @@
 set -e
 
 DOCKER=${DOCKER:-0}
-
-if [ "$DOCKER" = "1" ]; then
-    CCF_HOST=${CCF_HOST:-"localhost"}
-    CCF_PORT=${CCF_PORT:-8000}
-    CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
-else
-    CCF_URL=${CCF_URL:-"https://localhost:8000"}
-fi
+ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
 
 # If ELEVATE_PRIVILEGES is non-empty, the functional tests will be run with
 # the NET_BIND_SERVICE capability, allowing certain tests that bind
@@ -22,26 +15,33 @@ fi
 ELEVATE_PRIVILEGES=${ELEVATE_PRIVILEGES:-}
 
 if [ "$DOCKER" = "1" ]; then
-    CCF_HOST=$CCF_HOST CCF_PORT=$CCF_PORT \
-        ./docker/run-dev.sh &
+    export CCF_HOST=${CCF_HOST:-"localhost"}
+    export CCF_PORT=${CCF_PORT:-8000}
+    export CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
+
+    ./docker/run-dev.sh &
+    CCF_NETWORK_PID=$!
+    trap "kill $CCF_NETWORK_PID" EXIT
+
+    # wait until the network is ready
+    timeout=120
+    while ! curl -s -f -k $CCF_URL/app/parameters > /dev/null; do
+        echo "Waiting for service to be ready..."
+        sleep 1
+        timeout=$((timeout - 1))
+        if [ $timeout -eq 0 ]; then
+            echo "Service failed to become ready, exiting"
+            exit 1
+        fi
+    done
+
+    # Turn off pytest output capture to allow test logs to be interleaved with
+    # the docker logs.
+    TEST_ARGS="-s"
 else
-    ./start.sh &
+    SCITT_DIR=/tmp/scitt
+    TEST_ARGS="--start-cchost --enclave-type=$ENCLAVE_TYPE --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution"
 fi
-
-CCF_NETWORK_PID=$!
-trap "kill $CCF_NETWORK_PID" EXIT
-
-# wait until the network is ready
-timeout=120
-while ! curl -s -f -k $CCF_URL/app/parameters > /dev/null; do
-    echo "Waiting for service to be ready..."
-    sleep 1
-    timeout=$((timeout - 1))
-    if [ $timeout -eq 0 ]; then
-        echo "Service failed to become ready, exiting"
-        exit 1
-    fi
-done
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
@@ -49,15 +49,13 @@ if [ ! -f "venv/bin/activate" ]; then
 fi
 source venv/bin/activate 
 pip install --disable-pip-version-check -q -e ./pyscitt
-pip install pytest
-
-export CCF_URL
+pip install --disable-pip-version-check -q -r test/requirements.txt
 
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
     sudo -E --preserve-env=PATH \
         capsh --keep=1 --user=$(id -un) --inh=cap_net_bind_service --addamb=cap_net_bind_service \
-        -- -c "pytest ./test -s -rA -v --ignore-glob=*test_perf* $(printf "'%s' " "$@")"
+        -- -c "pytest ./test -v -rA $TEST_ARGS $(printf "'%s' " "$@")"
 else
-    pytest ./test -s -rA -v --ignore-glob=*test_perf* "$@"
+    pytest ./test -v -rA $TEST_ARGS "$@"
 fi
