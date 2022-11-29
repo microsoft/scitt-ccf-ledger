@@ -60,7 +60,7 @@ class ManagedCCHostFixtures:
         Start a managed SCITT service, using cchost.
 
         This fixture returns a function, which creates a new service everytime
-        it is called. Test should bot use this fixture directly. Instead the
+        it is called. Tests should not use this fixture directly. Instead the
         cchost (or client) fixture should be used, which provides access to an
         already running instance.
         """
