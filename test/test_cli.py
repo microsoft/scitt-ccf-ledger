@@ -384,10 +384,14 @@ def test_registration_info(run, tmp_path: Path):
     }
 
 
+@pytest.mark.isolated_test
 class TestUpdateScittConstitution:
-    # We make an effort to save and restore the constitution, but if something
-    # goes wrong during these tests we may break the service and render it unusable.
-    # Subsequent tests would likely fail if this were the case.
+    # These tests run in an isolated cchost process. This ensures that if
+    # something goes wrong with the test and leaves the service with an invalid
+    # constitution, the other tests can carry on unaffected.
+    #
+    # The isolated process is shared by the entire class though, so one broken
+    # test could still affect other tests of this class.
 
     @pytest.fixture(autouse=True)
     def original_constitution(self, run, tmp_path_factory):
