@@ -3,6 +3,8 @@
 
 import pytest
 
+pytest_plugins = "infra.fixtures"
+
 
 def pytest_addoption(parser):
     parser.addoption(
