@@ -97,10 +97,8 @@ namespace scitt
       auto entry = index->get(issuer, feed);
       if (!entry)
       {
-        throw HTTPError(
-          HTTP_STATUS_NOT_FOUND,
-          errors::UnknownFeed,
-          "No claim found for given issuer and feed");
+        throw NotFoundError(
+          errors::UnknownFeed, "No claim found for given issuer and feed");
       }
 
       auto info = fetch_tree_receipt(*ctx.rpc_ctx, entry->prefix_tree_seqno);
@@ -120,7 +118,14 @@ namespace scitt
 
     void current(ccf::endpoints::ReadOnlyEndpointContext& ctx)
     {
-      auto [seqno, tree] = index->current();
+      auto current = index->current();
+      if (!current)
+      {
+        throw NotFoundError(
+          errors::NoPrefixTree, "No prefix tree has been committed yet.");
+      }
+
+      auto [seqno, tree] = *current;
 
       auto info = fetch_tree_receipt(*ctx.rpc_ctx, seqno);
       if (!info)
