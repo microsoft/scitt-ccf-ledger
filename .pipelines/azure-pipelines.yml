@@ -113,7 +113,7 @@ stages:
             displayName: "CI checks"
 
       - job: scanbuild
-        displayName: Static Analytics 
+        displayName: Static Analysis 
         container: ccf
         steps:
           - script: ./scripts/scan-build.sh
