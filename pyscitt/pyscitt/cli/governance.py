@@ -165,10 +165,6 @@ def update_scitt_constitution(client: Client, scitt_constitution_path: Path, yes
     # any changes.
     # Note the use of `repr` to turn the constitution into a valid Javascript
     # string literal, in particular, escaping quotations marks and newlines.
-    #
-    # sandbox.sh has the inconvenient property of accepting proposals immediately,
-    # without even a single ballot. This makes this defensive measure ineffective
-    # in this context.
     ballot = f"""
         export function vote (rawProposal, proposerId) {{
             const singletonKey = new ArrayBuffer(8);
@@ -177,11 +173,6 @@ def update_scitt_constitution(client: Client, scitt_constitution_path: Path, yes
         }}
     """
     return GovernanceAction(proposal, ballot)
-
-
-def activate_member(client: Client):
-    r = client.post("/gov/ack/update_state_digest", sign_request=True)
-    client.post("/gov/ack", content=r.content, sign_request=True)
 
 
 def get_constitution(client: Client, path: Path):
@@ -196,7 +187,7 @@ def setup_local_development(
     # They are idempotent operation anyway, so no harm in doing them again.
 
     print("Activating member credentials...")
-    activate_member(client)
+    client.governance.activate_member()
 
     print("Configuring DID Web root CA bundle...")
     if did_web_ca_certs:
@@ -219,6 +210,7 @@ def setup_local_development(
         network["service_certificate"]
     )
     client.governance.propose(proposal, must_pass=True)
+    client.wait_for_network_open()
 
     if trust_store_dir:
         print(f"Adding service to {trust_store_dir} ...")
@@ -344,7 +336,7 @@ def cli(fn):
 
     p = sub.add_parser("activate_member")
     add_client_arguments(p, with_member_auth=True)
-    p.set_defaults(func=lambda args: activate_member(create_client(args)))
+    p.set_defaults(func=lambda args: create_client(args).governance.activate_member())
 
     p = sub.add_parser(
         "constitution",
