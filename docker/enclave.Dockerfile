@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.0
+ARG CCF_VERSION=3.0.1
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 
