@@ -14,7 +14,7 @@ project(scitt
   LANGUAGES C CXX
 )
 
-set(COMPILE_TARGET "sgx" CACHE STRING "Help")
+set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
 option(ENABLE_DEBUG_MALLOC "Enable Open Enclave's debug malloc for enclave builds" OFF)
 set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
 message(STATUS "ATTESTED_FETCH_MRENCLAVE_HEX=${ATTESTED_FETCH_MRENCLAVE_HEX}")
@@ -25,7 +25,11 @@ option(ENABLE_PREFIX_TREE "Enable the prefix tree" OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (CCF_UNSAFE)
-  find_package(ccf_unsafe REQUIRED)
+  if (NOT ${COMPILE_TARGET} STREQUAL "sgx")
+    message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
+  endif()
+
+  find_package(ccf_sgx_unsafe REQUIRED)
 else()
   find_package(ccf_${COMPILE_TARGET} REQUIRED)
 endif()
@@ -74,7 +78,7 @@ install(
 
 if (BUILD_TESTS)
   if (COMPILE_TARGET STREQUAL "sgx")
-    message(SEND_ERROR "Unit tests are not supported on SGX builds. Use -DBUILD_TESTS=OFF to disable them.")
+    message(FATAL_ERROR "Unit tests are not supported on SGX builds. Set BUILD_TESTS=OFF to disable them.")
   endif()
 
   # Avoid Gtest files ending up in the scitt install directory   

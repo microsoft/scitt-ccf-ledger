@@ -65,7 +65,7 @@ stages:
           Platform: sgx
           Pool: 1es-dcv3
           Variant: Docker
-          ImageFilename: scitt-ccf-ledger-release.tar
+          ImageFilename: scitt-ccf-ledger-sgx.tar
           Environment:
             DOCKER: 1
             DOCKER_IN_DOCKER: 1
@@ -125,8 +125,8 @@ stages:
             displayName: Get image tag from git tag
           
           - script: |
-              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-release.tar
-              docker tag scitt-ccf-ledger-release $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-sgx.tar
+              docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
             displayName: Load Docker image
 
           - task: Docker@2
