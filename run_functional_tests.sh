@@ -5,7 +5,7 @@
 set -e
 
 DOCKER=${DOCKER:-0}
-ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
+PLATFORM=${PLATFORM:-sgx}
 
 # If ELEVATE_PRIVILEGES is non-empty, the functional tests will be run with
 # the NET_BIND_SERVICE capability, allowing certain tests that bind
@@ -40,7 +40,7 @@ if [ "$DOCKER" = "1" ]; then
     TEST_ARGS="-s"
 else
     SCITT_DIR=/tmp/scitt
-    TEST_ARGS="--start-cchost --enclave-type=$ENCLAVE_TYPE --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution"
+    TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution"
 fi
 
 echo "Setting up python virtual environment."

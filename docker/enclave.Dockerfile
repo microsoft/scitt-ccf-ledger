@@ -1,4 +1,4 @@
-ARG CCF_VERSION=2.0.8
+ARG CCF_VERSION=3.0.1
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 
@@ -29,7 +29,7 @@ RUN mkdir /tmp/app-build && \
     CC="/opt/oe_lvi/clang-10" CXX="/opt/oe_lvi/clang++-10" cmake -GNinja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
-    -DCOMPILE_TARGETS="sgx" \
+    -DCOMPILE_TARGET="sgx" \
     -DBUILD_TESTS=OFF \
     -DATTESTED_FETCH_MRENCLAVE_HEX=`cat /usr/src/app/attested-fetch/mrenclave.txt` \
     /tmp/app && \

@@ -10,12 +10,12 @@ if ! command -v python3.8 &> /dev/null; then
     exit 1
 fi
 
-ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
+PLATFORM=${PLATFORM:-sgx}
 CCF_HOST=${CCF_HOST:-"localhost"}
 CCF_PORT=${CCF_PORT:-8000}
 CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
 
-DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$ENCLAVE_TYPE"}
+DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$PLATFORM"}
 CONTAINER_NAME=${CONTAINER_NAME:-"scitt-ccf-ledger-dev-$(date +%s)"}
 
 WORKSPACE=${WORKSPACE:-"workspace/"}
@@ -34,18 +34,21 @@ rm -rf "$WORKSPACE"
 mkdir -p "$WORKSPACE"
 
 cp ./docker/dev-config.tmpl.json "$WORKSPACE"/dev-config.json
-if [ "$ENCLAVE_TYPE" = "release" ]; then
+if [ "$PLATFORM" = "sgx" ]; then
+    enclave_platform="SGX"
     enclave_type="Release"
     enclave_file="libscitt.enclave.so.signed"
     DOCKER_FLAGS=(
         "--device" "/dev/sgx_enclave:/dev/sgx_enclave"
         "--device" "/dev/sgx_provision:/dev/sgx_provision"
     )
-elif [ "$ENCLAVE_TYPE" = "virtual" ]; then
+elif [ "$PLATFORM" = "virtual" ]; then
+    enclave_platform="Virtual"
     enclave_type="Virtual"
     enclave_file="libscitt.virtual.so"
     DOCKER_FLAGS=()
 fi
+sed -i "s/%ENCLAVE_PLATFORM%/$enclave_platform/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%ENCLAVE_TYPE%/$enclave_type/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%ENCLAVE_FILE%/$enclave_file/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%CCF_PORT%/$CCF_PORT/g" "$WORKSPACE"/dev-config.json
