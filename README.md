@@ -17,10 +17,10 @@ All instructions below assume Linux as the operating system.
 
 Use the following commands to start a single-node CCF network with the scitt-ccf-ledger application setup for development purposes.
 
-Note: `ENCLAVE_TYPE` should be set to `release` or `virtual` for an SGX build or virtual build, respectively.
+Note: `PLATFORM` should be set to `sgx` or `virtual` to select the type of build.
 
 ```sh
-export ENCLAVE_TYPE=<release|virtual>
+export PLATFORM=<sgx|virtual>
 ./docker/build.sh
 ./docker/run-dev.sh
 ```

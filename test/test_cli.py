@@ -7,8 +7,8 @@ import shlex
 from pathlib import Path
 
 import pytest
-from cose.messages import CoseMessage
 from loguru import logger as LOG
+from pycose.messages import CoseMessage
 
 from infra.did_web_server import DIDWebServer
 from pyscitt import crypto, did

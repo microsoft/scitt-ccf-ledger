@@ -7,8 +7,8 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, List, Union
 
 import cbor2
-from cose.messages import CoseMessage, Sign1Message
-from cose.messages.cosebase import CoseBase
+from pycose.messages import CoseMessage, Sign1Message
+from pycose.messages.cosebase import CoseBase
 
 if TYPE_CHECKING:
     from .client import BaseClient

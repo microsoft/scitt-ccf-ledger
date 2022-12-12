@@ -17,7 +17,7 @@ jobs:
     name: Analyze
     
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/ccf/app/dev:2.0.8-sgx
+    container: mcr.microsoft.com/ccf/app/dev:3.0.1-virtual
     
     permissions:
       actions: read
@@ -68,7 +68,7 @@ jobs:
     - if: matrix.language == 'cpp'
       name: Build C++
       run: |
-        CMAKE_BUILD_TYPE=Debug ENCLAVE_TYPE=virtual BUILD_TESTS=OFF ./build.sh
+        CMAKE_BUILD_TYPE=Debug PLATFORM=virtual BUILD_TESTS=OFF ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2

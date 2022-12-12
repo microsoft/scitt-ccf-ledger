@@ -14,7 +14,7 @@ from loguru import logger as LOG
 from pyscitt import governance
 from pyscitt.client import Client
 
-from .cchost import CCHost, get_enclave_path
+from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer
 
 # This file defines a collection of pytest fixtures used to manage and
@@ -26,9 +26,9 @@ from .did_web_server import DIDWebServer
 
 
 class ManagedCCHostFixtures:
-    def __init__(self, binary, enclave_type, enclave_file, constitution):
+    def __init__(self, binary, platform, enclave_file, constitution):
         self.binary = binary
-        self.enclave_type = enclave_type
+        self.platform = platform
         self.enclave_file = enclave_file
         self.constitution = constitution
 
@@ -79,7 +79,7 @@ class ManagedCCHostFixtures:
 
             cchost = CCHost(
                 self.binary,
-                self.enclave_type,
+                self.platform,
                 self.enclave_file,
                 workspace=workspace,
                 constitution=constitution_files,
@@ -192,12 +192,12 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--cchost-binary",
-        default="/opt/ccf/bin/cchost",
         help="Path to the cchost binary. Requires --start-cchost.",
     )
     parser.addoption(
-        "--enclave-type",
+        "--platform",
         default="virtual",
+        choices=["sgx", "virtual"],
         help="Type of enclave used when starting cchost. Requires --start-cchost.",
     )
     parser.addoption(
@@ -220,13 +220,15 @@ def pytest_configure(config):
     )
 
     if config.getoption("--start-cchost"):
-        binary = config.getoption("--cchost-binary")
         enclave_package = config.getoption("--enclave-package")
-        enclave_type = config.getoption("--enclave-type")
+        platform = config.getoption("--platform")
+        binary = config.getoption("--cchost-binary") or get_default_cchost_path(
+            platform
+        )
         constitution = config.getoption("--constitution")
-        enclave_file = get_enclave_path(enclave_type, enclave_package)
+        enclave_file = get_enclave_path(platform, enclave_package)
         config.pluginmanager.register(
-            ManagedCCHostFixtures(binary, enclave_type, enclave_file, constitution)
+            ManagedCCHostFixtures(binary, platform, enclave_file, constitution)
         )
     else:
         config.pluginmanager.register(ExternalLedgerFixtures())

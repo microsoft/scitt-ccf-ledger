@@ -3,7 +3,7 @@ parameters:
     type: string
   - name: DisplayName
     type: string
-  - name: Container
+  - name: Platform
     type: string
   - name: Pool
     type: string
@@ -25,8 +25,11 @@ parameters:
 jobs:
   - job: ${{ parameters.Name }}
     displayName: ${{ parameters.DisplayName }}
-    variables: ${{ parameters.Environment }}
-    container: ${{ parameters.Container }}
+    variables:
+      PLATFORM: ${{ parameters.Platform }}
+      ${{ insert }}: ${{ parameters.Environment }}
+
+    container: ${{ parameters.Platform }}
     ${{ if parameters.Pool }}:
       pool: ${{ parameters.Pool }}
     steps:
@@ -37,9 +40,11 @@ jobs:
 
       - ${{ if parameters.BuildCCF }}:
         - template: ccf.yml
-          parameters: ${{ parameters.BuildCCF }}
+          parameters:
+            Platform: ${{ parameters.Platform }}
+            ${{ insert }}: ${{ parameters.BuildCCF }}
 
-      - ${{ if eq(parameters.Container, 'sgx') }}:
+      - ${{ if eq(parameters.Platform, 'sgx') }}:
         - script: |
             sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv
             sudo usermod -a -G sgx_prv $(whoami)
@@ -60,9 +65,13 @@ jobs:
       - ${{ if eq(parameters.Variant, 'Local') }}:
         - script: ./build.sh
           displayName: Build (local)
+          env:
+            ${{ if eq(parameters.Platform, 'SGX') }}:
+              BUILD_TESTS: OFF
 
-        - script: ./run_unit_tests.sh
-          displayName: Run Unit tests
+        - ${{ if ne(parameters.Platform, 'SGX') }}:
+          - script: ./run_unit_tests.sh
+            displayName: Run Unit tests
 
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         displayName: Run Functional Tests
