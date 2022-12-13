@@ -12,6 +12,8 @@
 #include <ccf/crypto/entropy.h>
 #include <ccf/ds/hex.h>
 #include <ccf/node/host_processes_interface.h>
+#include <ccf/node_context.h>
+#include <ccf/service/tables/nodes.h>
 #include <ccf/tx.h>
 #include <fmt/format.h>
 #include <string>
@@ -23,7 +25,41 @@ namespace scitt::did::web
   class DidWebResolver : public MethodResolver
   {
   private:
+    ccfapp::AbstractNodeContext& context;
     std::shared_ptr<ccf::AbstractHostProcesses> host_processes;
+
+    /**
+     * Return the callback URL used by the external fetch process to submit
+     * results.
+     *
+     * We use the node table to determine what port the service is listening on.
+     * This works even if cchost was given port 0 in its configuration, as it
+     * will updated the node information after
+     */
+    std::string format_callback_url(std::string_view did, kv::Tx& tx) const
+    {
+      auto nodes = tx.ro<ccf::Nodes>(ccf::Tables::NODES);
+      ccf::NodeId node_id = context.get_node_id();
+      std::optional<ccf::NodeInfo> node_info = nodes->get(node_id);
+
+      if (node_info.has_value() && !node_info->rpc_interfaces.empty())
+      {
+        // cchost can listen on multiple interfaces. This arbitrarily uses the
+        // first one, in alphabetical order.
+        const auto& primary_interface =
+          node_info->rpc_interfaces.begin()->second;
+
+        // We ignore the hostname part of the bind address, since that is
+        // typically something like 0.0.0.0, and hardcode localhost instead.
+        auto [_host, port] =
+          ccf::split_net_address(primary_interface.bind_address);
+        return fmt::format("https://localhost:{}/app/did/{}/doc", port, did);
+      }
+      else
+      {
+        throw DIDResolutionError("Could not determine did:web call back URL");
+      }
+    }
 
     void trigger_fetch_did_web_doc(
       const std::string& did, ::timespec current_time, kv::Tx& tx) const
@@ -60,11 +96,12 @@ namespace scitt::did::web
         issuers->put(did, issuer_info);
       }
 
-      // TODO callback url? for now hard-coded in resolver script
+      auto callback = format_callback_url(did, tx);
 
       CCF_APP_INFO("Triggering fetch of DID document for {}", did);
+      CCF_APP_DEBUG("DID fetch callback url: {}", callback);
       host_processes->trigger_host_process_launch(
-        {DID_WEB_RESOLVER_SCRIPT, did, url, nonce});
+        {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback});
     }
 
     std::optional<DidResolutionResult> lookup(
@@ -112,8 +149,9 @@ namespace scitt::did::web
     }
 
   public:
-    DidWebResolver(std::shared_ptr<ccf::AbstractHostProcesses> host_processes) :
-      host_processes(host_processes)
+    DidWebResolver(ccfapp::AbstractNodeContext& context) :
+      context(context),
+      host_processes(context.get_subsystem<ccf::AbstractHostProcesses>())
     {}
 
     std::string_view get_method_prefix() const

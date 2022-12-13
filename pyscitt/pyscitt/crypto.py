@@ -13,31 +13,9 @@ from uuid import uuid4
 warnings.filterwarnings("ignore", category=Warning)
 
 import cbor2
-import cose.algorithms
-import cose.headers
 import jwt
-from cose.keys.curves import P256, P384, P521, Ed25519
-from cose.keys.ec2 import EC2Key
-from cose.keys.keyparam import (
-    EC2KpCurve,
-    EC2KpD,
-    EC2KpX,
-    EC2KpY,
-    OKPKpCurve,
-    OKPKpD,
-    OKPKpX,
-    RSAKpD,
-    RSAKpDP,
-    RSAKpDQ,
-    RSAKpE,
-    RSAKpN,
-    RSAKpP,
-    RSAKpQ,
-    RSAKpQInv,
-)
-from cose.keys.okp import OKPKey
-from cose.keys.rsa import RSAKey
-from cose.messages import CoseMessage, Sign1Message
+import pycose.algorithms
+import pycose.headers
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -63,6 +41,28 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
+from pycose.keys.curves import P256, P384, P521, Ed25519
+from pycose.keys.ec2 import EC2Key
+from pycose.keys.keyparam import (
+    EC2KpCurve,
+    EC2KpD,
+    EC2KpX,
+    EC2KpY,
+    OKPKpCurve,
+    OKPKpD,
+    OKPKpX,
+    RSAKpD,
+    RSAKpDP,
+    RSAKpDQ,
+    RSAKpE,
+    RSAKpN,
+    RSAKpP,
+    RSAKpQ,
+    RSAKpQInv,
+)
+from pycose.keys.okp import OKPKey
+from pycose.keys.rsa import RSAKey
+from pycose.messages import CoseMessage, Sign1Message
 
 from .receipt import Receipt
 
@@ -684,13 +684,13 @@ def sign_claimset(
     registration_info: RegistrationInfo = {},
 ) -> bytes:
     headers = {}
-    headers[cose.headers.Algorithm] = signer.algorithm
-    headers[cose.headers.ContentType] = content_type
+    headers[pycose.headers.Algorithm] = signer.algorithm
+    headers[pycose.headers.ContentType] = content_type
 
     if signer.x5c is not None:
-        headers[cose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
+        headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
     if signer.kid is not None:
-        headers[cose.headers.KID] = signer.kid.encode("utf-8")
+        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
     if signer.issuer is not None:
         headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
     if feed is not None:

@@ -30,6 +30,13 @@ namespace scitt
     {}
   };
 
+  struct NotFoundError : public HTTPError
+  {
+    NotFoundError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_NOT_FOUND, code, msg)
+    {}
+  };
+
   struct UnauthorizedError : public HTTPError
   {
     UnauthorizedError(std::string code, std::string msg) :

@@ -3,11 +3,12 @@
 
 import hashlib
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import TYPE_CHECKING, List, Union
 
 import cbor2
-from cose.messages import CoseMessage, Sign1Message
-from cose.messages.cosebase import CoseBase
+from pycose.messages import CoseMessage, Sign1Message
+from pycose.messages.cosebase import CoseBase
 
 if TYPE_CHECKING:
     from .client import BaseClient
@@ -196,12 +197,14 @@ class PrefixTreeClient:
         # process the commit.
         #
         # Query the indexer until its upper bound is greater or equal to what
-        # we got when flushing.
+        # we got when flushing. We also need to handle the NoPrefixTree 404 error,
+        # which can happen on a fresh service.
         self.client.get_historical(
             "/app/prefix_tree",
             retry_on=[
+                (HTTPStatus.NOT_FOUND, "NoPrefixTree"),
                 lambda r: r.is_success
-                and not is_indexed(r.content, info["upper_bound"])
+                and not is_indexed(r.content, info["upper_bound"]),
             ],
         )
         return info
