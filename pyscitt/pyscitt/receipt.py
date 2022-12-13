@@ -9,11 +9,11 @@ from typing import Any
 
 import cbor2
 import ccf.receipt
-from cose.messages import Sign1Message
-from cose.messages.cosebase import CoseBase
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
+from pycose.messages import Sign1Message
+from pycose.messages.cosebase import CoseBase
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
