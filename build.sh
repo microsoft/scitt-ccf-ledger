@@ -5,7 +5,7 @@
 set -ex
 
 CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
-ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
+PLATFORM=${PLATFORM:-sgx}
 CCF_UNSAFE=${CCF_UNSAFE:-OFF}
 ENABLE_PREFIX_TREE=${ENABLE_PREFIX_TREE:-OFF}
 BUILD_TESTS=${BUILD_TESTS:-ON}
@@ -20,7 +20,7 @@ install_dir=/tmp/scitt
 
 mkdir -p $install_dir
 
-if [ "$ENCLAVE_TYPE" = "release" ]; then
+if [ "$PLATFORM" = "sgx" ]; then
     mkdir -p build/attested-fetch
     pushd build/attested-fetch
     CC="$CC" CXX="$CXX" cmake -GNinja -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
@@ -31,15 +31,13 @@ if [ "$ENCLAVE_TYPE" = "release" ]; then
     /opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed > oesign.dump && \
         awk '/^mrenclave=/' oesign.dump | sed "s/mrenclave=//" > mrenclave.txt
     ATTESTED_FETCH_MRENCLAVE_HEX=$(<mrenclave.txt)
-    COMPILE_TARGETS=sgx
     popd
     cp "$root_dir"/app/fetch-did-web-doc-attested.sh $install_dir
-elif [ "$ENCLAVE_TYPE" = "virtual" ]; then
+elif [ "$PLATFORM" = "virtual" ]; then
     ATTESTED_FETCH_MRENCLAVE_HEX=""
-    COMPILE_TARGETS=virtual
     cp "$root_dir"/app/fetch-did-web-doc-unattested.sh $install_dir
 else
-    echo "Unknown enclave type: $ENCLAVE_TYPE, must be 'release' or 'virtual'"
+    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
     exit 1
 fi
 
@@ -52,7 +50,7 @@ CC="$CC" CXX="$CXX" \
     cmake -GNinja \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
     -DATTESTED_FETCH_MRENCLAVE_HEX="${ATTESTED_FETCH_MRENCLAVE_HEX}" \
-    -DCOMPILE_TARGETS="${COMPILE_TARGETS}" \
+    -DCOMPILE_TARGET="${PLATFORM}" \
     -DCCF_UNSAFE="${CCF_UNSAFE}" \
     -DENABLE_PREFIX_TREE="${ENABLE_PREFIX_TREE}" \
     -DBUILD_TESTS="${BUILD_TESTS}" \

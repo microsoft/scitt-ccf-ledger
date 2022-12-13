@@ -99,6 +99,10 @@ class GovernanceClient:
 
         return result
 
+    def activate_member(self):
+        r = self.client.post("/gov/ack/update_state_digest", sign_request=True)
+        self.client.post("/gov/ack", content=r.content, sign_request=True)
+
 
 def set_scitt_configuration_proposal(configuration: dict) -> dict:
     return {

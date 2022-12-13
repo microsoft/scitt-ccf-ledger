@@ -9,7 +9,7 @@ trigger:
 parameters:
   - name: CCF_VERSION
     type: string
-    default: 2.0.8
+    default: 3.0.1
 
 resources:
   containers:
@@ -17,8 +17,8 @@ resources:
       image: mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx
       options: --device /dev/sgx_enclave:/dev/sgx_enclave --device /dev/sgx_provision:/dev/sgx_provision -v /dev/sgx:/dev/sgx
 
-    - container: ccf
-      image: mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx
+    - container: virtual
+      image: mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-virtual
 
 variables:
   # This is used in functional tests to make certain tests mandatory
@@ -34,20 +34,18 @@ stages:
         parameters:
           Name: test_sgx_no_prefix_tree
           DisplayName: Test (SGX, no prefix tree)
-          Container: sgx
+          Platform: sgx
           Pool: 1es-dcv3
           Environment:
-            ENCLAVE_TYPE: release
             ENABLE_PREFIX_TREE: OFF
 
       - template: common.yml
         parameters:
           Name: test_sgx
           DisplayName: Test (SGX, with prefix tree)
-          Container: sgx
+          Platform: sgx
           Pool: 1es-dcv3
           Environment:
-            ENCLAVE_TYPE: release
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree'
 
@@ -55,9 +53,8 @@ stages:
         parameters:
           Name: test_virtual
           DisplayName: Test (Virtual, with prefix tree)
-          Container: ccf
+          Platform: virtual
           Environment:
-            ENCLAVE_TYPE: virtual
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree'
 
@@ -65,12 +62,11 @@ stages:
         parameters:
           Name: test_sgx_docker
           DisplayName: Test (SGX on Docker, no prefix tree)
-          Container: sgx
+          Platform: sgx
           Pool: 1es-dcv3
           Variant: Docker
-          ImageFilename: scitt-ccf-ledger-release.tar
+          ImageFilename: scitt-ccf-ledger-sgx.tar
           Environment:
-            ENCLAVE_TYPE: release
             DOCKER: 1
             DOCKER_IN_DOCKER: 1
 
@@ -78,11 +74,10 @@ stages:
         parameters:
           Name: test_virtual_docker
           DisplayName: Test (Virtual on Docker, no prefix tree)
-          Container: ccf
+          Platform: virtual
           Variant: Docker
           ImageFilename: scitt-ccf-ledger-virtual.tar
           Environment:
-            ENCLAVE_TYPE: virtual
             DOCKER: 1
             DOCKER_IN_DOCKER: 1
 
@@ -90,19 +85,18 @@ stages:
         parameters:
           Name: test_san
           DisplayName: Test (Sanitizers, with prefix tree)
-          Container: ccf
+          Platform: virtual
           BuildCCF:
             Version: ${{ parameters.CCF_VERSION }}
-            CMakeArgs: -DCOMPILE_TARGETS=virtual -DSAN=ON -DCMAKE_BUILD_TYPE=Debug -DLVI_MITIGATIONS=OFF
+            CMakeArgs: -DSAN=ON -DCMAKE_BUILD_TYPE=Debug -DLVI_MITIGATIONS=OFF
           Environment:
-            ENCLAVE_TYPE: virtual
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree'
 
       - job: format
         displayName: Code Formatting
-        container: ccf
+        container: virtual
         steps:
           - checkout: self
             submodules: true
@@ -135,8 +129,8 @@ stages:
             displayName: Get image tag from git tag
           
           - script: |
-              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-release.tar
-              docker tag scitt-ccf-ledger-release $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-sgx.tar
+              docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
             displayName: Load Docker image
 
           - task: Docker@2

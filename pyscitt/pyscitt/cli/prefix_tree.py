@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from cose.messages import CoseMessage
+from pycose.messages import CoseMessage
 
 from .. import crypto, prefix_tree
 from ..client import Client

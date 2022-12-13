@@ -7,9 +7,10 @@ The following explains how to build, run, and test scitt-ccf-ledger outside of D
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
 This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger in full.
 
-However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware and is generally sufficient for local development.
+However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
+and is generally sufficient for local development.
 
-Follow the steps below to setup your development environment:
+Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
 
 1. Set up machine: 
     - If using SGX, it is recommended that you provision a virtual machine:
@@ -19,10 +20,10 @@ Follow the steps below to setup your development environment:
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-2.0.8.tar.gz
-    tar xvzf ccf-2.0.8.tar.gz
-    cd CCF-ccf-2.0.8/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=2.0.8
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-3.0.1.tar.gz
+    tar xvzf ccf-3.0.1.tar.gz
+    cd CCF-ccf-3.0.1/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=3.0.1 -e platform=<sgx|virtual>
     ```
 
 ## Building
@@ -35,15 +36,14 @@ Follow the steps below to setup your development environment:
 
 2. Build scitt-ccf-ledger by running:
     ```sh
-    # release means SGX
-    ENCLAVE_TYPE=<release|virtual> ./build.sh
+    PLATFORM=<sgx|virtual> ./build.sh
     ```
 
 ## Running
 
 1. Start a single-node CCF network running the scitt-ccf-ledger application:
     ```sh
-    ENCLAVE_TYPE=<release|virtual> ./start.sh
+    PLATFORM=<sgx|virtual> ./start.sh
     ```
 
 2. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local
@@ -71,4 +71,4 @@ The functional tests can be run with:
 ./run_functional_tests.sh
 ```
 
-Note: the functional tests will launch a CCF network, please ensure you do not already have one running. 
+Note: the functional tests will launch their own CCF network on a randomly assigned port. You do not need to start an instance beforehand.

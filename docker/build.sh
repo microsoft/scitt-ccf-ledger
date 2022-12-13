@@ -4,22 +4,22 @@
 
 set -e
 
-ENCLAVE_TYPE=${ENCLAVE_TYPE:-release}
+PLATFORM=${PLATFORM:-sgx}
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
 
-if [ "$ENCLAVE_TYPE" = "release" ]; then
+if [ "$PLATFORM" = "sgx" ]; then
     DOCKERFILE="enclave.Dockerfile"
-elif [ "$ENCLAVE_TYPE" = "virtual" ]; then
+elif [ "$PLATFORM" = "virtual" ]; then
     DOCKERFILE="virtual.Dockerfile"
 else
-    echo "Unknown enclave type: $ENCLAVE_TYPE, must be 'release' or 'virtual'"
+    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
     exit 1
 fi
 
 git submodule sync
 git submodule update --init --recursive
 
-DOCKER_TAG="scitt-ccf-ledger-$ENCLAVE_TYPE"
+DOCKER_TAG="scitt-ccf-ledger-$PLATFORM"
 
 DOCKER_BUILDKIT=1 docker build -t "$DOCKER_TAG" -f docker/$DOCKERFILE .
 

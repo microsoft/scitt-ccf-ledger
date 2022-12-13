@@ -4,8 +4,8 @@
 
 set -x
 
-# This script invokes curl, and, if successful,
-# POSTs the response back to the CCF app at /did/{did}/doc.
+# This script invokes curl, and, if successful, POSTs the response back to the
+# CCF app. The callback URL to the CCF app is given as a command line argument.
 # It is only used for testing in non-SGX environments.
 
 # TODO remove this again once CCF logs output from subprocesses
@@ -13,12 +13,9 @@ exec >  >(tee -i /tmp/scitt-fetch-did-web-doc-unattested.log)
 exec 2>&1
 
 AFETCH_DIR="/tmp/scitt"
-did=$1
-url=$2
-nonce=$3
-CCF_SERVICE_HOST=${CCF_SERVICE_HOST:-"127.0.0.1"}
-CCF_SERVICE_PORT=${CCF_SERVICE_PORT:-"8000"}
-callback_url="https://${CCF_SERVICE_HOST}:${CCF_SERVICE_PORT}/app/did/${did}/doc"
+url=$1
+nonce=$2
+callback_url=$3
 out_path=$(mktemp "${AFETCH_DIR}/out.XXXXXX")
 trap "rm -f ${out_path}" 0 2 3 15
 
