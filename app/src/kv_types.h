@@ -129,7 +129,7 @@ namespace scitt
     Authentication authentication = {};
 
     // The long-term stable identity of this service, as a DID.
-    // If set, it will be used to populated the issuer field of receipts
+    // If set, it will be used to populate the issuer field of receipts
     std::optional<std::string> service_identity;
   };
 
