@@ -128,5 +128,6 @@ class TestServiceIdentifier:
         # "service identity" is used as a KID in the receipts.
         receipt = client.submit_claim(claims).receipt
         assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
-        assert receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
-
+        assert (
+            receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
+        )
