@@ -128,9 +128,9 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable identity of this service, as a DID.
+    // The long-term stable identifier of this service, as a DID.
     // If set, it will be used to populate the issuer field of receipts
-    std::optional<std::string> service_identity;
+    std::optional<std::string> service_identifier;
   };
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
@@ -151,7 +151,7 @@ namespace scitt
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration, policy, authentication, service_identity);
+    Configuration, policy, authentication, service_identifier);
 
   // Tables
 

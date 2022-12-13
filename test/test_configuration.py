@@ -114,12 +114,12 @@ def test_service_did(client, did_web, configure_service):
     assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
     assert cose.headers.KID not in receipt.phdr
 
-    service_identity = "did:web:ledger.example.com"
-    configure_service({"service_identity": service_identity})
+    service_identifier = "did:web:ledger.example.com"
+    configure_service({"service_identifier": service_identifier})
 
     # Get a new receipt. This time it should have the right issuer and kid.
     # Somewhat confusingly, what the old `/app/parameters` endpoint calls the
     # "service identity" is used as a KID in the receipts.
     receipt = client.submit_claim(claims).receipt
-    assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identity
+    assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
     assert receipt.phdr[cose.headers.KID].decode("ascii") == parameters["serviceId"]
