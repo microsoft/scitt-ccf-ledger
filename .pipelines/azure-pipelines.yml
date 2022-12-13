@@ -108,7 +108,7 @@ stages:
 
       - job: scanbuild
         displayName: Static Analysis 
-        container: ccf
+        container: virtual
         steps:
           - script: ./scripts/scan-build.sh
             displayName: "Scan build"
