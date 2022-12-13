@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-import cose
+import pycose
 import pytest
 
 from infra.did_web_server import DIDWebServer
@@ -102,24 +102,31 @@ class TestAcceptedDIDIssuers:
         client.submit_claim(claims)
 
 
-def test_service_did(client, did_web, configure_service):
-    parameters = client.get_parameters()
+class TestServiceIdentifier:
+    @pytest.fixture
+    def claims(self, did_web):
+        identity = did_web.create_identity()
+        return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    identity = did_web.create_identity()
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    def test_without_identifier(self, client, configure_service, claims):
+        configure_service({})
 
-    # By default, the service runs without a configured identity.
-    # The receipts it returns have no issuer or kid.
-    receipt = client.submit_claim(claims).receipt
-    assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
-    assert cose.headers.KID not in receipt.phdr
+        # By default, the service runs without a configured identity.
+        # The receipts it returns have no issuer or kid.
+        receipt = client.submit_claim(claims).receipt
+        assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
+        assert pycose.headers.KID not in receipt.phdr
 
-    service_identifier = "did:web:ledger.example.com"
-    configure_service({"service_identifier": service_identifier})
+    def test_with_identifier(self, client, configure_service, claims):
+        parameters = client.get_parameters()
+        service_identifier = "did:web:ledger.example.com"
+        configure_service({"service_identifier": service_identifier})
 
-    # Get a new receipt. This time it should have the right issuer and kid.
-    # Somewhat confusingly, what the old `/app/parameters` endpoint calls the
-    # "service identity" is used as a KID in the receipts.
-    receipt = client.submit_claim(claims).receipt
-    assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
-    assert receipt.phdr[cose.headers.KID].decode("ascii") == parameters["serviceId"]
+        # If a service identifier is configured, issued receipts include an issuer
+        # and kid.
+        # Somewhat confusingly, what the old `/app/parameters` endpoint calls the
+        # "service identity" is used as a KID in the receipts.
+        receipt = client.submit_claim(claims).receipt
+        assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
+        assert receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
+
