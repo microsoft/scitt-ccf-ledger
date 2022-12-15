@@ -94,11 +94,11 @@ namespace scitt
   {
     struct Out
     {
-      std::string version;
+      std::string scitt_version;
     };
   };
 
   DECLARE_JSON_TYPE(GetVersion::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, version);
+  DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, scitt_version);
 
 } // namespace scitt

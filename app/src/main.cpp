@@ -744,7 +744,7 @@ namespace scitt
       auto get_version = [this](EndpointContext& ctx, nlohmann::json&& params) {
         GetVersion::Out out;
 
-        out.version = SCITT_VERSION;
+        out.scitt_version = SCITT_VERSION;
 
         return out;
       };
