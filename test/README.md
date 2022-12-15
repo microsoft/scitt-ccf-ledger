@@ -3,9 +3,9 @@
 This repository contains functional tests for the SCITT CCF Ledger.
 
 The functional tests are written in Python and interact with a running service.
-THe majority of tests in this directory are focused on testing the behaviour of
+The majority of tests in this directory are focused on testing the behaviour of
 the service, but to a lesser extent, we also write tests that exercise the
-behaviour of the pyscitt module and scitt CLI.
+behaviour of the pyscitt package and `scitt` CLI.
 
 ## Structure
 
@@ -25,7 +25,7 @@ one large test function.
 The tests are written using the pytest framework, and makes extensive use of
 its fixtures mechanism. Fixtures setup the environment the tests run in and
 provide helper utilities to interact with it. For a more thorough overview of
-pytest fixtures, please refer to [the pyscitt documentation](https://docs.pytest.org/en/7.2.x/explanation/fixtures.html).
+pytest fixtures, please refer to [the pytest documentation](https://docs.pytest.org/en/7.2.x/explanation/fixtures.html).
 
 To use a fixture, a test function needs a parameter representing the fixture.
 For example, a test which needs access to a `Client` instance to interact with
@@ -63,7 +63,7 @@ def test_multiple_identities(did_web: DIDWebServer):
 
 Similarly, some fixtures are in fact helper functions which may not return any
 value, but have a side effect each time they are called. For example, in the
-`test_cli.py` file, the `run` fixture is used to execute the SCITT cli:
+`test_cli.py` file, the `run` fixture is used to execute the `scitt` CLI:
 
 ```python
 def test_constitution(run, tmp_path):
@@ -71,11 +71,11 @@ def test_constitution(run, tmp_path):
 ```
 
 The example above also shows how multiple fixtures can be combined in a single
-test, here both the run helper and [the built-in pytest `tmp_path` fixture](https://docs.pytest.org/en/7.2.x/how-to/tmp_path.html).
+test, here both the `run` helper and [the built-in pytest `tmp_path` fixture](https://docs.pytest.org/en/7.2.x/how-to/tmp_path.html).
 
 ## Ledger service
 
-The test infrastructure manages the environment the tests run in, and provided
+The test infrastructure manages the environment the tests run in, and provides
 fixtures to interact with it. In particular, this includes providing a ledger
 service instance. The test infrastructure can operate in two modes, depending
 on whether the `--start-cchost` flag was provided to pytest.
@@ -85,7 +85,7 @@ or more ledger services as necessary. This is generally more convenient and
 ensures the tests are running against a known clean state.
 
 Otherwise, the infrastructure can use an external ledger service. The service
-must already running and have be open for traffic before the tests are run.
+must already be running and open for traffic before the tests are run.
 This can be used to run against a SCITT ledger running inside a Docker
 container for example. Note that member access is required, and running the
 tests will disrupt the service. It must not be used against a production
@@ -127,17 +127,17 @@ included in the test infrastructure.
 
 The `client` fixture gives access to a `Client` object that is pre-configured
 to communicate with the local SCITT ledger service. Depending on the test
-markers and how pytest was invocated, this may be an external service, a
+markers and how pytest was invoked, this may be an external service, a
 managed service that is shared among all tests, or an isolated service that was
 started just for a particular test class. The `Client` instance is configured
 with a member private key, enabling governance operations, but no
 authentication token. A token can be provided by calling
 `client.replace(auth_token=...)`.
 
-The `service_url` and `member_auth` give access to the details necessary to
+The `service_url` and `member_auth` fixtures give access to the details necessary to
 interact with the running SCITT service. Generally, these fixtures do not need
 to be used, as the aforementioned `client` fixture provides a more practical
-way to use the service. The `member_auth_path` fixtuire provides the same
+way to use the service. The `member_auth_path` fixture provides the same
 credentials as `member_auth`, but as files on disk rather than in-memory
 strings.
 
@@ -163,7 +163,7 @@ Most of the time, the `client` fixture is sufficient.
 
 As mentioned earlier, the `test_cli.py` file features a `run` fixture function.
 This function can be used to execute the `scitt` CLI. If the `with_service_url`
-or `with_member_auth` keword arguments are true, appropriate flags are added to
+or `with_member_auth` keyword arguments are true, appropriate flags are added to
 the command invocation in order for the tooling to be able to contact the
 service. This fixture cannot be used in other files, where direct interaction
 with the service using the pyscitt programmatic API is preferred.
@@ -186,7 +186,7 @@ Finally, if a fixture is only relevant to a couple of tests, the tests can be
 grouped in a class and the fixture defined as a method in that class.
 
 Where it makes sense, it is better to implement the fixture's functionality
-with a general-purpose interface that is not tied to pytest, allowing it to
+with a general-purpose interface that is not tied to pytest, allowing it to be
 re-used in other contexts. The fixture definition becomes a thin wrapper to
 instantiate this generic interface. For example the `client` and `cchost`
 fixtures are wrappers around the re-usable `Client` and `CCHost`.
