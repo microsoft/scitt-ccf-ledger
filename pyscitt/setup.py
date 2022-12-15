@@ -16,7 +16,7 @@ setup(
         "httpx",
         "cryptography",
         "cbor2",
-        "cose>=0.9.dev8",
+        "pycose>=1.0.1",
         "ccf>=2.0.0",
         "pyjwt",
     ],
