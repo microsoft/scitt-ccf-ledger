@@ -14,12 +14,6 @@ steps:
       git clone --single-branch -b ccf-${{ parameters.Version }} https://github.com/microsoft/CCF $(Pipeline.Workspace)/CCF
     displayName: Checkout CCF ${{ parameters.Version }}
 
-  # This has been backported to the 3.x branch, and won't be necessary anymore when 3.0.2 is released.
-  - script: |
-      curl -L https://github.com/microsoft/CCF/commit/bcee5460048018ca933befaa1b5d8b654a7fce3a.diff | patch -p1
-    workingDirectory: $(Pipeline.Workspace)/CCF
-    displayName: Patch CCF
-
   - script: |
       cmake -GNinja -B build \
         -DCMAKE_INSTALL_PREFIX=/opt/ccf_${{ parameters.Platform }} \
