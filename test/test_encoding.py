@@ -53,7 +53,7 @@ class TestNonCanonicalEncoding:
         client.submit_claim(claim, decode=False)
 
     @pytest.mark.xfail(
-        reason="pytest does not preserve the original encoding (https://github.com/TimothyClaeys/pycose/pull/91)",
+        reason="pycose does not preserve the original encoding (https://github.com/TimothyClaeys/pycose/pull/91)",
         raises=InvalidSignature,
     )
     def test_verify_receipt(self, client, trust_store, claim):
