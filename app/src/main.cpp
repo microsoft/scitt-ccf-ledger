@@ -64,6 +64,66 @@ namespace scitt
   using EntrySeqnoIndexingStrategy =
     ccf::indexing::strategies::SeqnosForValue_Bucketed<EntryTable>;
 
+  /**
+   * This is a re-implementation of CCF's get_query_value, but it throws a
+   * BadRequestError if the query parameter cannot be parsed. Also supports
+   * boolean parameters as "true" and "false".
+   *
+   * Returns std::nullopt if the parameter is missing.
+   */
+  template <typename T>
+  static std::optional<T> get_query_value(
+    const http::ParsedQuery& pq, std::string_view name)
+  {
+    auto it = pq.find(name);
+    if (it == pq.end())
+    {
+      return std::nullopt;
+    }
+
+    std::string_view value = it->second;
+    if constexpr (std::is_same_v<T, std::string>)
+    {
+      return value;
+    }
+    else if constexpr (std::is_same_v<T, bool>)
+    {
+      if (value == "true")
+      {
+        return true;
+      }
+      else if (value == "false")
+      {
+        return false;
+      }
+      else
+      {
+        throw BadRequestError(
+          errors::QueryParameterError,
+          fmt::format(
+            "Invalid value for query parameter '{}': {}", name, value));
+      }
+    }
+    else if constexpr (std::is_integral_v<T>)
+    {
+      T result;
+      const auto [p, ec] = std::from_chars(value.begin(), value.end(), result);
+      if (ec != std::errc() || p != value.end())
+      {
+        throw BadRequestError(
+          errors::QueryParameterError,
+          fmt::format(
+            "Invalid value for query parameter '{}': {}", name, value));
+      }
+      return result;
+    }
+    else
+    {
+      static_assert(nonstd::dependent_false<T>::value, "Unsupported type");
+      return std::nullopt;
+    }
+  }
+
   class AppEndpoints : public ccf::UserEndpointRegistry
   {
   private:
@@ -243,28 +303,8 @@ namespace scitt
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
 
-        bool embed_receipt = false;
-        static constexpr auto embed_receipt_query_param = "embedReceipt";
-        // Custom code as http::get_query_value() doesn't support booleans yet.
-        // See https://github.com/microsoft/CCF/issues/3674.
-        auto it = parsed_query.find(embed_receipt_query_param);
-        if (it != parsed_query.end())
-        {
-          auto& param_val = it->second;
-          if (param_val == "true")
-          {
-            embed_receipt = true;
-          }
-          else if (param_val != "false")
-          {
-            throw BadRequestError(
-              errors::QueryParameterError,
-              fmt::format(
-                "Invalid value for query parameter '{}': {}",
-                embed_receipt_query_param,
-                param_val));
-          }
-        }
+        bool embed_receipt =
+          get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
 
         auto historical_tx = historical_state->store->create_read_only_tx();
 
@@ -370,121 +410,120 @@ namespace scitt
         .install();
 
       static constexpr auto get_entries_tx_ids_path = "/entries/txIds";
-      auto get_entries_tx_ids = [this](
-                                  EndpointContext& ctx,
-                                  nlohmann::json&& params) {
-        const auto parsed_query =
-          http::parse_query(ctx.rpc_ctx->get_request_query());
+      auto get_entries_tx_ids =
+        [this](EndpointContext& ctx, nlohmann::json&& params) {
+          const auto parsed_query =
+            http::parse_query(ctx.rpc_ctx->get_request_query());
 
-        std::string error_reason;
+          ccf::SeqNo from_seqno =
+            get_query_value<uint64_t>(parsed_query, "from").value_or(1);
+          std::optional<ccf::SeqNo> to_seqno_opt =
+            get_query_value<uint64_t>(parsed_query, "to");
+          ccf::SeqNo to_seqno;
 
-        size_t from_seqno;
-        if (!http::get_query_value(
-              parsed_query, "from", from_seqno, error_reason))
-        {
-          from_seqno = 1;
-        }
+          if (to_seqno_opt.has_value())
+          {
+            to_seqno = *to_seqno_opt;
+          }
+          else
+          {
+            ccf::View view;
+            ccf::SeqNo seqno;
+            const auto result = get_last_committed_txid_v1(view, seqno);
+            if (result != ccf::ApiResult::OK)
+            {
+              throw InternalError(fmt::format(
+                "Failed to get last committed transaction ID: {}",
+                ccf::api_result_to_str(result)));
+            }
+            to_seqno = seqno;
+          }
 
-        size_t to_seqno;
-        if (!http::get_query_value(parsed_query, "to", to_seqno, error_reason))
-        {
-          ccf::View view;
-          ccf::SeqNo seqno;
-          const auto result = get_last_committed_txid_v1(view, seqno);
-          if (result != ccf::ApiResult::OK)
+          if (to_seqno < from_seqno)
+          {
+            throw BadRequestError(
+              errors::InvalidInput,
+              fmt::format(
+                "Invalid range: Starts at {} but ends at {}",
+                from_seqno,
+                to_seqno));
+          }
+
+          const auto tx_status = get_tx_status(to_seqno);
+          if (!tx_status.has_value())
           {
             throw InternalError(fmt::format(
-              "Failed to get last committed transaction ID: {}",
-              ccf::api_result_to_str(result)));
+              "Failed to get transaction status for seqno {}", to_seqno));
           }
-          to_seqno = seqno;
-        }
 
-        if (to_seqno < from_seqno)
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Invalid range: Starts at {} but ends at {}",
-              from_seqno,
-              to_seqno));
-        }
-
-        const auto tx_status = get_tx_status(to_seqno);
-        if (!tx_status.has_value())
-        {
-          throw InternalError(fmt::format(
-            "Failed to get transaction status for seqno {}", to_seqno));
-        }
-
-        if (tx_status.value() != ccf::TxStatus::Committed)
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Only committed transactions can be queried. Transaction at "
-              "seqno {} is {}",
-              to_seqno,
-              ccf::tx_status_to_str(tx_status.value())));
-        }
-
-        const auto indexed_txid = entry_seqno_index->get_indexed_watermark();
-        if (indexed_txid.seqno < to_seqno)
-        {
-          throw ServiceUnavailableError(
-            errors::IndexingInProgressRetryLater,
-            "Index of requested range not available yet, retry later");
-        }
-
-        static constexpr size_t max_seqno_per_page = 10000;
-        const auto range_begin = from_seqno;
-        const auto range_end =
-          std::min(to_seqno, range_begin + max_seqno_per_page);
-
-        const auto interesting_seqnos =
-          entry_seqno_index->get_write_txs_in_range(range_begin, range_end);
-        if (!interesting_seqnos.has_value())
-        {
-          throw ServiceUnavailableError(
-            errors::IndexingInProgressRetryLater,
-            "Index of requested range not available yet, retry later");
-        }
-
-        std::vector<std::string> tx_ids;
-        for (auto seqno : interesting_seqnos.value())
-        {
-          ccf::View view;
-          auto result = get_view_for_seqno_v1(seqno, view);
-          if (result != ccf::ApiResult::OK)
+          if (tx_status.value() != ccf::TxStatus::Committed)
           {
-            throw InternalError(fmt::format(
-              "Failed to get view for seqno: {}",
-              ccf::api_result_to_str(result)));
+            throw BadRequestError(
+              errors::InvalidInput,
+              fmt::format(
+                "Only committed transactions can be queried. Transaction at "
+                "seqno {} is {}",
+                to_seqno,
+                ccf::tx_status_to_str(tx_status.value())));
           }
-          auto tx_id = ccf::TxID{view, seqno}.to_str();
-          tx_ids.push_back(tx_id);
-        }
 
-        GetEntriesTransactionIds::Out out;
-        out.transaction_ids = std::move(tx_ids);
+          const auto indexed_txid = entry_seqno_index->get_indexed_watermark();
+          if (indexed_txid.seqno < to_seqno)
+          {
+            throw ServiceUnavailableError(
+              errors::IndexingInProgressRetryLater,
+              "Index of requested range not available yet, retry later");
+          }
 
-        // If this didn't cover the total requested range, begin fetching the
-        // next page and tell the caller how to retrieve it
-        if (range_end != to_seqno)
-        {
-          const auto next_page_start = range_end + 1;
-          const auto next_range_end =
-            std::min(to_seqno, next_page_start + max_seqno_per_page);
-          entry_seqno_index->get_write_txs_in_range(
-            next_page_start, next_range_end);
-          // NB: This path tells the caller to continue to ask until the end of
-          // the range, even if the next response is paginated
-          out.next_link = fmt::format(
-            "/app/entries/txIds?from={}&to={}", next_page_start, to_seqno);
-        }
+          static constexpr size_t max_seqno_per_page = 10000;
+          const auto range_begin = from_seqno;
+          const auto range_end =
+            std::min(to_seqno, range_begin + max_seqno_per_page);
 
-        return out;
-      };
+          const auto interesting_seqnos =
+            entry_seqno_index->get_write_txs_in_range(range_begin, range_end);
+          if (!interesting_seqnos.has_value())
+          {
+            throw ServiceUnavailableError(
+              errors::IndexingInProgressRetryLater,
+              "Index of requested range not available yet, retry later");
+          }
+
+          std::vector<std::string> tx_ids;
+          for (auto seqno : interesting_seqnos.value())
+          {
+            ccf::View view;
+            auto result = get_view_for_seqno_v1(seqno, view);
+            if (result != ccf::ApiResult::OK)
+            {
+              throw InternalError(fmt::format(
+                "Failed to get view for seqno: {}",
+                ccf::api_result_to_str(result)));
+            }
+            auto tx_id = ccf::TxID{view, seqno}.to_str();
+            tx_ids.push_back(tx_id);
+          }
+
+          GetEntriesTransactionIds::Out out;
+          out.transaction_ids = std::move(tx_ids);
+
+          // If this didn't cover the total requested range, begin fetching the
+          // next page and tell the caller how to retrieve it
+          if (range_end != to_seqno)
+          {
+            const auto next_page_start = range_end + 1;
+            const auto next_range_end =
+              std::min(to_seqno, next_page_start + max_seqno_per_page);
+            entry_seqno_index->get_write_txs_in_range(
+              next_page_start, next_range_end);
+            // NB: This path tells the caller to continue to ask until the end
+            // of the range, even if the next response is paginated
+            out.next_link = fmt::format(
+              "/app/entries/txIds?from={}&to={}", next_page_start, to_seqno);
+          }
+
+          return out;
+        };
 
       make_endpoint(
         get_entries_tx_ids_path,

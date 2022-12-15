@@ -19,19 +19,24 @@ class TestHistorical:
             submission = client.submit_claim(claim, decode=False)
             result.append(
                 SimpleNamespace(
-                    claim=claim, tx=submission.tx, receipt=submission.receipt
+                    claim=claim,
+                    tx=submission.tx,
+                    seqno=submission.seqno,
+                    receipt=submission.receipt,
                 )
             )
         return result
 
     def test_enumerate_claims(self, client, submissions):
-        txs = list(
-            client.enumerate_claims(start=submissions[0].tx, end=submissions[-1].tx)
+        seqnos = list(
+            client.enumerate_claims(
+                start=submissions[0].seqno, end=submissions[-1].seqno
+            )
         )
 
-        # This works because we don't run tests concurrently on a single server.
+        # This works because we don't run tests concurrently on a shared server.
         # If we did, we'd have to check for a sub-list instead.
-        assert [s.tx for s in submissions] == txs
+        assert [s.tx for s in submissions] == seqnos
 
     def test_get_receipt(self, client, trust_store, submissions):
         for s in submissions:
@@ -43,7 +48,7 @@ class TestHistorical:
             claim = client.get_claim(s.tx)
             crypto.verify_cose_with_receipt(claim, trust_store, s.receipt)
 
-    def test_get_claim_with_receipt(self, client, trust_store, submissions):
+    def test_get_claim_with_embedded_receipt(self, client, trust_store, submissions):
         for s in submissions:
             claim = client.get_claim(s.tx, embed_receipt=True)
             crypto.verify_cose_with_receipt(claim, trust_store)
