@@ -36,6 +36,7 @@ jobs:
       - checkout: self
         submodules: true
         fetchTags: true
+        fetchDepth: 0
         clean: true
         lfs: false
 
