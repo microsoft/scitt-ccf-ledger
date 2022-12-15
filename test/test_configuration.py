@@ -3,6 +3,7 @@
 
 from pathlib import Path
 
+import pycose
 import pytest
 
 from infra.did_web_server import DIDWebServer
@@ -99,3 +100,34 @@ class TestAcceptedDIDIssuers:
             {"policy": {"accepted_did_issuers": [identity.issuer, "else"]}}
         )
         client.submit_claim(claims)
+
+
+class TestServiceIdentifier:
+    @pytest.fixture
+    def claim(self, did_web):
+        identity = did_web.create_identity()
+        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    def test_without_identifier(self, client, configure_service, claim):
+        configure_service({})
+
+        # By default, the service runs without a configured identity.
+        # The receipts it returns have no issuer or kid.
+        receipt = client.submit_claim(claim).receipt
+        assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
+        assert pycose.headers.KID not in receipt.phdr
+
+    def test_with_identifier(self, client, configure_service, claim):
+        parameters = client.get_parameters()
+        service_identifier = "did:web:ledger.example.com"
+        configure_service({"service_identifier": service_identifier})
+
+        # If a service identifier is configured, issued receipts include an issuer
+        # and kid.
+        # Somewhat confusingly, what the old `/app/parameters` endpoint calls the
+        # "service identity" is used as a KID in the receipts.
+        receipt = client.submit_claim(claim).receipt
+        assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
+        assert (
+            receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
+        )

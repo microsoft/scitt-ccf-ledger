@@ -13,6 +13,8 @@ namespace scitt
   // @CMAKE_GENERATED_COMMENT@
   //
 
+  const std::string SCITT_VERSION = "@SCITT_VERSION@";
+  
   const std::string ATTESTED_FETCH_MRENCLAVE_HEX = "@ATTESTED_FETCH_MRENCLAVE_HEX@";
 
   // clang-format on

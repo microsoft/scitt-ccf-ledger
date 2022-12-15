@@ -1,6 +1,7 @@
-ARG CCF_VERSION=3.0.1
+ARG CCF_VERSION=3.0.2
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
+ARG SCITT_VERSION_OVERRIDE
 
 # Build CCF app
 COPY ./app /tmp/app/
@@ -11,6 +12,7 @@ RUN mkdir /tmp/app-build && \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
     -DCOMPILE_TARGET="virtual" \
     -DBUILD_TESTS=OFF \
+    -DSCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE} \
     /tmp/app && \
     ninja && ninja install
 
@@ -24,6 +26,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/lib/libscitt.virtual.so libscitt.virtual.so
+COPY --from=builder /usr/src/app/share/VERSION VERSION
 
 COPY app/fetch-did-web-doc-unattested.sh /tmp/scitt/fetch-did-web-doc-unattested.sh
 

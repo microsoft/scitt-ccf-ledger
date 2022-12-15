@@ -9,7 +9,7 @@ trigger:
 parameters:
   - name: CCF_VERSION
     type: string
-    default: 3.0.1
+    default: 3.0.2
 
 resources:
   containers:
