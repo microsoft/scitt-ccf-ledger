@@ -13,7 +13,7 @@ from pyscitt import crypto
 class TestNonCanonicalEncoding:
     @pytest.fixture
     def claim(self, did_web):
-        """Create a signed claim, which protected headers encoded non-canonically."""
+        """Create a signed claim, with protected headers encoded non-canonically."""
 
         identity = did_web.create_identity()
 
@@ -71,7 +71,7 @@ class TestNonCanonicalEncoding:
         updated_pieces = cbor2.loads(embedded).value
 
         # Any part of the message that is cryptographically bound needs to be preserved.
-        # These are respestively, the protected header, the payload and the signature.
+        # These are respectively, the protected header, the payload and the signature.
         assert original_pieces[0] == updated_pieces[0]
         assert original_pieces[2] == updated_pieces[2]
         assert original_pieces[3] == updated_pieces[3]
