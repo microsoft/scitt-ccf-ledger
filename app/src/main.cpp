@@ -8,6 +8,7 @@
 #include "did/document.h"
 #include "did/resolver.h"
 #include "did/web/method.h"
+#include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
 #include "kv_types.h"
@@ -759,6 +760,24 @@ namespace scitt
         HTTP_GET,
         error_adapter(get_constitution),
         no_authn_policy)
+        .install();
+
+      static constexpr auto get_version_path = "/version";
+      auto get_version = [this](EndpointContext& ctx, nlohmann::json&& params) {
+        GetVersion::Out out;
+
+        out.scitt_version = SCITT_VERSION;
+
+        return out;
+      };
+
+      make_endpoint(
+        get_version_path,
+        HTTP_GET,
+        error_adapter(ccf::json_adapter(get_version)),
+        no_authn_policy)
+        .set_auto_schema<void, GetVersion::Out>()
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
 
 #ifdef ENABLE_PREFIX_TREE
