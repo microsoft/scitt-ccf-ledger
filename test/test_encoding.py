@@ -12,7 +12,7 @@ from pyscitt import crypto
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def claims(self, did_web):
+    def claim(self, did_web):
         """Create a signed claim, which protected headers encoded non-canonically."""
 
         identity = did_web.create_identity()
@@ -48,25 +48,26 @@ class TestNonCanonicalEncoding:
         message = [protected, dict(), payload, signature]
         return cbor2.dumps(cbor2.CBORTag(Sign1Message.cbor_tag, message))
 
-    def test_submit_claim(self, client, trust_store, claims):
+    def test_submit_claim(self, client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
-        client.submit_claim(claims, decode=False)
+        client.submit_claim(claim, decode=False)
 
     @pytest.mark.xfail(
-        reason="pytest does not preserve the original encoding", raises=InvalidSignature
+        reason="pytest does not preserve the original encoding (https://github.com/TimothyClaeys/pycose/pull/91)",
+        raises=InvalidSignature,
     )
-    def test_verify_receipt(self, client, trust_store, claims):
+    def test_verify_receipt(self, client, trust_store, claim):
         """We should be able to verify the produced receipt."""
-        # Once the xfail is fixes, this test can be merged with the test_submit_claim.
-        receipt = client.submit_claim(claims, decode=False).receipt
-        crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+        # Once the xfail is fixed, this test can be merged with test_submit_claim.
+        receipt = client.submit_claim(claim, decode=False).receipt
+        crypto.verify_cose_with_receipt(claim, trust_store, receipt)
 
-    def test_embed_receipt(self, client, trust_store, claims):
+    def test_embed_receipt(self, client, trust_store, claim):
         """When embedding a receipt in a claim, the ledger should not affect the original encoding."""
-        tx = client.submit_claim(claims, decode=False).tx
+        tx = client.submit_claim(claim, decode=False).tx
         embedded = client.get_claim(tx, embed_receipt=True)
 
-        original_pieces = cbor2.loads(claims).value
+        original_pieces = cbor2.loads(claim).value
         updated_pieces = cbor2.loads(embedded).value
 
         # Any part of the message that is cryptographically bound needs to be preserved.
