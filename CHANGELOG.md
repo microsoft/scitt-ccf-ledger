@@ -18,9 +18,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Update to pycose 1.0 (#34).
 - Return a nice error instead of 500 when no prefix tree has been committed yet (#26).
 
-### Fixed
-
-
 ## [0.1.0-dev.1]
 ### Added
 - Initial release.
