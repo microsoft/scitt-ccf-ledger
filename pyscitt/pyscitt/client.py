@@ -303,6 +303,9 @@ class Client(BaseClient):
     def get_constitution(self) -> str:
         return self.get("/app/constitution").text
 
+    def get_version(self) -> dict:
+        return self.get("/app/version").json()
+
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False, decode=True
     ) -> Submission:

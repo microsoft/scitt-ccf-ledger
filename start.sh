@@ -8,7 +8,7 @@
 set -ex
 
 PLATFORM=${PLATFORM:-sgx}
-CCF_DIR=${CCF_DIR:-/opt/ccf}
+CCF_DIR=${CCF_DIR:-/opt/ccf_$PLATFORM}
 # TODO: Don't use /tmp
 SCITT_DIR=/tmp/scitt
 

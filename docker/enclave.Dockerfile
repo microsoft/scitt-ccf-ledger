@@ -1,6 +1,7 @@
 ARG CCF_VERSION=3.0.1
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
+ARG SCITT_VERSION_OVERRIDE
 
 WORKDIR /usr/src/app/
 
@@ -32,6 +33,7 @@ RUN mkdir /tmp/app-build && \
     -DCOMPILE_TARGET="sgx" \
     -DBUILD_TESTS=OFF \
     -DATTESTED_FETCH_MRENCLAVE_HEX=`cat /usr/src/app/attested-fetch/mrenclave.txt` \
+    -DSCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE} \
     /tmp/app && \
     ninja && ninja install
 
@@ -54,6 +56,7 @@ RUN apt remove -y wget
 
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/lib/libscitt.enclave.so.signed libscitt.enclave.so.signed
+COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY --from=builder /usr/src/app/mrenclave.txt mrenclave.txt
 
 COPY app/fetch-did-web-doc-attested.sh /tmp/scitt/fetch-did-web-doc-attested.sh
