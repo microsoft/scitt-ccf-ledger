@@ -34,7 +34,10 @@ namespace scitt
    * receipt.
    */
   std::vector<uint8_t> create_countersign_protected_header(
-    ::timespec registration_time, std::string_view service_id)
+    ::timespec registration_time,
+    std::optional<std::string_view> issuer,
+    std::optional<std::span<const uint8_t>> kid,
+    std::string_view service_id)
   {
     cbor::encoder encoder;
 
@@ -43,8 +46,24 @@ namespace scitt
       encoder,
       COSE_HEADER_PARAM_TREE_ALGORITHM,
       cbor::from_string(TREE_ALGORITHM_CCF));
+
+    if (issuer.has_value())
+    {
+      QCBOREncode_AddTextToMapN(
+        encoder, cose::COSE_HEADER_PARAM_ISSUER, cbor::from_string(*issuer));
+    }
+    if (kid.has_value())
+    {
+      QCBOREncode_AddBytesToMapN(
+        encoder, cose::COSE_HEADER_PARAM_KID, cbor::from_bytes(*kid));
+    }
+
+    // This is the legacy header parameter, currently specified by
+    // draft-birkholz-scitt-receipts. Eventually this will be phased out in
+    // favour of the iss/kid headers above.
     QCBOREncode_AddTextToMap(
       encoder, COSE_HEADER_PARAM_SERVICE_ID, cbor::from_string(service_id));
+
     QCBOREncode_AddUInt64ToMap(
       encoder, COSE_HEADER_PARAM_REGISTRATION_TIME, registration_time.tv_sec);
     QCBOREncode_CloseMap(encoder);

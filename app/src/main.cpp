@@ -166,10 +166,32 @@ namespace scitt
         auto service_info = service->get().value();
         auto service_cert = service_info.cert;
         auto service_cert_der = crypto::cert_pem_to_der(service_cert);
-        auto service_id = crypto::Sha256Hash(service_cert_der).hex_str();
+        auto service_cert_digest =
+          crypto::Sha256Hash(service_cert_der).hex_str();
 
-        auto sign_protected =
-          create_countersign_protected_header(time, service_id);
+        // Take the service's DID from the configuration, if present. For the
+        // time being, the kid is the same as the service certificate hash.
+        // Eventually, this may change to become eg. an RFC7638 JWK thumbprint.
+        std::vector<uint8_t> sign_protected;
+        if (cfg.service_identifier.has_value())
+        {
+          // TODO: clarify the format of KID. We currently use the hex digest,
+          // encoded in ASCII. Since the COSE field is a bstr, we could skip the
+          // hex/ASCII encoding part of it and embed the digest directly, but
+          // this would not be valid as-is in the corresponding JWK.
+          std::span<const uint8_t> kid = {
+            reinterpret_cast<const uint8_t*>(service_cert_digest.data()),
+            service_cert_digest.size(),
+          };
+
+          sign_protected = create_countersign_protected_header(
+            time, *cfg.service_identifier, kid, service_cert_digest);
+        }
+        else
+        {
+          sign_protected = create_countersign_protected_header(
+            time, std::nullopt, std::nullopt, service_cert_digest);
+        }
 
         // Compute the hash of the to-be-signed countersigning structure
         // and set it as CCF transaction claim for use in receipt validation.
