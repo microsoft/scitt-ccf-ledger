@@ -90,4 +90,15 @@ namespace scitt
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     GetEntriesTransactionIds::Out, next_link, "nextLink");
 
+  struct GetVersion
+  {
+    struct Out
+    {
+      std::string scitt_version;
+    };
+  };
+
+  DECLARE_JSON_TYPE(GetVersion::Out);
+  DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, scitt_version);
+
 } // namespace scitt

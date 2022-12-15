@@ -17,7 +17,7 @@ jobs:
     name: Analyze
     
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/ccf/app/dev:3.0.1-virtual
+    container: mcr.microsoft.com/ccf/app/dev:3.0.2-virtual
     
     permissions:
       actions: read
@@ -34,6 +34,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
     # Work-around for https://github.com/actions/runner/issues/2033
     - name: Work around git safe.directory in container
