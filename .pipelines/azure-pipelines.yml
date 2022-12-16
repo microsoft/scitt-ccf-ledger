@@ -111,11 +111,11 @@ stages:
         container: virtual
         steps:
           - checkout: self
-          submodules: true
-          fetchTags: true
-          fetchDepth: 0
-          clean: true
-          lfs: false
+            submodules: true
+            fetchTags: true
+            fetchDepth: 0
+            clean: true
+            lfs: false
 
           - script: ./scripts/scan-build.sh
             displayName: "Scan build"
