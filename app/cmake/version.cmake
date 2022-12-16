@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 include(CMakePrintHelpers)
 cmake_print_variables(CMAKE_CURRENT_SOURCE_DIR)
+cmake_print_variables(GIT_EXECUTABLE)
 
 unset(SCITT_VERSION)
 
