@@ -107,8 +107,7 @@ stages:
             displayName: "CI checks"
             
       - job: scanbuild
-        displayName: Static Analysis 
-        container: virtual
+        displayName: Static Analysis
         steps:
           - script: ./scripts/scan-build.sh
             displayName: "Scan build"
