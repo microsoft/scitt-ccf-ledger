@@ -108,7 +108,13 @@ stages:
             
       - job: scanbuild
         displayName: Static Analysis
+        container: virtual
         steps:
+          - checkout: self
+            submodules: true
+            clean: true
+            lfs: false
+            
           - script: ./scripts/scan-build.sh
             displayName: "Scan build"
   
