@@ -1,5 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+include(CMakePrintHelpers)
+cmake_print_variables(CMAKE_CURRENT_SOURCE_DIR)
 
 unset(SCITT_VERSION)
 
