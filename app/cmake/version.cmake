@@ -1,7 +1,5 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-include(CMakePrintHelpers)
-
 
 unset(SCITT_VERSION)
 
@@ -10,10 +8,6 @@ if (SCITT_VERSION_OVERRIDE)
 else()
   # Deduce project version from git environment
   find_package(Git)
-  
-  cmake_print_variables(CMAKE_CURRENT_SOURCE_DIR)
-  cmake_print_variables(GIT_EXECUTABLE)
-  cmake_print_variables(SCITT_VERSION_OVERRIDE)
 
   execute_process(
     COMMAND "bash" "-c" "${GIT_EXECUTABLE} describe --tags --match=\"*.*.*\""
