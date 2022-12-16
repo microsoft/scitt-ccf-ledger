@@ -19,9 +19,15 @@ fi
 git submodule sync
 git submodule update --init --recursive
 
+SCITT_VERSION_OVERRIDE=$(git describe --tags --match="*.*.*")
+
 DOCKER_TAG="scitt-ccf-ledger-$PLATFORM"
 
-DOCKER_BUILDKIT=1 docker build -t "$DOCKER_TAG" -f docker/$DOCKERFILE .
+DOCKER_BUILDKIT=1 docker build \
+    -t "$DOCKER_TAG" \
+    -f docker/$DOCKERFILE \
+    --build-arg SCITT_VERSION_OVERRIDE="$SCITT_VERSION_OVERRIDE" \
+    .
 
 if [ -n "$SAVE_IMAGE_PATH" ]; then
     docker save "$DOCKER_TAG" -o "$SAVE_IMAGE_PATH"
