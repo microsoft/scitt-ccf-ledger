@@ -101,7 +101,7 @@ class BaseClient:
         url: str,
         *,
         auth_token: Optional[str] = None,
-        member_auth: Optional[Tuple[str, str, str]] = None,
+        member_auth: Optional[Tuple] = None,
         development: bool = False,
     ):
         """
@@ -131,12 +131,14 @@ class BaseClient:
             headers["Authorization"] = "Bearer " + auth_token
 
         if member_auth:
-            cert, key, akv_configuration = member_auth
-            if key:
-                key_id = crypto.get_cert_fingerprint(cert)      
+            if len(member_auth) == 2:
+                cert, key = member_auth
+                key_id = crypto.get_cert_fingerprint(cert)
+                self.member_http_sig = HttpSig(key_id, key, None)
             else:
-                key_id = None          
-            self.member_http_sig = HttpSig(key_id, key, akv_configuration)
+                cert, key, akv_configuration= member_auth
+                key_id = None
+                self.member_http_sig = HttpSig(key_id, key, akv_configuration)          
         else:
             self.member_http_sig = None
 
