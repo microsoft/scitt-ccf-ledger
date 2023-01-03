@@ -67,6 +67,12 @@ def add_client_arguments(
             type=Path,
             help="Path to CCF member certificate file",
         )
+        parser.add_argument(
+            "--akv-configuration",
+            default=None,
+            type=Path,
+            help="Path to CCF member Azure key vault configuration file",
+        )
 
     if with_auth_token:
         parser.add_argument("--auth-token", help="JWT bearer token")
@@ -86,7 +92,11 @@ def create_client(args: argparse.Namespace):
     if "member_cert" in args:
         cert = args.member_cert.read_text()
         key = args.member_key.read_text()
-        kwargs["member_auth"] = (cert, key)
+        kwargs["member_auth"] = (cert, key, None)
+ 
+    if "akv_configuration" in args:
+        akv_configuration = args.akv_configuration.read_text()
+        kwargs["member_auth"] = (None, None, akv_configuration)
 
     if "auth_token" in args:
         kwargs["auth_token"] = args.auth_token

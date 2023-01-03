@@ -16,6 +16,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from loguru import logger as LOG
 
+from pyscitt.key_vault_sign_client import KeyVaultSignClient
+
 from . import crypto
 from .governance import GovernanceClient
 from .prefix_tree import PrefixTreeClient
@@ -27,11 +29,14 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 class HttpSig(httpx.Auth):
     requires_request_body = True
 
-    def __init__(self, key_id: str, pem_private_key: str):
-        self.key_id = key_id
-        self.private_key = load_pem_private_key(
-            pem_private_key.encode("ascii"), password=None, backend=default_backend()
-        )
+    def __init__(self, key_id: str, pem_private_key: str, akv_configuration:str):
+        if key_id:
+            self.key_id = key_id
+            self.private_key = load_pem_private_key(
+                pem_private_key.encode("ascii"), password=None, backend=default_backend()
+                )
+        else:
+            self.akv_configuration = akv_configuration
 
     def auth_flow(self, request):
         body_digest = base64.b64encode(hashlib.sha256(request.content).digest()).decode(
@@ -45,12 +50,18 @@ class HttpSig(httpx.Auth):
                 f"content-length: {len(request.content)}",
             ]
         ).encode("utf-8")
-        digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
-            self.private_key.curve.key_size
-        ]
-        signature = self.private_key.sign(
-            signature_algorithm=ec.ECDSA(algorithm=digest_algo), data=string_to_sign
-        )
+        
+        if self.akv_configuration:
+            key_vault_sign_client = KeyVaultSignClient(self.akv_configuration)
+            signature, cert = key_vault_sign_client.sign_with_idetity(string_to_sign)
+            self.key_id = crypto.get_cert_fingerprint(cert)
+        else:   
+            digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
+                self.private_key.curve.key_size
+            ]
+            signature = self.private_key.sign(
+                signature_algorithm=ec.ECDSA(algorithm=digest_algo), data=string_to_sign
+            )
         b64signature = base64.b64encode(signature).decode("ascii")
         request.headers[
             "authorization"
@@ -78,7 +89,7 @@ class BaseClient:
 
     url: str
     auth_token: Optional[str]
-    member_auth: Optional[Tuple[str, str]]
+    member_auth: Optional[Tuple[str, str, str]]
     development: bool
 
     session: httpx.Client
@@ -89,7 +100,7 @@ class BaseClient:
         url: str,
         *,
         auth_token: Optional[str] = None,
-        member_auth: Optional[Tuple[str, str]] = None,
+        member_auth: Optional[Tuple[str, str, str]] = None,
         development: bool = False,
     ):
         """
@@ -119,9 +130,12 @@ class BaseClient:
             headers["Authorization"] = "Bearer " + auth_token
 
         if member_auth:
-            cert, key = member_auth
-            key_id = crypto.get_cert_fingerprint(cert)
-            self.member_http_sig = HttpSig(key_id, key)
+            cert, key, akv_configuration = member_auth
+            if key:
+                key_id = crypto.get_cert_fingerprint(cert)      
+            else:
+                key_id = None          
+            self.member_http_sig = HttpSig(key_id, key, akv_configuration)
         else:
             self.member_http_sig = None
 

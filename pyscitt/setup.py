@@ -14,10 +14,13 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "httpx",
-        "cryptography",
+        "cryptography==38.*",
         "cbor2",
         "pycose>=1.0.1",
         "ccf>=2.0.0",
         "pyjwt",
+        "azure-keyvault",
+        "azure-identity",
+        "pyasn1"
     ],
 )
