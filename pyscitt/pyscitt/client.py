@@ -32,11 +32,13 @@ class HttpSig(httpx.Auth):
     def __init__(self, key_id: str, pem_private_key: str, akv_configuration:str):
         if key_id:
             self.key_id = key_id
+        else:
+            self.key_id = None
+        if pem_private_key:
             self.private_key = load_pem_private_key(
                 pem_private_key.encode("ascii"), password=None, backend=default_backend()
                 )
-        else:
-            self.key_id = None
+        if akv_configuration:
             self.akv_configuration = akv_configuration
 
     def auth_flow(self, request):
@@ -52,7 +54,7 @@ class HttpSig(httpx.Auth):
             ]
         ).encode("utf-8")
         
-        if not self.key_id:
+        if hasattr(self, 'akv_configuration'):
             key_vault_sign_client = KeyVaultSignClient(self.akv_configuration)
             signature, cert = key_vault_sign_client.sign_with_idetity(string_to_sign)
             self.key_id = crypto.get_cert_fingerprint(cert)
