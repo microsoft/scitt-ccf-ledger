@@ -1,22 +1,17 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 import base64
 import hashlib
 import json
+
 from azure.identity import DefaultAzureCredential
+from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
+from azure.keyvault.keys import KeyClient
+from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
 from pyasn1.type.namedtype import NamedTypes, NamedType
 from pyasn1.type.univ import Integer, Sequence
 from pyasn1.codec.der.encoder import encode
-
-from azure.keyvault.certificates import (
-    CertificateClient,
-    KeyVaultCertificate
-)
-from azure.keyvault.keys import (
-    KeyClient
-    )
-from azure.keyvault.keys.crypto import (
-    CryptographyClient,
-    SignatureAlgorithm,
-)
 
 class _DERSignature(Sequence):
     """Internal helper class for decoding AKV signature for CCF."""

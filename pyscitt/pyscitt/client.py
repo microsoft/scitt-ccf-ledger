@@ -36,6 +36,7 @@ class HttpSig(httpx.Auth):
                 pem_private_key.encode("ascii"), password=None, backend=default_backend()
                 )
         else:
+            self.key_id = None
             self.akv_configuration = akv_configuration
 
     def auth_flow(self, request):
@@ -51,7 +52,7 @@ class HttpSig(httpx.Auth):
             ]
         ).encode("utf-8")
         
-        if self.akv_configuration:
+        if not self.key_id:
             key_vault_sign_client = KeyVaultSignClient(self.akv_configuration)
             signature, cert = key_vault_sign_client.sign_with_idetity(string_to_sign)
             self.key_id = crypto.get_cert_fingerprint(cert)

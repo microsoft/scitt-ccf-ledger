@@ -93,8 +93,8 @@ def create_client(args: argparse.Namespace):
         cert = args.member_cert.read_text()
         key = args.member_key.read_text()
         kwargs["member_auth"] = (cert, key, None)
- 
-    if "akv_configuration" in args:
+    print(args)
+    if "akv_configuration" in args and args.akv_configuration:
         akv_configuration = args.akv_configuration.read_text()
         kwargs["member_auth"] = (None, None, akv_configuration)
 
