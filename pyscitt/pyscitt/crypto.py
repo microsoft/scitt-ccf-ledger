@@ -637,7 +637,10 @@ def create_did_document(
     )
 
     return {
-        "@context": "https://www.w3.org/ns/did/v1",
+        "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1"
+        ],
         "id": did,
         "assertionMethod": [
             {
