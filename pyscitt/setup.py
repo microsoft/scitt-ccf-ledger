@@ -21,6 +21,6 @@ setup(
         "pyjwt",
         "azure-keyvault",
         "azure-identity",
-        "pyasn1"
+        "pyasn1",
     ],
 )

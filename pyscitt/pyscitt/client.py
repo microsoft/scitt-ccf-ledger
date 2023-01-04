@@ -29,15 +29,17 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 class HttpSig(httpx.Auth):
     requires_request_body = True
 
-    def __init__(self, key_id: str, pem_private_key: str, akv_configuration:str):
+    def __init__(self, key_id: str, pem_private_key: str, akv_configuration: str):
         if key_id:
             self.key_id = key_id
         else:
             self.key_id = None
         if pem_private_key:
             self.private_key = load_pem_private_key(
-                pem_private_key.encode("ascii"), password=None, backend=default_backend()
-                )
+                pem_private_key.encode("ascii"),
+                password=None,
+                backend=default_backend(),
+            )
         if akv_configuration:
             self.akv_configuration = akv_configuration
 
@@ -53,12 +55,12 @@ class HttpSig(httpx.Auth):
                 f"content-length: {len(request.content)}",
             ]
         ).encode("utf-8")
-        
-        if hasattr(self, 'akv_configuration'):
+
+        if hasattr(self, "akv_configuration"):
             key_vault_sign_client = KeyVaultSignClient(self.akv_configuration)
-            signature, cert = key_vault_sign_client.sign_with_idetity(string_to_sign)
+            signature, cert = key_vault_sign_client.sign_with_identity(string_to_sign)
             self.key_id = crypto.get_cert_fingerprint(cert)
-        else:   
+        else:
             digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
                 self.private_key.curve.key_size
             ]
@@ -138,9 +140,9 @@ class BaseClient:
                 key_id = crypto.get_cert_fingerprint(cert)
                 self.member_http_sig = HttpSig(key_id, key, None)
             else:
-                cert, key, akv_configuration= member_auth
+                cert, key, akv_configuration = member_auth
                 key_id = None
-                self.member_http_sig = HttpSig(key_id, key, akv_configuration)          
+                self.member_http_sig = HttpSig(key_id, key, akv_configuration)
         else:
             self.member_http_sig = None
 
