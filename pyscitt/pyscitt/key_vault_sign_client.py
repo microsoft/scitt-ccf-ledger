@@ -9,9 +9,10 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
 from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
-from pyasn1.type.namedtype import NamedTypes, NamedType
-from pyasn1.type.univ import Integer, Sequence
 from pyasn1.codec.der.encoder import encode
+from pyasn1.type.namedtype import NamedType, NamedTypes
+from pyasn1.type.univ import Integer, Sequence
+
 
 class _DERSignature(Sequence):
     """Internal helper class for decoding AKV signature for CCF."""
