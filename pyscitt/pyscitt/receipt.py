@@ -5,12 +5,13 @@ import base64
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Tuple
 
 import cbor2
 import ccf.receipt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509 import load_der_x509_certificate
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
@@ -102,9 +103,12 @@ class CCFReceiptContents(ReceiptContents):
         claims_digest = hashlib.sha256(tbs).digest()
 
         root = self.root(claims_digest).hex()
-        signature = base64.b64encode(self.signature).decode()
 
-        ccf.receipt.verify(root, signature, node_cert)
+        # The CCF module expects a base64 signature, in ASN1/DER format.
+        signature = convert_p1363_signature_to_dss(self.signature)
+        b64signature = base64.b64encode(signature).decode()
+
+        ccf.receipt.verify(root, b64signature, node_cert)
         ccf.receipt.check_endorsement(node_cert, service_cert)
 
     def as_dict(self) -> dict:
@@ -173,3 +177,33 @@ class Receipt:
             "protected": hdr_as_dict(self.phdr),
             "contents": self.contents.as_dict(),
         }
+
+
+def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:
+    """
+    Decode an ECDSA signature from its IEEE P1363 encoding into its r and s
+    components. The two integers are padded to the curve size and concatenated.
+
+    This is the format used throughout the COSE/JOSE ecosystem.
+    """
+    # The two components are padded to the same size, so we can find the size
+    # of each one by taking half the size of the signature.
+    assert len(signature) % 2 == 0
+    mid = len(signature) // 2
+    r = int.from_bytes(signature[:mid], "big")
+    s = int.from_bytes(signature[mid:], "big")
+    return r, s
+
+
+def convert_p1363_signature_to_dss(signature: bytes) -> bytes:
+    """
+    Convert an ECDSA signature from its IEEE P1363 encoding to an ASN1/DER
+    encoding.
+
+    The former is the format used throughout the COSE/JOSE ecosystem. The
+    latter is used by OpenSSL and cryptography, as well as the CCF python
+    module.
+
+    """
+    r, s = decode_p1363_signature(signature)
+    return encode_dss_signature(r, s)
