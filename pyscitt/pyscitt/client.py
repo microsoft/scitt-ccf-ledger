@@ -6,7 +6,7 @@ import hashlib
 import time
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Iterable, Optional, Tuple, Union
+from typing import Generic, Iterable, Literal, Optional, Tuple, TypeVar, Union, overload
 from urllib.parse import urlencode
 
 import httpx
@@ -269,8 +269,11 @@ class BaseClient:
         )
 
 
+T = TypeVar("T", bound=Optional[bytes], covariant=True)
+
+
 @dataclass
-class Submission:
+class Submission(Generic[T]):
     """
     The result of submitting a claim to the service.
     The presence and format of the receipt is depends on arguments passed to the `submit_claim`
@@ -278,7 +281,7 @@ class Submission:
     """
 
     tx: str
-    receipt: Optional[Union[bytes, Receipt]]
+    receipt: T
 
     @property
     def seqno(self) -> int:
@@ -307,9 +310,21 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
+    @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False, decode=True
-    ) -> Submission:
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+    ) -> Submission[bytes]:
+        ...
+
+    @overload
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation: Literal[True]
+    ) -> Submission[None]:
+        ...
+
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation=False
+    ) -> Union[Submission[bytes], Submission[None]]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
@@ -324,7 +339,7 @@ class Client(BaseClient):
         if skip_confirmation:
             return Submission(tx, None)
         else:
-            receipt = self.get_receipt(tx, decode=decode)
+            receipt = self.get_receipt(tx, decode=False)
             return Submission(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
@@ -332,6 +347,14 @@ class Client(BaseClient):
             f"/entries/{tx}", params={"embedReceipt": embed_receipt}
         )
         return response.content
+
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
+        ...
+
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
+        ...
 
     def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
         response = self.get_historical(f"/entries/{tx}/receipt")

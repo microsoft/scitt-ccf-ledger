@@ -30,7 +30,10 @@ then
 fi
 
 source scripts/venv/bin/activate
-pip install --disable-pip-version-check -q -U black isort
+pip install --disable-pip-version-check -q -U black isort mypy
+
+echo "-- Python types"
+git ls-files | grep -e '\.py$' | xargs mypy
 
 echo "-- Python imports"
 if [ $FIX -ne 0 ]; then

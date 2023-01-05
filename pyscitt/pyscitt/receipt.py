@@ -21,7 +21,7 @@ HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
 
 
-def hdr_as_dict(phdr: list) -> dict:
+def hdr_as_dict(phdr: dict) -> dict:
     """
     Return a representation of a list of COSE header parameters that
     is amenable to pretty-printing.
@@ -58,7 +58,12 @@ class ReceiptContents(ABC):
     @classmethod
     def from_cose_obj(self, headers: dict, cose_obj: Any) -> "ReceiptContents":
         if headers.get(HEADER_PARAM_TREE_ALGORITHM) == TREE_ALGORITHM_CCF:
-            return CCFReceiptContents.from_cose_obj(cose_obj)
+            return CCFReceiptContents(
+                cose_obj[0],
+                cose_obj[1],
+                cose_obj[2],
+                LeafInfo.from_cose_obj(cose_obj[3]),
+            )
         else:
             raise ValueError("unsupported tree algorithm, cannot decode receipt")
 
@@ -69,12 +74,6 @@ class CCFReceiptContents(ReceiptContents):
     node_certificate: bytes
     inclusion_proof: list
     leaf_info: LeafInfo
-
-    @classmethod
-    def from_cose_obj(cls, cose_obj: list) -> "ReceiptContents":
-        return cls(
-            cose_obj[0], cose_obj[1], cose_obj[2], LeafInfo.from_cose_obj(cose_obj[3])
-        )
 
     def root(self, claims_digest: bytes) -> bytes:
         leaf = self.leaf_info.digest(claims_digest).hex()
