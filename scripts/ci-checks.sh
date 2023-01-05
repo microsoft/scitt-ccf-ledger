@@ -31,6 +31,8 @@ fi
 
 source scripts/venv/bin/activate
 pip install --disable-pip-version-check -q -U black isort mypy
+pip install --disable-pip-version-check -q -e ./pyscitt
+pip install --disable-pip-version-check -q -r test/requirements.txt
 
 echo "-- Python types"
 git ls-files | grep -e '\.py$' | xargs mypy
