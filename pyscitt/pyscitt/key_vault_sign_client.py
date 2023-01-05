@@ -9,6 +9,8 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
 from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
+from cryptography.hazmat.backends import default_backend
+from cryptography.x509 import load_pem_x509_certificate
 from pyasn1.codec.der.encoder import encode
 from pyasn1.type.namedtype import NamedType, NamedTypes
 from pyasn1.type.univ import Integer, Sequence
@@ -35,32 +37,21 @@ class KeyVaultSignClient:
         self._identity_certificate_version = akv_sign_configuration_dict[
             "certificateVersion"
         ]
-        self._identity_private_curve_key_size = akv_sign_configuration_dict[
-            "privateCurveKeySize"
-        ]
         self.credential = DefaultAzureCredential()
         cert_client = CertificateClient(
             vault_url=self._vault_url, credential=self.credential
         )
-        cert = cert_client.get_certificate_version(
+        self.cert = self._decode_certificate(cert_client.get_certificate_version(
             certificate_name=self._identity_certificate_name,
             version=self._identity_certificate_version,
-        )
-        self.key_id = crypto.get_cert_fingerprint(self._decode_certificate(cert))
+        ))
+        self.key_id = crypto.get_cert_fingerprint(self.cert)
 
     @staticmethod
     def _decode_certificate(cert: KeyVaultCertificate) -> str:
         decoded = base64.b64encode(cert.cer).decode()  # type: ignore
-
-        styled_cert = "-----BEGIN CERTIFICATE-----\n"
-        for index in range(0, len(decoded), 64):
-            if index + 64 > len(decoded):
-                styled_cert += decoded[index:]
-            else:
-                styled_cert += decoded[index : index + 64]
-            styled_cert += "\n"
-        styled_cert += "-----END CERTIFICATE-----"
-        return styled_cert
+        cert_pem = f"-----BEGIN CERTIFICATE-----\n{decoded}\n-----END CERTIFICATE-----"
+        return cert_pem
 
     def sign_with_identity(self, digest: bytes):
         # credential = DefaultAzureCredential()
@@ -75,16 +66,17 @@ class KeyVaultSignClient:
 
         # The signatures returned by AKV are returned as a JWS signature and encoded in
         # base64url format and are not directly compatible with the signatures supported by CCF.
-        signature_algorithm = SignatureAlgorithm.es384
         # See https://github.com/microsoft/CCF/blob/master/doc/members/jws_to_der.py
         # for original conversion code.
         # digest_to_sign = hashlib.sha384(digest.encode()).digest()
+        signature_algorithm = SignatureAlgorithm.es384
+        cert = load_pem_x509_certificate(self.cert.encode("ascii"), default_backend())
 
         digest_to_sign = {
-            256: hashlib.sha256(digest).digest(),
-            384: hashlib.sha384(digest).digest(),
-        }[self._identity_private_curve_key_size]
-
+            'sha256': hashlib.sha256(digest).digest(),
+            'sha384': hashlib.sha384(digest).digest(),
+        }[cert.signature_hash_algorithm.name]
+    
         sign_result = crypto_client.sign(
             algorithm=signature_algorithm, digest=digest_to_sign
         )
