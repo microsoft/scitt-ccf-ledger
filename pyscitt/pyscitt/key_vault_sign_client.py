@@ -65,7 +65,7 @@ class KeyVaultSignClient:
     def sign_with_identity(self, digest: bytes):
         # credential = DefaultAzureCredential()
         key_client = KeyClient(vault_url=self._vault_url, credential=self.credential)
-       
+
         key = key_client.get_key(
             name=self._identity_certificate_name,
             version=self._identity_certificate_version,
