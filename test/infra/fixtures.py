@@ -164,8 +164,8 @@ class ManagedCCHostFixtures:
     @pytest.fixture(scope="class")
     def member_auth_path(self, member_auth, tmp_path_factory):
         path = tmp_path_factory.mktemp("member")
-        path.joinpath("member0_cert.pem").write_text(member_auth[0])
-        path.joinpath("member0_privk.pem").write_text(member_auth[1])
+        path.joinpath("member0_cert.pem").write_text(member_auth.cert)
+        path.joinpath("member0_privk.pem").write_text(member_auth.key)
         return (path.joinpath("member0_cert.pem"), path.joinpath("member0_privk.pem"))
 
 

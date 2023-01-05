@@ -14,6 +14,8 @@ from . import crypto
 
 class localKeySignClient(MemberAuthenticationMethod):
     def __init__(self, cert: str, key: str) -> None:
+        self.cert = cert
+        self.key = key
         self.key_id = crypto.get_cert_fingerprint(cert)
         self.private_key = load_pem_private_key(
             key.encode("ascii"),

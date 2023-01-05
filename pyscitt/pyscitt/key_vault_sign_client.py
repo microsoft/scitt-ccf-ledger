@@ -3,7 +3,6 @@
 
 import base64
 import hashlib
-import json
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
