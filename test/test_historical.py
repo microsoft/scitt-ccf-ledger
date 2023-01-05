@@ -49,7 +49,9 @@ class TestHistorical:
             claim = client.get_claim(s.tx)
             crypto.verify_cose_with_receipt(claim, trust_store, s.receipt)
 
-    def test_get_claim_with_embedded_receipt(self, client: Client, trust_store, submissions):
+    def test_get_claim_with_embedded_receipt(
+        self, client: Client, trust_store, submissions
+    ):
         for s in submissions:
             claim = client.get_claim(s.tx, embed_receipt=True)
             crypto.verify_cose_with_receipt(claim, trust_store)

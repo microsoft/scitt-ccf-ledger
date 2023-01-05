@@ -66,6 +66,9 @@ class ServiceError(Exception):
         return f"{self.code}: {self.message}"
 
 
+SelfClient = TypeVar("SelfClient", bound="BaseClient")
+
+
 class BaseClient:
     """
     Wrapper around an HTTP client, with facilities to interact with a CCF-based
@@ -128,14 +131,14 @@ class BaseClient:
             base_url=url, headers=headers, verify=not development
         )
 
-    def replace(self, **kwargs):
+    def replace(self: SelfClient, **kwargs) -> SelfClient:
         """
         Create a new instance with certain parameters modified. Any parameters
         that weren't specified will be inherited from the current instance.
 
         The accepted keyword arguments are the same as those of the constructor.
         """
-        values = {
+        values: dict = {
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
