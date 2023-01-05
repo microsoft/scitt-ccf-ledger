@@ -4,6 +4,7 @@
 import base64
 import hashlib
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Iterable, Optional, Tuple, Union
@@ -25,23 +26,25 @@ from .receipt import Receipt
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
+
+class MemberAuthenticationMethod(ABC):
+    @property
+    @abstractmethod
+    def get_key_id(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def sign(self, data: bytes) -> bytes:
+        pass
+
+
 # copied from CCF/tests/infra/clients.py
 class HttpSig(httpx.Auth):
     requires_request_body = True
 
-    def __init__(self, key_id: str, pem_private_key: str, akv_configuration: str):
-        if key_id:
-            self.key_id = key_id
-        else:
-            self.key_id = None
-        if pem_private_key:
-            self.private_key = load_pem_private_key(
-                pem_private_key.encode("ascii"),
-                password=None,
-                backend=default_backend(),
-            )
-        if akv_configuration:
-            self.akv_configuration = akv_configuration
+    def __init__(self, member_auth_client: MemberAuthenticationMethod):
+        self.member_auth_client = member_auth_client
+        self.key_id = member_auth_client.get_key_id()
 
     def auth_flow(self, request):
         body_digest = base64.b64encode(hashlib.sha256(request.content).digest()).decode(
@@ -56,17 +59,7 @@ class HttpSig(httpx.Auth):
             ]
         ).encode("utf-8")
 
-        if hasattr(self, "akv_configuration"):
-            key_vault_sign_client = KeyVaultSignClient(self.akv_configuration)
-            signature, cert = key_vault_sign_client.sign_with_identity(string_to_sign)
-            self.key_id = crypto.get_cert_fingerprint(cert)
-        else:
-            digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
-                self.private_key.curve.key_size
-            ]
-            signature = self.private_key.sign(
-                signature_algorithm=ec.ECDSA(algorithm=digest_algo), data=string_to_sign
-            )
+        signature = self.member_auth_client.sign(string_to_sign)
         b64signature = base64.b64encode(signature).decode("ascii")
         request.headers[
             "authorization"
@@ -94,7 +87,7 @@ class BaseClient:
 
     url: str
     auth_token: Optional[str]
-    member_auth: Optional[Tuple[str, str, str]]
+    member_auth: MemberAuthenticationMethod
     development: bool
 
     session: httpx.Client
@@ -105,7 +98,7 @@ class BaseClient:
         url: str,
         *,
         auth_token: Optional[str] = None,
-        member_auth: Optional[Tuple] = None,
+        member_auth: MemberAuthenticationMethod = None,
         development: bool = False,
     ):
         """
@@ -135,14 +128,7 @@ class BaseClient:
             headers["Authorization"] = "Bearer " + auth_token
 
         if member_auth:
-            if len(member_auth) == 2:
-                cert, key = member_auth
-                key_id = crypto.get_cert_fingerprint(cert)
-                self.member_http_sig = HttpSig(key_id, key, None)
-            else:
-                cert, key, akv_configuration = member_auth
-                key_id = None
-                self.member_http_sig = HttpSig(key_id, key, akv_configuration)
+            self.member_http_sig = HttpSig(member_auth)
         else:
             self.member_http_sig = None
 

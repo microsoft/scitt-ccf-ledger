@@ -13,6 +13,8 @@ from pyasn1.codec.der.encoder import encode
 from pyasn1.type.namedtype import NamedType, NamedTypes
 from pyasn1.type.univ import Integer, Sequence
 
+from . import crypto
+
 
 class _DERSignature(Sequence):
     """Internal helper class for decoding AKV signature for CCF."""
@@ -26,8 +28,7 @@ class _DERSignature(Sequence):
 class KeyVaultSignClient:
     """MemberIdentity implementation that uses Azure Key Vault."""
 
-    def __init__(self, akv_sign_configuration: str):
-        akv_sign_configuration_dict = json.loads(akv_sign_configuration)
+    def __init__(self, akv_sign_configuration_dict: dict):
         self._vault_name = akv_sign_configuration_dict["keyVaultName"]
         self._vault_url = f"https://{self._vault_name}.vault.azure.net"
         self._identity_certificate_name = akv_sign_configuration_dict["certificateName"]
@@ -37,6 +38,15 @@ class KeyVaultSignClient:
         self._identity_private_curve_key_size = akv_sign_configuration_dict[
             "privateCurveKeySize"
         ]
+        self.credential = DefaultAzureCredential()
+        cert_client = CertificateClient(
+            vault_url=self._vault_url, credential=self.credential
+        )
+        cert = cert_client.get_certificate_version(
+            certificate_name=self._identity_certificate_name,
+            version=self._identity_certificate_version,
+        )
+        self.key_id = crypto.get_cert_fingerprint(self._decode_certificate(cert))
 
     @staticmethod
     def _decode_certificate(cert: KeyVaultCertificate) -> str:
@@ -53,23 +63,15 @@ class KeyVaultSignClient:
         return styled_cert
 
     def sign_with_identity(self, digest: bytes):
-        credential = DefaultAzureCredential()
-        key_client = KeyClient(vault_url=self._vault_url, credential=credential)
-        cert_client = CertificateClient(
-            vault_url=self._vault_url, credential=credential
-        )
-
+        # credential = DefaultAzureCredential()
+        key_client = KeyClient(vault_url=self._vault_url, credential=self.credential)
+       
         key = key_client.get_key(
             name=self._identity_certificate_name,
             version=self._identity_certificate_version,
         )
 
-        cert = cert_client.get_certificate_version(
-            certificate_name=self._identity_certificate_name,
-            version=self._identity_certificate_version,
-        )
-
-        crypto_client = CryptographyClient(key, credential=credential)
+        crypto_client = CryptographyClient(key, credential=self.credential)
 
         # The signatures returned by AKV are returned as a JWS signature and encoded in
         # base64url format and are not directly compatible with the signatures supported by CCF.
@@ -100,5 +102,11 @@ class KeyVaultSignClient:
         der_signature["s"] = int.from_bytes(
             jws_raw[-int(jws_raw_len / 2) :], byteorder="big"
         )
-        output_buf = encode(der_signature)
-        return output_buf, self._decode_certificate(cert)
+        return encode(der_signature)
+
+    def get_key_id(self) -> bytes:
+        return self.key_id
+
+    def sign(self, data: bytes) -> bytes:
+        signature = self.sign_with_identity(data)
+        return signature
