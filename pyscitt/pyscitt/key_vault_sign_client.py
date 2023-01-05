@@ -41,10 +41,12 @@ class KeyVaultSignClient:
         cert_client = CertificateClient(
             vault_url=self._vault_url, credential=self.credential
         )
-        self.cert = self._decode_certificate(cert_client.get_certificate_version(
-            certificate_name=self._identity_certificate_name,
-            version=self._identity_certificate_version,
-        ))
+        self.cert = self._decode_certificate(
+            cert_client.get_certificate_version(
+                certificate_name=self._identity_certificate_name,
+                version=self._identity_certificate_version,
+            )
+        )
         self.key_id = crypto.get_cert_fingerprint(self.cert)
 
     @staticmethod
@@ -73,10 +75,10 @@ class KeyVaultSignClient:
         cert = load_pem_x509_certificate(self.cert.encode("ascii"), default_backend())
 
         digest_to_sign = {
-            'sha256': hashlib.sha256(digest).digest(),
-            'sha384': hashlib.sha384(digest).digest(),
+            "sha256": hashlib.sha256(digest).digest(),
+            "sha384": hashlib.sha384(digest).digest(),
         }[cert.signature_hash_algorithm.name]
-    
+
         sign_result = crypto_client.sign(
             algorithm=signature_algorithm, digest=digest_to_sign
         )
