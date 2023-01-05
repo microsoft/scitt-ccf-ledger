@@ -108,7 +108,7 @@ class BaseClient:
             A bearer token for all requests made by this instance.
 
         member_auth:
-            A pair of certificate and private key in PEM format, used to sign requests.
+            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login idenity, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
         development:
