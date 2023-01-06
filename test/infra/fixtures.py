@@ -13,7 +13,7 @@ from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
-from pyscitt.local_key_sign_client import localKeySignClient
+from pyscitt.local_key_sign_client import LocalKeySignClient
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer
@@ -93,7 +93,7 @@ class ManagedCCHostFixtures:
                 client = Client(
                     f"https://127.0.0.1:{cchost.rpc_port}",
                     development=True,
-                    member_auth=localKeySignClient(
+                    member_auth=LocalKeySignClient(
                         cchost.member_cert, cchost.member_private_key
                     ),
                 )
@@ -159,7 +159,7 @@ class ManagedCCHostFixtures:
 
     @pytest.fixture(scope="class")
     def member_auth(self, cchost):
-        return localKeySignClient(cchost.member_cert, cchost.member_private_key)
+        return LocalKeySignClient(cchost.member_cert, cchost.member_private_key)
 
     @pytest.fixture(scope="class")
     def member_auth_path(self, member_auth, tmp_path_factory):
@@ -184,7 +184,7 @@ class ExternalLedgerFixtures:
 
     @pytest.fixture(scope="session")
     def member_auth(self, member_auth_path):
-        return localKeySignClient(
+        return LocalKeySignClient(
             member_auth_path[0].read_text(), member_auth_path[1].read_text()
         )
 

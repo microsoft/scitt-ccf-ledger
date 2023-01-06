@@ -54,8 +54,7 @@ class KeyVaultSignClient:
         cert_pem = f"-----BEGIN CERTIFICATE-----\n{decoded}\n-----END CERTIFICATE-----"
         return cert_pem
 
-    def sign_with_identity(self, digest: bytes):
-        # credential = DefaultAzureCredential()
+    def sign(self, data: bytes):
         key_client = KeyClient(vault_url=self._vault_url, credential=self.credential)
 
         key = key_client.get_key(
@@ -73,10 +72,7 @@ class KeyVaultSignClient:
         signature_algorithm = SignatureAlgorithm.es384
         cert = load_pem_x509_certificate(self.cert.encode("ascii"), default_backend())
 
-        digest_to_sign = {
-            "sha256": hashlib.sha256(digest).digest(),
-            "sha384": hashlib.sha384(digest).digest(),
-        }[cert.signature_hash_algorithm.name]
+        digest_to_sign = hashlib.new(cert.signature_hash_algorithm.name, data).digest()
 
         sign_result = crypto_client.sign(
             algorithm=signature_algorithm, digest=digest_to_sign
@@ -90,16 +86,12 @@ class KeyVaultSignClient:
 
         der_signature = _DERSignature()
         der_signature["r"] = int.from_bytes(
-            jws_raw[: int(jws_raw_len / 2)], byteorder="big"
+            jws_raw[: int(jws_raw_len // 2)], byteorder="big"
         )
         der_signature["s"] = int.from_bytes(
-            jws_raw[-int(jws_raw_len / 2) :], byteorder="big"
+            jws_raw[int(jws_raw_len // 2) :], byteorder="big"
         )
         return encode(der_signature)
 
     def get_key_id(self) -> bytes:
         return self.key_id
-
-    def sign(self, data: bytes) -> bytes:
-        signature = self.sign_with_identity(data)
-        return signature

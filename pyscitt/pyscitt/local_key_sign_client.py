@@ -12,7 +12,7 @@ from pyscitt.client import MemberAuthenticationMethod
 from . import crypto
 
 
-class localKeySignClient(MemberAuthenticationMethod):
+class LocalKeySignClient(MemberAuthenticationMethod):
     def __init__(self, cert: str, key: str) -> None:
         self.cert = cert
         self.key = key

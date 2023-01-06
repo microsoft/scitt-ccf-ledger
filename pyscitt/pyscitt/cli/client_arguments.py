@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from pyscitt.key_vault_sign_client import KeyVaultSignClient
-from pyscitt.local_key_sign_client import localKeySignClient
+from pyscitt.local_key_sign_client import LocalKeySignClient
 
 from ..client import Client
 
@@ -104,7 +104,7 @@ def create_client(args: argparse.Namespace):
     elif "member_cert" in args:
         cert = args.member_cert.read_text()
         key = args.member_key.read_text()
-        kwargs["member_auth"] = localKeySignClient(cert, key)
+        kwargs["member_auth"] = LocalKeySignClient(cert, key)
 
     if "auth_token" in args:
         kwargs["auth_token"] = args.auth_token

@@ -17,9 +17,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from loguru import logger as LOG
 
-from pyscitt.key_vault_sign_client import KeyVaultSignClient
-
-from . import crypto
 from .governance import GovernanceClient
 from .prefix_tree import PrefixTreeClient
 from .receipt import Receipt
