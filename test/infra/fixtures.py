@@ -102,7 +102,7 @@ class ManagedCCHostFixtures:
                 )
                 client.governance.propose(proposal, must_pass=True)
                 client.get(
-                    "/app/parameters",
+                    "/parameters",
                     retry_on=[(HTTPStatus.NOT_FOUND, "FrontendNotOpen")],
                 )
 

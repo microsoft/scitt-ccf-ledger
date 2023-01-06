@@ -26,4 +26,4 @@ scitt governance propose_configuration \
 TRUST_STORE=tmp/trust_store
 mkdir -p $TRUST_STORE
 
-curl -k -f $SCITT_URL/app/parameters > $TRUST_STORE/scitt.json
+curl -k -f $SCITT_URL/parameters > $TRUST_STORE/scitt.json
