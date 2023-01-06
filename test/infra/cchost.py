@@ -195,7 +195,7 @@ class CCHost:
         # Ensure SGX_AESM_ADDR is not set when starting cchost.
         cchost_env = os.environ.copy()
         cchost_env.pop("SGX_AESM_ADDR", None)
-        
+
         LOG.debug("Starting cchost process...")
         process = await asyncio.create_subprocess_exec(
             self.binary,
