@@ -192,6 +192,10 @@ class CCHost:
                 raise
 
     async def _start_process(self):
+        # Ensure SGX_AESM_ADDR is not set when starting cchost.
+        cchost_env = os.environ.copy()
+        cchost_env.pop("SGX_AESM_ADDR", None)
+        
         LOG.debug("Starting cchost process...")
         process = await asyncio.create_subprocess_exec(
             self.binary,
@@ -202,6 +206,7 @@ class CCHost:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=cchost_env,
         )
 
         # We use two nested task groups. The reason for this is we want the log
