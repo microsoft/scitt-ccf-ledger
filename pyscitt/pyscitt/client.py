@@ -11,7 +11,6 @@ from typing import Iterable, Optional, Tuple, Union
 from urllib.parse import urlencode
 
 import httpx
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -241,7 +240,7 @@ class BaseClient:
         In the latter case, an exception is raised.
         """
         response = self.get(
-            "/app/tx",
+            "/tx",
             params={"transaction_id": tx},
             retry_on=[lambda r: r.is_success and r.json()["status"] == "Pending"],
         )
@@ -297,7 +296,7 @@ class Client(BaseClient):
     """
 
     def get_parameters(self) -> dict:
-        return self.get("/app/parameters").json()
+        return self.get("/parameters").json()
 
     def get_trust_store(self) -> dict:
         params = self.get_parameters()
@@ -305,17 +304,19 @@ class Client(BaseClient):
         return {service_id: params}
 
     def get_constitution(self) -> str:
-        return self.get("/app/constitution").text
+        # The endpoint returns the value as a JSON-encoded string, ie. wrapped
+        # in double quotes and with all special characters escaped.
+        return self.get("/gov/kv/constitution").json()
 
     def get_version(self) -> dict:
-        return self.get("/app/version").json()
+        return self.get("/version").json()
 
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False, decode=True
     ) -> Submission:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
-            "/app/entries",
+            "/entries",
             headers=headers,
             content=claim,
             retry_on=[
@@ -332,12 +333,12 @@ class Client(BaseClient):
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
-            f"/app/entries/{tx}", params={"embedReceipt": embed_receipt}
+            f"/entries/{tx}", params={"embedReceipt": embed_receipt}
         )
         return response.content
 
     def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
-        response = self.get_historical(f"/app/entries/{tx}/receipt")
+        response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)
         else:
@@ -358,7 +359,7 @@ class Client(BaseClient):
         if end is not None:
             params["to"] = end
 
-        link = f"/app/entries/txIds?{urlencode(params)}"
+        link = f"/entries/txIds?{urlencode(params)}"
 
         while link:
             response = self.get(

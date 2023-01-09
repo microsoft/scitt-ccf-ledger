@@ -25,7 +25,7 @@ if [ "$DOCKER" = "1" ]; then
 
     # wait until the network is ready
     timeout=120
-    while ! curl -s -f -k $CCF_URL/app/parameters > /dev/null; do
+    while ! curl -s -f -k $CCF_URL/parameters > /dev/null; do
         echo "Waiting for service to be ready..."
         sleep 1
         timeout=$((timeout - 1))

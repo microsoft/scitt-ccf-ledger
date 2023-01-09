@@ -124,7 +124,7 @@ class TestServiceIdentifier:
 
         # If a service identifier is configured, issued receipts include an issuer
         # and kid.
-        # Somewhat confusingly, what the old `/app/parameters` endpoint calls the
+        # Somewhat confusingly, what the old `/parameters` endpoint calls the
         # "service identity" is used as a KID in the receipts.
         receipt = client.submit_claim(claim).receipt
         assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier

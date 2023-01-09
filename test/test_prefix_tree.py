@@ -20,9 +20,7 @@ def test_prefix_tree(did_web, client):
     pt = client.prefix_tree
 
     # Until we flush the prefix tree, the claim does not appear
-    with pytest.raises(
-        ServiceError, match="UnknownFeed: No claim found for given issuer and feed"
-    ):
+    with pytest.raises(ServiceError, match="UnknownFeed"):
         pt.get_read_receipt(identity.issuer, feed)
 
     pt.flush()
@@ -80,12 +78,10 @@ def test_prefix_tree(did_web, client):
 def test_empty_prefix_tree(client):
     """Before any flush has been committed, fetching the prefix tree receipt returns a graceful error."""
 
-    with pytest.raises(
-        ServiceError, match="NoPrefixTree: No prefix tree has been committed yet"
-    ):
-        client.get_historical("/app/prefix_tree")
+    with pytest.raises(ServiceError, match="NoPrefixTree"):
+        client.get_historical("/prefix_tree")
 
-        client.prefix_tree.flush()
+    client.prefix_tree.flush()
 
-        # Now we're okay since we have at least one PT root committed.
-        client.get_historical("/app/prefix_tree")
+    # Now we're okay since we have at least one PT root committed.
+    client.get_historical("/prefix_tree")

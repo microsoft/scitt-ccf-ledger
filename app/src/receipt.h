@@ -72,6 +72,61 @@ namespace scitt
   }
 
   /**
+   * Get the curve size, in bytes, associated with the public key of the given
+   * DER-encoded certificate.
+   *
+   * If the curve size is not a whole number of bytes, it will be rounded up to
+   * the nearest value. For example, given a certificate's key using the P521
+   * curve, this function returns 66.
+   */
+  size_t get_certificate_ecdsa_curve_size(std::span<const uint8_t> der)
+  {
+    OpenSSL::Unique_X509 cert(OpenSSL::Unique_BIO(der), false, true);
+    EVP_PKEY* pk = X509_get_pubkey(cert);
+
+    size_t bits = EVP_PKEY_bits(pk);
+    return (bits + 7) / 8;
+  }
+
+  /**
+   * Convert an ECDSA signature from ASN1/DER encoding to IEEE P1363 (ie. r and
+   * s concatenated).
+   *
+   * The format is what CCF returns in its receipts, whereas the latter is
+   * preferred in the COSE/JOSE ecosystem.
+   *
+   * The curve size must be specified, in bytes, as the signature size is
+   * dependent of it. The encoded signature is written to the given output
+   * buffer. The written size is returned.
+   */
+  size_t convert_ecdsa_signature(
+    std::span<const uint8_t> signature, size_t curve_size, UsefulBuf out)
+  {
+    if (out.len < 2 * curve_size)
+    {
+      throw ReceiptProcessingError("Not enough space to encode signature");
+    }
+
+    const uint8_t* p = signature.data();
+    OpenSSL::Unique_ECDSA_SIG sig(
+      d2i_ECDSA_SIG(NULL, &p, signature.size()), true);
+
+    const BIGNUM* r = ECDSA_SIG_get0_r(sig);
+    const BIGNUM* s = ECDSA_SIG_get0_s(sig);
+
+    uint8_t* dst = static_cast<uint8_t*>(out.ptr);
+    if (BN_bn2binpad(r, dst, curve_size) < 0)
+    {
+      throw std::logic_error("ecdsa signature is larger than curve size");
+    }
+    if (BN_bn2binpad(s, dst + curve_size, curve_size) < 0)
+    {
+      throw std::logic_error("ecdsa signature is larger than curve size");
+    }
+    return 2 * curve_size;
+  }
+
+  /**
    * Serialize a CCF receipt into a CBOR encoder.
    *
    * The receipt has the following format:
@@ -100,6 +155,7 @@ namespace scitt
     }
 
     auto proof_receipt = std::dynamic_pointer_cast<ccf::ProofReceipt>(receipt);
+
     auto& write_set_digest = proof_receipt->leaf_components.write_set_digest;
     auto& commit_evidence = proof_receipt->leaf_components.commit_evidence;
     auto node_cert_der = crypto::cert_pem_to_der(proof_receipt->cert);
@@ -107,7 +163,13 @@ namespace scitt
     // Contents array: [signature, node_certificate, inclusion_proof, leaf_info]
     QCBOREncode_OpenArray(ctx);
 
-    QCBOREncode_AddBytes(ctx, cbor::from_bytes(proof_receipt->signature));
+    UsefulBuf signature;
+    QCBOREncode_OpenBytes(ctx, &signature);
+    size_t curve_size = get_certificate_ecdsa_curve_size(node_cert_der);
+    size_t signature_size =
+      convert_ecdsa_signature(proof_receipt->signature, curve_size, signature);
+    QCBOREncode_CloseBytes(ctx, signature_size);
+
     QCBOREncode_AddBytes(ctx, cbor::from_bytes(node_cert_der));
 
     // Inclusion proof array: [left, hash]*
