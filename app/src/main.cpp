@@ -520,7 +520,7 @@ namespace scitt
             // NB: This path tells the caller to continue to ask until the end
             // of the range, even if the next response is paginated
             out.next_link = fmt::format(
-              "/app/entries/txIds?from={}&to={}", next_page_start, to_seqno);
+              "/entries/txIds?from={}&to={}", next_page_start, to_seqno);
           }
 
           return out;

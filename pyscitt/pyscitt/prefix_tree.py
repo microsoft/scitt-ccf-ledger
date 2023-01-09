@@ -188,9 +188,7 @@ class PrefixTreeClient:
         def is_indexed(data: bytes, upper_bound_seqno: int) -> bool:
             return TreeReceipt.decode(data).upper_bound_seqno >= upper_bound_seqno
 
-        info = self.client.post(
-            "/app/prefix_tree/flush", wait_for_confirmation=True
-        ).json()
+        info = self.client.post("/prefix_tree/flush", wait_for_confirmation=True).json()
 
         # The confirmation we get from the flush is not quite enough for the
         # results to be visible, since it may take some time for the indexer to
@@ -200,7 +198,7 @@ class PrefixTreeClient:
         # we got when flushing. We also need to handle the NoPrefixTree 404 error,
         # which can happen on a fresh service.
         self.client.get_historical(
-            "/app/prefix_tree",
+            "/prefix_tree",
             retry_on=[
                 (HTTPStatus.NOT_FOUND, "NoPrefixTree"),
                 lambda r: r.is_success
@@ -210,10 +208,10 @@ class PrefixTreeClient:
         return info
 
     def debug(self) -> dict:
-        return self.client.get("/app/prefix_tree/debug").json()
+        return self.client.get("/prefix_tree/debug").json()
 
     def get_read_receipt(self, issuer: str, feed: str, *, decode=True):
-        response = self.client.get_historical(f"/app/read_receipt/{issuer}/{feed}")
+        response = self.client.get_historical(f"/read_receipt/{issuer}/{feed}")
         if decode:
             return ReadReceipt.decode(response.content)
         else:
