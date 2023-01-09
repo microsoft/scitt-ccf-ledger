@@ -10,9 +10,12 @@ from typing import Any
 import cbor2
 import ccf.receipt
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509 import load_der_x509_certificate
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
+
+from . import crypto
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
@@ -101,9 +104,12 @@ class CCFReceiptContents(ReceiptContents):
         claims_digest = hashlib.sha256(tbs).digest()
 
         root = self.root(claims_digest).hex()
-        signature = base64.b64encode(self.signature).decode()
 
-        ccf.receipt.verify(root, signature, node_cert)
+        # The CCF module expects a base64 signature, in ASN1/DER format.
+        signature = crypto.convert_p1363_signature_to_dss(self.signature)
+        b64signature = base64.b64encode(signature).decode()
+
+        ccf.receipt.verify(root, b64signature, node_cert)
         ccf.receipt.check_endorsement(node_cert, service_cert)
 
     def as_dict(self) -> dict:
