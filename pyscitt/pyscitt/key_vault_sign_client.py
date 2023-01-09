@@ -10,20 +10,9 @@ from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509 import load_pem_x509_certificate
-from pyasn1.codec.der.encoder import encode
-from pyasn1.type.namedtype import NamedType, NamedTypes
-from pyasn1.type.univ import Integer, Sequence
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 from . import crypto
-
-
-class _DERSignature(Sequence):
-    """Internal helper class for decoding AKV signature for CCF."""
-
-    componentType = NamedTypes(
-        NamedType("r", Integer()),
-        NamedType("s", Integer()),
-    )
 
 
 class KeyVaultSignClient:
@@ -83,15 +72,9 @@ class KeyVaultSignClient:
         # for original conversion code.
         jws_raw = sign_result.signature
         jws_raw_len = len(jws_raw)
-
-        der_signature = _DERSignature()
-        der_signature["r"] = int.from_bytes(
-            jws_raw[: int(jws_raw_len // 2)], byteorder="big"
-        )
-        der_signature["s"] = int.from_bytes(
-            jws_raw[int(jws_raw_len // 2) :], byteorder="big"
-        )
-        return encode(der_signature)
+        r = int.from_bytes(jws_raw[: jws_raw_len // 2], byteorder="big") 
+        s = int.from_bytes(jws_raw[jws_raw_len // 2 :], byteorder="big") 
+        return encode_dss_signature(r, s)
 
     def get_key_id(self) -> bytes:
         return self.key_id
