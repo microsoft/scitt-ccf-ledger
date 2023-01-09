@@ -9,7 +9,6 @@ from typing import Any
 
 import cbor2
 import ccf.receipt
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509 import load_der_x509_certificate
@@ -96,9 +95,9 @@ class CCFReceiptContents(ReceiptContents):
             raise ValueError("signatureAlgorithm must be ES256")
 
         service_cert_der = base64.b64decode(service_params["serviceCertificate"])
-        service_cert = load_der_x509_certificate(service_cert_der, default_backend())
+        service_cert = load_der_x509_certificate(service_cert_der)
 
-        node_cert = load_der_x509_certificate(self.node_certificate, default_backend())
+        node_cert = load_der_x509_certificate(self.node_certificate)
         if not isinstance(node_cert.public_key(), ec.EllipticCurvePublicKey):
             raise ValueError("Invalid node public key algorithm")
 

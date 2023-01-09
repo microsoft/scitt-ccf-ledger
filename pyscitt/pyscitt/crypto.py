@@ -17,7 +17,6 @@ import jwt
 import pycose.algorithms
 import pycose.headers
 from cryptography import x509
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
@@ -90,7 +89,6 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
     priv = rsa.generate_private_key(
         public_exponent=RECOMMENDED_RSA_PUBLIC_EXPONENT,
         key_size=key_size,
-        backend=default_backend(),
     )
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
@@ -105,9 +103,7 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
 def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
     if curve not in REGISTERED_EC_CURVES:
         raise NotImplementedError(f"Unsupported curve: {curve}")
-    priv = ec.generate_private_key(
-        curve=REGISTERED_EC_CURVES[curve].curve_obj, backend=default_backend()
-    )
+    priv = ec.generate_private_key(curve=REGISTERED_EC_CURVES[curve].curve_obj)
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -153,7 +149,7 @@ def is_ssh_private_key(pem: str):
 
 
 def ssh_private_key_to_pem(pem: str) -> Pem:
-    priv = load_ssh_private_key(pem.encode("ascii"), None, default_backend())
+    priv = load_ssh_private_key(pem.encode("ascii"), None)
     pem = priv.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode(
         "ascii"
     )
@@ -161,7 +157,7 @@ def ssh_private_key_to_pem(pem: str) -> Pem:
 
 
 def ssh_public_key_to_pem(ssh_pub_key: str) -> Pem:
-    pub = load_ssh_public_key(ssh_pub_key.encode("ascii"), default_backend())
+    pub = load_ssh_public_key(ssh_pub_key.encode("ascii"))
     pem = pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode(
         "ascii"
     )
@@ -177,9 +173,7 @@ def generate_cert(
 ):
     if not cn:
         cn = str(uuid4())
-    subject_priv = load_pem_private_key(
-        private_key_pem.encode("ascii"), None, default_backend()
-    )
+    subject_priv = load_pem_private_key(private_key_pem.encode("ascii"), None)
     subject_pub_key = subject_priv.public_key()
     subject = x509.Name(
         [
@@ -199,7 +193,8 @@ def generate_cert(
 
     if issuer_private_key_pem:
         issuer_priv_key = load_pem_private_key(
-            issuer_private_key_pem.encode("ascii"), None, default_backend()
+            issuer_private_key_pem.encode("ascii"),
+            None,
         )
     else:
         issuer_priv_key = subject_priv
@@ -212,13 +207,13 @@ def generate_cert(
         .not_valid_before(datetime.datetime.utcnow())
         .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-        .sign(issuer_priv_key, hash_alg, default_backend())
+        .sign(issuer_priv_key, hash_alg)
     )
     return cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
 def get_priv_key_type(priv_pem: str) -> str:
-    key = load_pem_private_key(priv_pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(priv_pem.encode("ascii"), None)
     if isinstance(key, RSAPrivateKey):
         return "rsa"
     elif isinstance(key, EllipticCurvePrivateKey):
@@ -229,7 +224,7 @@ def get_priv_key_type(priv_pem: str) -> str:
 
 
 def get_pub_key_type(pub_pem: str) -> str:
-    key = load_pem_public_key(pub_pem.encode("ascii"), default_backend())
+    key = load_pem_public_key(pub_pem.encode("ascii"))
     if isinstance(key, RSAPublicKey):
         return "rsa"
     elif isinstance(key, EllipticCurvePublicKey):
@@ -240,7 +235,7 @@ def get_pub_key_type(pub_pem: str) -> str:
 
 
 def get_cert_key_type(cert_pem: str) -> str:
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
     if isinstance(cert.public_key(), RSAPublicKey):
         return "rsa"
     elif isinstance(cert.public_key(), EllipticCurvePublicKey):
@@ -249,40 +244,40 @@ def get_cert_key_type(cert_pem: str) -> str:
 
 
 def get_cert_info(pem: str) -> dict:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     return {"cn": cn}
 
 
 def get_cert_fingerprint(pem: Pem) -> str:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.fingerprint(hashes.SHA256()).hex()
 
 
 def pub_key_pem_to_der(pem: Pem) -> bytes:
-    pub_key = load_pem_public_key(pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pem.encode("ascii"))
     return pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 
 
 def pub_key_pem_to_ssh(pem: Pem) -> str:
-    pub_key = load_pem_public_key(pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pem.encode("ascii"))
     return pub_key.public_bytes(Encoding.OpenSSH, PublicFormat.OpenSSH).decode("ascii")
 
 
 def private_key_pem_to_ssh(pem: Pem) -> str:
-    private_key = load_pem_private_key(pem.encode("ascii"), None, default_backend())
+    private_key = load_pem_private_key(pem.encode("ascii"), None)
     return private_key.private_bytes(
         Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption()
     ).decode("ascii")
 
 
 def cert_pem_to_der(pem: Pem) -> bytes:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.public_bytes(Encoding.DER)
 
 
 def cert_der_to_pem(der: bytes) -> str:
-    cert = load_der_x509_certificate(der, default_backend())
+    cert = load_der_x509_certificate(der)
     return cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
@@ -323,13 +318,13 @@ def default_algorithm_for_key(key) -> str:
 
 
 def default_algorithm_for_private_key(key_pem: Pem) -> str:
-    key = load_pem_private_key(key_pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(key_pem.encode("ascii"), None)
     return default_algorithm_for_key(key)
 
 
 def verify_cose_sign1(buf: bytes, cert_pem: str):
     key_type = get_cert_key_type(cert_pem)
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
     key = cert.public_key()
     if key_type == "rsa":
         cose_key = from_cryptography_rsakey_obj(key)
@@ -507,7 +502,7 @@ def from_cryptography_ed25519key_obj(ext_key) -> OKPKey:
 
 
 def cose_private_key_from_pem(pem: Pem):
-    key = load_pem_private_key(pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(pem.encode("ascii"), None)
     if isinstance(key, RSAPrivateKey):
         return from_cryptography_rsakey_obj(key)
     elif isinstance(key, EllipticCurvePrivateKey):
@@ -578,7 +573,7 @@ def create_did_document(
     did: str, pub_key_pem: Pem, alg: Optional[str] = None, kid: Optional[str] = None
 ) -> dict:
 
-    pub_key = load_pem_public_key(pub_key_pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pub_key_pem.encode("ascii"))
     der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 
     if isinstance(pub_key, RSAPublicKey):
