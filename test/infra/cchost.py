@@ -345,7 +345,7 @@ class CCHost:
                     "bind_address": f"0.0.0.0:{self.listen_node_port}"
                 },
             },
-            "logging": {"format": "Json", "host_level": "Trace"},
+            "logging": {"format": "Json", "host_level": "Info"},
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
             },
