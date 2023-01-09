@@ -5,7 +5,7 @@ import base64
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any
 
 import cbor2
 import ccf.receipt
