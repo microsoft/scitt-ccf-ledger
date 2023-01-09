@@ -10,7 +10,6 @@ from typing import Iterable, Optional, Tuple, Union
 from urllib.parse import urlencode
 
 import httpx
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -30,7 +29,7 @@ class HttpSig(httpx.Auth):
     def __init__(self, key_id: str, pem_private_key: str):
         self.key_id = key_id
         self.private_key = load_pem_private_key(
-            pem_private_key.encode("ascii"), password=None, backend=default_backend()
+            pem_private_key.encode("ascii"), password=None
         )
 
     def auth_flow(self, request):

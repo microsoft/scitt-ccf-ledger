@@ -276,6 +276,10 @@ namespace scitt
       : public Unique_SSL_OBJECT<ECDSA_SIG, ECDSA_SIG_new, ECDSA_SIG_free>
     {
       using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
+
+      Unique_ECDSA_SIG(ECDSA_SIG* sig, bool check_null) :
+        Unique_SSL_OBJECT(sig, ECDSA_SIG_free, check_null)
+      {}
     };
 
     struct Unique_BIGNUM : public Unique_SSL_OBJECT<BIGNUM, BN_new, BN_free>
