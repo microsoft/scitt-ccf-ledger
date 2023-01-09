@@ -41,7 +41,6 @@
 #include <ccf/node/host_processes_interface.h>
 #include <ccf/node/quote.h>
 #include <ccf/service/tables/cert_bundles.h>
-#include <ccf/service/tables/constitution.h>
 #include <ccf/service/tables/members.h>
 #include <ccf/service/tables/nodes.h>
 #include <ccf/service/tables/service.h>
@@ -781,24 +780,6 @@ namespace scitt
         error_adapter(ccf::json_adapter(get_configuration)),
         no_authn_policy)
         .set_auto_schema<void, Configuration>()
-        .install();
-
-      static constexpr auto get_constitution_path = "/constitution";
-      auto get_constitution = [&](EndpointContext& ctx) {
-        auto constitution =
-          ctx.tx.template ro<ccf::Constitution>(ccf::Tables::CONSTITUTION)
-            ->get()
-            .value();
-
-        ctx.rpc_ctx->set_response_body(std::move(constitution));
-        ctx.rpc_ctx->set_response_header(
-          http::headers::CONTENT_TYPE, "application/javascript");
-      };
-      make_endpoint(
-        get_constitution_path,
-        HTTP_GET,
-        error_adapter(get_constitution),
-        no_authn_policy)
         .install();
 
       static constexpr auto get_version_path = "/version";

@@ -300,7 +300,9 @@ class Client(BaseClient):
         return {service_id: params}
 
     def get_constitution(self) -> str:
-        return self.get("/constitution").text
+        # The endpoint returns the value as a JSON-encoded string, ie. wrapped
+        # in double quotes and with all special characters escaped.
+        return self.get("/gov/kv/constitution").json()
 
     def get_version(self) -> dict:
         return self.get("/version").json()
