@@ -9,8 +9,8 @@ from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
 from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
 from cryptography.hazmat.backends import default_backend
-from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+from cryptography.x509 import load_pem_x509_certificate
 
 from . import crypto
 
@@ -72,8 +72,8 @@ class KeyVaultSignClient:
         # for original conversion code.
         jws_raw = sign_result.signature
         jws_raw_len = len(jws_raw)
-        r = int.from_bytes(jws_raw[: jws_raw_len // 2], byteorder="big") 
-        s = int.from_bytes(jws_raw[jws_raw_len // 2 :], byteorder="big") 
+        r = int.from_bytes(jws_raw[: jws_raw_len // 2], byteorder="big")
+        s = int.from_bytes(jws_raw[jws_raw_len // 2 :], byteorder="big")
         return encode_dss_signature(r, s)
 
     def get_key_id(self) -> bytes:
