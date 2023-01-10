@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from loguru import logger as LOG
 
+from . import crypto
 from .governance import GovernanceClient
 from .prefix_tree import PrefixTreeClient
 from .receipt import Receipt
@@ -24,11 +25,6 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
 
 class MemberAuthenticationMethod(ABC):
-    @property
-    @abstractmethod
-    def get_key_id(self) -> bytes:
-        pass
-
     @abstractmethod
     def sign(self, data: bytes) -> bytes:
         pass
@@ -36,11 +32,12 @@ class MemberAuthenticationMethod(ABC):
 
 # copied from CCF/tests/infra/clients.py
 class HttpSig(httpx.Auth):
+    member_auth_client: MemberAuthenticationMethod
     requires_request_body = True
 
     def __init__(self, member_auth_client: MemberAuthenticationMethod):
         self.member_auth_client = member_auth_client
-        self.key_id = member_auth_client.get_key_id()
+        self.key_id = crypto.get_cert_fingerprint(member_auth_client.cert)
 
     def auth_flow(self, request):
         body_digest = base64.b64encode(hashlib.sha256(request.content).digest()).decode(
@@ -83,7 +80,7 @@ class BaseClient:
 
     url: str
     auth_token: Optional[str]
-    member_auth: MemberAuthenticationMethod
+    member_auth: Optional[MemberAuthenticationMethod]
     development: bool
 
     session: httpx.Client
@@ -94,7 +91,7 @@ class BaseClient:
         url: str,
         *,
         auth_token: Optional[str] = None,
-        member_auth: MemberAuthenticationMethod = None,
+        member_auth: Optional[MemberAuthenticationMethod] = None,
         development: bool = False,
     ):
         """
