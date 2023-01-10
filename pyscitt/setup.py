@@ -19,5 +19,7 @@ setup(
         "cbor2",
         "pycose>=1.0.1",
         "pyjwt",
+        "azure-keyvault",
+        "azure-identity",
     ],
 )

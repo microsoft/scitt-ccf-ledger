@@ -13,6 +13,7 @@ from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
+from pyscitt.local_key_sign_client import LocalKeySignClient
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer
@@ -92,7 +93,9 @@ class ManagedCCHostFixtures:
                 client = Client(
                     f"https://127.0.0.1:{cchost.rpc_port}",
                     development=True,
-                    member_auth=(cchost.member_cert, cchost.member_private_key),
+                    member_auth=LocalKeySignClient(
+                        cchost.member_cert, cchost.member_private_key
+                    ),
                 )
                 client.governance.activate_member()
 
@@ -156,13 +159,13 @@ class ManagedCCHostFixtures:
 
     @pytest.fixture(scope="class")
     def member_auth(self, cchost):
-        return (cchost.member_cert, cchost.member_private_key)
+        return LocalKeySignClient(cchost.member_cert, cchost.member_private_key)
 
     @pytest.fixture(scope="class")
     def member_auth_path(self, member_auth, tmp_path_factory):
         path = tmp_path_factory.mktemp("member")
-        path.joinpath("member0_cert.pem").write_text(member_auth[0])
-        path.joinpath("member0_privk.pem").write_text(member_auth[1])
+        path.joinpath("member0_cert.pem").write_text(member_auth.cert)
+        path.joinpath("member0_privk.pem").write_text(member_auth.key)
         return (path.joinpath("member0_cert.pem"), path.joinpath("member0_privk.pem"))
 
 
@@ -181,7 +184,9 @@ class ExternalLedgerFixtures:
 
     @pytest.fixture(scope="session")
     def member_auth(self, member_auth_path):
-        return (member_auth_path[0].read_text(), member_auth_path[1].read_text())
+        return LocalKeySignClient(
+            member_auth_path[0].read_text(), member_auth_path[1].read_text()
+        )
 
 
 def pytest_addoption(parser):
