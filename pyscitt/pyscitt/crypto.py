@@ -7,7 +7,7 @@ import hashlib
 import json
 import warnings
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -620,14 +620,20 @@ def create_did_document(
     else:
         raise ValueError("unsupported key type")
 
+    if not did.startswith("did:"):
+        raise ValueError("did must start with 'did:'")
+
     if kid is None:
-        kid = hashlib.sha256(der).hexdigest()
+        kid = "#" + hashlib.sha256(der).hexdigest()
+    if not kid.startswith("#"):
+        raise ValueError("kid must start with '#'")
+
     if alg is None:
         alg = default_algorithm_for_key(pub_key)
 
     jwk.update(
         {
-            "kid": kid,
+            "kid": kid[1:],
             "alg": alg,
         }
     )
@@ -640,7 +646,7 @@ def create_did_document(
         "id": did,
         "assertionMethod": [
             {
-                "id": f"{did}#{kid}",
+                "id": f"{did}{kid}",
                 "type": "JsonWebKey2020",
                 "controller": did,
                 "publicKeyJwk": jwk,
@@ -654,7 +660,7 @@ class Signer:
     issuer: Optional[str]
     kid: Optional[str]
     algorithm: str
-    x5c: Optional[list]
+    x5c: Optional[List[str]]
 
     def __init__(
         self,
@@ -662,7 +668,7 @@ class Signer:
         issuer: Optional[str] = None,
         kid: Optional[str] = None,
         algorithm: Optional[str] = None,
-        x5c: Optional[str] = None,
+        x5c: Optional[List[str]] = None,
     ):
         """
         If no algorithm is specified, a sensible default is inferred from the private key.

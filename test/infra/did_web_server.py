@@ -100,7 +100,12 @@ class DIDWebServer(AbstractContextManager):
         self.stop()
 
     def create_identity(
-        self, path: Optional[str] = None, *, alg: Optional[str] = None, **kwargs
+        self,
+        path: Optional[str] = None,
+        *,
+        alg: Optional[str] = None,
+        kid: Optional[str] = None,
+        **kwargs,
     ) -> crypto.Signer:
         """
         Create a new identity on the server.
@@ -122,6 +127,7 @@ class DIDWebServer(AbstractContextManager):
             identifier,
             pub_key_pem=public_key,
             alg=alg,
+            kid=kid,
         )
 
         out_dir = self.data_dir / path

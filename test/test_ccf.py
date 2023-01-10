@@ -113,3 +113,43 @@ def test_default_did_port(client, trust_store, tmp_path):
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
         receipt = client.submit_claim(claims, decode=False).receipt
         crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+
+
+def test_consistent_kid(client, did_web, trust_store):
+    """
+    Submit a claim with a known kid and check that it is consistent
+    in the claim header and DID document.
+    """
+    kid = "#key-1"
+    identity = did_web.create_identity(kid=kid)
+
+    # Sign a dummy claim using our new identity.
+    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    # Check that the COSE header contains the expected kid.
+    header, _ = crypto.parse_cose_sign1(claim)
+    assert header["kid"] == kid
+
+    # Submit the claim and verify the resulting receipt.
+    receipt = client.submit_claim(claim, decode=False).receipt
+    crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+
+    # Check that the resolved DID document contains the expected assertion
+    # method id.
+    did_doc = client.get_did_document(identity.issuer)
+    assert did_doc["assertionMethod"][0]["id"] == f"{identity.issuer}{kid}"
+
+
+def test_invalid_kid(client, did_web):
+    """
+    Submit a claim with an invalid kid and check that it is rejected.
+    """
+    identity = did_web.create_identity(kid="#key-1")
+    invalid_identity = crypto.Signer(
+        identity.private_key, issuer=identity.issuer, kid="key-1"
+    )
+
+    claim = crypto.sign_json_claimset(invalid_identity, {"foo": "bar"})
+
+    with pytest.raises(ServiceError, match="kid must start with '#'"):
+        client.submit_claim(claim)
