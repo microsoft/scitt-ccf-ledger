@@ -625,14 +625,20 @@ def create_did_document(
     else:
         raise ValueError("unsupported key type")
 
+    if not did.startswith("did:"):
+        raise ValueError("did must start with 'did:'")
+
     if kid is None:
-        kid = hashlib.sha256(der).hexdigest()
+        kid = "#" + hashlib.sha256(der).hexdigest()
+    if not kid.startswith("#"):
+        raise ValueError("kid must start with '#'")
+
     if alg is None:
         alg = default_algorithm_for_key(pub_key)
 
     jwk.update(
         {
-            "kid": kid,
+            "kid": kid[1:],
             "alg": alg,
         }
     )
@@ -645,7 +651,7 @@ def create_did_document(
         "id": did,
         "assertionMethod": [
             {
-                "id": f"{did}#{kid}",
+                "id": f"{did}{kid}",
                 "type": "JsonWebKey2020",
                 "controller": did,
                 "publicKeyJwk": jwk,
