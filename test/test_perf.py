@@ -6,10 +6,12 @@ import pytest
 from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
 
+X5C_PARAMS = dict(alg="ES256", kty="ec", ec_curve="P-256")
+
 
 @pytest.fixture(scope="class")
 def x5c_ca(client):
-    ca = X5ChainCertificateAuthority(alg="ES256", kty="ec", ec_curve="P-256")
+    ca = X5ChainCertificateAuthority(**X5C_PARAMS)
 
     client.governance.propose(
         governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle),
@@ -47,29 +49,21 @@ class TestPerf:
         client.submit_claim(claims)
 
         latency_did_web_submit_s = measure_latency(
-            lambda: client.submit_claim(
-                claims, skip_confirmation=True, wait_time=0
-            )
+            lambda: client.submit_claim(claims, skip_confirmation=True, wait_time=0)
         )
         latency_did_web_submit_and_receipt_s = measure_latency(
-            lambda: client.submit_claim(
-                claims, skip_confirmation=False, wait_time=0
-            )
+            lambda: client.submit_claim(claims, skip_confirmation=False, wait_time=0)
         )
 
         # Test x5c performance.
-        identity = x5c_ca.create_identity(1, alg="ES256")
+        identity = x5c_ca.create_identity(1, **X5C_PARAMS)
         claims = crypto.sign_json_claimset(identity, payload)
 
         latency_x5c_submit_s = measure_latency(
-            lambda: client.submit_claim(
-                claims, skip_confirmation=True, wait_time=0
-            )
+            lambda: client.submit_claim(claims, skip_confirmation=True, wait_time=0)
         )
         latency_x5c_submit_and_receipt_s = measure_latency(
-            lambda: client.submit_claim(
-                claims, skip_confirmation=False, wait_time=0
-            )
+            lambda: client.submit_claim(claims, skip_confirmation=False, wait_time=0)
         )
 
         # Note: Time-to-receipt depends on the configured signature interval of
