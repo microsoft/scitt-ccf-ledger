@@ -9,6 +9,7 @@ from infra.did_web_server import DIDWebServer
 from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
 from pyscitt.client import Client, ServiceError
+from pyscitt.verify import verify_receipt
 
 
 @pytest.mark.parametrize(
@@ -34,11 +35,10 @@ def test_submit_claim(client: Client, did_web, trust_store, params):
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims).receipt
-
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
-    crypto.verify_cose_with_receipt(embedded, trust_store, None)
+    verify_receipt(embedded, trust_store, None)
 
 
 @pytest.mark.parametrize(
@@ -68,7 +68,7 @@ def test_submit_claim_x5c(client: Client, trust_store, params: dict, x5c_len: in
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims).receipt
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
 
 def test_invalid_x5c(client: Client, trust_store):
@@ -119,7 +119,7 @@ def test_default_did_port(client: Client, trust_store, tmp_path):
         # Sign and submit a dummy claim using our new identity
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
         receipt = client.submit_claim(claims).receipt
-        crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+        verify_receipt(claims, trust_store, receipt)
 
 
 def test_consistent_kid(client, did_web, trust_store):
@@ -139,7 +139,7 @@ def test_consistent_kid(client, did_web, trust_store):
 
     # Submit the claim and verify the resulting receipt.
     receipt = client.submit_claim(claim).receipt
-    crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
     # Check that the resolved DID document contains the expected assertion
     # method id.

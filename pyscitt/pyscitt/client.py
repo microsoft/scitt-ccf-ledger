@@ -19,6 +19,7 @@ from . import crypto
 from .governance import GovernanceClient
 from .prefix_tree import PrefixTreeClient
 from .receipt import Receipt
+from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
@@ -337,13 +338,8 @@ class Client(BaseClient):
     Specialization of the BaseClient, aimed at interacting with a SCITT CCF ledger instance.
     """
 
-    def get_parameters(self) -> dict:
-        return self.get("/parameters").json()
-
-    def get_trust_store(self) -> dict:
-        params = self.get_parameters()
-        service_id = params.get("serviceId")
-        return {service_id: params}
+    def get_parameters(self) -> ServiceParameters:
+        return ServiceParameters.from_dict(self.get("/parameters").json())
 
     def get_constitution(self) -> str:
         # The endpoint returns the value as a JSON-encoded string, ie. wrapped

@@ -1,15 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from pathlib import Path
+import base64
 
+import httpx
 import pycose
 import pytest
 
 from infra.did_web_server import DIDWebServer
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
+from pyscitt.did import Resolver, did_web_document_url
 from pyscitt.receipt import Receipt
+from pyscitt.verify import DIDResolverTrustStore, verify_receipt
 
 
 class TestAcceptedAlgorithms:
@@ -103,32 +106,59 @@ class TestAcceptedDIDIssuers:
         client.submit_claim(claims)
 
 
-class TestServiceIdentifier:
-    @pytest.fixture
-    def claim(self, did_web):
-        identity = did_web.create_identity()
-        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+def test_service_identifier(
+    client: Client,
+    configure_service,
+    service_identifier: str,
+    did_web: DIDWebServer,
+):
+    identity = did_web.create_identity()
+    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    def test_without_identifier(self, client: Client, configure_service, claim):
-        configure_service({})
+    # Receipts include an issuer and kid.
+    receipt = Receipt.decode(client.submit_claim(claim).receipt)
+    assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
+    assert pycose.headers.KID in receipt.phdr
 
-        # By default, the service runs without a configured identity.
-        # The receipts it returns have no issuer or kid.
-        receipt = Receipt.decode(client.submit_claim(claim).receipt)
-        assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
-        assert pycose.headers.KID not in receipt.phdr
+    trust_store = DIDResolverTrustStore(Resolver(verify=False))
+    verify_receipt(claim, trust_store, receipt)
 
-    def test_with_identifier(self, client: Client, configure_service, claim):
-        parameters = client.get_parameters()
-        service_identifier = "did:web:ledger.example.com"
-        configure_service({"service_identifier": service_identifier})
 
-        # If a service identifier is configured, issued receipts include an issuer
-        # and kid.
-        # Somewhat confusingly, what the old `/parameters` endpoint calls the
-        # "service identity" is used as a KID in the receipts.
-        receipt = Receipt.decode(client.submit_claim(claim).receipt)
-        assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
-        assert (
-            receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
-        )
+def test_without_service_identifier(
+    client: Client,
+    configure_service,
+    service_identifier: str,
+    did_web: DIDWebServer,
+):
+    identity = did_web.create_identity()
+    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    # The test framework automatically configures the service with a DID.
+    # Reconfigure the service to disable it.
+    configure_service({"service_identifier": None})
+
+    url = did_web_document_url(service_identifier)
+    assert httpx.get(url, verify=False).status_code == 404
+
+    # The receipts it returns have no issuer or kid.
+    receipt = Receipt.decode(client.submit_claim(claim).receipt)
+    assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
+    assert pycose.headers.KID not in receipt.phdr
+
+
+def test_consistent_jwk(client, service_identifier):
+    doc = Resolver(verify=False).resolve(service_identifier)
+    assert len(doc["assertionMethod"]) > 0
+
+    # Each assertionMethod contains both a bare public key, and an X509
+    # certificate, which should contain the same public key. This checks that
+    # the two keys are actually the same.
+    for method in doc["assertionMethod"]:
+        jwk = method["publicKeyJwk"]
+        key = crypto.convert_jwk_to_pem(jwk)
+
+        assert len(jwk["x5c"]) == 1
+        certificate = crypto.cert_der_to_pem(base64.b64decode(jwk["x5c"][0]))
+        cert_key = crypto.get_cert_public_key(certificate)
+
+        assert crypto.pub_key_pem_to_der(key) == crypto.pub_key_pem_to_der(cert_key)
