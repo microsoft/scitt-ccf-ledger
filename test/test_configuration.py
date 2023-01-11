@@ -8,7 +8,8 @@ import pytest
 
 from infra.did_web_server import DIDWebServer
 from pyscitt import crypto
-from pyscitt.client import ServiceError
+from pyscitt.client import Client, ServiceError
+from pyscitt.receipt import Receipt
 
 
 class TestAcceptedAlgorithms:
@@ -17,7 +18,7 @@ class TestAcceptedAlgorithms:
             f()
 
     @pytest.fixture
-    def submit(self, client, did_web: DIDWebServer):
+    def submit(self, client: Client, did_web: DIDWebServer):
         def f(**kwargs):
             """Sign and submit the claims with a new identity"""
             identity = did_web.create_identity(**kwargs)
@@ -67,32 +68,32 @@ class TestAcceptedDIDIssuers:
     def claims(self, identity):
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    def test_reject_all_issuers(self, client, configure_service, claims):
+    def test_reject_all_issuers(self, client: Client, configure_service, claims):
         # Start with a configuration with no accepted issuers.
         # The service should reject anything we submit to it.
         configure_service({"policy": {"accepted_did_issuers": []}})
         self.not_allowed(lambda: client.submit_claim(claims))
 
-    def test_wrong_accepted_issuer(self, client, configure_service, claims):
+    def test_wrong_accepted_issuer(self, client: Client, configure_service, claims):
         # Add just one issuer to the policy. Claims signed not with this
         # issuer are rejected.
         configure_service({"policy": {"accepted_did_issuers": ["else"]}})
         self.not_allowed(lambda: client.submit_claim(claims))
 
-    def test_allow_any_issuer(self, client, configure_service, claims):
+    def test_allow_any_issuer(self, client: Client, configure_service, claims):
         # If no accepted_issuers are defined in the policy, any issuers
         # are accepted.
         configure_service({"policy": {}})
         client.submit_claim(claims)
 
-    def test_valid_issuer(self, client, configure_service, identity, claims):
+    def test_valid_issuer(self, client: Client, configure_service, identity, claims):
         # Add just one issuer to the policy. Claims signed with this
         # issuer are accepted.
         configure_service({"policy": {"accepted_did_issuers": [identity.issuer]}})
         client.submit_claim(claims)
 
     def test_multiple_accepted_issuers(
-        self, client, configure_service, identity, claims
+        self, client: Client, configure_service, identity, claims
     ):
         # Add multiple issuers to the policy. Claims signed with this
         # issuer are accepted.
@@ -108,16 +109,16 @@ class TestServiceIdentifier:
         identity = did_web.create_identity()
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    def test_without_identifier(self, client, configure_service, claim):
+    def test_without_identifier(self, client: Client, configure_service, claim):
         configure_service({})
 
         # By default, the service runs without a configured identity.
         # The receipts it returns have no issuer or kid.
-        receipt = client.submit_claim(claim).receipt
+        receipt = Receipt.decode(client.submit_claim(claim).receipt)
         assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
         assert pycose.headers.KID not in receipt.phdr
 
-    def test_with_identifier(self, client, configure_service, claim):
+    def test_with_identifier(self, client: Client, configure_service, claim):
         parameters = client.get_parameters()
         service_identifier = "did:web:ledger.example.com"
         configure_service({"service_identifier": service_identifier})
@@ -126,7 +127,7 @@ class TestServiceIdentifier:
         # and kid.
         # Somewhat confusingly, what the old `/parameters` endpoint calls the
         # "service identity" is used as a KID in the receipts.
-        receipt = client.submit_claim(claim).receipt
+        receipt = Receipt.decode(client.submit_claim(claim).receipt)
         assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
         assert (
             receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]

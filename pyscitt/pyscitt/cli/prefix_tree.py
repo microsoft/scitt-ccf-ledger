@@ -25,7 +25,7 @@ def prefix_tree_debug(client: Client):
 
 def prefix_tree_get_receipt(
     client: Client,
-    claim_path: Optional[str],
+    claim_path: Optional[Path],
     issuer: Optional[str],
     feed: Optional[str],
     output: Optional[Path],

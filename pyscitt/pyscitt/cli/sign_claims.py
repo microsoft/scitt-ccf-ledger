@@ -53,11 +53,11 @@ class RegistrationInfoArgument:
         else:
             data = self.content.encode("ascii")
 
-        if self.type == RegistrationInfoType.INT:
+        if self.type is RegistrationInfoType.INT:
             return int(data.decode("utf-8"))
-        elif self.type == RegistrationInfoType.TEXT:
+        elif self.type is RegistrationInfoType.TEXT:
             return data.decode("utf-8")
-        elif self.type == RegistrationInfoType.BYTES:
+        elif self.type is RegistrationInfoType.BYTES:
             return data
 
 
