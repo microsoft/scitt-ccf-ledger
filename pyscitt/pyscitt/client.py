@@ -319,13 +319,13 @@ class Client(BaseClient):
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False, **kwargs
     ) -> Submission[bytes]:
         ...
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[True]
+        self, claim: bytes, *, skip_confirmation: Literal[True], **kwargs
     ) -> Submission[None]:
         ...
 

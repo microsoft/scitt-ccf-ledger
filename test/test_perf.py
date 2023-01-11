@@ -48,12 +48,12 @@ class TestPerf:
 
         latency_did_web_submit_s = measure_latency(
             lambda: client.submit_claim(
-                claims, skip_confirmation=True, decode=False, wait_time=0
+                claims, skip_confirmation=True, wait_time=0
             )
         )
         latency_did_web_submit_and_receipt_s = measure_latency(
             lambda: client.submit_claim(
-                claims, skip_confirmation=False, decode=False, wait_time=0
+                claims, skip_confirmation=False, wait_time=0
             )
         )
 
@@ -63,12 +63,12 @@ class TestPerf:
 
         latency_x5c_submit_s = measure_latency(
             lambda: client.submit_claim(
-                claims, skip_confirmation=True, decode=False, wait_time=0
+                claims, skip_confirmation=True, wait_time=0
             )
         )
         latency_x5c_submit_and_receipt_s = measure_latency(
             lambda: client.submit_claim(
-                claims, skip_confirmation=False, decode=False, wait_time=0
+                claims, skip_confirmation=False, wait_time=0
             )
         )
 
