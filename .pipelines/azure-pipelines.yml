@@ -38,6 +38,8 @@ stages:
           Pool: 1es-dcv3
           Environment:
             ENABLE_PREFIX_TREE: OFF
+          FunctionalTestArguments: '--enable-perf'
+          PublishPerfResults: true
 
       - template: common.yml
         parameters:
