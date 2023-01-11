@@ -62,13 +62,13 @@ class Path:
     def hash(self, index: bytes, leaf: bytes) -> bytes:
         positions = bitvector(self.positions)
         hashes = reversed(self.hashes)
-        index = bitvector(index)
+        index_bits = bitvector(index)
 
         current = leaf
         for i in reversed(range(256)):
             if positions[i]:
-                node = hashlib.sha256(index.prefix(i))
-                if index[i]:
+                node = hashlib.sha256(index_bits.prefix(i))
+                if index_bits[i]:
                     node.update(next(hashes))
                     node.update(current)
                 else:

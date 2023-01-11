@@ -174,7 +174,12 @@ def generate_cert(
     if not cn:
         cn = str(uuid4())
     subject_priv = load_pem_private_key(private_key_pem.encode("ascii"), None)
+    assert isinstance(
+        subject_priv, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
+    )
+
     subject_pub_key = subject_priv.public_key()
+
     subject = x509.Name(
         [
             x509.NameAttribute(NameOID.COMMON_NAME, cn),
@@ -195,6 +200,9 @@ def generate_cert(
         issuer_priv_key = load_pem_private_key(
             issuer_private_key_pem.encode("ascii"),
             None,
+        )
+        assert isinstance(
+            issuer_priv_key, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
         )
     else:
         issuer_priv_key = subject_priv
@@ -231,15 +239,6 @@ def get_pub_key_type(pub_pem: str) -> str:
         return "ec"
     elif isinstance(key, Ed25519PublicKey):
         return "ed25519"
-    raise NotImplementedError("unsupported key type")
-
-
-def get_cert_key_type(cert_pem: str) -> str:
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
-    if isinstance(cert.public_key(), RSAPublicKey):
-        return "rsa"
-    elif isinstance(cert.public_key(), EllipticCurvePublicKey):
-        return "ec"
     raise NotImplementedError("unsupported key type")
 
 
@@ -323,13 +322,15 @@ def default_algorithm_for_private_key(key_pem: Pem) -> str:
 
 
 def verify_cose_sign1(buf: bytes, cert_pem: str):
-    key_type = get_cert_key_type(cert_pem)
     cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
     key = cert.public_key()
-    if key_type == "rsa":
+    if isinstance(key, RSAPublicKey):
         cose_key = from_cryptography_rsakey_obj(key)
-    else:
+    elif isinstance(key, EllipticCurvePublicKey):
         cose_key = from_cryptography_eckey_obj(key)
+    else:
+        raise NotImplementedError("unsupported key type")
+
     msg = Sign1Message.decode(buf)
     msg.key = cose_key
     if not msg.verify_signature():
@@ -386,7 +387,7 @@ def pretty_cose_sign1(buf: bytes) -> str:
 
 # temporary, from https://github.com/BrianSipos/pycose/blob/rsa_keys_algs/cose/keys/rsa.py
 # until https://github.com/TimothyClaeys/pycose/issues/44 is implemented
-def from_cryptography_rsakey_obj(ext_key) -> RSAKey:
+def from_cryptography_rsakey_obj(ext_key: Union[RSAPrivateKey, RSAPublicKey]) -> RSAKey:
     """
     Returns an initialized COSE Key object of type RSAKey.
     :param ext_key: Python cryptography key.
@@ -426,7 +427,9 @@ def from_cryptography_rsakey_obj(ext_key) -> RSAKey:
     return RSAKey.from_dict(cose_key)
 
 
-def from_cryptography_eckey_obj(ext_key) -> EC2Key:
+def from_cryptography_eckey_obj(
+    ext_key: Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]
+) -> EC2Key:
     """
     Returns an initialized COSE Key object of type EC2Key.
     :param ext_key: Python cryptography key.
@@ -463,7 +466,9 @@ def from_cryptography_eckey_obj(ext_key) -> EC2Key:
     return EC2Key.from_dict(cose_key)
 
 
-def from_cryptography_ed25519key_obj(ext_key) -> OKPKey:
+def from_cryptography_ed25519key_obj(
+    ext_key: Union[Ed25519PrivateKey, Ed25519PublicKey]
+) -> OKPKey:
     """
     Returns an initialized COSE Key object of type OKPKey.
     :param ext_key: Python cryptography key.
@@ -660,7 +665,7 @@ class Signer:
     issuer: Optional[str]
     kid: Optional[str]
     algorithm: str
-    x5c: Optional[List[str]]
+    x5c: Optional[List[Pem]]
 
     def __init__(
         self,
@@ -668,7 +673,7 @@ class Signer:
         issuer: Optional[str] = None,
         kid: Optional[str] = None,
         algorithm: Optional[str] = None,
-        x5c: Optional[List[str]] = None,
+        x5c: Optional[List[Pem]] = None,
     ):
         """
         If no algorithm is specified, a sensible default is inferred from the private key.
@@ -688,7 +693,7 @@ def sign_claimset(
     feed: Optional[str] = None,
     registration_info: RegistrationInfo = {},
 ) -> bytes:
-    headers = {}
+    headers: dict = {}
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
 
@@ -710,7 +715,7 @@ def sign_claimset(
 
 def sign_json_claimset(
     signer: Signer,
-    claims: json,
+    claims: dict,
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
 ) -> bytes:
