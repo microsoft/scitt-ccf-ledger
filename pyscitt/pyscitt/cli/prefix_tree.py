@@ -10,6 +10,7 @@ from pycose.messages import CoseMessage
 from .. import crypto, prefix_tree
 from ..client import Client
 from ..crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
+from ..verify import StaticTrustStore
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -49,10 +50,8 @@ def prefix_tree_get_receipt(
     print(json.dumps(receipt.as_dict(), indent=2))
 
     if claim_path and service_trust_store_path:
-        service_trust_store = crypto.read_service_trust_store(service_trust_store_path)
-        service_params = crypto.get_service_parameters(
-            receipt.tree_headers["service_id"], service_trust_store
-        )
+        service_trust_store = StaticTrustStore.load(service_trust_store_path)
+        service_params = service_trust_store.lookup(receipt.tree_headers)
         receipt.verify(claim, service_params)
 
 

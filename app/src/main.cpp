@@ -13,6 +13,7 @@
 #include "http_error.h"
 #include "kv_types.h"
 #include "receipt.h"
+#include "service_endpoints.h"
 #include "util.h"
 #include "verifier.h"
 
@@ -799,6 +800,8 @@ namespace scitt
         .set_auto_schema<void, GetVersion::Out>()
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
+
+      register_service_endpoints(*this);
 
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);

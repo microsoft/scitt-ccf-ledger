@@ -12,6 +12,9 @@
 
 namespace scitt::did
 {
+  static constexpr std::string_view VERIFICATION_METHOD_TYPE_JWK =
+    "JsonWebKey2020";
+
   struct Jwk
   {
     std::string kty;

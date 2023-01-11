@@ -5,8 +5,8 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
-from .. import crypto
 from ..client import Client
+from ..verify import StaticTrustStore, verify_receipt
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -21,7 +21,7 @@ def retrieve_signed_claimsets(
     base_path.mkdir(parents=True, exist_ok=True)
 
     if service_trust_store_path:
-        service_trust_store = crypto.read_service_trust_store(service_trust_store_path)
+        service_trust_store = StaticTrustStore.load(service_trust_store_path)
     else:
         service_trust_store = None
 
@@ -30,9 +30,7 @@ def retrieve_signed_claimsets(
         path = base_path / f"{tx}.cose"
 
         if service_trust_store:
-            crypto.verify_cose_with_receipt(
-                claim, service_trust_store=service_trust_store
-            )
+            verify_receipt(claim, service_trust_store=service_trust_store)
 
         with open(path, "wb") as f:
             f.write(claim)

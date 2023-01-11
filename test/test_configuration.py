@@ -1,14 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from pathlib import Path
-
+import httpx
 import pycose
 import pytest
+from pycose.messages import Sign1Message
 
 from infra.did_web_server import DIDWebServer
 from pyscitt import crypto
 from pyscitt.client import ServiceError
+from pyscitt.did import did_web_document_url
+from pyscitt.verify import DIDResolverTrustStore
 
 
 class TestAcceptedAlgorithms:
@@ -108,26 +110,35 @@ class TestServiceIdentifier:
         identity = did_web.create_identity()
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    def test_without_identifier(self, client, configure_service, claim):
+    def test_service_identifier(
+        self, client, configure_service, service_identifier, claim
+    ):
         configure_service({})
 
-        # By default, the service runs without a configured identity.
+        # Receipts include an issuer and kid.
+        receipt = client.submit_claim(claim).receipt
+        assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
+        assert pycose.headers.KID in receipt.phdr
+
+        trust_store = DIDResolverTrustStore(doc)
+        params = trust_store.lookup(receipt.phdr)
+        receipt.verify(Sign1Message.decode(claim), params)
+
+    def test_without_identifier(
+        self, client, configure_service, service_identifier, claim
+    ):
+        # The test framework automatically configures the service with a DID.
+        # Reconfigure the service to disable it.
+        configure_service(
+            {
+                "service_identifier": None,
+            }
+        )
+
+        url = did_web_document_url(service_identifier)
+        assert httpx.get(url, verify=False).status_code == 404
+
         # The receipts it returns have no issuer or kid.
         receipt = client.submit_claim(claim).receipt
         assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
         assert pycose.headers.KID not in receipt.phdr
-
-    def test_with_identifier(self, client, configure_service, claim):
-        parameters = client.get_parameters()
-        service_identifier = "did:web:ledger.example.com"
-        configure_service({"service_identifier": service_identifier})
-
-        # If a service identifier is configured, issued receipts include an issuer
-        # and kid.
-        # Somewhat confusingly, what the old `/parameters` endpoint calls the
-        # "service identity" is used as a KID in the receipts.
-        receipt = client.submit_claim(claim).receipt
-        assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
-        assert (
-            receipt.phdr[pycose.headers.KID].decode("ascii") == parameters["serviceId"]
-        )
