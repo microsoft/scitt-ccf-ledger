@@ -4,6 +4,8 @@
 from typing import Optional
 from urllib.parse import quote, unquote
 
+import httpx
+
 from .crypto import Pem, Signer
 
 DID_FILENAME = "did.json"
@@ -46,6 +48,7 @@ def did_web_document_url(did: str) -> str:
 
 
 def find_assertion_method(did_doc: dict, kid: Optional[str]):
+    # TODO: support non-inline verification methods
     assertion_methods = did_doc["assertionMethod"]
     if kid is None:
         assertion_method = assertion_methods[0]
@@ -75,3 +78,20 @@ def get_signer(private_key: Pem, did_doc: dict, kid: Optional[str] = None) -> Si
     algorithm = assertion_method["publicKeyJwk"]["alg"]
 
     return Signer(private_key, did_doc["id"], kid, algorithm)
+
+
+class Resolver:
+    def resolve(self, did: str) -> dict:
+        parts = did.split(":", 3)
+        if len(parts) < 3:
+            raise ValueError("Malformed DID")
+
+        if parts[0] != "did" or parts[0] != "web":
+            raise ValueError("Malformed DID")
+
+        url = did_web_document_url(did)
+
+        r = httpx.get(url)
+        r.raise_for_status()
+
+        return r.json()

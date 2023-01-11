@@ -5,22 +5,22 @@ from pathlib import Path
 from typing import Optional
 
 from .. import crypto
+from ..verify import StaticTrustStore, verify_receipt
 
 
 def validate_cose_with_receipt(
     cose_path: Path, receipt_path: Optional[Path], service_trust_store_path: Path
 ):
-    service_trust_store = crypto.read_service_trust_store(service_trust_store_path)
-    with open(cose_path, "rb") as f:
-        cose = f.read()
+    service_trust_store = StaticTrustStore.load(service_trust_store_path)
+
+    cose = cose_path.read_bytes()
+
     if receipt_path is None:
         receipt = None
     else:
-        with open(receipt_path, "rb") as f:
-            receipt = f.read()
-    crypto.verify_cose_with_receipt(
-        cose, service_trust_store=service_trust_store, receipt=receipt
-    )
+        receipt = receipt_path.read_bytes()
+
+    verify_receipt(cose, service_trust_store, receipt)
     print(f"COSE document is valid: {cose_path}")
 
 

@@ -9,9 +9,11 @@ from typing import Any
 
 import cbor2
 import ccf.receipt
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
-from cryptography.x509 import load_der_x509_certificate
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, utils
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from cryptography.x509 import Certificate, load_der_x509_certificate
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
 
@@ -48,7 +50,7 @@ class LeafInfo:
 
 class ReceiptContents(ABC):
     @abstractmethod
-    def verify(self, tbs: bytes, service_params: dict):
+    def verify(self, tbs: bytes, service: "crypto.ServiceParameters"):
         pass
 
     @abstractmethod
@@ -88,29 +90,32 @@ class CCFReceiptContents(ReceiptContents):
 
         return bytes.fromhex(ccf.receipt.root(leaf, proof))
 
-    def verify(self, tbs: bytes, service_params: dict):
-        if service_params.get("treeAlgorithm") != "CCF":
+    def verify(self, tbs: bytes, service: "crypto.ServiceParameters"):
+        if service.tree_algorithm != "CCF":
             raise ValueError("treeAlgorithm must be CCF")
-        if service_params.get("signatureAlgorithm") != "ES256":
+        if service.signature_algorithm != "ES256":
             raise ValueError("signatureAlgorithm must be ES256")
-
-        service_cert_der = base64.b64decode(service_params["serviceCertificate"])
-        service_cert = load_der_x509_certificate(service_cert_der)
-
-        node_cert = load_der_x509_certificate(self.node_certificate)
-        if not isinstance(node_cert.public_key(), ec.EllipticCurvePublicKey):
-            raise ValueError("Invalid node public key algorithm")
 
         claims_digest = hashlib.sha256(tbs).digest()
 
         root = self.root(claims_digest).hex()
 
-        # The CCF module expects a base64 signature, in ASN1/DER format.
-        signature = crypto.convert_p1363_signature_to_dss(self.signature)
-        b64signature = base64.b64encode(signature).decode()
+        node_cert = load_der_x509_certificate(self.node_certificate)
+        ccf.receipt.verify(root, signature, node_cert)
+        self._check_node_cert(node_cert, service)
 
-        ccf.receipt.verify(root, b64signature, node_cert)
-        ccf.receipt.check_endorsement(node_cert, service_cert)
+    @staticmethod
+    def _check_node_cert(cert: Certificate, service: "crypto.ServiceParameters"):
+        digest_alg = cert.signature_hash_algorithm
+        digester = hashes.Hash(digest_alg)
+        digester.update(cert.tbs_certificate_bytes)
+        digest = digester.finalize()
+
+        public_key = load_pem_public_key(service.public_key.encode("ascii"))
+        if not isinstance(public_key, ec.EllipticCurvePublicKey):
+            raise ValueError("Invalid node public key algorithm")
+
+        public_key.verify(cert.signature, digest, ec.ECDSA(utils.Prehashed(digest_alg)))
 
     def as_dict(self) -> dict:
         """
@@ -165,9 +170,9 @@ class Receipt:
         ]
         return cbor2.dumps(countersign_structure)
 
-    def verify(self, claim: Sign1Message, service_params: dict):
+    def verify(self, claim: Sign1Message, service: "crypto.ServiceParameters"):
         tbs = self.countersign_structure(claim)
-        self.contents.verify(tbs, service_params)
+        self.contents.verify(tbs, service)
 
     def as_dict(self) -> dict:
         """

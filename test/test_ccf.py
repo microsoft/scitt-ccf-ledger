@@ -9,6 +9,7 @@ from infra.did_web_server import DIDWebServer
 from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
 from pyscitt.client import ServiceError
+from pyscitt.verify import verify_receipt
 
 
 @pytest.mark.parametrize(
@@ -35,10 +36,10 @@ def test_submit_claim(client, did_web, trust_store, params):
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims, decode=False).receipt
 
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
-    crypto.verify_cose_with_receipt(embedded, trust_store, None)
+    verify_receipt(embedded, trust_store, None)
 
 
 @pytest.mark.parametrize(
@@ -69,7 +70,7 @@ def test_submit_claim_x5c(client, trust_store, params: dict):
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims, decode=False).receipt
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
     # x5c chain missing cert
     if x5c_len > 1:
@@ -112,4 +113,4 @@ def test_default_did_port(client, trust_store, tmp_path):
         # Sign and submit a dummy claim using our new identity
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
         receipt = client.submit_claim(claims, decode=False).receipt
-        crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+        verify_receipt(claims, trust_store, receipt)
