@@ -153,6 +153,7 @@ class BaseClient:
         url,
         *,
         retry_on=[],
+        wait_time=None,
         sign_request=False,
         wait_for_confirmation=False,
         **kwargs,
@@ -216,7 +217,10 @@ class BaseClient:
             else:
                 break
 
-            wait = int(response.headers.get("retry-after", default_wait_time))
+            if wait_time is not None:
+                wait = wait_time
+            else:
+                wait = int(response.headers.get("retry-after", default_wait_time))
             if time.monotonic() + wait > deadline:
                 raise ValueError("Too many retries")
 
@@ -326,7 +330,7 @@ class Client(BaseClient):
         ...
 
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False
+        self, claim: bytes, *, skip_confirmation=False, **kwargs
     ) -> Union[Submission[bytes], Submission[None]]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
@@ -336,13 +340,14 @@ class Client(BaseClient):
             retry_on=[
                 (HTTPStatus.SERVICE_UNAVAILABLE, "DIDResolutionInProgressRetryLater")
             ],
+            **kwargs,
         )
 
         tx = response.headers[CCF_TX_ID_HEADER]
         if skip_confirmation:
             return Submission(tx, None)
         else:
-            receipt = self.get_receipt(tx, decode=False)
+            receipt = self.get_receipt(tx, decode=False, **kwargs)
             return Submission(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
@@ -352,15 +357,17 @@ class Client(BaseClient):
         return response.content
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
+    def get_receipt(
+        self, tx: str, *, decode: Literal[True] = True, **kwargs
+    ) -> Receipt:
         ...
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
+    def get_receipt(self, tx: str, *, decode: Literal[False], **kwargs) -> bytes:
         ...
 
-    def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
-        response = self.get_historical(f"/entries/{tx}/receipt")
+    def get_receipt(self, tx: str, *, decode=True, **kwargs) -> Union[bytes, Receipt]:
+        response = self.get_historical(f"/entries/{tx}/receipt", **kwargs)
         if decode:
             return Receipt.decode(response.content)
         else:
