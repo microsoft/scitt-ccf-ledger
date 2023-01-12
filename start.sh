@@ -38,3 +38,4 @@ exec python3.8 test/infra/cchost.py \
     --constitution-file $CONSTITUTION_DIR/scitt.js \
     --platform "$PLATFORM" \
     "$@"
+A
