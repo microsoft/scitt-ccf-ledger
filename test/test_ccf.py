@@ -138,7 +138,7 @@ def test_consistent_kid(client, did_web, trust_store):
     assert header["kid"] == kid
 
     # Submit the claim and verify the resulting receipt.
-    receipt = client.submit_claim(claim, decode=False).receipt
+    receipt = client.submit_claim(claim).receipt
     crypto.verify_cose_with_receipt(claim, trust_store, receipt)
 
     # Check that the resolved DID document contains the expected assertion
