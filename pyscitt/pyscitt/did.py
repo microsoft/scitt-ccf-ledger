@@ -66,7 +66,7 @@ def find_assertion_method(did_doc: dict, kid: Optional[str]):
 # The part before the fragment is the DID itself
 # and stored in "issuer".
 def get_verification_method_kid(obj: dict) -> str:
-    return obj["id"].split("#")[1]
+    return "#" + obj["id"].split("#")[1]
 
 
 def get_signer(private_key: Pem, did_doc: dict, kid: Optional[str] = None) -> Signer:

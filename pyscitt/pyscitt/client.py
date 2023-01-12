@@ -323,6 +323,10 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
+    def get_did_document(self, did: str) -> dict:
+        # Note: This endpoint only returns data for did:web DIDs.
+        return self.get(f"/did/{did}").json()["did_document"]
+
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[False] = False
