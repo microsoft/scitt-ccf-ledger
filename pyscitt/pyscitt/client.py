@@ -137,6 +137,7 @@ class BaseClient:
             self.member_http_sig = None
 
         if tcp_nodelay_patch:
+            # Work-around until https://github.com/encode/httpcore/pull/651 is merged.
             # This is necessary to set TCP_NODELAY on the sockets used by httpx.
             # Without it we get issues with Nagle + delayed ACK,
             # leading to 40ms pauses when sending requests.

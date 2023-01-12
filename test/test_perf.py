@@ -24,14 +24,14 @@ def x5c_ca(client):
     return ca
 
 
-def measure_latency(fn, arg_fn=None):
+def measure_latency(fn, arg_fn=None, n=150):
     if arg_fn is None:
 
         def arg_fn():
             return None
 
     times = []
-    for _ in range(150):
+    for _ in range(n):
         arg = arg_fn()
         t_start = time.perf_counter()
         fn(arg)
@@ -53,13 +53,16 @@ class TestPerf:
         client = client.replace(wait_time=0.01, tcp_nodelay_patch=True)
 
         # Test did:web performance (uncached resolution).
+        uncached_repeat = 20
         latency_did_web_uncached_submit_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=True),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
+            n=uncached_repeat
         )
         latency_did_web_uncached_submit_and_receipt_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=False),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
+            n=uncached_repeat
         )
 
         # Test did:web performance (cached resolution).
