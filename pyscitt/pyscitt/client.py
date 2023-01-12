@@ -25,6 +25,7 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
 
 class MemberAuthenticationMethod(ABC):
+    cert: str
     @abstractmethod
     def sign(self, data: bytes) -> bytes:
         pass

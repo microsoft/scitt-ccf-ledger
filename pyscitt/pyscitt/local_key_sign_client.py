@@ -19,7 +19,6 @@ class LocalKeySignClient(MemberAuthenticationMethod):
         )
 
     def sign(self, data: bytes) -> bytes:
-        print(self.private_key)
         digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
             self.private_key.curve.key_size
         ]

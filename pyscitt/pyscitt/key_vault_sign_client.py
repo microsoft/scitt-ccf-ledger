@@ -41,7 +41,7 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
 
     @staticmethod
     def _encode_certificate(cert: KeyVaultCertificate) -> str:
-        decoded = base64.b64encode(cert.cer).decode()  # type: ignore
+        decoded = base64.b64encode(cert.cer).decode()
         cert_pem = f"-----BEGIN CERTIFICATE-----\n{decoded}\n-----END CERTIFICATE-----"
         return cert_pem
 
