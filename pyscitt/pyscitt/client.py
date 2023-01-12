@@ -81,6 +81,7 @@ class BaseClient:
     url: str
     auth_token: Optional[str]
     member_auth: Optional[Tuple[str, str]]
+    wait_time: Optional[float]
     development: bool
 
     session: httpx.Client
@@ -92,6 +93,7 @@ class BaseClient:
         *,
         auth_token: Optional[str] = None,
         member_auth: Optional[Tuple[str, str]] = None,
+        wait_time: Optional[float] = None,
         development: bool = False,
     ):
         """
@@ -104,6 +106,9 @@ class BaseClient:
             A pair of certificate and private key in PEM format, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
+        wait_time:
+            The time to wait between retries. If None, the default wait time is used.
+
         development:
             If true, the TLS certificate of the server will not be verified.
         """
@@ -114,6 +119,7 @@ class BaseClient:
         self.url = url
         self.auth_token = auth_token
         self.member_auth = member_auth
+        self.wait_time = wait_time
         self.development = development
 
         headers = {}
@@ -142,6 +148,7 @@ class BaseClient:
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
+            "wait_time": self.wait_time,
             "development": self.development,
         }
         values.update(kwargs)
@@ -153,7 +160,6 @@ class BaseClient:
         url,
         *,
         retry_on=[],
-        wait_time=None,
         sign_request=False,
         wait_for_confirmation=False,
         **kwargs,
@@ -217,8 +223,8 @@ class BaseClient:
             else:
                 break
 
-            if wait_time is not None:
-                wait = wait_time
+            if self.wait_time is not None:
+                wait = self.wait_time
             else:
                 wait = int(response.headers.get("retry-after", default_wait_time))
             if time.monotonic() + wait > deadline:
@@ -319,18 +325,18 @@ class Client(BaseClient):
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[False] = False, **kwargs
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False
     ) -> Submission[bytes]:
         ...
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[True], **kwargs
+        self, claim: bytes, *, skip_confirmation: Literal[True]
     ) -> Submission[None]:
         ...
 
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False, **kwargs
+        self, claim: bytes, *, skip_confirmation=False
     ) -> Union[Submission[bytes], Submission[None]]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
@@ -340,14 +346,13 @@ class Client(BaseClient):
             retry_on=[
                 (HTTPStatus.SERVICE_UNAVAILABLE, "DIDResolutionInProgressRetryLater")
             ],
-            **kwargs,
         )
 
         tx = response.headers[CCF_TX_ID_HEADER]
         if skip_confirmation:
             return Submission(tx, None)
         else:
-            receipt = self.get_receipt(tx, decode=False, **kwargs)
+            receipt = self.get_receipt(tx, decode=False)
             return Submission(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
@@ -357,17 +362,15 @@ class Client(BaseClient):
         return response.content
 
     @overload
-    def get_receipt(
-        self, tx: str, *, decode: Literal[True] = True, **kwargs
-    ) -> Receipt:
+    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
         ...
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[False], **kwargs) -> bytes:
+    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
         ...
 
-    def get_receipt(self, tx: str, *, decode=True, **kwargs) -> Union[bytes, Receipt]:
-        response = self.get_historical(f"/entries/{tx}/receipt", **kwargs)
+    def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
+        response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)
         else:

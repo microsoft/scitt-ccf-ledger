@@ -84,5 +84,5 @@ jobs:
       - ${{ if parameters.PublishPerfResults }}:
         - task: PublishPipelineArtifact@1
           inputs:
-            artifactName: "perf-results"
+            artifactName: "${{ parameters.Name }}-perf-results"
             targetPath: $(Build.SourcesDirectory)/perf.json
