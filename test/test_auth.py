@@ -7,7 +7,7 @@ import pytest
 
 from infra.jwt_issuer import JwtIssuer
 from pyscitt import crypto
-from pyscitt.client import ServiceError
+from pyscitt.client import Client, ServiceError
 
 
 class TestAuthentication:
@@ -45,7 +45,7 @@ class TestAuthentication:
         return f
 
     @pytest.fixture
-    def submit(self, client, claims):
+    def submit(self, client: Client, claims):
         def f(**kwargs):
             client.replace(**kwargs).submit_claim(claims)
 

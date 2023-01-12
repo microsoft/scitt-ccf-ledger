@@ -1,7 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import List, Tuple
+
 from pyscitt import crypto
+from pyscitt.crypto import Pem
 
 
 class X5ChainCertificateAuthority:
@@ -15,32 +18,25 @@ class X5ChainCertificateAuthority:
     def cert_bundle(self) -> str:
         return self.root_cert_pem
 
-    def create_identity(self, x5c_len: int, **kwargs) -> crypto.Signer:
+    def create_identity(self, length: int, **kwargs) -> crypto.Signer:
         """
         Create a new identity for x5c signer
-
         """
         algorithm = kwargs.pop("alg")
-        x5c, x5c_priv_key_list = self.create_x5c_node_pem(
-            self.root_key_pem, self.root_cert_pem, x5c_len, **kwargs
-        )
-        return crypto.Signer(x5c_priv_key_list[0], algorithm=algorithm, x5c=x5c)
+        x5c, private_key = self.create_chain(length, **kwargs)
+        return crypto.Signer(private_key, algorithm=algorithm, x5c=x5c)
 
-    def create_x5c_node_pem(
-        self,
-        root_priv_key_pem: crypto.Pem,
-        root_cert_pem: crypto.Pem,
-        x5c_len: int,
-        **kwargs
-    ):
-        x5c = [root_cert_pem]
-        x5c_priv_key_list = [root_priv_key_pem]
-        for i in range(1, x5c_len):
-            priv_key_pem, _ = crypto.generate_keypair(**kwargs)
-            ca = i < x5c_len - 1
+    def create_chain(self, length: int, **kwargs) -> Tuple[List[Pem], Pem]:
+        x5c = [self.root_cert_pem]
+        private_key = self.root_key_pem
+
+        for i in range(length):
+            next_private_key, _ = crypto.generate_keypair(**kwargs)
+            ca = i < length
             cert_pem = crypto.generate_cert(
-                priv_key_pem, x5c[-1], x5c_priv_key_list[-1], ca=ca
+                next_private_key, x5c[-1], private_key, ca=ca
             )
             x5c.append(cert_pem)
-            x5c_priv_key_list.append(priv_key_pem)
-        return x5c[::-1], x5c_priv_key_list[::-1]
+            private_key = next_private_key
+
+        return x5c[::-1], private_key

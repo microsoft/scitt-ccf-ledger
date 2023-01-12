@@ -7,7 +7,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Iterable, Optional, Tuple, Union
+from typing import Generic, Iterable, Literal, Optional, Tuple, TypeVar, Union, overload
 from urllib.parse import urlencode
 
 import httpx
@@ -70,6 +70,9 @@ class ServiceError(Exception):
         return f"{self.code}: {self.message}"
 
 
+SelfClient = TypeVar("SelfClient", bound="BaseClient")
+
+
 class BaseClient:
     """
     Wrapper around an HTTP client, with facilities to interact with a CCF-based
@@ -130,14 +133,14 @@ class BaseClient:
             base_url=url, headers=headers, verify=not development
         )
 
-    def replace(self, **kwargs):
+    def replace(self: SelfClient, **kwargs) -> SelfClient:
         """
         Create a new instance with certain parameters modified. Any parameters
         that weren't specified will be inherited from the current instance.
 
         The accepted keyword arguments are the same as those of the constructor.
         """
-        values = {
+        values: dict = {
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
@@ -271,8 +274,11 @@ class BaseClient:
         )
 
 
+T = TypeVar("T", bound=Optional[bytes], covariant=True)
+
+
 @dataclass
-class Submission:
+class Submission(Generic[T]):
     """
     The result of submitting a claim to the service.
     The presence and format of the receipt is depends on arguments passed to the `submit_claim`
@@ -280,7 +286,7 @@ class Submission:
     """
 
     tx: str
-    receipt: Optional[Union[bytes, Receipt]]
+    receipt: T
 
     @property
     def seqno(self) -> int:
@@ -309,9 +315,25 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
+    def get_did_document(self, did: str) -> dict:
+        # Note: This endpoint only returns data for did:web DIDs.
+        return self.get(f"/did/{did}").json()["did_document"]
+
+    @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False, decode=True
-    ) -> Submission:
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+    ) -> Submission[bytes]:
+        ...
+
+    @overload
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation: Literal[True]
+    ) -> Submission[None]:
+        ...
+
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation=False
+    ) -> Union[Submission[bytes], Submission[None]]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
@@ -326,7 +348,7 @@ class Client(BaseClient):
         if skip_confirmation:
             return Submission(tx, None)
         else:
-            receipt = self.get_receipt(tx, decode=decode)
+            receipt = self.get_receipt(tx, decode=False)
             return Submission(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
@@ -334,6 +356,14 @@ class Client(BaseClient):
             f"/entries/{tx}", params={"embedReceipt": embed_receipt}
         )
         return response.content
+
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
+        ...
+
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
+        ...
 
     def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
         response = self.get_historical(f"/entries/{tx}/receipt")

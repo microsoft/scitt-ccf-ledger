@@ -8,7 +8,7 @@ import pytest
 from infra.did_web_server import DIDWebServer
 from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
-from pyscitt.client import ServiceError
+from pyscitt.client import Client, ServiceError
 
 
 @pytest.mark.parametrize(
@@ -23,7 +23,7 @@ from pyscitt.client import ServiceError
         {"alg": "EdDSA", "kty": "ed25519"},
     ],
 )
-def test_submit_claim(client, did_web, trust_store, params):
+def test_submit_claim(client: Client, did_web, trust_store, params):
     """
     Submit claims to the SCITT CCF ledger and verify the resulting receipts.
 
@@ -33,7 +33,7 @@ def test_submit_claim(client, did_web, trust_store, params):
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims, decode=False).receipt
+    receipt = client.submit_claim(claims).receipt
 
     crypto.verify_cose_with_receipt(claims, trust_store, receipt)
 
@@ -42,21 +42,20 @@ def test_submit_claim(client, did_web, trust_store, params):
 
 
 @pytest.mark.parametrize(
-    "params",
+    "params,x5c_len",
     [
-        {"alg": "PS384", "kty": "rsa", "x5c_len": 1},
-        {"alg": "PS384", "kty": "rsa", "x5c_len": 2},
-        {"alg": "PS384", "kty": "rsa", "x5c_len": 3},
-        {"alg": "ES256", "kty": "ec", "ec_curve": "P-256", "x5c_len": 1},
+        ({"alg": "PS384", "kty": "rsa"}, 1),
+        ({"alg": "PS384", "kty": "rsa"}, 2),
+        ({"alg": "PS384", "kty": "rsa"}, 3),
+        ({"alg": "ES256", "kty": "ec", "ec_curve": "P-256"}, 1),
     ],
 )
-def test_submit_claim_x5c(client, trust_store, params: dict):
+def test_submit_claim_x5c(client: Client, trust_store, params: dict, x5c_len: int):
     """
     Submit claims to the SCITT CCF ledger and verify the resulting receipts for x5c.
 
     Test is parametrized over different signing parameters.
     """
-    x5c_len = params.pop("x5c_len")
     x5c_ca = X5ChainCertificateAuthority(**params)
 
     client.governance.propose(
@@ -68,19 +67,27 @@ def test_submit_claim_x5c(client, trust_store, params: dict):
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims, decode=False).receipt
+    receipt = client.submit_claim(claims).receipt
     crypto.verify_cose_with_receipt(claims, trust_store, receipt)
 
-    # x5c chain missing cert
-    if x5c_len > 1:
-        identity.x5c = identity.x5c[1:]
-        claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-        with pytest.raises(ServiceError, match="Signature verification failed"):
-            client.submit_claim(claims)
+def test_invalid_x5c(client: Client, trust_store):
+    x5c_ca = X5ChainCertificateAuthority(alg="ES256", kty="ec")
+    client.governance.propose(
+        governance.set_ca_bundle_proposal("x509_roots", x5c_ca.cert_bundle),
+        must_pass=True,
+    )
+
+    # Create a signer with a missing certificate in the chain
+    x5c, private_key = x5c_ca.create_chain(length=3, kty="ec")
+    identity = crypto.Signer(private_key, x5c=x5c[1:])
+    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    with pytest.raises(ServiceError, match="Signature verification failed"):
+        client.submit_claim(claims)
 
 
-def test_default_did_port(client, trust_store, tmp_path):
+def test_default_did_port(client: Client, trust_store, tmp_path):
     """
     Submit a claim using a DID web server running on the default port 443.
 
@@ -111,5 +118,45 @@ def test_default_did_port(client, trust_store, tmp_path):
 
         # Sign and submit a dummy claim using our new identity
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-        receipt = client.submit_claim(claims, decode=False).receipt
+        receipt = client.submit_claim(claims).receipt
         crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+
+
+def test_consistent_kid(client, did_web, trust_store):
+    """
+    Submit a claim with a known kid and check that it is consistent
+    in the claim header and DID document.
+    """
+    kid = "#key-1"
+    identity = did_web.create_identity(kid=kid)
+
+    # Sign a dummy claim using our new identity.
+    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    # Check that the COSE header contains the expected kid.
+    header, _ = crypto.parse_cose_sign1(claim)
+    assert header["kid"] == kid
+
+    # Submit the claim and verify the resulting receipt.
+    receipt = client.submit_claim(claim).receipt
+    crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+
+    # Check that the resolved DID document contains the expected assertion
+    # method id.
+    did_doc = client.get_did_document(identity.issuer)
+    assert did_doc["assertionMethod"][0]["id"] == f"{identity.issuer}{kid}"
+
+
+def test_invalid_kid(client, did_web):
+    """
+    Submit a claim with an invalid kid and check that it is rejected.
+    """
+    identity = did_web.create_identity(kid="#key-1")
+    invalid_identity = crypto.Signer(
+        identity.private_key, issuer=identity.issuer, kid="key-1"
+    )
+
+    claim = crypto.sign_json_claimset(invalid_identity, {"foo": "bar"})
+
+    with pytest.raises(ServiceError, match="kid must start with '#'"):
+        client.submit_claim(claim)

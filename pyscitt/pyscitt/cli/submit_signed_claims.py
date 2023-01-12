@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import argparse
 from pathlib import Path
 from typing import Optional
 
@@ -23,14 +24,14 @@ def submit_signed_claimset(
     with open(path, "rb") as f:
         signed_claimset = f.read()
 
-    submission = client.submit_claim(
-        signed_claimset, skip_confirmation=skip_confirmation, decode=False
-    )
-
-    print(f"Submitted {path} as transaction {submission.tx}")
     if skip_confirmation:
-        print("Confirmation fo submission was skipped! Claim may not be registered.")
+        tx = client.submit_claim(signed_claimset, skip_confirmation=True).tx
+        print(f"Submitted {path} as transaction {tx}")
+        print("Confirmation of submission was skipped! Claim may not be registered.")
         return
+
+    submission = client.submit_claim(signed_claimset)
+    print(f"Submitted {path} as transaction {submission.tx}")
 
     if receipt_path:
         with open(receipt_path, "wb") as f:
