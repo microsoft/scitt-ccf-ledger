@@ -57,12 +57,12 @@ class TestPerf:
         latency_did_web_uncached_submit_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=True),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-            n=uncached_repeat
+            n=uncached_repeat,
         )
         latency_did_web_uncached_submit_and_receipt_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=False),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-            n=uncached_repeat
+            n=uncached_repeat,
         )
 
         # Test did:web performance (cached resolution).
