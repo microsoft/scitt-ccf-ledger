@@ -13,25 +13,6 @@ from ..did import did_web_document_url, format_did_web
 DID_FILENAME = "did.json"
 
 
-def get_did_web_doc_url_from_did(did: str) -> str:
-    rest = did.replace(DID_WEB_PREFIX, "")
-    try:
-        rest.index(":")
-    except:
-        return (
-            DID_WEB_DOC_URL_PREFIX
-            + rest.replace(ENCODED_COLON, ":")
-            + DID_WEB_DOC_WELLKNOWN_PATH
-            + DID_WEB_DOC_URL_SUFFIX
-        )
-    else:
-        return (
-            DID_WEB_DOC_URL_PREFIX
-            + rest.replace(":", "/").replace(ENCODED_COLON, ":")
-            + DID_WEB_DOC_URL_SUFFIX
-        )
-
-
 def write_file(path: Path, contents: str):
     print(f"Writing {path}")
     path.write_text(contents)
@@ -46,6 +27,7 @@ def create_did_web(
 ):
 
     parsed = urlsplit(base_url)
+    assert parsed.hostname
     did = format_did_web(
         host=parsed.hostname, port=parsed.port, path=parsed.path.lstrip("/")
     )

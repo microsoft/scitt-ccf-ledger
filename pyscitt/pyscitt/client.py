@@ -6,11 +6,10 @@ import hashlib
 import time
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Iterable, Optional, Tuple, Union
+from typing import Generic, Iterable, Literal, Optional, Tuple, TypeVar, Union, overload
 from urllib.parse import urlencode
 
 import httpx
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -30,7 +29,7 @@ class HttpSig(httpx.Auth):
     def __init__(self, key_id: str, pem_private_key: str):
         self.key_id = key_id
         self.private_key = load_pem_private_key(
-            pem_private_key.encode("ascii"), password=None, backend=default_backend()
+            pem_private_key.encode("ascii"), password=None
         )
 
     def auth_flow(self, request):
@@ -65,6 +64,9 @@ class ServiceError(Exception):
 
     def __str__(self):
         return f"{self.code}: {self.message}"
+
+
+SelfClient = TypeVar("SelfClient", bound="BaseClient")
 
 
 class BaseClient:
@@ -129,14 +131,14 @@ class BaseClient:
             base_url=url, headers=headers, verify=not development
         )
 
-    def replace(self, **kwargs):
+    def replace(self: SelfClient, **kwargs) -> SelfClient:
         """
         Create a new instance with certain parameters modified. Any parameters
         that weren't specified will be inherited from the current instance.
 
         The accepted keyword arguments are the same as those of the constructor.
         """
-        values = {
+        values: dict = {
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
@@ -237,7 +239,7 @@ class BaseClient:
         In the latter case, an exception is raised.
         """
         response = self.get(
-            "/app/tx",
+            "/tx",
             params={"transaction_id": tx},
             retry_on=[lambda r: r.is_success and r.json()["status"] == "Pending"],
         )
@@ -270,8 +272,11 @@ class BaseClient:
         )
 
 
+T = TypeVar("T", bound=Optional[bytes], covariant=True)
+
+
 @dataclass
-class Submission:
+class Submission(Generic[T]):
     """
     The result of submitting a claim to the service.
     The presence and format of the receipt is depends on arguments passed to the `submit_claim`
@@ -279,7 +284,7 @@ class Submission:
     """
 
     tx: str
-    receipt: Optional[Union[bytes, Receipt]]
+    receipt: T
 
     @property
     def seqno(self) -> int:
@@ -293,7 +298,7 @@ class Client(BaseClient):
     """
 
     def get_parameters(self) -> dict:
-        return self.get("/app/parameters").json()
+        return self.get("/parameters").json()
 
     def get_trust_store(self) -> dict:
         params = self.get_parameters()
@@ -301,17 +306,35 @@ class Client(BaseClient):
         return {service_id: params}
 
     def get_constitution(self) -> str:
-        return self.get("/app/constitution").text
+        # The endpoint returns the value as a JSON-encoded string, ie. wrapped
+        # in double quotes and with all special characters escaped.
+        return self.get("/gov/kv/constitution").json()
 
     def get_version(self) -> dict:
-        return self.get("/app/version").json()
+        return self.get("/version").json()
+
+    def get_did_document(self, did: str) -> dict:
+        # Note: This endpoint only returns data for did:web DIDs.
+        return self.get(f"/did/{did}").json()["did_document"]
+
+    @overload
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+    ) -> Submission[bytes]:
+        ...
+
+    @overload
+    def submit_claim(
+        self, claim: bytes, *, skip_confirmation: Literal[True]
+    ) -> Submission[None]:
+        ...
 
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False, decode=True
-    ) -> Submission:
+        self, claim: bytes, *, skip_confirmation=False
+    ) -> Union[Submission[bytes], Submission[None]]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
-            "/app/entries",
+            "/entries",
             headers=headers,
             content=claim,
             retry_on=[
@@ -323,17 +346,25 @@ class Client(BaseClient):
         if skip_confirmation:
             return Submission(tx, None)
         else:
-            receipt = self.get_receipt(tx, decode=decode)
+            receipt = self.get_receipt(tx, decode=False)
             return Submission(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
-            f"/app/entries/{tx}", params={"embedReceipt": embed_receipt}
+            f"/entries/{tx}", params={"embedReceipt": embed_receipt}
         )
         return response.content
 
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
+        ...
+
+    @overload
+    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
+        ...
+
     def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
-        response = self.get_historical(f"/app/entries/{tx}/receipt")
+        response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)
         else:
@@ -354,7 +385,7 @@ class Client(BaseClient):
         if end is not None:
             params["to"] = end
 
-        link = f"/app/entries/txIds?{urlencode(params)}"
+        link = f"/entries/txIds?{urlencode(params)}"
 
         while link:
             response = self.get(

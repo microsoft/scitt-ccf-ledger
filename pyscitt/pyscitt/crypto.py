@@ -7,7 +7,7 @@ import hashlib
 import json
 import warnings
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -17,7 +17,6 @@ import jwt
 import pycose.algorithms
 import pycose.headers
 from cryptography import x509
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
@@ -29,6 +28,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     NoEncryption,
@@ -89,7 +89,6 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
     priv = rsa.generate_private_key(
         public_exponent=RECOMMENDED_RSA_PUBLIC_EXPONENT,
         key_size=key_size,
-        backend=default_backend(),
     )
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
@@ -104,9 +103,7 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
 def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
     if curve not in REGISTERED_EC_CURVES:
         raise NotImplementedError(f"Unsupported curve: {curve}")
-    priv = ec.generate_private_key(
-        curve=REGISTERED_EC_CURVES[curve].curve_obj, backend=default_backend()
-    )
+    priv = ec.generate_private_key(curve=REGISTERED_EC_CURVES[curve].curve_obj)
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -152,7 +149,7 @@ def is_ssh_private_key(pem: str):
 
 
 def ssh_private_key_to_pem(pem: str) -> Pem:
-    priv = load_ssh_private_key(pem.encode("ascii"), None, default_backend())
+    priv = load_ssh_private_key(pem.encode("ascii"), None)
     pem = priv.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode(
         "ascii"
     )
@@ -160,7 +157,7 @@ def ssh_private_key_to_pem(pem: str) -> Pem:
 
 
 def ssh_public_key_to_pem(ssh_pub_key: str) -> Pem:
-    pub = load_ssh_public_key(ssh_pub_key.encode("ascii"), default_backend())
+    pub = load_ssh_public_key(ssh_pub_key.encode("ascii"))
     pem = pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode(
         "ascii"
     )
@@ -176,10 +173,13 @@ def generate_cert(
 ):
     if not cn:
         cn = str(uuid4())
-    subject_priv = load_pem_private_key(
-        private_key_pem.encode("ascii"), None, default_backend()
+    subject_priv = load_pem_private_key(private_key_pem.encode("ascii"), None)
+    assert isinstance(
+        subject_priv, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
     )
+
     subject_pub_key = subject_priv.public_key()
+
     subject = x509.Name(
         [
             x509.NameAttribute(NameOID.COMMON_NAME, cn),
@@ -198,7 +198,11 @@ def generate_cert(
 
     if issuer_private_key_pem:
         issuer_priv_key = load_pem_private_key(
-            issuer_private_key_pem.encode("ascii"), None, default_backend()
+            issuer_private_key_pem.encode("ascii"),
+            None,
+        )
+        assert isinstance(
+            issuer_priv_key, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
         )
     else:
         issuer_priv_key = subject_priv
@@ -211,13 +215,13 @@ def generate_cert(
         .not_valid_before(datetime.datetime.utcnow())
         .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-        .sign(issuer_priv_key, hash_alg, default_backend())
+        .sign(issuer_priv_key, hash_alg)
     )
     return cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
 def get_priv_key_type(priv_pem: str) -> str:
-    key = load_pem_private_key(priv_pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(priv_pem.encode("ascii"), None)
     if isinstance(key, RSAPrivateKey):
         return "rsa"
     elif isinstance(key, EllipticCurvePrivateKey):
@@ -228,7 +232,7 @@ def get_priv_key_type(priv_pem: str) -> str:
 
 
 def get_pub_key_type(pub_pem: str) -> str:
-    key = load_pem_public_key(pub_pem.encode("ascii"), default_backend())
+    key = load_pem_public_key(pub_pem.encode("ascii"))
     if isinstance(key, RSAPublicKey):
         return "rsa"
     elif isinstance(key, EllipticCurvePublicKey):
@@ -238,50 +242,41 @@ def get_pub_key_type(pub_pem: str) -> str:
     raise NotImplementedError("unsupported key type")
 
 
-def get_cert_key_type(cert_pem: str) -> str:
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"), default_backend())
-    if isinstance(cert.public_key(), RSAPublicKey):
-        return "rsa"
-    elif isinstance(cert.public_key(), EllipticCurvePublicKey):
-        return "ec"
-    raise NotImplementedError("unsupported key type")
-
-
 def get_cert_info(pem: str) -> dict:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     return {"cn": cn}
 
 
 def get_cert_fingerprint(pem: Pem) -> str:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.fingerprint(hashes.SHA256()).hex()
 
 
 def pub_key_pem_to_der(pem: Pem) -> bytes:
-    pub_key = load_pem_public_key(pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pem.encode("ascii"))
     return pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 
 
 def pub_key_pem_to_ssh(pem: Pem) -> str:
-    pub_key = load_pem_public_key(pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pem.encode("ascii"))
     return pub_key.public_bytes(Encoding.OpenSSH, PublicFormat.OpenSSH).decode("ascii")
 
 
 def private_key_pem_to_ssh(pem: Pem) -> str:
-    private_key = load_pem_private_key(pem.encode("ascii"), None, default_backend())
+    private_key = load_pem_private_key(pem.encode("ascii"), None)
     return private_key.private_bytes(
         Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption()
     ).decode("ascii")
 
 
 def cert_pem_to_der(pem: Pem) -> bytes:
-    cert = load_pem_x509_certificate(pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.public_bytes(Encoding.DER)
 
 
 def cert_der_to_pem(der: bytes) -> str:
-    cert = load_der_x509_certificate(der, default_backend())
+    cert = load_der_x509_certificate(der)
     return cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
@@ -322,18 +317,20 @@ def default_algorithm_for_key(key) -> str:
 
 
 def default_algorithm_for_private_key(key_pem: Pem) -> str:
-    key = load_pem_private_key(key_pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(key_pem.encode("ascii"), None)
     return default_algorithm_for_key(key)
 
 
 def verify_cose_sign1(buf: bytes, cert_pem: str):
-    key_type = get_cert_key_type(cert_pem)
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"), default_backend())
+    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
     key = cert.public_key()
-    if key_type == "rsa":
+    if isinstance(key, RSAPublicKey):
         cose_key = from_cryptography_rsakey_obj(key)
-    else:
+    elif isinstance(key, EllipticCurvePublicKey):
         cose_key = from_cryptography_eckey_obj(key)
+    else:
+        raise NotImplementedError("unsupported key type")
+
     msg = Sign1Message.decode(buf)
     msg.key = cose_key
     if not msg.verify_signature():
@@ -390,7 +387,7 @@ def pretty_cose_sign1(buf: bytes) -> str:
 
 # temporary, from https://github.com/BrianSipos/pycose/blob/rsa_keys_algs/cose/keys/rsa.py
 # until https://github.com/TimothyClaeys/pycose/issues/44 is implemented
-def from_cryptography_rsakey_obj(ext_key) -> RSAKey:
+def from_cryptography_rsakey_obj(ext_key: Union[RSAPrivateKey, RSAPublicKey]) -> RSAKey:
     """
     Returns an initialized COSE Key object of type RSAKey.
     :param ext_key: Python cryptography key.
@@ -430,7 +427,9 @@ def from_cryptography_rsakey_obj(ext_key) -> RSAKey:
     return RSAKey.from_dict(cose_key)
 
 
-def from_cryptography_eckey_obj(ext_key) -> EC2Key:
+def from_cryptography_eckey_obj(
+    ext_key: Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]
+) -> EC2Key:
     """
     Returns an initialized COSE Key object of type EC2Key.
     :param ext_key: Python cryptography key.
@@ -467,7 +466,9 @@ def from_cryptography_eckey_obj(ext_key) -> EC2Key:
     return EC2Key.from_dict(cose_key)
 
 
-def from_cryptography_ed25519key_obj(ext_key) -> OKPKey:
+def from_cryptography_ed25519key_obj(
+    ext_key: Union[Ed25519PrivateKey, Ed25519PublicKey]
+) -> OKPKey:
     """
     Returns an initialized COSE Key object of type OKPKey.
     :param ext_key: Python cryptography key.
@@ -506,7 +507,7 @@ def from_cryptography_ed25519key_obj(ext_key) -> OKPKey:
 
 
 def cose_private_key_from_pem(pem: Pem):
-    key = load_pem_private_key(pem.encode("ascii"), None, default_backend())
+    key = load_pem_private_key(pem.encode("ascii"), None)
     if isinstance(key, RSAPrivateKey):
         return from_cryptography_rsakey_obj(key)
     elif isinstance(key, EllipticCurvePrivateKey):
@@ -577,7 +578,7 @@ def create_did_document(
     did: str, pub_key_pem: Pem, alg: Optional[str] = None, kid: Optional[str] = None
 ) -> dict:
 
-    pub_key = load_pem_public_key(pub_key_pem.encode("ascii"), default_backend())
+    pub_key = load_pem_public_key(pub_key_pem.encode("ascii"))
     der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 
     if isinstance(pub_key, RSAPublicKey):
@@ -624,14 +625,20 @@ def create_did_document(
     else:
         raise ValueError("unsupported key type")
 
+    if not did.startswith("did:"):
+        raise ValueError("did must start with 'did:'")
+
     if kid is None:
-        kid = hashlib.sha256(der).hexdigest()
+        kid = "#" + hashlib.sha256(der).hexdigest()
+    if not kid.startswith("#"):
+        raise ValueError("kid must start with '#'")
+
     if alg is None:
         alg = default_algorithm_for_key(pub_key)
 
     jwk.update(
         {
-            "kid": kid,
+            "kid": kid[1:],
             "alg": alg,
         }
     )
@@ -644,7 +651,7 @@ def create_did_document(
         "id": did,
         "assertionMethod": [
             {
-                "id": f"{did}#{kid}",
+                "id": f"{did}{kid}",
                 "type": "JsonWebKey2020",
                 "controller": did,
                 "publicKeyJwk": jwk,
@@ -658,7 +665,7 @@ class Signer:
     issuer: Optional[str]
     kid: Optional[str]
     algorithm: str
-    x5c: Optional[list]
+    x5c: Optional[List[Pem]]
 
     def __init__(
         self,
@@ -666,7 +673,7 @@ class Signer:
         issuer: Optional[str] = None,
         kid: Optional[str] = None,
         algorithm: Optional[str] = None,
-        x5c: Optional[str] = None,
+        x5c: Optional[List[Pem]] = None,
     ):
         """
         If no algorithm is specified, a sensible default is inferred from the private key.
@@ -686,7 +693,7 @@ def sign_claimset(
     feed: Optional[str] = None,
     registration_info: RegistrationInfo = {},
 ) -> bytes:
-    headers = {}
+    headers: dict = {}
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
 
@@ -708,7 +715,7 @@ def sign_claimset(
 
 def sign_json_claimset(
     signer: Signer,
-    claims: json,
+    claims: dict,
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
 ) -> bytes:
@@ -739,3 +746,33 @@ def get_service_parameters(service_id: str, service_trust_store: dict) -> dict:
     if service_id not in service_trust_store:
         raise ValueError(f"Service ID not found in trust store: {service_id}")
     return service_trust_store[service_id]
+
+
+def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:
+    """
+    Decode an ECDSA signature from its IEEE P1363 encoding into its r and s
+    components. The two integers are padded to the curve size and concatenated.
+
+    This is the format used throughout the COSE/JOSE ecosystem.
+    """
+    # The two components are padded to the same size, so we can find the size
+    # of each one by taking half the size of the signature.
+    assert len(signature) % 2 == 0
+    mid = len(signature) // 2
+    r = int.from_bytes(signature[:mid], "big")
+    s = int.from_bytes(signature[mid:], "big")
+    return r, s
+
+
+def convert_p1363_signature_to_dss(signature: bytes) -> bytes:
+    """
+    Convert an ECDSA signature from its IEEE P1363 encoding to an ASN1/DER
+    encoding.
+
+    The former is the format used throughout the COSE/JOSE ecosystem. The
+    latter is used by OpenSSL and cryptography, as well as the CCF python
+    module.
+
+    """
+    r, s = decode_p1363_signature(signature)
+    return encode_dss_signature(r, s)

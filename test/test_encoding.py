@@ -8,6 +8,7 @@ from pycose import algorithms, headers
 from pycose.messages import Sign1Message
 
 from pyscitt import crypto
+from pyscitt.client import Client
 
 
 class TestNonCanonicalEncoding:
@@ -48,23 +49,23 @@ class TestNonCanonicalEncoding:
         message = [protected, dict(), payload, signature]
         return cbor2.dumps(cbor2.CBORTag(Sign1Message.cbor_tag, message))
 
-    def test_submit_claim(self, client, trust_store, claim):
+    def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
-        client.submit_claim(claim, decode=False)
+        client.submit_claim(claim)
 
     @pytest.mark.xfail(
         reason="pycose does not preserve the original encoding (https://github.com/TimothyClaeys/pycose/pull/91)",
         raises=InvalidSignature,
     )
-    def test_verify_receipt(self, client, trust_store, claim):
+    def test_verify_receipt(self, client: Client, trust_store, claim):
         """We should be able to verify the produced receipt."""
         # Once the xfail is fixed, this test can be merged with test_submit_claim.
-        receipt = client.submit_claim(claim, decode=False).receipt
+        receipt = client.submit_claim(claim).receipt
         crypto.verify_cose_with_receipt(claim, trust_store, receipt)
 
-    def test_embed_receipt(self, client, trust_store, claim):
+    def test_embed_receipt(self, client: Client, trust_store, claim):
         """When embedding a receipt in a claim, the ledger should not affect the original encoding."""
-        tx = client.submit_claim(claim, decode=False).tx
+        tx = client.submit_claim(claim).tx
         embedded = client.get_claim(tx, embed_receipt=True)
 
         original_pieces = cbor2.loads(claim).value

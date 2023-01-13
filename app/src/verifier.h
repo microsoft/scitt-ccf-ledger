@@ -98,8 +98,12 @@ namespace scitt::verifier
 
         if (kid.has_value())
         {
+          if (!kid.value().starts_with("#"))
+          {
+            throw VerificationError("kid must start with '#'.");
+          }
           assertion_method_id =
-            fmt::format("{}#{}", issuer.value(), kid.value());
+            fmt::format("{}{}", issuer.value(), kid.value());
         }
 
         auto resolution_options = did::DidResolutionOptions{

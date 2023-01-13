@@ -9,17 +9,19 @@ from typing import Any
 
 import cbor2
 import ccf.receipt
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509 import load_der_x509_certificate
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
+
+from . import crypto
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
 
 
-def hdr_as_dict(phdr: list) -> dict:
+def hdr_as_dict(phdr: dict) -> dict:
     """
     Return a representation of a list of COSE header parameters that
     is amenable to pretty-printing.
@@ -56,7 +58,12 @@ class ReceiptContents(ABC):
     @classmethod
     def from_cose_obj(self, headers: dict, cose_obj: Any) -> "ReceiptContents":
         if headers.get(HEADER_PARAM_TREE_ALGORITHM) == TREE_ALGORITHM_CCF:
-            return CCFReceiptContents.from_cose_obj(cose_obj)
+            return CCFReceiptContents(
+                cose_obj[0],
+                cose_obj[1],
+                cose_obj[2],
+                LeafInfo.from_cose_obj(cose_obj[3]),
+            )
         else:
             raise ValueError("unsupported tree algorithm, cannot decode receipt")
 
@@ -67,12 +74,6 @@ class CCFReceiptContents(ReceiptContents):
     node_certificate: bytes
     inclusion_proof: list
     leaf_info: LeafInfo
-
-    @classmethod
-    def from_cose_obj(cls, cose_obj: list) -> "ReceiptContents":
-        return cls(
-            cose_obj[0], cose_obj[1], cose_obj[2], LeafInfo.from_cose_obj(cose_obj[3])
-        )
 
     def root(self, claims_digest: bytes) -> bytes:
         leaf = self.leaf_info.digest(claims_digest).hex()
@@ -93,18 +94,21 @@ class CCFReceiptContents(ReceiptContents):
             raise ValueError("signatureAlgorithm must be ES256")
 
         service_cert_der = base64.b64decode(service_params["serviceCertificate"])
-        service_cert = load_der_x509_certificate(service_cert_der, default_backend())
+        service_cert = load_der_x509_certificate(service_cert_der)
 
-        node_cert = load_der_x509_certificate(self.node_certificate, default_backend())
+        node_cert = load_der_x509_certificate(self.node_certificate)
         if not isinstance(node_cert.public_key(), ec.EllipticCurvePublicKey):
             raise ValueError("Invalid node public key algorithm")
 
         claims_digest = hashlib.sha256(tbs).digest()
 
         root = self.root(claims_digest).hex()
-        signature = base64.b64encode(self.signature).decode()
 
-        ccf.receipt.verify(root, signature, node_cert)
+        # The CCF module expects a base64 signature, in ASN1/DER format.
+        signature = crypto.convert_p1363_signature_to_dss(self.signature)
+        b64signature = base64.b64encode(signature).decode()
+
+        ccf.receipt.verify(root, b64signature, node_cert)
         ccf.receipt.check_endorsement(node_cert, service_cert)
 
     def as_dict(self) -> dict:

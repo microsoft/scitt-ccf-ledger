@@ -53,7 +53,7 @@ namespace scitt::did::web
         // typically something like 0.0.0.0, and hardcode localhost instead.
         auto [_host, port] =
           ccf::split_net_address(primary_interface.bind_address);
-        return fmt::format("https://localhost:{}/app/did/{}/doc", port, did);
+        return fmt::format("https://localhost:{}/did/{}/doc", port, did);
       }
       else
       {
