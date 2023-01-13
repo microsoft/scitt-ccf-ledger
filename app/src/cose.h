@@ -27,30 +27,161 @@
 namespace scitt::cose
 {
   static constexpr int64_t COSE_HEADER_PARAM_ALG = 1;
+  static constexpr int64_t COSE_HEADER_PARAM_CRIT = 2;
   static constexpr int64_t COSE_HEADER_PARAM_CTY = 3;
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
+
+  // Temporary made up profile label, we don't expect claims to contain a
+  // profile header parameter yet, but it's useful to have a label so we can
+  // easily act on the absence of a profile.
+  static constexpr int64_t COSE_HEADER_PARAM_PROFILE = 6861;
 
   // Temporary assignments from draft-birkholz-scitt-architecture
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
 
+  // Notary header parameters.
+  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_SCHEME =
+    "io.cncf.notary.signingScheme";
+  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_TIME =
+    "io.cncf.notary.signingTime";
+  static constexpr const char* NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME =
+    "io.cncf.notary.authenticSigningTime";
+  static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
+    "io.cncf.notary.expiry";
+
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  struct UnprotectedHeader
+  {
+    // We currently expect only notary to use the unprotected header and
+    // we expect to find only the x5chain in there.
+    std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+  };
+
+  UnprotectedHeader decode_unprotected_header(
+    const std::vector<uint8_t>& cose_sign1)
+  {
+    UnprotectedHeader parsed;
+    // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
+    // t_cose doesn't support custom header parameters yet.
+
+    QCBORError qcbor_result;
+
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(
+      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+    QCBORDecode_EnterArray(&ctx, nullptr);
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError("Failed to parse COSE_Sign1 outer array");
+    }
+
+    uint64_t tag = QCBORDecode_GetNthTagOfLast(&ctx, 0);
+    if (tag != CBOR_TAG_COSE_SIGN1)
+    {
+      throw COSEDecodeError("COSE_Sign1 is not tagged");
+    }
+    QCBORItem coseItem;
+    QCBORDecode_GetNext(&ctx, &coseItem);
+
+    struct q_useful_buf_c unprotected_parameters;
+    QCBORDecode_EnterMap(&ctx, NULL);
+
+    enum
+    {
+      ALG_INDEX,
+      X5CHAIN_INDEX,
+      END_INDEX,
+    };
+    QCBORItem header_items[END_INDEX + 1];
+    header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
+    header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
+    header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
+
+    QCBORDecode_GetItemsInMap(&ctx, header_items);
+
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError("Failed to decode unprotected header");
+    }
+    if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.x5chain = std::vector<std::vector<uint8_t>>();
+
+      QCBORItem chainItem = header_items[X5CHAIN_INDEX];
+      if (chainItem.uDataType == QCBOR_TYPE_ARRAY)
+      {
+        int lenOfArray = chainItem.val.uCount;
+        if (lenOfArray == 0)
+        {
+          throw COSEDecodeError(
+            "x5chain array length was 0 in cose unprotected header.");
+        }
+        QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
+        for (int i = 0; i < lenOfArray; i++)
+        {
+          QCBORDecode_GetNext(&ctx, &chainItem);
+          if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
+          {
+            parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
+          }
+          else
+          {
+            throw COSEDecodeError(
+              "Next item in chain was not of type qcbor byte string.");
+          }
+        }
+        QCBORDecode_ExitArray(&ctx);
+      }
+      else if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
+      {
+        parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
+      }
+      else
+      {
+        CCF_APP_INFO("x5c type", chainItem.uDataType);
+        throw COSEDecodeError(
+          "Value type of x5chain in unprotected header is not array or byte "
+          "string.");
+      }
+    }
+    QCBORDecode_ExitMap(&ctx);
+    QCBORDecode_ExitBstrWrapped(&ctx);
+
+    return parsed;
+  }
+
   struct ProtectedHeader
   {
+    // All headers are optional here but optionality will later be validated
+    // according to the COSE profile of the claim.
+    std::optional<std::string> profile;
+
+    // Vanilla SCITT protected header parameters
     // Issuer is used when verifying with did:web
     // x5chain is used when verification is done with the x509 certificate chain
-    int64_t alg;
+    std::optional<int64_t> alg;
+    std::optional<std::vector<std::variant<int64_t, std::string>>> crit;
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
-    std::string cty;
+    std::optional<std::string> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+
+    // Extra Notary protected header parameters.
+    std::optional<std::string> notary_signing_scheme;
+    std::optional<int64_t> notary_signing_time;
+    std::optional<int64_t> notary_authentic_signing_time;
+    std::optional<int64_t> notary_expiry;
   };
 
   ProtectedHeader decode_protected_header(
@@ -87,19 +218,33 @@ namespace scitt::cose
 
     enum
     {
+      PROFILE_INDEX,
       ALG_INDEX,
+      CRIT_INDEX,
       ISSUER_INDEX,
       FEED_INDEX,
       KID_INDEX,
       CTY_INDEX,
       X5CHAIN_INDEX,
+      NOTARY_SIGNING_SCHEME_INDEX,
+      NOTARY_SIGNING_TIME_INDEX,
+      NOTARY_AUTHENTIC_SIGNING_TIME_INDEX,
+      NOTARY_EXPIRY_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
 
+    header_items[PROFILE_INDEX].label.int64 = COSE_HEADER_PARAM_PROFILE;
+    header_items[PROFILE_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[PROFILE_INDEX].uDataType = QCBOR_TYPE_INT64;
+
     header_items[ALG_INDEX].label.int64 = COSE_HEADER_PARAM_ALG;
     header_items[ALG_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[ALG_INDEX].uDataType = QCBOR_TYPE_INT64;
+
+    header_items[CRIT_INDEX].label.int64 = COSE_HEADER_PARAM_CRIT;
+    header_items[CRIT_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[CRIT_INDEX].uDataType = QCBOR_TYPE_ARRAY;
 
     header_items[ISSUER_INDEX].label.int64 = COSE_HEADER_PARAM_ISSUER;
     header_items[ISSUER_INDEX].uLabelType = QCBOR_TYPE_INT64;
@@ -121,6 +266,30 @@ namespace scitt::cose
     header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
 
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_SCHEME);
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].uLabelType =
+      QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType =
+      QCBOR_TYPE_TEXT_STRING;
+
+    header_items[NOTARY_SIGNING_TIME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_TIME);
+    header_items[NOTARY_SIGNING_TIME_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_SIGNING_TIME_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME);
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uLabelType =
+      QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType =
+      QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[NOTARY_EXPIRY_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_EXPIRY);
+    header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     QCBORDecode_GetItemsInMap(&ctx, header_items);
@@ -131,25 +300,67 @@ namespace scitt::cose
       throw COSEDecodeError("Failed to decode protected header");
     }
 
-    if (header_items[ALG_INDEX].uDataType == QCBOR_TYPE_NONE)
+    if (header_items[PROFILE_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      throw COSEDecodeError("Missing algorithm in protected header");
+      parsed.kid = cbor::as_string(header_items[PROFILE_INDEX].val.string);
     }
-    if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+    if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.kid = cbor::as_string(header_items[KID_INDEX].val.string);
+      parsed.alg = header_items[ALG_INDEX].val.int64;
     }
     if (header_items[ISSUER_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.issuer = cbor::as_string(header_items[ISSUER_INDEX].val.string);
     }
+    if (header_items[CRIT_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.crit = std::vector<std::variant<int64_t, std::string>>();
+      QCBORItem critItem = header_items[CRIT_INDEX];
+      if (critItem.uDataType != QCBOR_TYPE_ARRAY)
+      {
+        throw COSEDecodeError(
+          "Value type of crit in protected header is not of type array");
+      }
+      int lenOfArray = critItem.val.uCount;
+      if (lenOfArray == 0)
+      {
+        throw COSEDecodeError(
+          "Cannot have crit array of length 0 in cose protected header.");
+      }
+      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_CRIT);
+      for (int i = 0; i < lenOfArray; i++)
+      {
+        QCBORDecode_GetNext(&ctx, &critItem);
+        if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
+        {
+          parsed.crit->push_back(std::variant<int64_t, std::string>(
+            std::string(cbor::as_string(critItem.val.string))));
+        }
+        else if (critItem.uDataType == QCBOR_TYPE_INT64)
+        {
+          parsed.crit->push_back(
+            std::variant<int64_t, std::string>(critItem.val.int64));
+        }
+        else
+        {
+          throw COSEDecodeError(
+            "Next item in crit was not of type qcbor byte string or qcbor "
+            "int64.");
+        }
+      }
+      QCBORDecode_ExitArray(&ctx);
+    }
+    if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.kid = cbor::as_string(header_items[KID_INDEX].val.string);
+    }
     if (header_items[FEED_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.feed = cbor::as_string(header_items[FEED_INDEX].val.string);
     }
-    if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_NONE)
+    if (header_items[CTY_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      throw COSEDecodeError("Missing cty in protected header");
+      parsed.cty = cbor::as_string(header_items[CTY_INDEX].val.string);
     }
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
@@ -190,9 +401,30 @@ namespace scitt::cose
           "string.");
       }
     }
-
-    parsed.alg = header_items[ALG_INDEX].val.int64;
-    parsed.cty = cbor::as_string(header_items[CTY_INDEX].val.string);
+    // Extra Notary header parameters.
+    if (header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_signing_scheme =
+        cbor::as_string(header_items[NOTARY_SIGNING_SCHEME_INDEX].val.string);
+    }
+    if (header_items[NOTARY_SIGNING_TIME_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_signing_time =
+        header_items[NOTARY_SIGNING_TIME_INDEX].val.epochDate.nSeconds;
+    }
+    if (
+      header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType !=
+      QCBOR_TYPE_NONE)
+    {
+      parsed.notary_authentic_signing_time =
+        header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX]
+          .val.epochDate.nSeconds;
+    }
+    if (header_items[NOTARY_EXPIRY_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_expiry =
+        header_items[NOTARY_EXPIRY_INDEX].val.epochDate.nSeconds;
+    }
 
     QCBORDecode_ExitMap(&ctx);
     QCBORDecode_ExitBstrWrapped(&ctx);
