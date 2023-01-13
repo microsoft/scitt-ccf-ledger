@@ -747,13 +747,14 @@ namespace scitt::cose
   }
 
   /**
-   * Verify the signature of a Notary COSE Sign1 message using the given public key.
+   * Verify the signature of a Notary COSE Sign1 message using the given public
+   * key.
    *
    * Beyond the basic verification of key usage and the signature
    * itself, no particular validation of the message is done.
    *
-   * This function is a temporary workaround until t_cose supports custom header parameters
-   * in the crit parameter list.
+   * This function is a temporary workaround until t_cose supports custom header
+   * parameters in the crit parameter list.
    */
   void notary_verify(
     const std::vector<uint8_t>& cose_sign1, const PublicKey& key)

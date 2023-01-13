@@ -184,9 +184,9 @@ namespace scitt::verifier
       // decode_protected_header checks crit is not empty
 
       // TODO: For each param in crit check it is in known params and that it is
-      // in the protected header, else fail. Or wait until t_cose supports custom header
-      // parameters in crit and then we get this for free when we use t_cose for signature
-      // validation.
+      // in the protected header, else fail. Or wait until t_cose supports
+      // custom header parameters in crit and then we get this for free when we
+      // use t_cose for signature validation.
 
       if (
         std::find(
@@ -195,7 +195,8 @@ namespace scitt::verifier
           std::variant<int64_t, std::string>(
             std::string("io.cncf.notary.signingScheme"))) == crit.end())
       {
-        throw cose::COSEDecodeError("crit must contain 'io.cncf.notary.signingScheme'");
+        throw cose::COSEDecodeError(
+          "crit must contain 'io.cncf.notary.signingScheme'");
       }
 
       if (cty.value() != "application/vnd.cncf.notary.payload.v1+json")
