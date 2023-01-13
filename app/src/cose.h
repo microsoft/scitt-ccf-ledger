@@ -439,6 +439,387 @@ namespace scitt::cose
     {}
   };
 
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> qcbor_buf_to_vector(const UsefulBufC& buf)
+  {
+    return std::vector<uint8_t>(
+      reinterpret_cast<const uint8_t*>(buf.ptr),
+      reinterpret_cast<const uint8_t*>(buf.ptr) + buf.len);
+  }
+
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> get_signature(const std::vector<uint8_t>& cose_sign1)
+  {
+    UsefulBufC msg{cose_sign1.data(), cose_sign1.size()};
+
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(&ctx, msg, QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&ctx, nullptr);
+
+    QCBORItem item;
+
+    // skip body_protected
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // skip unprotected header
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // skip payload
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // signature
+    QCBORDecode_GetNext(&ctx, &item);
+    auto signature = item.val.string;
+
+    QCBORDecode_ExitArray(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
+
+    return qcbor_buf_to_vector(signature);
+  }
+
+  // Temporarily needed for notary_verify().
+  bool is_ecdsa_alg(int64_t cose_alg)
+  {
+    return cose_alg == COSE_ALGORITHM_ES256 ||
+      cose_alg == COSE_ALGORITHM_ES384 || cose_alg == COSE_ALGORITHM_ES512;
+  }
+
+  // Temporarily needed for notary_verify().
+  bool is_rsa_pss_alg(int64_t cose_alg)
+  {
+    return cose_alg == COSE_ALGORITHM_PS256 ||
+      cose_alg == COSE_ALGORITHM_PS384 || cose_alg == COSE_ALGORITHM_PS512;
+  }
+
+  // Temporarily needed for notary_verify().
+  crypto::MDType get_md_type(int64_t cose_alg)
+  {
+    switch (cose_alg)
+    {
+      case COSE_ALGORITHM_ES256:
+      case COSE_ALGORITHM_PS256:
+        return crypto::MDType::SHA256;
+      case COSE_ALGORITHM_ES384:
+      case COSE_ALGORITHM_PS384:
+        return crypto::MDType::SHA384;
+      case COSE_ALGORITHM_ES512:
+      case COSE_ALGORITHM_PS512:
+        return crypto::MDType::SHA512;
+      case COSE_ALGORITHM_EDDSA:
+        return crypto::MDType::NONE;
+      default:
+        throw std::runtime_error("Unsupported COSE algorithm");
+    }
+  }
+
+  // Temporarily needed for notary_verify().
+  const EVP_MD* get_openssl_md_type(crypto::MDType type)
+  {
+    switch (type)
+    {
+      case crypto::MDType::NONE:
+        return nullptr;
+      case crypto::MDType::SHA1:
+        return EVP_sha1();
+      case crypto::MDType::SHA256:
+        return EVP_sha256();
+      case crypto::MDType::SHA384:
+        return EVP_sha384();
+      case crypto::MDType::SHA512:
+        return EVP_sha512();
+      default:
+        throw std::runtime_error("Unsupported hash algorithm");
+    }
+    return nullptr;
+  }
+
+  // Temporarily needed for notary_verify().
+  static unsigned ecdsa_key_size(EVP_PKEY* key_evp)
+  {
+    int key_len_bits;
+    unsigned key_len_bytes;
+
+    key_len_bits = EVP_PKEY_bits(key_evp);
+
+    /* Calculation of size per RFC 8152 section 8.1 -- round up to
+     * number of bytes. */
+    key_len_bytes = (unsigned)key_len_bits / 8;
+    if (key_len_bits % 8)
+    {
+      key_len_bytes++;
+    }
+
+    return key_len_bytes;
+  }
+
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> create_tbs(const std::vector<uint8_t>& cose_sign1)
+  {
+    // Note: This function does not return the hash of the TBS because
+    // EdDSA does not support pre-hashed messages as input.
+
+    // Sig_structure = [
+    //     context: "Signature1",
+    //     body_protected: empty_or_serialized_map,
+    //     external_aad: bstr,
+    //     payload: bstr
+    // ]
+
+    // Extract fields from the COSE_Sign1 message.
+    UsefulBufC msg{cose_sign1.data(), cose_sign1.size()};
+
+    QCBORDecodeContext decode_ctx;
+    QCBORDecode_Init(&decode_ctx, msg, QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&decode_ctx, nullptr);
+
+    QCBORItem item;
+
+    // body_protected
+    QCBORDecode_GetNext(&decode_ctx, &item);
+    auto body_protected = item.val.string;
+
+    // skip unprotected header
+    QCBORDecode_VGetNextConsume(&decode_ctx, &item);
+
+    // payload
+    QCBORDecode_GetNext(&decode_ctx, &item);
+    auto payload = item.val.string;
+
+    // signature
+    QCBORDecode_GetNext(&decode_ctx, &item);
+    auto signature = item.val.string;
+
+    QCBORDecode_ExitArray(&decode_ctx);
+    auto error = QCBORDecode_Finish(&decode_ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
+
+    // Create Sig_structure.
+    // Note that hashing the structure incrementally to avoid
+    // doubling memory would work for RSA-PSS and ECDSA, but not EdDSA.
+
+    std::vector<uint8_t> sig_structure_buf(cose_sign1.size() + 1024);
+    UsefulBuf sig_structure{sig_structure_buf.data(), sig_structure_buf.size()};
+
+    QCBOREncodeContext encode_ctx;
+    QCBOREncode_Init(&encode_ctx, sig_structure);
+
+    QCBOREncode_OpenArray(&encode_ctx);
+
+    // context
+    QCBOREncode_AddSZString(&encode_ctx, "Signature1");
+
+    // body_protected: The protected header of the message.
+    QCBOREncode_AddBytes(&encode_ctx, body_protected);
+
+    // external_aad: always empty.
+    QCBOREncode_AddBytes(&encode_ctx, NULLUsefulBufC);
+
+    // payload: The payload of the message.
+    QCBOREncode_AddBytes(&encode_ctx, payload);
+
+    QCBOREncode_CloseArray(&encode_ctx);
+
+    UsefulBufC encoded_cbor;
+    QCBORError err;
+    err = QCBOREncode_Finish(&encode_ctx, &encoded_cbor);
+    if (err != QCBOR_SUCCESS)
+    {
+      throw std::runtime_error("Error encoding CBOR");
+    }
+
+    auto cbor = std::vector<uint8_t>(
+      (uint8_t*)encoded_cbor.ptr,
+      (uint8_t*)encoded_cbor.ptr + encoded_cbor.len);
+    return cbor;
+  }
+
+  static enum t_cose_err_t ecdsa_signature_cose_to_der(
+    EVP_PKEY* key_evp,
+    struct q_useful_buf_c cose_signature,
+    struct q_useful_buf buffer,
+    struct q_useful_buf_c* der_signature)
+  {
+    unsigned key_len;
+    enum t_cose_err_t return_value;
+    BIGNUM* signature_r_bn = NULL;
+    BIGNUM* signature_s_bn = NULL;
+    int ossl_result;
+    ECDSA_SIG* signature;
+    unsigned char* der_signature_ptr;
+    int der_signature_len;
+
+    key_len = ecdsa_key_size(key_evp);
+
+    /* Check the signature length against expected */
+    if (cose_signature.len != key_len * 2)
+    {
+      return_value = T_COSE_ERR_SIG_VERIFY;
+      goto Done;
+    }
+
+    /* Put the r and the s from the signature into big numbers */
+    signature_r_bn =
+      BN_bin2bn((const uint8_t*)cose_signature.ptr, (int)key_len, NULL);
+    if (signature_r_bn == NULL)
+    {
+      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
+      goto Done;
+    }
+
+    signature_s_bn = BN_bin2bn(
+      ((const uint8_t*)cose_signature.ptr) + key_len, (int)key_len, NULL);
+    if (signature_s_bn == NULL)
+    {
+      BN_free(signature_r_bn);
+      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
+      goto Done;
+    }
+
+    /* Put the signature bytes into an ECDSA_SIG */
+    signature = ECDSA_SIG_new();
+    if (signature == NULL)
+    {
+      /* Don't leak memory in error condition */
+      BN_free(signature_r_bn);
+      BN_free(signature_s_bn);
+      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
+      goto Done;
+    }
+
+    /* Put the r and s bignums into an ECDSA_SIG. Freeing
+     * ossl_sig_to_verify will now free r and s.
+     */
+    ossl_result = ECDSA_SIG_set0(signature, signature_r_bn, signature_s_bn);
+    if (ossl_result != 1)
+    {
+      BN_free(signature_r_bn);
+      BN_free(signature_s_bn);
+      return_value = T_COSE_ERR_SIG_FAIL;
+      goto Done;
+    }
+
+    /* Now output the ECDSA_SIG structure in DER format.
+     *
+     * Code safety is the priority here.  i2d_ECDSA_SIG() has two
+     * output buffer modes, one where it just writes to the buffer
+     * given and the other were it allocates memory.  It would be
+     * better to avoid the allocation, but the copy mode is not safe
+     * because you can't give it a buffer length. This is bad stuff
+     * from last century.
+     *
+     * So the allocation mode is used on the presumption that it is
+     * safe and correct even though there is more copying and memory
+     * use.
+     */
+    der_signature_ptr = NULL;
+    der_signature_len = i2d_ECDSA_SIG(signature, &der_signature_ptr);
+    ECDSA_SIG_free(signature);
+    if (der_signature_len < 0)
+    {
+      return_value = T_COSE_ERR_SIG_FAIL;
+      goto Done;
+    }
+
+    *der_signature = q_useful_buf_copy_ptr(
+      buffer, der_signature_ptr, (size_t)der_signature_len);
+    if (q_useful_buf_c_is_null_or_empty(*der_signature))
+    {
+      return_value = T_COSE_ERR_SIG_FAIL;
+      goto Done;
+    }
+
+    OPENSSL_free(der_signature_ptr);
+
+    return_value = T_COSE_SUCCESS;
+
+  Done:
+    /* All the memory frees happen along the way in the code above. */
+    return return_value;
+  }
+
+  /**
+   * Verify the signature of a Notary COSE Sign1 message using the given public key.
+   *
+   * Beyond the basic verification of key usage and the signature
+   * itself, no particular validation of the message is done.
+   *
+   * This function is a temporary workaround until t_cose supports custom header parameters
+   * in the crit parameter list.
+   */
+  void notary_verify(
+    const std::vector<uint8_t>& cose_sign1, const PublicKey& key)
+  {
+    CCF_APP_INFO("Verifying notary claim.");
+    auto phdr = decode_protected_header(cose_sign1);
+    auto header_alg = phdr.alg.value();
+    auto key_alg = key.get_cose_alg();
+    if (key_alg.has_value() && header_alg != key_alg.value())
+    {
+      throw COSESignatureValidationError(
+        "Algorithm mismatch between protected header and public key");
+    }
+
+    auto md_type = get_md_type(header_alg);
+    auto ossl_md_type = get_openssl_md_type(md_type);
+    auto tbs = create_tbs(cose_sign1);
+    auto signature = get_signature(cose_sign1);
+
+    struct q_useful_buf_c openssl_signature;
+#define DER_SIG_ENCODE_OVER_HEAD 16
+#define T_COSE_MAX_ECDSA_SIG_SIZE 132
+    MakeUsefulBufOnStack(
+      der_format_buffer, T_COSE_MAX_ECDSA_SIG_SIZE + DER_SIG_ENCODE_OVER_HEAD);
+
+    if (is_ecdsa_alg(header_alg))
+    {
+      CCF_APP_INFO("Verifying notary claim ECDSA");
+      // Convert from IEEE to DER
+      enum t_cose_err_t return_value;
+      return_value = ecdsa_signature_cose_to_der(
+        key.get_evp_pkey(),
+        cbor::from_bytes(signature),
+        der_format_buffer,
+        &openssl_signature);
+      if (return_value)
+      {
+        throw COSESignatureValidationError("ECDSA Signature conversion failed");
+      }
+      signature = std::vector<uint8_t>(
+        (const uint8_t*)openssl_signature.ptr,
+        (const uint8_t*)openssl_signature.ptr + openssl_signature.len);
+    }
+
+    OpenSSL::Unique_EVP_MD_CTX md_ctx;
+    EVP_MD_CTX_init(md_ctx);
+    EVP_PKEY_CTX* pctx;
+    OpenSSL::CHECK1(EVP_DigestVerifyInit(
+      md_ctx, &pctx, ossl_md_type, nullptr, key.get_evp_pkey()));
+    if (is_rsa_pss_alg(header_alg))
+    {
+      OpenSSL::CHECK1(
+        EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING));
+    }
+
+    auto valid =
+      EVP_DigestVerify(
+        md_ctx, signature.data(), signature.size(), tbs.data(), tbs.size()) ==
+      1;
+
+    if (!valid)
+    {
+      throw COSESignatureValidationError("Signature verification failed");
+    }
+  }
+
   /**
    * Verify the signature of a COSE Sign1 message using the given public key.
    *
