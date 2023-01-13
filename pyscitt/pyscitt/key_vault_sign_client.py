@@ -7,10 +7,10 @@ import hashlib
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
 from azure.keyvault.keys import KeyClient
-from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+from azure.keyvault.keys.crypto import CryptographyClient
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.x509 import load_pem_x509_certificate
 
 from pyscitt.client import MemberAuthenticationMethod
@@ -41,6 +41,7 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
 
     @staticmethod
     def _encode_certificate(cert: KeyVaultCertificate) -> str:
+        assert isinstance(cert.cer, bytes)
         decoded = base64.b64encode(cert.cer).decode()
         cert_pem = f"-----BEGIN CERTIFICATE-----\n{decoded}\n-----END CERTIFICATE-----"
         return cert_pem
@@ -53,6 +54,7 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         )
         crypto_client = CryptographyClient(key, credential=self.credential)
         cert = load_pem_x509_certificate(self.cert.encode("ascii"))
+        assert isinstance(cert.public_key, (EllipticCurvePublicKey))
         key_size = cert.public_key().curve.key_size
         signature_algorithm = "ES" + str(key_size)
         hash_algorithm = "sha" + str(key_size)

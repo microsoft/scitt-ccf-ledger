@@ -3,6 +3,7 @@
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from loguru import logger as LOG
 
@@ -19,6 +20,7 @@ class LocalKeySignClient(MemberAuthenticationMethod):
         )
 
     def sign(self, data: bytes) -> bytes:
+        assert isinstance(self.private_key, (EllipticCurvePrivateKey))
         digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
             self.private_key.curve.key_size
         ]
