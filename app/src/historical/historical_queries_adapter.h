@@ -123,7 +123,7 @@ namespace scitt::historical
       if (historical_state == nullptr)
       {
         args.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
-        constexpr size_t retry_after_seconds = 3;
+        constexpr size_t retry_after_seconds = 1;
         args.rpc_ctx->set_response_header(
           http::headers::RETRY_AFTER, retry_after_seconds);
         args.rpc_ctx->set_response_header(
