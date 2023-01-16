@@ -90,7 +90,7 @@ namespace scitt
       }
       catch (const HTTPError& e)
       {
-        SCITT_INFO(fmt::format("HTTPError: {}", e.what()));
+        SCITT_INFO("HTTPError: {}", e.what());
         ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
         for (const auto& [header_name, header_value] : e.headers)
         {
@@ -99,8 +99,7 @@ namespace scitt
       }
       catch (const std::exception& e)
       {
-        SCITT_FAIL(
-          fmt::format("Unhandled exception in endpoint: {}", e.what()));
+        SCITT_FAIL("Unhandled exception in endpoint: {}", e.what());
         throw;
       }
     };

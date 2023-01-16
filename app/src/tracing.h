@@ -37,23 +37,19 @@ namespace scitt
     return stream.str();
   }
 
-  inline void SCITT_INFO(const std::string& msg)
-  {
-    CCF_APP_INFO(
-      "ClientRequestId={} RequestId={} {}",
-      client_request_id.value_or(""),
-      request_id,
-      msg);
-  }
+#define SCITT_INFO(s, ...) \
+  CCF_APP_INFO( \
+    "ClientRequestId={} RequestId={} " s, \
+    client_request_id.value_or(""), \
+    request_id, \
+    ##__VA_ARGS__)
 
-  inline void SCITT_FAIL(const std::string& msg)
-  {
-    CCF_APP_FAIL(
-      "ClientRequestId={} RequestId={} {}",
-      client_request_id.value_or(""),
-      request_id,
-      msg);
-  }
+#define SCITT_FAIL(s, ...) \
+  CCF_APP_FAIL( \
+    "ClientRequestId={} RequestId={} " s, \
+    client_request_id.value_or(""), \
+    request_id, \
+    ##__VA_ARGS__)
 
   template <typename Fn, typename Ctx>
   Fn generic_tracing_adapter(
@@ -91,11 +87,11 @@ namespace scitt
           "x-ms-client-request-id", client_request_id.value());
       }
 
-      SCITT_INFO(fmt::format(
+      SCITT_INFO(
         "Verb={} Path={} Query={}",
         ctx.rpc_ctx->get_request_verb().c_str(),
         ctx.rpc_ctx->get_request_path(),
-        ctx.rpc_ctx->get_request_query()));
+        ctx.rpc_ctx->get_request_query());
 
       ::timespec start;
       ccf::ApiResult result = get_time(start);
@@ -125,13 +121,13 @@ namespace scitt
 
       auto duration_ms = diff_timespec_ms(start, end);
 
-      SCITT_INFO(fmt::format(
+      SCITT_INFO(
         "Verb={} Path={} Query={} Status={} TimeMs={}",
         ctx.rpc_ctx->get_request_verb().c_str(),
         ctx.rpc_ctx->get_request_path(),
         ctx.rpc_ctx->get_request_query(),
         ctx.rpc_ctx->get_response_status(),
-        duration_ms));
+        duration_ms);
     };
   }
 

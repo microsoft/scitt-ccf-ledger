@@ -672,7 +672,7 @@ namespace scitt
           std::move(resolution.resolution_metadata);
 
         issuers->put(issuer, issuer_info.value());
-        SCITT_INFO(fmt::format("Updated DID document for issuer {}", issuer));
+        SCITT_INFO("Updated DID document for issuer {}", issuer);
 
         return ccf::make_success();
       };
