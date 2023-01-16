@@ -81,6 +81,8 @@ class BaseClient:
     url: str
     auth_token: Optional[str]
     member_auth: Optional[Tuple[str, str]]
+    wait_time: Optional[float]
+    tcp_nodelay_patch: bool
     development: bool
 
     session: httpx.Client
@@ -92,6 +94,8 @@ class BaseClient:
         *,
         auth_token: Optional[str] = None,
         member_auth: Optional[Tuple[str, str]] = None,
+        wait_time: Optional[float] = None,
+        tcp_nodelay_patch: bool = False,
         development: bool = False,
     ):
         """
@@ -104,6 +108,9 @@ class BaseClient:
             A pair of certificate and private key in PEM format, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
+        wait_time:
+            The time to wait between retries. If None, the default wait time is used.
+
         development:
             If true, the TLS certificate of the server will not be verified.
         """
@@ -114,6 +121,8 @@ class BaseClient:
         self.url = url
         self.auth_token = auth_token
         self.member_auth = member_auth
+        self.wait_time = wait_time
+        self.tcp_nodelay_patch = tcp_nodelay_patch
         self.development = development
 
         headers = {}
@@ -127,8 +136,34 @@ class BaseClient:
         else:
             self.member_http_sig = None
 
+        if tcp_nodelay_patch:
+            # Work-around until https://github.com/encode/httpcore/pull/651 is merged.
+            # This is necessary to set TCP_NODELAY on the sockets used by httpx.
+            # Without it we get issues with Nagle + delayed ACK,
+            # leading to 40ms pauses when sending requests.
+            # Note that many libraries do this by default, but httpx does not.
+            import socket
+
+            import httpcore
+
+            class NoDelayBackend(httpcore.backends.sync.SyncBackend):
+                def connect_tcp(
+                    self, host: str, port: int, timeout=None, local_address=None
+                ):
+                    s = super().connect_tcp(host, port, timeout, local_address)
+                    s._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # type: ignore
+                    return s
+
+            transport = httpx.HTTPTransport(verify=not development)
+            transport._pool = httpcore.ConnectionPool(
+                network_backend=NoDelayBackend(),
+                ssl_context=transport._pool._ssl_context,
+            )
+        else:
+            transport = None
+
         self.session = httpx.Client(
-            base_url=url, headers=headers, verify=not development
+            base_url=url, headers=headers, verify=not development, transport=transport
         )
 
     def replace(self: SelfClient, **kwargs) -> SelfClient:
@@ -142,6 +177,8 @@ class BaseClient:
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
+            "wait_time": self.wait_time,
+            "tcp_nodelay_patch": self.tcp_nodelay_patch,
             "development": self.development,
         }
         values.update(kwargs)
@@ -216,7 +253,10 @@ class BaseClient:
             else:
                 break
 
-            wait = int(response.headers.get("retry-after", default_wait_time))
+            if self.wait_time is not None:
+                wait = self.wait_time
+            else:
+                wait = int(response.headers.get("retry-after", default_wait_time))
             if time.monotonic() + wait > deadline:
                 raise ValueError("Too many retries")
 
