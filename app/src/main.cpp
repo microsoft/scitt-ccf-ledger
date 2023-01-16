@@ -356,7 +356,7 @@ namespace scitt
           state_cache,
           is_tx_committed,
           get_tx_id_from_request_path)),
-        no_authn_policy)
+        authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
 
@@ -405,7 +405,7 @@ namespace scitt
           state_cache,
           is_tx_committed,
           get_tx_id_from_request_path)),
-        no_authn_policy)
+        authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
 
@@ -529,7 +529,7 @@ namespace scitt
         get_entries_tx_ids_path,
         HTTP_GET,
         error_adapter(ccf::json_adapter(get_entries_tx_ids)),
-        no_authn_policy)
+        authn_policy)
         .set_auto_schema<void, GetEntriesTransactionIds::Out>()
         .add_query_parameter<size_t>(
           "from", ccf::endpoints::QueryParamPresence::OptionalParameter)
@@ -554,7 +554,7 @@ namespace scitt
         get_issuers_path,
         HTTP_GET,
         error_adapter(ccf::json_adapter(get_issuers)),
-        no_authn_policy)
+        authn_policy)
         .install();
 
       static constexpr auto get_issuer_info_path = "/did/{did}";
@@ -580,7 +580,7 @@ namespace scitt
         get_issuer_info_path,
         HTTP_GET,
         error_adapter(ccf::json_adapter(get_issuer_info)),
-        no_authn_policy)
+        authn_policy)
         .install();
 
       static constexpr auto update_did_doc_path = "/did/{did}/doc";
