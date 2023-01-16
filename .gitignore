@@ -7,3 +7,4 @@ venv/
 workspace/
 *.egg-info/
 .vscode/settings.json
+perf.json
