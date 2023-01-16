@@ -7,6 +7,7 @@
 #include "did/resolver.h"
 #include "did/web/syntax.h"
 #include "kv_types.h"
+#include "tracing.h"
 
 #include <algorithm>
 #include <ccf/crypto/entropy.h>
@@ -98,7 +99,7 @@ namespace scitt::did::web
 
       auto callback = format_callback_url(did, tx);
 
-      CCF_APP_INFO("Triggering fetch of DID document for {}", did);
+      SCITT_INFO(fmt::format("Triggering fetch of DID document for {}", did));
       CCF_APP_DEBUG("DID fetch callback url: {}", callback);
       host_processes->trigger_host_process_launch(
         {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback});

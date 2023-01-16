@@ -13,6 +13,7 @@
 #include "http_error.h"
 #include "kv_types.h"
 #include "receipt.h"
+#include "tracing.h"
 #include "util.h"
 #include "verifier.h"
 
@@ -172,6 +173,18 @@ namespace scitt
 
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
+      timespec untrusted_host_time;
+      const auto result = get_untrusted_host_time_v1(untrusted_host_time);
+      if (result == ccf::ApiResult::OK)
+      {
+        srand(untrusted_host_time.tv_sec);
+      }
+
+      std::function<ccf::ApiResult(timespec & time)> get_time =
+        [this](timespec& time) {
+          return this->get_untrusted_host_time_v1(time);
+        };
+
       static constexpr auto post_entry_path = "/entries";
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
@@ -275,7 +288,10 @@ namespace scitt
       };
 
       make_endpoint(
-        post_entry_path, HTTP_POST, error_adapter(post_entry), authn_policy)
+        post_entry_path,
+        HTTP_POST,
+        tracing_adapter(error_adapter(post_entry), get_time),
+        authn_policy)
         .install();
 
       auto is_tx_committed =
@@ -351,11 +367,13 @@ namespace scitt
       make_endpoint(
         get_entry_path,
         HTTP_GET,
-        error_adapter(scitt::historical::adapter(
-          get_entry,
-          state_cache,
-          is_tx_committed,
-          get_tx_id_from_request_path)),
+        tracing_adapter(
+          error_adapter(scitt::historical::adapter(
+            get_entry,
+            state_cache,
+            is_tx_committed,
+            get_tx_id_from_request_path)),
+          get_time),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
@@ -400,11 +418,13 @@ namespace scitt
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        error_adapter(scitt::historical::adapter(
-          get_entry_receipt,
-          state_cache,
-          is_tx_committed,
-          get_tx_id_from_request_path)),
+        tracing_adapter(
+          error_adapter(scitt::historical::adapter(
+            get_entry_receipt,
+            state_cache,
+            is_tx_committed,
+            get_tx_id_from_request_path)),
+          get_time),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
@@ -528,7 +548,8 @@ namespace scitt
       make_endpoint(
         get_entries_tx_ids_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_entries_tx_ids)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_entries_tx_ids)), get_time),
         authn_policy)
         .set_auto_schema<void, GetEntriesTransactionIds::Out>()
         .add_query_parameter<size_t>(
@@ -553,7 +574,8 @@ namespace scitt
       make_endpoint(
         get_issuers_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_issuers)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_issuers)), get_time),
         authn_policy)
         .install();
 
@@ -579,7 +601,8 @@ namespace scitt
       make_endpoint(
         get_issuer_info_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_issuer_info)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_issuer_info)), get_time),
         authn_policy)
         .install();
 
@@ -649,7 +672,7 @@ namespace scitt
           std::move(resolution.resolution_metadata);
 
         issuers->put(issuer, issuer_info.value());
-        CCF_APP_INFO("Updated DID document for issuer {}", issuer);
+        SCITT_INFO(fmt::format("Updated DID document for issuer {}", issuer));
 
         return ccf::make_success();
       };
@@ -657,7 +680,8 @@ namespace scitt
       make_endpoint(
         update_did_doc_path,
         HTTP_POST,
-        error_adapter(ccf::json_adapter(update_did_doc)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(update_did_doc)), get_time),
         no_authn_policy)
         .set_auto_schema<PostDidResolution::In, void>()
         .install();
@@ -680,7 +704,8 @@ namespace scitt
       make_endpoint(
         get_ca_certs_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_ca_certs)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_ca_certs)), get_time),
         no_authn_policy)
         .install();
 
@@ -716,7 +741,8 @@ namespace scitt
       make_endpoint(
         get_service_parameters_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_service_parameters)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_service_parameters)), get_time),
         no_authn_policy)
         .set_auto_schema<void, GetServiceParameters::Out>()
         .install();
@@ -761,7 +787,9 @@ namespace scitt
       make_endpoint(
         get_historic_service_parameters_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_historic_service_parameters)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_historic_service_parameters)),
+          get_time),
         no_authn_policy)
         .set_auto_schema<void, GetHistoricServiceParameters::Out>()
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -777,7 +805,8 @@ namespace scitt
       make_endpoint(
         get_configuration_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_configuration)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_configuration)), get_time),
         no_authn_policy)
         .set_auto_schema<void, Configuration>()
         .install();
@@ -794,13 +823,15 @@ namespace scitt
       make_endpoint(
         get_version_path,
         HTTP_GET,
-        error_adapter(ccf::json_adapter(get_version)),
+        tracing_adapter(
+          error_adapter(ccf::json_adapter(get_version)), get_time),
         no_authn_policy)
         .set_auto_schema<void, GetVersion::Out>()
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
 
 #ifdef ENABLE_PREFIX_TREE
+      // TODO add tracing_adapter() to all endpoints
       PrefixTreeFrontend::init_handlers(context, *this);
 #endif
     }
