@@ -14,10 +14,10 @@
 
 namespace scitt
 {
-  std::string REQUEST_ID_HEADER = "x-ms-request-id";
-  std::string CLIENT_REQUEST_ID_HEADER = "x-ms-client-request-id";
+  constexpr std::string_view REQUEST_ID_HEADER = "x-ms-request-id";
+  constexpr std::string_view CLIENT_REQUEST_ID_HEADER = "x-ms-client-request-id";
 
-  std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
+  const std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
 
   thread_local std::string request_id;
   thread_local std::optional<std::string> client_request_id;
@@ -56,6 +56,11 @@ namespace scitt
     Fn fn, const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return [fn, get_time](Ctx& ctx) {
+      auto cleanup = finally([] {
+        request_id = "";
+        client_request_id = std::nullopt;
+      });
+
       request_id = create_request_id();
       ctx.rpc_ctx->set_response_header(REQUEST_ID_HEADER, request_id);
 
