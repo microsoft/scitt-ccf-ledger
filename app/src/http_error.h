@@ -90,7 +90,10 @@ namespace scitt
       }
       catch (const HTTPError& e)
       {
-        SCITT_INFO("HTTPError: {}", e.what());
+        if (e.code == errors::InternalError)
+          SCITT_FAIL("Code={} {}", e.code, e.what());
+        else
+          SCITT_INFO("Code={}", e.code);
         ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
         for (const auto& [header_name, header_value] : e.headers)
         {

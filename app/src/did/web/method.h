@@ -99,7 +99,7 @@ namespace scitt::did::web
 
       auto callback = format_callback_url(did, tx);
 
-      SCITT_INFO("Triggering fetch of DID document for {}", did);
+      SCITT_INFO("Fetching DID document for {}", did);
       CCF_APP_DEBUG("DID fetch callback url: {}", callback);
       host_processes->trigger_host_process_launch(
         {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback});

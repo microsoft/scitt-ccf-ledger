@@ -38,18 +38,24 @@ namespace scitt
   }
 
 #define SCITT_INFO(s, ...) \
-  CCF_APP_INFO( \
-    "ClientRequestId={} RequestId={} " s, \
-    client_request_id.value_or(""), \
-    request_id, \
-    ##__VA_ARGS__)
+  if (client_request_id.has_value()) \
+    CCF_APP_INFO( \
+      "ClientRequestId={} RequestId={} " s, \
+      client_request_id.value(), \
+      request_id, \
+      ##__VA_ARGS__); \
+  else \
+    CCF_APP_INFO("RequestId={} " s, request_id, ##__VA_ARGS__)
 
 #define SCITT_FAIL(s, ...) \
-  CCF_APP_FAIL( \
-    "ClientRequestId={} RequestId={} " s, \
-    client_request_id.value_or(""), \
-    request_id, \
-    ##__VA_ARGS__)
+  if (client_request_id.has_value()) \
+    CCF_APP_FAIL( \
+      "ClientRequestId={} RequestId={} " s, \
+      client_request_id.value_or(""), \
+      request_id, \
+      ##__VA_ARGS__); \
+  else \
+    CCF_APP_FAIL("RequestId={} " s, request_id, ##__VA_ARGS__)
 
   template <typename Fn, typename Ctx>
   Fn generic_tracing_adapter(
@@ -76,7 +82,7 @@ namespace scitt
               client_request_id.value(), match, CLIENT_REQUEST_ID_REGEX))
         {
           client_request_id = std::nullopt;
-          SCITT_INFO("Invalid client request id");
+          SCITT_INFO("Code=InvalidInput Invalid client request id");
           ctx.rpc_ctx->set_error(
             HTTP_STATUS_BAD_REQUEST,
             errors::InvalidInput,
@@ -87,17 +93,29 @@ namespace scitt
           "x-ms-client-request-id", client_request_id.value());
       }
 
-      SCITT_INFO(
-        "Verb={} Path={} Query={}",
-        ctx.rpc_ctx->get_request_verb().c_str(),
-        ctx.rpc_ctx->get_request_path(),
-        ctx.rpc_ctx->get_request_query());
+      auto query = ctx.rpc_ctx->get_request_query();
+
+      if (query.empty())
+      {
+        SCITT_INFO(
+          "Verb={} Path={}",
+          ctx.rpc_ctx->get_request_verb().c_str(),
+          ctx.rpc_ctx->get_request_path());
+      }
+      else
+      {
+        SCITT_INFO(
+          "Verb={} Path={} Query={}",
+          ctx.rpc_ctx->get_request_verb().c_str(),
+          ctx.rpc_ctx->get_request_path(),
+          ctx.rpc_ctx->get_request_query());
+      }
 
       ::timespec start;
       ccf::ApiResult result = get_time(start);
       if (result != ccf::ApiResult::OK)
       {
-        SCITT_FAIL("get_untrusted_host_time_v1 failed");
+        SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
         ctx.rpc_ctx->set_error(
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           errors::InternalError,
@@ -111,7 +129,7 @@ namespace scitt
       result = get_time(end);
       if (result != ccf::ApiResult::OK)
       {
-        SCITT_FAIL("get_untrusted_host_time_v1 failed");
+        SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
         ctx.rpc_ctx->set_error(
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           errors::InternalError,
@@ -121,13 +139,25 @@ namespace scitt
 
       auto duration_ms = diff_timespec_ms(start, end);
 
-      SCITT_INFO(
-        "Verb={} Path={} Query={} Status={} TimeMs={}",
-        ctx.rpc_ctx->get_request_verb().c_str(),
-        ctx.rpc_ctx->get_request_path(),
-        ctx.rpc_ctx->get_request_query(),
-        ctx.rpc_ctx->get_response_status(),
-        duration_ms);
+      if (query.empty())
+      {
+        SCITT_INFO(
+          "Verb={} Path={} Status={} TimeMs={}",
+          ctx.rpc_ctx->get_request_verb().c_str(),
+          ctx.rpc_ctx->get_request_path(),
+          ctx.rpc_ctx->get_response_status(),
+          duration_ms);
+      }
+      else
+      {
+        SCITT_INFO(
+          "Verb={} Path={} Query={} Status={} TimeMs={}",
+          ctx.rpc_ctx->get_request_verb().c_str(),
+          ctx.rpc_ctx->get_request_path(),
+          ctx.rpc_ctx->get_request_query(),
+          ctx.rpc_ctx->get_response_status(),
+          duration_ms);
+      }
     };
   }
 

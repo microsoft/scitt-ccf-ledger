@@ -285,6 +285,9 @@ namespace scitt
         });
 
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
+
+        // TODO log CoseProfile
+        SCITT_INFO("ClaimSizeKb={}", body.size() / 1024);
       };
 
       make_endpoint(
@@ -672,7 +675,7 @@ namespace scitt
           std::move(resolution.resolution_metadata);
 
         issuers->put(issuer, issuer_info.value());
-        SCITT_INFO("Updated DID document for issuer {}", issuer);
+        SCITT_INFO("Updated DID document for {}", issuer);
 
         return ccf::make_success();
       };

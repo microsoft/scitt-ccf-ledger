@@ -11,6 +11,7 @@ REQUEST_ID_HEADER = "x-ms-request-id"
 CLIENT_REQUEST_ID_HEADER = "x-ms-client-request-id"
 REQUEST_ID_REGEX = re.compile(r"[0-9a-f]+")
 
+
 def test_tracing_headers(client: Client):
     response = client.get("/version")
     assert CLIENT_REQUEST_ID_HEADER not in response.headers
