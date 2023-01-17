@@ -159,9 +159,6 @@ def test_submit_claim_notary_x509(
     msg = Sign1Message(phdr=phdr, uhdr=uhdr, payload=payload)
     msg.key = crypto.cose_private_key_from_pem(identity.private_key)
     claim = msg.encode(tag=True)
-    # TODO remove this:
-    with open(f"test_{params['kty']}.cose", "wb") as f:
-        f.write(claim)
 
     receipt = client.submit_claim(claim).receipt
     crypto.verify_cose_with_receipt(claim, trust_store, receipt)

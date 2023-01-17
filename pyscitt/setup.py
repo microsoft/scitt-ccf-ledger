@@ -17,7 +17,8 @@ setup(
         "cryptography==38.*",  # needs to match ccf
         "httpx",
         "cbor2",
-        "pycose>=1.0.1",
+        # TODO: remove this once pycose >= 1.0.2 is released
+        "pycose @ git+https://github.com/TimothyClaeys/pycose@501bfda9ce710455f39ba1bd13f9e5d857a0ecb3#egg=pycose",
         "pyjwt",
     ],
 )

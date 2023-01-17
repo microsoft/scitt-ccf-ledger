@@ -64,6 +64,57 @@ namespace scitt::cose
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
   };
 
+  std::vector<std::vector<uint8_t>> decode_x5chain(
+    QCBORDecodeContext& ctx, const QCBORItem& x5chain)
+  {
+    std::vector<std::vector<uint8_t>> parsed;
+
+    if (x5chain.uDataType == QCBOR_TYPE_ARRAY)
+    {
+      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
+      while (true)
+      {
+        QCBORItem item;
+        auto result = QCBORDecode_GetNext(&ctx, &item);
+        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        {
+          break;
+        }
+        if (result != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError("Item in x5chain is not well-formed.");
+        }
+        if (item.uDataType == QCBOR_TYPE_BYTE_STRING)
+        {
+          parsed.push_back(cbor::as_vector(item.val.string));
+        }
+        else
+        {
+          throw COSEDecodeError(
+            "Next item in x5chain was not of type byte string.");
+        }
+      }
+      QCBORDecode_ExitArray(&ctx);
+      if (parsed.empty())
+      {
+        throw COSEDecodeError("x5chain array length was 0 in COSE header.");
+      }
+    }
+    else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
+    {
+      parsed.push_back(cbor::as_vector(x5chain.val.string));
+    }
+    else
+    {
+      CCF_APP_FAIL("Type: {}", x5chain.uDataType);
+      throw COSEDecodeError(
+        "Value type of x5chain in COSE header is not array or byte "
+        "string.");
+    }
+
+    return parsed;
+  }
+
   UnprotectedHeader decode_unprotected_header(
     std::span<const uint8_t> cose_sign1)
   {
@@ -88,14 +139,15 @@ namespace scitt::cose
     {
       throw COSEDecodeError("COSE_Sign1 is not tagged");
     }
-    QCBORItem coseItem;
-    QCBORDecode_GetNext(&ctx, &coseItem);
+
+    // Skip the protected header.
+    QCBORItem item;
+    QCBORDecode_VGetNext(&ctx, &item);
 
     QCBORDecode_EnterMap(&ctx, NULL);
 
     enum
     {
-      ALG_INDEX,
       X5CHAIN_INDEX,
       END_INDEX,
     };
@@ -110,54 +162,20 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError("Failed to decode unprotected header");
+      throw COSEDecodeError(
+        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
     }
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.x5chain = std::vector<std::vector<uint8_t>>();
-
-      QCBORItem chainItem = header_items[X5CHAIN_INDEX];
-      if (chainItem.uDataType == QCBOR_TYPE_ARRAY)
-      {
-        int lenOfArray = chainItem.val.uCount;
-        if (lenOfArray == 0)
-        {
-          throw COSEDecodeError(
-            "x5chain array length was 0 in cose unprotected header.");
-        }
-        QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
-        for (int i = 0; i < lenOfArray; i++)
-        {
-          QCBORDecode_GetNext(&ctx, &chainItem);
-          if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-          {
-            parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-          }
-          else
-          {
-            throw COSEDecodeError(
-              "Next item in chain was not of type qcbor byte string.");
-          }
-        }
-        QCBORDecode_ExitArray(&ctx);
-      }
-      else if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-      {
-        parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-      }
-      else
-      {
-        CCF_APP_INFO("x5c type", chainItem.uDataType);
-        throw COSEDecodeError(
-          "Value type of x5chain in unprotected header is not array or byte "
-          "string.");
-      }
+      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
     }
     QCBORDecode_ExitMap(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
+
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
+      throw COSEDecodeError(
+        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
     }
 
     return parsed;
@@ -316,12 +334,13 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError("Failed to decode protected header");
+      throw COSEDecodeError(
+        fmt::format("Failed to decode protected header: {}", qcbor_result));
     }
 
     if (header_items[PROFILE_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.kid = cbor::as_string(header_items[PROFILE_INDEX].val.string);
+      parsed.profile = cbor::as_string(header_items[PROFILE_INDEX].val.string);
     }
     if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
@@ -335,16 +354,18 @@ namespace scitt::cose
     {
       parsed.crit = std::vector<std::variant<int64_t, std::string>>();
       QCBORItem critItem = header_items[CRIT_INDEX];
-      int lenOfArray = critItem.val.uCount;
-      if (lenOfArray == 0)
-      {
-        throw COSEDecodeError(
-          "Cannot have crit array of length 0 in cose protected header.");
-      }
       QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_CRIT);
-      for (int i = 0; i < lenOfArray; i++)
+      while (true)
       {
-        QCBORDecode_GetNext(&ctx, &critItem);
+        auto result = QCBORDecode_GetNext(&ctx, &critItem);
+        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        {
+          break;
+        }
+        if (result != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError("Item in crit is not well-formed.");
+        }
         if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
         {
           parsed.crit->push_back(
@@ -362,6 +383,11 @@ namespace scitt::cose
         }
       }
       QCBORDecode_ExitArray(&ctx);
+      if (parsed.crit->empty())
+      {
+        throw COSEDecodeError(
+          "Cannot have crit array of length 0 in COSE protected header.");
+      }
     }
     if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
@@ -377,42 +403,7 @@ namespace scitt::cose
     }
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.x5chain = std::vector<std::vector<uint8_t>>();
-      QCBORItem chainItem = header_items[X5CHAIN_INDEX];
-      if (chainItem.uDataType == QCBOR_TYPE_ARRAY)
-      {
-        int lenOfArray = chainItem.val.uCount;
-        if (lenOfArray == 0)
-        {
-          throw COSEDecodeError(
-            "x5chain array length was 0 in cose protected header.");
-        }
-        QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
-        for (int i = 0; i < lenOfArray; i++)
-        {
-          QCBORDecode_GetNext(&ctx, &chainItem);
-          if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-          {
-            parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-          }
-          else
-          {
-            throw COSEDecodeError(
-              "Next item in chain was not of type qcbor byte string.");
-          }
-        }
-        QCBORDecode_ExitArray(&ctx);
-      }
-      else if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-      {
-        parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-      }
-      else
-      {
-        throw COSEDecodeError(
-          "Value type of x5chain in protected header is not array or byte "
-          "string.");
-      }
+      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
     }
     // Extra Notary header parameters.
     if (header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType != QCBOR_TYPE_NONE)
@@ -442,10 +433,11 @@ namespace scitt::cose
     QCBORDecode_ExitMap(&ctx);
     QCBORDecode_ExitBstrWrapped(&ctx);
 
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
+      throw COSEDecodeError(
+        fmt::format("Failed to decode protected header: {}", qcbor_result));
     }
 
     return parsed;
@@ -480,7 +472,7 @@ namespace scitt::cose
     QCBORDecode_VGetNextConsume(&ctx, &item);
 
     // signature
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto signature = item.val.string;
 
     QCBORDecode_ExitArray(&ctx);
@@ -584,18 +576,18 @@ namespace scitt::cose
     QCBORItem item;
 
     // body_protected
-    QCBORDecode_GetNext(&decode_ctx, &item);
+    QCBORDecode_VGetNext(&decode_ctx, &item);
     auto body_protected = item.val.string;
 
     // skip unprotected header
     QCBORDecode_VGetNextConsume(&decode_ctx, &item);
 
     // payload
-    QCBORDecode_GetNext(&decode_ctx, &item);
+    QCBORDecode_VGetNext(&decode_ctx, &item);
     auto payload = item.val.string;
 
     // signature
-    QCBORDecode_GetNext(&decode_ctx, &item);
+    QCBORDecode_VGetNext(&decode_ctx, &item);
     auto signature = item.val.string;
 
     QCBORDecode_ExitArray(&decode_ctx);
@@ -803,18 +795,18 @@ namespace scitt::cose
     QCBORItem item;
 
     // protected headers
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto phdrs = cbor::as_span(item.val.string);
 
     // skip unprotected header
     QCBORDecode_VGetNextConsume(&ctx, &item);
 
     // payload
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto payload = cbor::as_span(item.val.string);
 
     // signature
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto signature = cbor::as_span(item.val.string);
 
     QCBORDecode_ExitArray(&ctx);
@@ -889,18 +881,18 @@ namespace scitt::cose
     QCBORItem item;
 
     // protected header
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto protected_header = item.val.string;
 
     // skip unprotected header (we'll create a new one)
     QCBORDecode_VGetNextConsume(&ctx, &item);
 
     // payload
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto payload = item.val.string;
 
     // signature
-    QCBORDecode_GetNext(&ctx, &item);
+    QCBORDecode_VGetNext(&ctx, &item);
     auto signature = item.val.string;
 
     QCBORDecode_ExitArray(&ctx);
@@ -920,6 +912,7 @@ namespace scitt::cose
     QCBOREncode_AddBytes(encoder, protected_header);
 
     // unprotected header
+    // FIXME keep existing unprotected header
     QCBOREncode_OpenMap(encoder);
     QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_SCITT_RECEIPTS);
     QCBOREncode_AddEncoded(encoder, cbor::from_bytes(receipt));

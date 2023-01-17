@@ -457,7 +457,9 @@ def from_cryptography_eckey_obj(
         pub_nums = ext_key.public_numbers()
 
     # Create map of cryptography curves to cose curves. E.g. {ec.SECP256R1: P256, ...}
-    registered_crvs = {crv.curve_obj: crv for crv in REGISTERED_EC_CURVES.values()}
+    registered_crvs = {
+        type(crv.curve_obj): crv for crv in REGISTERED_EC_CURVES.values()
+    }
     if type(pub_nums.curve) not in registered_crvs:
         raise ValueError(f"Unsupported EC Curve: {type(pub_nums.curve)}")
     curve = registered_crvs[type(pub_nums.curve)]
@@ -622,7 +624,7 @@ def create_did_document(
         curve = pub_numbers.curve
         # Create map of curves to names. E.g. {ec.SECP256R1: "P-256", ...}
         registered_crvs = {
-            crv.curve_obj: name for name, crv in REGISTERED_EC_CURVES.items()
+            type(crv.curve_obj): name for name, crv in REGISTERED_EC_CURVES.items()
         }
         if type(curve) not in registered_crvs:
             raise ValueError(f"Unsupported EC Curve: {curve}")
