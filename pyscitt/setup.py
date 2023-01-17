@@ -18,7 +18,7 @@ setup(
         "httpx",
         "cbor2",
         # TODO: remove this once pycose >= 1.0.2 is released
-        "pycose @ git+https://github.com/TimothyClaeys/pycose@501bfda9ce710455f39ba1bd13f9e5d857a0ecb3#egg=pycose",
+        "pycose @ git+https://github.com/TimothyClaeys/pycose@94db358eda640966c0e0e9148110b6c66763f9e5#egg=pycose",
         "pyjwt",
     ],
 )
