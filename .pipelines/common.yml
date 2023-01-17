@@ -22,6 +22,9 @@ parameters:
   - name: FunctionalTestArguments
     type: string
     default: ''
+  - name: PublishPerfResults
+    type: boolean
+    default: false
 jobs:
   - job: ${{ parameters.Name }}
     displayName: ${{ parameters.DisplayName }}
@@ -77,3 +80,9 @@ jobs:
 
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         displayName: Run Functional Tests
+
+      - ${{ if parameters.PublishPerfResults }}:
+        - task: PublishPipelineArtifact@1
+          inputs:
+            artifactName: "perf-results-${{ parameters.Name }}"
+            targetPath: $(Build.SourcesDirectory)/perf.json
