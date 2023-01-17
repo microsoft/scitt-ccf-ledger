@@ -290,10 +290,11 @@ namespace scitt
         SCITT_INFO("ClaimSizeKb={}", body.size() / 1024);
       };
 
-      make_endpoint(
+      make_endpoint_with_local_commit_handler(
         post_entry_path,
         HTTP_POST,
         tracing_adapter(error_adapter(post_entry), get_time),
+        tracing_local_commit_callback,
         authn_policy)
         .install();
 
@@ -680,11 +681,12 @@ namespace scitt
         return ccf::make_success();
       };
 
-      make_endpoint(
+      make_endpoint_with_local_commit_handler(
         update_did_doc_path,
         HTTP_POST,
         tracing_adapter(
           error_adapter(ccf::json_adapter(update_did_doc)), get_time),
+        tracing_local_commit_callback,
         no_authn_policy)
         .set_auto_schema<PostDidResolution::In, void>()
         .install();

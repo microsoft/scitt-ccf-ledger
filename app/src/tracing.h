@@ -23,6 +23,18 @@ namespace scitt
   thread_local std::string request_id;
   thread_local std::optional<std::string> client_request_id;
 
+  struct AppData
+  {
+    std::string request_id;
+    std::optional<std::string> client_request_id;
+  };
+
+  void clear_trace_state()
+  {
+    request_id = "";
+    client_request_id = std::nullopt;
+  }
+
   int diff_timespec_ms(
     const struct timespec& time0, const struct timespec& time1)
   {
@@ -62,10 +74,7 @@ namespace scitt
     Fn fn, const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return [fn, get_time](Ctx& ctx) {
-      auto cleanup = finally([] {
-        request_id = "";
-        client_request_id = std::nullopt;
-      });
+      auto cleanup = finally(clear_trace_state);
 
       request_id = create_request_id();
       ctx.rpc_ctx->set_response_header(REQUEST_ID_HEADER, request_id);
@@ -92,6 +101,9 @@ namespace scitt
         ctx.rpc_ctx->set_response_header(
           "x-ms-client-request-id", client_request_id.value());
       }
+
+      ctx.rpc_ctx->set_user_data(
+        std::make_shared<AppData>(AppData{request_id, client_request_id}));
 
       auto query = ctx.rpc_ctx->get_request_query();
 
@@ -159,6 +171,23 @@ namespace scitt
           duration_ms);
       }
     };
+  }
+
+  void tracing_local_commit_callback(
+    ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid)
+  {
+    auto cleanup = finally(clear_trace_state);
+
+    auto user_data = static_cast<AppData*>(ctx.rpc_ctx->get_user_data());
+    if (user_data != nullptr)
+    {
+      request_id = user_data->request_id;
+      client_request_id = user_data->client_request_id;
+    }
+
+    SCITT_INFO("TxId={}", txid.to_str());
+
+    ccf::endpoints::default_locally_committed_func(ctx, txid);
   }
 
   /**
