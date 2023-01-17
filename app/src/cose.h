@@ -65,7 +65,7 @@ namespace scitt::cose
   };
 
   UnprotectedHeader decode_unprotected_header(
-    const std::vector<uint8_t>& cose_sign1)
+    std::span<const uint8_t> cose_sign1)
   {
     UnprotectedHeader parsed;
     // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
@@ -333,13 +333,11 @@ namespace scitt::cose
         QCBORDecode_GetNext(&ctx, &critItem);
         if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
         {
-          parsed.crit->push_back(std::variant<int64_t, std::string>(
-            std::string(cbor::as_string(critItem.val.string))));
+          parsed.crit->push_back(std::string(cbor::as_string(critItem.val.string))));
         }
         else if (critItem.uDataType == QCBOR_TYPE_INT64)
         {
-          parsed.crit->push_back(
-            std::variant<int64_t, std::string>(critItem.val.int64));
+          parsed.crit->push_back(critItem.val.int64);
         }
         else
         {
@@ -546,15 +544,7 @@ namespace scitt::cose
 
     key_len_bits = EVP_PKEY_bits(key_evp);
 
-    /* Calculation of size per RFC 8152 section 8.1 -- round up to
-     * number of bytes. */
-    key_len_bytes = (unsigned)key_len_bits / 8;
-    if (key_len_bits % 8)
-    {
-      key_len_bytes++;
-    }
-
-    return key_len_bytes;
+    return (key_len_bits + 7) / 8;
   }
 
   // Temporarily needed for notary_verify().

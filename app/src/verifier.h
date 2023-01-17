@@ -136,7 +136,7 @@ namespace scitt::verifier
     }
 
     void validate_notary_protected_header(
-      cose::ProtectedHeader& phdr, const Configuration& configuration)
+      const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
       auto alg = phdr.alg;
       auto cty = phdr.cty;
