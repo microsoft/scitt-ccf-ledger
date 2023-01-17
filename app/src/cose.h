@@ -91,7 +91,6 @@ namespace scitt::cose
     QCBORItem coseItem;
     QCBORDecode_GetNext(&ctx, &coseItem);
 
-    struct q_useful_buf_c unprotected_parameters;
     QCBORDecode_EnterMap(&ctx, NULL);
 
     enum
@@ -155,7 +154,11 @@ namespace scitt::cose
       }
     }
     QCBORDecode_ExitMap(&ctx);
-    QCBORDecode_ExitBstrWrapped(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
 
     return parsed;
   }
@@ -182,6 +185,22 @@ namespace scitt::cose
     std::optional<int64_t> notary_signing_time;
     std::optional<int64_t> notary_authentic_signing_time;
     std::optional<int64_t> notary_expiry;
+
+    bool is_critical(const std::variant<int64_t, std::string>& label) const
+    {
+      if (!crit.has_value())
+      {
+        return false;
+      }
+      for (const auto& crit_label : crit.value())
+      {
+        if (crit_label == label)
+        {
+          return true;
+        }
+      }
+      return false;
+    }
   };
 
   ProtectedHeader decode_protected_header(
@@ -316,11 +335,6 @@ namespace scitt::cose
     {
       parsed.crit = std::vector<std::variant<int64_t, std::string>>();
       QCBORItem critItem = header_items[CRIT_INDEX];
-      if (critItem.uDataType != QCBOR_TYPE_ARRAY)
-      {
-        throw COSEDecodeError(
-          "Value type of crit in protected header is not of type array");
-      }
       int lenOfArray = critItem.val.uCount;
       if (lenOfArray == 0)
       {
@@ -333,7 +347,8 @@ namespace scitt::cose
         QCBORDecode_GetNext(&ctx, &critItem);
         if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
         {
-          parsed.crit->push_back(std::string(cbor::as_string(critItem.val.string))));
+          parsed.crit->push_back(
+            std::string(cbor::as_string(critItem.val.string)));
         }
         else if (critItem.uDataType == QCBOR_TYPE_INT64)
         {
@@ -342,7 +357,7 @@ namespace scitt::cose
         else
         {
           throw COSEDecodeError(
-            "Next item in crit was not of type qcbor byte string or qcbor "
+            "Next item in crit was not of type text string or "
             "int64.");
         }
       }
@@ -427,6 +442,12 @@ namespace scitt::cose
     QCBORDecode_ExitMap(&ctx);
     QCBORDecode_ExitBstrWrapped(&ctx);
 
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
+
     return parsed;
   }
 
@@ -436,14 +457,6 @@ namespace scitt::cose
       std::runtime_error(msg)
     {}
   };
-
-  // Temporarily needed for notary_verify().
-  std::vector<uint8_t> qcbor_buf_to_vector(const UsefulBufC& buf)
-  {
-    return std::vector<uint8_t>(
-      reinterpret_cast<const uint8_t*>(buf.ptr),
-      reinterpret_cast<const uint8_t*>(buf.ptr) + buf.len);
-  }
 
   // Temporarily needed for notary_verify().
   std::vector<uint8_t> get_signature(const std::vector<uint8_t>& cose_sign1)
@@ -477,7 +490,7 @@ namespace scitt::cose
       throw std::runtime_error("Failed to decode COSE_Sign1");
     }
 
-    return qcbor_buf_to_vector(signature);
+    return cbor::as_vector(signature);
   }
 
   // Temporarily needed for notary_verify().
@@ -593,147 +606,66 @@ namespace scitt::cose
     }
 
     // Create Sig_structure.
-    // Note that hashing the structure incrementally to avoid
-    // doubling memory would work for RSA-PSS and ECDSA, but not EdDSA.
 
-    std::vector<uint8_t> sig_structure_buf(cose_sign1.size() + 1024);
-    UsefulBuf sig_structure{sig_structure_buf.data(), sig_structure_buf.size()};
-
-    QCBOREncodeContext encode_ctx;
-    QCBOREncode_Init(&encode_ctx, sig_structure);
-
-    QCBOREncode_OpenArray(&encode_ctx);
+    cbor::encoder encode_ctx(cose_sign1.size() + 1024);
+    QCBOREncode_OpenArray(encode_ctx);
 
     // context
-    QCBOREncode_AddSZString(&encode_ctx, "Signature1");
+    QCBOREncode_AddSZString(encode_ctx, "Signature1");
 
     // body_protected: The protected header of the message.
-    QCBOREncode_AddBytes(&encode_ctx, body_protected);
+    QCBOREncode_AddBytes(encode_ctx, body_protected);
 
     // external_aad: always empty.
-    QCBOREncode_AddBytes(&encode_ctx, NULLUsefulBufC);
+    QCBOREncode_AddBytes(encode_ctx, NULLUsefulBufC);
 
     // payload: The payload of the message.
-    QCBOREncode_AddBytes(&encode_ctx, payload);
+    QCBOREncode_AddBytes(encode_ctx, payload);
 
-    QCBOREncode_CloseArray(&encode_ctx);
+    QCBOREncode_CloseArray(encode_ctx);
 
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&encode_ctx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::runtime_error("Error encoding CBOR");
-    }
-
-    auto cbor = std::vector<uint8_t>(
-      (uint8_t*)encoded_cbor.ptr,
-      (uint8_t*)encoded_cbor.ptr + encoded_cbor.len);
-    return cbor;
+    return encode_ctx.finish();
   }
 
-  static enum t_cose_err_t ecdsa_signature_cose_to_der(
-    EVP_PKEY* key_evp,
-    struct q_useful_buf_c cose_signature,
-    struct q_useful_buf buffer,
-    struct q_useful_buf_c* der_signature)
+  std::vector<uint8_t> ecdsa_sig_from_r_s(
+    const uint8_t* r,
+    size_t r_size,
+    const uint8_t* s,
+    size_t s_size,
+    bool big_endian = true)
   {
-    unsigned key_len;
-    enum t_cose_err_t return_value;
-    BIGNUM* signature_r_bn = NULL;
-    BIGNUM* signature_s_bn = NULL;
-    int ossl_result;
-    ECDSA_SIG* signature;
-    unsigned char* der_signature_ptr;
-    int der_signature_len;
-
-    key_len = ecdsa_key_size(key_evp);
-
-    /* Check the signature length against expected */
-    if (cose_signature.len != key_len * 2)
+    OpenSSL::Unique_BIGNUM r_bn;
+    OpenSSL::Unique_BIGNUM s_bn;
+    if (big_endian)
     {
-      return_value = T_COSE_ERR_SIG_VERIFY;
-      goto Done;
+      OpenSSL::CHECKNULL(BN_bin2bn(r, r_size, r_bn));
+      OpenSSL::CHECKNULL(BN_bin2bn(s, s_size, s_bn));
     }
-
-    /* Put the r and the s from the signature into big numbers */
-    signature_r_bn =
-      BN_bin2bn((const uint8_t*)cose_signature.ptr, (int)key_len, NULL);
-    if (signature_r_bn == NULL)
+    else
     {
-      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
-      goto Done;
+      OpenSSL::CHECKNULL(BN_lebin2bn(r, r_size, r_bn));
+      OpenSSL::CHECKNULL(BN_lebin2bn(s, s_size, s_bn));
     }
+    OpenSSL::Unique_ECDSA_SIG sig;
+    OpenSSL::CHECK1(ECDSA_SIG_set0(sig, r_bn, s_bn));
+    // Ignore previous pointers, as they're now managed by ECDSA_SIG_set0
+    // https://www.openssl.org/docs/man1.1.1/man3/ECDSA_SIG_get0.html
+    (void)r_bn.release();
+    (void)s_bn.release();
+    auto der_size = i2d_ECDSA_SIG(sig, nullptr);
+    OpenSSL::CHECK0(der_size);
+    std::vector<uint8_t> der_sig(der_size);
+    auto der_sig_buf = der_sig.data();
+    OpenSSL::CHECK0(i2d_ECDSA_SIG(sig, &der_sig_buf));
+    return der_sig;
+  }
 
-    signature_s_bn = BN_bin2bn(
-      ((const uint8_t*)cose_signature.ptr) + key_len, (int)key_len, NULL);
-    if (signature_s_bn == NULL)
-    {
-      BN_free(signature_r_bn);
-      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
-      goto Done;
-    }
-
-    /* Put the signature bytes into an ECDSA_SIG */
-    signature = ECDSA_SIG_new();
-    if (signature == NULL)
-    {
-      /* Don't leak memory in error condition */
-      BN_free(signature_r_bn);
-      BN_free(signature_s_bn);
-      return_value = T_COSE_ERR_INSUFFICIENT_MEMORY;
-      goto Done;
-    }
-
-    /* Put the r and s bignums into an ECDSA_SIG. Freeing
-     * ossl_sig_to_verify will now free r and s.
-     */
-    ossl_result = ECDSA_SIG_set0(signature, signature_r_bn, signature_s_bn);
-    if (ossl_result != 1)
-    {
-      BN_free(signature_r_bn);
-      BN_free(signature_s_bn);
-      return_value = T_COSE_ERR_SIG_FAIL;
-      goto Done;
-    }
-
-    /* Now output the ECDSA_SIG structure in DER format.
-     *
-     * Code safety is the priority here.  i2d_ECDSA_SIG() has two
-     * output buffer modes, one where it just writes to the buffer
-     * given and the other were it allocates memory.  It would be
-     * better to avoid the allocation, but the copy mode is not safe
-     * because you can't give it a buffer length. This is bad stuff
-     * from last century.
-     *
-     * So the allocation mode is used on the presumption that it is
-     * safe and correct even though there is more copying and memory
-     * use.
-     */
-    der_signature_ptr = NULL;
-    der_signature_len = i2d_ECDSA_SIG(signature, &der_signature_ptr);
-    ECDSA_SIG_free(signature);
-    if (der_signature_len < 0)
-    {
-      return_value = T_COSE_ERR_SIG_FAIL;
-      goto Done;
-    }
-
-    *der_signature = q_useful_buf_copy_ptr(
-      buffer, der_signature_ptr, (size_t)der_signature_len);
-    if (q_useful_buf_c_is_null_or_empty(*der_signature))
-    {
-      return_value = T_COSE_ERR_SIG_FAIL;
-      goto Done;
-    }
-
-    OPENSSL_free(der_signature_ptr);
-
-    return_value = T_COSE_SUCCESS;
-
-  Done:
-    /* All the memory frees happen along the way in the code above. */
-    return return_value;
+  std::vector<uint8_t> ecdsa_sig_p1363_to_der(
+    const std::vector<uint8_t>& signature)
+  {
+    auto half_size = signature.size() / 2;
+    return ecdsa_sig_from_r_s(
+      signature.data(), half_size, signature.data() + half_size, half_size);
   }
 
   /**
@@ -749,7 +681,6 @@ namespace scitt::cose
   void notary_verify(
     const std::vector<uint8_t>& cose_sign1, const PublicKey& key)
   {
-    CCF_APP_INFO("Verifying notary claim.");
     auto phdr = decode_protected_header(cose_sign1);
     auto header_alg = phdr.alg.value();
     auto key_alg = key.get_cose_alg();
@@ -772,21 +703,7 @@ namespace scitt::cose
 
     if (is_ecdsa_alg(header_alg))
     {
-      CCF_APP_INFO("Verifying notary claim ECDSA");
-      // Convert from IEEE to DER
-      enum t_cose_err_t return_value;
-      return_value = ecdsa_signature_cose_to_der(
-        key.get_evp_pkey(),
-        cbor::from_bytes(signature),
-        der_format_buffer,
-        &openssl_signature);
-      if (return_value)
-      {
-        throw COSESignatureValidationError("ECDSA Signature conversion failed");
-      }
-      signature = std::vector<uint8_t>(
-        (const uint8_t*)openssl_signature.ptr,
-        (const uint8_t*)openssl_signature.ptr + openssl_signature.len);
+      signature = ecdsa_sig_p1363_to_der(signature);
     }
 
     OpenSSL::Unique_EVP_MD_CTX md_ctx;

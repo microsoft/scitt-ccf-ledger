@@ -188,12 +188,7 @@ namespace scitt::verifier
       // custom header parameters in crit and then we get this for free when we
       // use t_cose for signature validation.
 
-      if (
-        std::find(
-          crit.begin(),
-          crit.end(),
-          std::variant<int64_t, std::string>(
-            std::string("io.cncf.notary.signingScheme"))) == crit.end())
+      if (!phdr.is_critical("io.cncf.notary.signingScheme"))
       {
         throw cose::COSEDecodeError(
           "crit must contain 'io.cncf.notary.signingScheme'");
@@ -237,12 +232,7 @@ namespace scitt::verifier
           throw cose::COSEDecodeError(
             "Missing io.cncf.notary.authenticSigningTime in protected header");
         }
-        if (
-          std::find(
-            crit.begin(),
-            crit.end(),
-            std::variant<int64_t, std::string>(std::string(
-              "io.cncf.notary.authenticSigningTime"))) == crit.end())
+        if (!phdr.is_critical("io.cncf.notary.authenticSigningTime"))
         {
           throw cose::COSEDecodeError(
             "Missing io.cncf.notary.authenticSigningTime in crit parameters");
@@ -258,12 +248,7 @@ namespace scitt::verifier
       if (notary_expiry.has_value())
       {
         // notary_expiry is critial but not required.
-        if (
-          std::find(
-            crit.begin(),
-            crit.end(),
-            std::variant<int64_t, std::string>(
-              std::string("io.cncf.notary.expiry"))) == crit.end())
+        if (!phdr.is_critical("io.cncf.notary.expiry"))
         {
           throw cose::COSEDecodeError(
             "Missing io.cncf.notary.expiry in crit parameters");
