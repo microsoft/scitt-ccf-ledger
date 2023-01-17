@@ -8,11 +8,11 @@ from pyscitt.crypto import Pem
 
 
 class X5ChainCertificateAuthority:
-    def __init__(self, host: str = "localhost", **kwargs):
-        self.host = host
+    def __init__(self, cn: str = "localhost", **kwargs):
+        self.cn = cn
         self.algorithm = kwargs.pop("alg")
         self.root_key_pem, _ = crypto.generate_keypair(**kwargs)
-        self.root_cert_pem = crypto.generate_cert(self.root_key_pem, cn=host, ca=True)
+        self.root_cert_pem = crypto.generate_cert(self.root_key_pem, cn=cn, ca=True)
 
     @property
     def cert_bundle(self) -> str:
