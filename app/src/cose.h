@@ -488,15 +488,15 @@ namespace scitt::cose
   // Temporarily needed for notary_verify().
   bool is_ecdsa_alg(int64_t cose_alg)
   {
-    return cose_alg == COSE_ALGORITHM_ES256 ||
-      cose_alg == COSE_ALGORITHM_ES384 || cose_alg == COSE_ALGORITHM_ES512;
+    return cose_alg == T_COSE_ALGORITHM_ES256 ||
+      cose_alg == T_COSE_ALGORITHM_ES384 || cose_alg == T_COSE_ALGORITHM_ES512;
   }
 
   // Temporarily needed for notary_verify().
   bool is_rsa_pss_alg(int64_t cose_alg)
   {
-    return cose_alg == COSE_ALGORITHM_PS256 ||
-      cose_alg == COSE_ALGORITHM_PS384 || cose_alg == COSE_ALGORITHM_PS512;
+    return cose_alg == T_COSE_ALGORITHM_PS256 ||
+      cose_alg == T_COSE_ALGORITHM_PS384 || cose_alg == T_COSE_ALGORITHM_PS512;
   }
 
   // Temporarily needed for notary_verify().
@@ -504,16 +504,16 @@ namespace scitt::cose
   {
     switch (cose_alg)
     {
-      case COSE_ALGORITHM_ES256:
-      case COSE_ALGORITHM_PS256:
+      case T_COSE_ALGORITHM_ES256:
+      case T_COSE_ALGORITHM_PS256:
         return crypto::MDType::SHA256;
-      case COSE_ALGORITHM_ES384:
-      case COSE_ALGORITHM_PS384:
+      case T_COSE_ALGORITHM_ES384:
+      case T_COSE_ALGORITHM_PS384:
         return crypto::MDType::SHA384;
-      case COSE_ALGORITHM_ES512:
-      case COSE_ALGORITHM_PS512:
+      case T_COSE_ALGORITHM_ES512:
+      case T_COSE_ALGORITHM_PS512:
         return crypto::MDType::SHA512;
-      case COSE_ALGORITHM_EDDSA:
+      case T_COSE_ALGORITHM_EDDSA:
         return crypto::MDType::NONE;
       default:
         throw std::runtime_error("Unsupported COSE algorithm");
