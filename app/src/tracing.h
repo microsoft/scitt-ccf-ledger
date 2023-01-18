@@ -4,6 +4,7 @@
 #pragma once
 
 #include "constants.h"
+#include "util.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/endpoint_context.h>
@@ -44,7 +45,7 @@ namespace scitt
 
   std::string create_request_id()
   {
-    return fmt::format("{:x}", rand());
+    return fmt::format("{:x}", ENTROPY->random64());
   }
 
 #define SCITT_INFO(s, ...) \

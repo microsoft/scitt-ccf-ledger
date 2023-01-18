@@ -8,9 +8,9 @@
 #include "did/web/syntax.h"
 #include "kv_types.h"
 #include "tracing.h"
+#include "util.h"
 
 #include <algorithm>
-#include <ccf/crypto/entropy.h>
 #include <ccf/ds/hex.h>
 #include <ccf/node/host_processes_interface.h>
 #include <ccf/node_context.h>
@@ -21,8 +21,6 @@
 
 namespace scitt::did::web
 {
-  const static crypto::EntropyPtr entropy = crypto::create_entropy();
-
   class DidWebResolver : public MethodResolver
   {
   private:
@@ -68,7 +66,7 @@ namespace scitt::did::web
       check_did_is_did_web(did);
 
       auto now = current_time.tv_sec;
-      auto nonce = ds::to_hex(entropy->random(16));
+      auto nonce = ds::to_hex(ENTROPY->random(16));
       // add nonce to query param for cache busting
       // TODO validate if this is fine security-wise
       auto url = get_did_web_doc_url_from_did(did) + "?" + nonce;

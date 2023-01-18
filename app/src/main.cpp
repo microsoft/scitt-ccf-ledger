@@ -190,13 +190,6 @@ namespace scitt
 
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
-      timespec untrusted_host_time;
-      const auto result = get_untrusted_host_time_v1(untrusted_host_time);
-      if (result == ccf::ApiResult::OK)
-      {
-        srand(untrusted_host_time.tv_sec);
-      }
-
       static constexpr auto post_entry_path = "/entries";
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();

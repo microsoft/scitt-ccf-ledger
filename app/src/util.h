@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ccf/crypto/entropy.h>
 #include <ccf/crypto/pem.h>
 #include <string>
 #include <string_view>
@@ -11,6 +12,8 @@
 
 namespace scitt
 {
+  const static crypto::EntropyPtr ENTROPY = crypto::create_entropy();
+
   static std::vector<crypto::Pem> split_x509_cert_bundle(
     const std::string_view& pem)
   {
