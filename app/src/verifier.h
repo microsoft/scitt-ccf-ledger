@@ -33,7 +33,7 @@ namespace scitt::verifier
       resolver(std::move(resolver))
     {}
 
-    void validate_algorithm(
+    void check_is_accepted_algorithm(
       const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
       std::string_view algorithm;
@@ -67,7 +67,7 @@ namespace scitt::verifier
     {
       // IETF SCITT profile validation.
 
-      validate_algorithm(phdr, configuration);
+      check_is_accepted_algorithm(phdr, configuration);
 
       if (!phdr.cty.has_value())
       {
@@ -138,7 +138,7 @@ namespace scitt::verifier
     {
       // X.509 SCITT profile validation.
 
-      validate_algorithm(phdr, configuration);
+      check_is_accepted_algorithm(phdr, configuration);
 
       if (!phdr.cty.has_value())
       {
@@ -170,7 +170,7 @@ namespace scitt::verifier
 
       // alg, crit, cty, io.cncf.notary.signingScheme are required.
 
-      validate_algorithm(phdr, configuration);
+      check_is_accepted_algorithm(phdr, configuration);
 
       if (!phdr.crit.has_value())
       {
