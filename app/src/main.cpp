@@ -162,12 +162,10 @@ namespace scitt
           return this->get_untrusted_host_time_v1(time);
         };
 
-      return ccf::UserEndpointRegistry::make_endpoint_with_local_commit_handler(
-        method,
-        verb,
-        tracing_adapter(error_adapter(f), method, get_time),
-        tracing_local_commit_callback,
-        ap);
+      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
+        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
+      endpoint.locally_committed_func = tracing_local_commit_callback;
+      return endpoint;
     }
 
   public:
@@ -827,7 +825,6 @@ namespace scitt
         .install();
 
 #ifdef ENABLE_PREFIX_TREE
-      // TODO local variant of make_endpoint in all endpoints
       PrefixTreeFrontend::init_handlers(context, *this);
 #endif
     }
