@@ -4,7 +4,7 @@ The following explains how to build, run, and test scitt-ccf-ledger outside of D
 
 ## Development environment
 
-[![Open in GitHub Codespaces (virtual mode)](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=590635544)
+[![Open in GitHub Codespaces (virtual mode)](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=letmaik%2Fvscode&repo=562968818&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestEurope)
 
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
 This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger in full.
