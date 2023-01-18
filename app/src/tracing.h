@@ -61,7 +61,7 @@ namespace scitt
   if (client_request_id.has_value()) \
     CCF_APP_FAIL( \
       "ClientRequestId={} RequestId={} " s, \
-      client_request_id.value_or(""), \
+      client_request_id.value(), \
       request_id, \
       ##__VA_ARGS__); \
   else \
