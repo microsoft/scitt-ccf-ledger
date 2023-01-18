@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 #include "lru.h"
+#include "tracing.h"
 
 #include <ccf/endpoint_context.h>
 #include <ccf/historical_queries_adapter.h>
@@ -65,15 +66,16 @@ namespace scitt::historical
         {
           case HistoricalTxStatus::Error:
           {
+            SCITT_FAIL("Code=InternalError {}", error_reason);
             args.rpc_ctx->set_error(
               HTTP_STATUS_INTERNAL_SERVER_ERROR,
-              ccf::errors::TransactionPendingOrUnknown,
+              ccf::errors::InternalError,
               std::move(error_reason));
             return;
           }
           case HistoricalTxStatus::PendingOrUnknown:
           {
-            // Set header No-Cache
+            SCITT_INFO("Code=TransactionPendingOrUnknown");
             args.rpc_ctx->set_response_header(
               http::headers::CACHE_CONTROL, "no-cache");
             args.rpc_ctx->set_error(
@@ -84,6 +86,7 @@ namespace scitt::historical
           }
           case HistoricalTxStatus::Invalid:
           {
+            SCITT_INFO("Code=TransactionInvalid");
             args.rpc_ctx->set_error(
               HTTP_STATUS_NOT_FOUND,
               ccf::errors::TransactionInvalid,
@@ -108,7 +111,7 @@ namespace scitt::historical
         std::unique_lock<std::mutex> guard(ACTIVE_HANDLES_MUTEX);
         ACTIVE_HANDLES_LRU.set_cull_callback(
           [&state_cache](ccf::SeqNo key, bool) {
-            CCF_APP_TRACE("Culling state cache handle {}", key);
+            SCITT_INFO("Dropping cached transaction {}", key);
             state_cache.drop_cached_states(key);
           });
         ACTIVE_HANDLES_LRU.insert(historic_request_handle, true);
@@ -131,6 +134,7 @@ namespace scitt::historical
         args.rpc_ctx->set_response_body(fmt::format(
           "Historical transaction {} is not currently available.",
           target_tx_id.to_str()));
+        SCITT_INFO("Code=TransactionNotCached");
         return;
       }
 
