@@ -100,6 +100,7 @@ namespace scitt
           "x-ms-client-request-id", client_request_id.value());
       }
 
+      // The user data is used to propagate the request IDs to the local commit callback
       ctx.rpc_ctx->set_user_data(
         std::make_shared<AppData>(AppData{request_id, client_request_id}));
 
