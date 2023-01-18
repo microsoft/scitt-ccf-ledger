@@ -33,21 +33,9 @@ namespace scitt::verifier
       resolver(std::move(resolver))
     {}
 
-    PublicKey process_vanilla_profile(
-      cose::ProtectedHeader& phdr,
-      kv::Tx& tx,
-      ::timespec current_time,
-      std::chrono::seconds resolution_cache_expiry,
-      const Configuration& configuration)
+    void validate_algorithm(
+      const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
-      // Default SCITT profile validation.
-
-      // Cty is required.
-      if (!phdr.cty.has_value())
-      {
-        throw cose::COSEDecodeError("Missing cty in protected header");
-      }
-
       std::string_view algorithm;
       try
       {
@@ -68,77 +56,112 @@ namespace scitt::verifier
       {
         throw VerificationError("Unsupported algorithm in protected header");
       }
+    }
+
+    PublicKey process_ietf_profile(
+      cose::ProtectedHeader& phdr,
+      kv::Tx& tx,
+      ::timespec current_time,
+      std::chrono::seconds resolution_cache_expiry,
+      const Configuration& configuration)
+    {
+      // IETF SCITT profile validation.
+
+      validate_algorithm(phdr, configuration);
+
+      if (!phdr.cty.has_value())
+      {
+        throw cose::COSEDecodeError("Missing cty in protected header");
+      }
 
       auto issuer = phdr.issuer;
       auto kid = phdr.kid;
-      auto x5chain = phdr.x5chain;
-      if (
-        issuer.has_value() &&
-        !configuration.policy.is_accepted_issuer(issuer.value()))
+
+      if (!phdr.issuer.has_value())
+      {
+        throw cose::COSEDecodeError("Missing issuer in protected header");
+      }
+      if (!configuration.policy.is_accepted_issuer(issuer.value()))
       {
         throw VerificationError("Unsupported DID issuer in protected header");
       }
 
-      PublicKey key;
-      if (x5chain.has_value())
+      std::optional<std::string> assertion_method_id;
+      if (!issuer.has_value())
       {
-        // Verify the chain of certs against the x509 root store.
-        auto roots = x509_root_store(tx);
-        auto cert = verify_chain(roots, x5chain.value());
-        key = PublicKey(cert, std::nullopt);
+        throw VerificationError(
+          "Issuer was missing as a part of the decoded header.");
       }
-      else
+
+      if (kid.has_value())
       {
-        std::optional<std::string> assertion_method_id;
-        if (!issuer.has_value())
+        if (!kid.value().starts_with("#"))
         {
-          throw VerificationError(
-            "Issuer was missing as a part of the decoded header.");
+          throw VerificationError("kid must start with '#'.");
         }
-
-        if (kid.has_value())
-        {
-          if (!kid.value().starts_with("#"))
-          {
-            throw VerificationError("kid must start with '#'.");
-          }
-          assertion_method_id =
-            fmt::format("{}{}", issuer.value(), kid.value());
-        }
-
-        auto resolution_options = did::DidResolutionOptions{
-          .current_time = current_time,
-          .did_web_options = did::DidWebOptions{
-            .tx = tx,
-            .max_age = resolution_cache_expiry,
-            .if_assertion_method_id_match = assertion_method_id}};
-
-        // Perform DID resolution for the given issuer.
-        // Note: Any DIDResolutionError is expected to be handled by the caller.
-        auto resolution = resolver->resolve(issuer.value(), resolution_options);
-
-        // Locate the right JWK in the resolved DID document.
-        did::Jwk jwk;
-        try
-        {
-          jwk = did::find_assertion_method_jwk_in_did_document(
-            resolution.did_doc, assertion_method_id);
-        }
-        catch (const did::DIDAssertionMethodError& e)
-        {
-          throw VerificationError(e.what());
-        }
-
-        // Convert the JWK into something we can actually use.
-        key = get_jwk_public_key(jwk);
+        assertion_method_id = fmt::format("{}{}", issuer.value(), kid.value());
       }
+
+      auto resolution_options = did::DidResolutionOptions{
+        .current_time = current_time,
+        .did_web_options = did::DidWebOptions{
+          .tx = tx,
+          .max_age = resolution_cache_expiry,
+          .if_assertion_method_id_match = assertion_method_id}};
+
+      // Perform DID resolution for the given issuer.
+      // Note: Any DIDResolutionError is expected to be handled by the caller.
+      auto resolution = resolver->resolve(issuer.value(), resolution_options);
+
+      // Locate the right JWK in the resolved DID document.
+      did::Jwk jwk;
+      try
+      {
+        jwk = did::find_assertion_method_jwk_in_did_document(
+          resolution.did_doc, assertion_method_id);
+      }
+      catch (const did::DIDAssertionMethodError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // Convert the JWK into something we can actually use.
+      auto key = get_jwk_public_key(jwk);
+
+      return key;
+    }
+
+    PublicKey process_x509_profile(
+      cose::ProtectedHeader& phdr,
+      kv::Tx& tx,
+      const Configuration& configuration)
+    {
+      // X.509 SCITT profile validation.
+
+      validate_algorithm(phdr, configuration);
+
+      if (!phdr.cty.has_value())
+      {
+        throw cose::COSEDecodeError("Missing cty in protected header");
+      }
+      if (!phdr.x5chain.has_value())
+      {
+        throw cose::COSEDecodeError("Missing x5chain in protected header");
+      }
+
+      auto x5chain = phdr.x5chain;
+
+      // Verify the chain of certs against the x509 root store.
+      auto roots = x509_root_store(tx);
+      auto cert = verify_chain(roots, x5chain.value());
+      auto key = PublicKey(cert, std::nullopt);
+
       return key;
     }
 
     void validate_notary_protected_header(
       const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
-      auto alg = phdr.alg;
       auto cty = phdr.cty;
       auto notary_signing_scheme = phdr.notary_signing_scheme;
       auto notary_signing_time = phdr.notary_signing_time;
@@ -146,26 +169,9 @@ namespace scitt::verifier
       auto notary_expiry = phdr.notary_expiry;
 
       // alg, crit, cty, io.cncf.notary.signingScheme are required.
-      std::string_view algorithm;
-      try
-      {
-        // We use the equivalent JOSE human-readable names in the
-        // configuration, rather than the obscure integer values
-        // from COSE.
-        if (!alg.has_value())
-        {
-          VerificationError("Missing algorithm in protected header");
-        }
-        algorithm = get_jose_alg_from_cose_alg(alg.value());
-      }
-      catch (const InvalidSignatureAlgorithm& e)
-      {
-        throw VerificationError(e.what());
-      }
-      if (!contains(configuration.policy.get_accepted_algorithms(), algorithm))
-      {
-        throw VerificationError("Unsupported algorithm in protected header");
-      }
+
+      validate_algorithm(phdr, configuration);
+
       if (!phdr.crit.has_value())
       {
         throw cose::COSEDecodeError("Missing crit in protected header");
@@ -321,14 +327,12 @@ namespace scitt::verifier
           throw VerificationError(e.what());
         }
       }
-      else if (!phdr.profile.has_value())
+      else if (phdr.issuer.has_value())
       {
-        // Vanilla SCITT claim
-        // Verify profile
-        key = process_vanilla_profile(
+        // IETF SCITT claim
+        key = process_ietf_profile(
           phdr, tx, current_time, resolution_cache_expiry, configuration);
 
-        // Verify signature.
         try
         {
           cose::verify(data, key);
@@ -338,11 +342,30 @@ namespace scitt::verifier
           throw VerificationError(e.what());
         }
       }
-      else
+      else if (phdr.x5chain.has_value())
       {
-        CCF_APP_INFO(
+        // X.509 SCITT claim
+        key = process_x509_profile(phdr, tx, configuration);
+
+        try
+        {
+          cose::verify(data, key);
+        }
+        catch (const cose::COSESignatureValidationError& e)
+        {
+          throw VerificationError(e.what());
+        }
+      }
+      else if (phdr.profile.has_value())
+      {
+        SCITT_INFO(
           "Unknown COSE profile in protected header: {}", phdr.profile.value());
         throw cose::COSEDecodeError("Unknown COSE profile in protected header");
+      }
+      else
+      {
+        SCITT_INFO("Unknown COSE profile");
+        throw cose::COSEDecodeError("Unknown COSE profile");
       }
     }
 
