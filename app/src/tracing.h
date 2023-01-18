@@ -86,9 +86,8 @@ namespace scitt
       {
         // Validate client request id to avoid misinterpretation of the log,
         // e.g. if it contains a space.
-        std::smatch match;
         if (!std::regex_match(
-              client_request_id.value(), match, CLIENT_REQUEST_ID_REGEX))
+              client_request_id.value(), CLIENT_REQUEST_ID_REGEX))
         {
           client_request_id = std::nullopt;
           SCITT_INFO("Code=InvalidInput Invalid client request id");
