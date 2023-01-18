@@ -257,7 +257,7 @@ namespace scitt::verifier
     }
 
     PublicKey process_notary_profile(
-      const std::vector<uint8_t>& data,
+      cose::UnprotectedHeader& uhdr,
       cose::ProtectedHeader& phdr,
       kv::Tx& tx,
       const Configuration& configuration)
@@ -265,22 +265,10 @@ namespace scitt::verifier
       // Validate protected header
       validate_notary_protected_header(phdr, configuration);
 
-      // Notary puts the x5chain in unprotected header,
-      // hence decode unprotected header.
-      cose::UnprotectedHeader unphdr;
-      try
-      {
-        unphdr = cose::decode_unprotected_header(data);
-      }
-      catch (const cose::COSEDecodeError& e)
-      {
-        throw VerificationError(e.what());
-      }
-
       // Validate unprotected header
       // Unprotected header must contain x5chain else the notary claim cannot be
       // verified.
-      if (!unphdr.x5chain.has_value())
+      if (!uhdr.x5chain.has_value())
       {
         throw VerificationError(
           "Notary claim's unprotected header is missing an x5chain (label 33) "
@@ -290,7 +278,7 @@ namespace scitt::verifier
       PublicKey key;
       // Verify the chain of certs against the x509 root store.
       auto roots = x509_root_store(tx);
-      auto cert = verify_chain(roots, unphdr.x5chain.value());
+      auto cert = verify_chain(roots, uhdr.x5chain.value());
       key = PublicKey(cert, std::nullopt);
       return key;
     }
@@ -302,11 +290,11 @@ namespace scitt::verifier
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
     {
-      // Parse the protected header to identify the COSE message's profile.
       cose::ProtectedHeader phdr;
+      cose::UnprotectedHeader uhdr;
       try
       {
-        phdr = cose::decode_protected_header(data);
+        std::tie(phdr, uhdr) = cose::decode_headers(data);
       }
       catch (const cose::COSEDecodeError& e)
       {
@@ -319,12 +307,14 @@ namespace scitt::verifier
       {
         // Notary claim
         // Verify profile
-        key = process_notary_profile(data, phdr, tx, configuration);
+        key = process_notary_profile(uhdr, phdr, tx, configuration);
 
         // Verify signature.
         try
         {
-          cose::notary_verify(data, key);
+          // TODO: replace with cose::verify() once the t_cose workarounds are
+          // removed.
+          cose::notary_verify(data, phdr, key);
         }
         catch (const cose::COSESignatureValidationError& e)
         {

@@ -196,7 +196,7 @@ namespace scitt
         cose::ProtectedHeader phdr;
         try
         {
-          phdr = cose::decode_protected_header(*entry);
+          phdr = cose::decode_headers(*entry).first;
         }
         catch (const cose::COSEDecodeError& e)
         {
