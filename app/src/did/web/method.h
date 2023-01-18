@@ -7,9 +7,10 @@
 #include "did/resolver.h"
 #include "did/web/syntax.h"
 #include "kv_types.h"
+#include "tracing.h"
+#include "util.h"
 
 #include <algorithm>
-#include <ccf/crypto/entropy.h>
 #include <ccf/ds/hex.h>
 #include <ccf/node/host_processes_interface.h>
 #include <ccf/node_context.h>
@@ -20,8 +21,6 @@
 
 namespace scitt::did::web
 {
-  const static crypto::EntropyPtr entropy = crypto::create_entropy();
-
   class DidWebResolver : public MethodResolver
   {
   private:
@@ -67,7 +66,7 @@ namespace scitt::did::web
       check_did_is_did_web(did);
 
       auto now = current_time.tv_sec;
-      auto nonce = ds::to_hex(entropy->random(16));
+      auto nonce = ds::to_hex(ENTROPY->random(16));
       // add nonce to query param for cache busting
       // TODO validate if this is fine security-wise
       auto url = get_did_web_doc_url_from_did(did) + "?" + nonce;
@@ -98,7 +97,7 @@ namespace scitt::did::web
 
       auto callback = format_callback_url(did, tx);
 
-      CCF_APP_INFO("Triggering fetch of DID document for {}", did);
+      SCITT_INFO("Fetching DID document for {}", did);
       CCF_APP_DEBUG("DID fetch callback url: {}", callback);
       host_processes->trigger_host_process_launch(
         {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback});

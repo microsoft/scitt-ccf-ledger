@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "tracing.h"
+
 namespace scitt
 {
   struct HTTPError : public std::runtime_error
@@ -88,7 +90,10 @@ namespace scitt
       }
       catch (const HTTPError& e)
       {
-        CCF_APP_INFO("HTTPError: {}", e.what());
+        if (e.code == errors::InternalError)
+          SCITT_FAIL("Code={} {}", e.code, e.what());
+        else
+          SCITT_INFO("Code={}", e.code);
         ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
         for (const auto& [header_name, header_value] : e.headers)
         {
@@ -97,7 +102,7 @@ namespace scitt
       }
       catch (const std::exception& e)
       {
-        CCF_APP_FAIL("Unhandled exception in endpoint: {}", e.what());
+        SCITT_FAIL("Unhandled exception in endpoint: {}", e.what());
         throw;
       }
     };

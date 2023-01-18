@@ -64,6 +64,7 @@ class HttpSig(httpx.Auth):
 
 @dataclass
 class ServiceError(Exception):
+    headers: dict
     code: str
     message: str
 
@@ -268,7 +269,7 @@ class BaseClient:
 
         if not response.is_success:
             error = response.json()["error"]
-            raise ServiceError(error["code"], error["message"])
+            raise ServiceError(response.headers, error["code"], error["message"])
 
         if wait_for_confirmation:
             self.wait_for_confirmation(response.headers[CCF_TX_ID_HEADER])
