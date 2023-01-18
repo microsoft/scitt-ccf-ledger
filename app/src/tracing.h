@@ -44,9 +44,7 @@ namespace scitt
 
   std::string create_request_id()
   {
-    std::stringstream stream;
-    stream << std::hex << rand();
-    return stream.str();
+      return fmt::format("{:x}", rand());
   }
 
 #define SCITT_INFO(s, ...) \
