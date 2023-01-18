@@ -44,7 +44,7 @@ namespace scitt
 
   std::string create_request_id()
   {
-      return fmt::format("{:x}", rand());
+    return fmt::format("{:x}", rand());
   }
 
 #define SCITT_INFO(s, ...) \
@@ -69,9 +69,11 @@ namespace scitt
 
   template <typename Fn, typename Ctx>
   Fn generic_tracing_adapter(
-    Fn fn, const std::function<ccf::ApiResult(::timespec& time)>& get_time)
+    Fn fn,
+    const std::string& method,
+    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
-    return [fn, get_time](Ctx& ctx) {
+    return [fn, method, get_time](Ctx& ctx) {
       auto cleanup = finally(clear_trace_state);
 
       request_id = create_request_id();
@@ -100,27 +102,18 @@ namespace scitt
           "x-ms-client-request-id", client_request_id.value());
       }
 
-      // The user data is used to propagate the request IDs to the local commit callback
+      // The user data is used to propagate the request IDs to the local commit
+      // callback
       ctx.rpc_ctx->set_user_data(
         std::make_shared<AppData>(AppData{request_id, client_request_id}));
 
       auto query = ctx.rpc_ctx->get_request_query();
 
-      if (query.empty())
-      {
-        SCITT_INFO(
-          "Verb={} Path={}",
-          ctx.rpc_ctx->get_request_verb().c_str(),
-          ctx.rpc_ctx->get_request_path());
-      }
-      else
-      {
-        SCITT_INFO(
-          "Verb={} Path={} Query={}",
-          ctx.rpc_ctx->get_request_verb().c_str(),
-          ctx.rpc_ctx->get_request_path(),
-          ctx.rpc_ctx->get_request_query());
-      }
+      SCITT_INFO(
+        "Verb={} Path={} URL={}",
+        ctx.rpc_ctx->get_request_verb().c_str(),
+        method,
+        ctx.rpc_ctx->get_request_url());
 
       ::timespec start;
       ccf::ApiResult result = get_time(start);
@@ -150,25 +143,13 @@ namespace scitt
 
       auto duration_ms = diff_timespec_ms(start, end);
 
-      if (query.empty())
-      {
-        SCITT_INFO(
-          "Verb={} Path={} Status={} TimeMs={}",
-          ctx.rpc_ctx->get_request_verb().c_str(),
-          ctx.rpc_ctx->get_request_path(),
-          ctx.rpc_ctx->get_response_status(),
-          duration_ms);
-      }
-      else
-      {
-        SCITT_INFO(
-          "Verb={} Path={} Query={} Status={} TimeMs={}",
-          ctx.rpc_ctx->get_request_verb().c_str(),
-          ctx.rpc_ctx->get_request_path(),
-          ctx.rpc_ctx->get_request_query(),
-          ctx.rpc_ctx->get_response_status(),
-          duration_ms);
-      }
+      SCITT_INFO(
+        "Verb={} Path={} URL={} Status={} TimeMs={}",
+        ctx.rpc_ctx->get_request_verb().c_str(),
+        method,
+        ctx.rpc_ctx->get_request_url(),
+        ctx.rpc_ctx->get_response_status(),
+        duration_ms);
     };
   }
 
@@ -194,28 +175,31 @@ namespace scitt
    */
   ccf::endpoints::EndpointFunction tracing_adapter(
     ccf::endpoints::EndpointFunction fn,
+    const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return generic_tracing_adapter<
       ccf::endpoints::EndpointFunction,
-      ccf::endpoints::EndpointContext>(fn, get_time);
+      ccf::endpoints::EndpointContext>(fn, method, get_time);
   }
 
   ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
     ccf::endpoints::ReadOnlyEndpointFunction fn,
+    const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return generic_tracing_adapter<
       ccf::endpoints::ReadOnlyEndpointFunction,
-      ccf::endpoints::ReadOnlyEndpointContext>(fn, get_time);
+      ccf::endpoints::ReadOnlyEndpointContext>(fn, method, get_time);
   }
 
   ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
     ccf::endpoints::CommandEndpointFunction fn,
+    const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return generic_tracing_adapter<
       ccf::endpoints::CommandEndpointFunction,
-      ccf::endpoints::CommandEndpointContext>(fn, get_time);
+      ccf::endpoints::CommandEndpointContext>(fn, method, get_time);
   }
 }
