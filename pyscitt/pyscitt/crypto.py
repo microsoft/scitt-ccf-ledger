@@ -20,6 +20,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
+    EllipticCurve,
     EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
     EllipticCurvePublicNumbers,
@@ -102,7 +103,9 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
 def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
     if curve not in REGISTERED_EC_CURVES:
         raise NotImplementedError(f"Unsupported curve: {curve}")
-    priv = ec.generate_private_key(curve=REGISTERED_EC_CURVES[curve].curve_obj)
+    curve_obj = REGISTERED_EC_CURVES[curve].curve_obj
+    assert isinstance(curve_obj, EllipticCurve)
+    priv = ec.generate_private_key(curve=curve_obj)
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -745,6 +748,7 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
         x = int.from_bytes(base64.urlsafe_b64decode(jwk["x"]), "big")
         y = int.from_bytes(base64.urlsafe_b64decode(jwk["y"]), "big")
         crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj
+        assert isinstance(crv, EllipticCurve)
         key = EllipticCurvePublicNumbers(x, y, crv).public_key()
     else:
         raise NotImplementedError("Unsupported JWK type")

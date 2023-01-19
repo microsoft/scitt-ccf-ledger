@@ -10,11 +10,11 @@ from typing import Any, Dict, Optional, Union
 
 import cbor2
 import pycose
-from pycose.keys.rsa import RSAKey
-from pycose.keys.ec2 import EC2Key
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.x509 import load_pem_x509_certificate
+from pycose.keys.ec2 import EC2Key
+from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
