@@ -303,77 +303,79 @@ namespace scitt::verifier
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(data);
+
+        // Validate_profile and retrieve key.
+        PublicKey key;
+        if (phdr.notary_signing_scheme.has_value())
+        {
+          // Notary claim
+          // Verify profile
+          key = process_notary_profile(uhdr, phdr, tx, configuration);
+
+          // Verify signature.
+          try
+          {
+            // TODO: replace with cose::verify() once the t_cose workarounds are
+            // removed.
+            cose::notary_verify(data, phdr, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::Notary;
+        }
+        else if (phdr.issuer.has_value())
+        {
+          // IETF SCITT claim
+          key = process_ietf_profile(
+            phdr, tx, current_time, resolution_cache_expiry, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::IETF;
+        }
+        else if (phdr.x5chain.has_value())
+        {
+          // X.509 SCITT claim
+          key = process_x509_profile(phdr, tx, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::X509;
+        }
+        else if (phdr.profile.has_value())
+        {
+          SCITT_INFO(
+            "Unknown COSE profile in protected header: {}",
+            phdr.profile.value());
+          throw cose::COSEDecodeError(
+            "Unknown COSE profile in protected header");
+        }
+        else
+        {
+          SCITT_INFO("Unknown COSE profile");
+          throw cose::COSEDecodeError("Unknown COSE profile");
+        }
       }
       catch (const cose::COSEDecodeError& e)
       {
         throw VerificationError(e.what());
-      }
-
-      // Validate_profile and retrieve key.
-      PublicKey key;
-      if (phdr.notary_signing_scheme.has_value())
-      {
-        // Notary claim
-        // Verify profile
-        key = process_notary_profile(uhdr, phdr, tx, configuration);
-
-        // Verify signature.
-        try
-        {
-          // TODO: replace with cose::verify() once the t_cose workarounds are
-          // removed.
-          cose::notary_verify(data, phdr, key);
-        }
-        catch (const cose::COSESignatureValidationError& e)
-        {
-          throw VerificationError(e.what());
-        }
-
-        return ClaimProfile::Notary;
-      }
-      else if (phdr.issuer.has_value())
-      {
-        // IETF SCITT claim
-        key = process_ietf_profile(
-          phdr, tx, current_time, resolution_cache_expiry, configuration);
-
-        try
-        {
-          cose::verify(data, key);
-        }
-        catch (const cose::COSESignatureValidationError& e)
-        {
-          throw VerificationError(e.what());
-        }
-
-        return ClaimProfile::IETF;
-      }
-      else if (phdr.x5chain.has_value())
-      {
-        // X.509 SCITT claim
-        key = process_x509_profile(phdr, tx, configuration);
-
-        try
-        {
-          cose::verify(data, key);
-        }
-        catch (const cose::COSESignatureValidationError& e)
-        {
-          throw VerificationError(e.what());
-        }
-
-        return ClaimProfile::X509;
-      }
-      else if (phdr.profile.has_value())
-      {
-        SCITT_INFO(
-          "Unknown COSE profile in protected header: {}", phdr.profile.value());
-        throw cose::COSEDecodeError("Unknown COSE profile in protected header");
-      }
-      else
-      {
-        SCITT_INFO("Unknown COSE profile");
-        throw cose::COSEDecodeError("Unknown COSE profile");
       }
     }
 
