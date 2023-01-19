@@ -139,7 +139,7 @@ def test_consistent_kid(client, did_web, trust_store):
 
     # Submit the claim and verify the resulting receipt.
     receipt = client.submit_claim(claim).receipt
-    verify_receipt(claims, trust_store, receipt)
+    verify_receipt(claim, trust_store, receipt)
 
     # Check that the resolved DID document contains the expected assertion
     # method id.
