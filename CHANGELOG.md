@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Add support for Notary COSE profile (#73). Note that this is currently experimental and not supported by the IETF specifications that are being developed.
 - Add support for `x-ms-request-id`/`x-ms-client-request-id` correlation headers (#79). All log messages originating from the app include the request id and, if available, the client request id. Note that support for W3C Trace Context headers may be added in the future.
 - Emit log messages for each request (#79).
+- Add `GET /scitt/did.json` endpoint that returns a DID document of the service in support of resolvable service identifiers in receipts (#68). Note that this is still experimental and will likely change. For now, only the current service identity key is included in the DID document, which means that receipts issued with old identities cannot be validated yet.
 - Add option in `pyscitt` to sign governance proposals using Azure Key Vault (#54).
 
 ### Changed
