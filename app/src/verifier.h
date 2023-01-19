@@ -6,6 +6,7 @@
 #include "cose.h"
 #include "did/resolver.h"
 #include "openssl_wrappers.h"
+#include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
 
@@ -289,7 +290,7 @@ namespace scitt::verifier
       return key;
     }
 
-    void verify_claim(
+    ClaimProfile verify_claim(
       const std::vector<uint8_t>& data,
       kv::Tx& tx,
       ::timespec current_time,
@@ -326,6 +327,8 @@ namespace scitt::verifier
         {
           throw VerificationError(e.what());
         }
+
+        return ClaimProfile::Notary;
       }
       else if (phdr.issuer.has_value())
       {
@@ -341,6 +344,8 @@ namespace scitt::verifier
         {
           throw VerificationError(e.what());
         }
+
+        return ClaimProfile::IETF;
       }
       else if (phdr.x5chain.has_value())
       {
@@ -355,6 +360,8 @@ namespace scitt::verifier
         {
           throw VerificationError(e.what());
         }
+
+        return ClaimProfile::X509;
       }
       else if (phdr.profile.has_value())
       {

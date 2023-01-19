@@ -220,9 +220,10 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
+        ClaimProfile claim_profile;
         try
         {
-          verifier->verify_claim(
+          claim_profile = verifier->verify_claim(
             body, ctx.tx, time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
         }
         catch (const did::DIDMethodNotSupportedError& e)
@@ -288,8 +289,8 @@ namespace scitt
 
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
 
-        // TODO log CoseProfile
-        SCITT_INFO("ClaimSizeKb={}", body.size() / 1024);
+        SCITT_INFO(
+          "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
       };
 
       make_endpoint(post_entry_path, HTTP_POST, post_entry, authn_policy)
