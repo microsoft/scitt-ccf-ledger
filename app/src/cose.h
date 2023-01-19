@@ -497,17 +497,6 @@ namespace scitt::cose
   }
 
   // Temporarily needed for notary_verify().
-  static unsigned ecdsa_key_size(EVP_PKEY* key_evp)
-  {
-    int key_len_bits;
-    unsigned key_len_bytes;
-
-    key_len_bits = EVP_PKEY_bits(key_evp);
-
-    return (key_len_bits + 7) / 8;
-  }
-
-  // Temporarily needed for notary_verify().
   std::vector<uint8_t> create_sign1_tbs(
     int cose_size,
     std::span<const uint8_t> protected_header,
