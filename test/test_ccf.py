@@ -160,8 +160,15 @@ def test_submit_claim_notary_x509(
     msg.key = crypto.cose_private_key_from_pem(identity.private_key)
     claim = msg.encode(tag=True)
 
-    receipt = client.submit_claim(claim).receipt
-    verify_receipt(claim, trust_store, receipt)
+    submission = client.submit_claim(claim)
+    verify_receipt(claim, trust_store, submission.receipt)
+
+    # Embedding the receipt requires re-encoding the unprotected header.
+    # Notary has x5chain in the unprotected header.
+    # This checks whether x5chain is preserved after re-encoding by simply
+    # submitting the claim again.
+    claim_with_receipt = client.get_claim(submission.tx, embed_receipt=True)
+    client.submit_claim(claim_with_receipt)
 
 
 def test_default_did_port(client: Client, trust_store, tmp_path):

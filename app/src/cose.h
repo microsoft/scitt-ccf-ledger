@@ -798,35 +798,15 @@ namespace scitt::cose
     // The following code is a low-level workaround.
 
     // Extract fields from the COSE_Sign1 message.
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+    auto [protected_header, payload, signature] =
+      extract_sign1_fields(cose_sign1);
 
-    QCBORDecode_EnterArray(&ctx, nullptr);
-
-    QCBORItem item;
-
-    // protected header
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto protected_header = item.val.string;
-
-    // skip unprotected header (we'll create a new one)
-    QCBORDecode_VGetNextConsume(&ctx, &item);
-
-    // payload
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto payload = item.val.string;
-
-    // signature
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto signature = item.val.string;
-
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
-    }
+    // Decode unprotected header.
+    // TODO: This is a temporary solution to carry over Notary's x5chain
+    // parameter. Ideally, the full unprotected header should be preserved
+    // but that is more tricky to do in QCBOR.
+    UnprotectedHeader uhdr = std::get<1>(cose::decode_headers(cose_sign1));
+    auto x5chain = uhdr.x5chain;
 
     // Serialize COSE_Sign1 with new unprotected header.
     cbor::encoder encoder;
@@ -835,18 +815,27 @@ namespace scitt::cose
 
     QCBOREncode_OpenArray(encoder);
 
-    QCBOREncode_AddBytes(encoder, protected_header);
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(protected_header));
 
     // unprotected header
-    // FIXME keep existing unprotected header
     QCBOREncode_OpenMap(encoder);
     QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_SCITT_RECEIPTS);
     QCBOREncode_AddEncoded(encoder, cbor::from_bytes(receipt));
     QCBOREncode_CloseArray(encoder);
+    if (x5chain.has_value())
+    {
+      QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_X5CHAIN);
+      auto certs = x5chain.value();
+      for (auto& cert : certs)
+      {
+        QCBOREncode_AddBytes(encoder, cbor::from_bytes(cert));
+      }
+      QCBOREncode_CloseArray(encoder);
+    }
     QCBOREncode_CloseMap(encoder);
 
-    QCBOREncode_AddBytes(encoder, payload);
-    QCBOREncode_AddBytes(encoder, signature);
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(payload));
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(signature));
 
     QCBOREncode_CloseArray(encoder);
 
