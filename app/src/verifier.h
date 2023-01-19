@@ -9,6 +9,7 @@
 #include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
+#include "tracing.h"
 
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
