@@ -13,6 +13,8 @@ import pycose
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from cryptography.x509 import load_pem_x509_certificate
+from pycose.keys.ec2 import EC2Key
+from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
@@ -71,6 +73,7 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
     cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
     key = cert.public_key()
 
+    cose_key: Union[EC2Key, RSAKey]
     if isinstance(key, RSAPublicKey):
         cose_key = crypto.from_cryptography_rsakey_obj(key)
     elif isinstance(key, EllipticCurvePublicKey):

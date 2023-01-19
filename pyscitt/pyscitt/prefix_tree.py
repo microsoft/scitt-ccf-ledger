@@ -110,8 +110,9 @@ class ReadReceipt:
         self, claim: Union[Sign1Message, bytes], service_params: ServiceParameters
     ):
         if isinstance(claim, bytes):
-            claim = CoseMessage.decode(claim)
-        assert isinstance(claim, Sign1Message)
+            claim_ = CoseMessage.decode(claim)
+            assert isinstance(claim_, Sign1Message)
+            claim = claim_
 
         tbs = self.tree_tbs(claim)
         self.tree_receipt.verify(tbs, service_params)

@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "did/resolver.h"
 #include "did/web/syntax.h"
+#include "generated/constants.h"
 #include "openenclave.h"
 #include "util.h"
 

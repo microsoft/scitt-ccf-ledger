@@ -17,7 +17,8 @@ setup(
         "cryptography==38.*",  # needs to match ccf
         "httpx",
         "cbor2",
-        "pycose>=1.0.1",
+        # TODO: remove this once pycose >= 1.0.2 is released
+        "pycose @ git+https://github.com/TimothyClaeys/pycose@94db358eda640966c0e0e9148110b6c66763f9e5#egg=pycose",
         "pyjwt",
         "azure-keyvault",
         "azure-identity",

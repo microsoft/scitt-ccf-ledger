@@ -20,6 +20,7 @@
 #include <optional>
 #include <qcbor/qcbor.h>
 #include <qcbor/qcbor_spiffy_decode.h>
+#include <span>
 #include <string>
 #include <t_cose/t_cose_sign1_verify.h>
 #include <vector>
@@ -27,14 +28,30 @@
 namespace scitt::cose
 {
   static constexpr int64_t COSE_HEADER_PARAM_ALG = 1;
+  static constexpr int64_t COSE_HEADER_PARAM_CRIT = 2;
   static constexpr int64_t COSE_HEADER_PARAM_CTY = 3;
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
+
+  // Temporary made up profile label, we don't expect claims to contain a
+  // profile header parameter yet, but it's useful to have a label so we can
+  // easily act on the absence of a profile.
+  static constexpr int64_t COSE_HEADER_PARAM_PROFILE = 6861;
 
   // Temporary assignments from draft-birkholz-scitt-architecture
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
+
+  // Notary header parameters.
+  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_SCHEME =
+    "io.cncf.notary.signingScheme";
+  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_TIME =
+    "io.cncf.notary.signingTime";
+  static constexpr const char* NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME =
+    "io.cncf.notary.authenticSigningTime";
+  static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
+    "io.cncf.notary.expiry";
 
   struct COSEDecodeError : public std::runtime_error
   {
@@ -43,18 +60,103 @@ namespace scitt::cose
 
   struct ProtectedHeader
   {
+    // All headers are optional here but optionality will later be validated
+    // according to the COSE profile of the claim.
+    std::optional<std::string> profile;
+
+    // Vanilla SCITT protected header parameters
     // Issuer is used when verifying with did:web
     // x5chain is used when verification is done with the x509 certificate chain
-    int64_t alg;
+    std::optional<int64_t> alg;
+    std::optional<std::vector<std::variant<int64_t, std::string>>> crit;
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
-    std::string cty;
+    std::optional<std::string> cty;
+    std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+
+    // Extra Notary protected header parameters.
+    std::optional<std::string> notary_signing_scheme;
+    std::optional<int64_t> notary_signing_time;
+    std::optional<int64_t> notary_authentic_signing_time;
+    std::optional<int64_t> notary_expiry;
+
+    bool is_critical(const std::variant<int64_t, std::string>& label) const
+    {
+      if (!crit.has_value())
+      {
+        return false;
+      }
+      for (const auto& crit_label : crit.value())
+      {
+        if (crit_label == label)
+        {
+          return true;
+        }
+      }
+      return false;
+    }
+  };
+
+  struct UnprotectedHeader
+  {
+    // We currently expect only notary to use the unprotected header and
+    // we expect to find only the x5chain in there.
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
   };
 
-  ProtectedHeader decode_protected_header(
-    const std::vector<uint8_t>& cose_sign1)
+  std::vector<std::vector<uint8_t>> decode_x5chain(
+    QCBORDecodeContext& ctx, const QCBORItem& x5chain)
+  {
+    std::vector<std::vector<uint8_t>> parsed;
+
+    if (x5chain.uDataType == QCBOR_TYPE_ARRAY)
+    {
+      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
+      while (true)
+      {
+        QCBORItem item;
+        auto result = QCBORDecode_GetNext(&ctx, &item);
+        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        {
+          break;
+        }
+        if (result != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError("Item in x5chain is not well-formed.");
+        }
+        if (item.uDataType == QCBOR_TYPE_BYTE_STRING)
+        {
+          parsed.push_back(cbor::as_vector(item.val.string));
+        }
+        else
+        {
+          throw COSEDecodeError(
+            "Next item in x5chain was not of type byte string.");
+        }
+      }
+      QCBORDecode_ExitArray(&ctx);
+      if (parsed.empty())
+      {
+        throw COSEDecodeError("x5chain array length was 0 in COSE header.");
+      }
+    }
+    else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
+    {
+      parsed.push_back(cbor::as_vector(x5chain.val.string));
+    }
+    else
+    {
+      CCF_APP_FAIL("Type: {}", x5chain.uDataType);
+      throw COSEDecodeError(
+        "Value type of x5chain in COSE header is not array or byte "
+        "string.");
+    }
+
+    return parsed;
+  }
+
+  ProtectedHeader decode_protected_header(QCBORDecodeContext& ctx)
   {
     ProtectedHeader parsed;
 
@@ -63,23 +165,6 @@ namespace scitt::cose
 
     QCBORError qcbor_result;
 
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
-
-    QCBORDecode_EnterArray(&ctx, nullptr);
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
-    {
-      throw COSEDecodeError("Failed to parse COSE_Sign1 outer array");
-    }
-
-    uint64_t tag = QCBORDecode_GetNthTagOfLast(&ctx, 0);
-    if (tag != CBOR_TAG_COSE_SIGN1)
-    {
-      throw COSEDecodeError("COSE_Sign1 is not tagged");
-    }
-
     struct q_useful_buf_c protected_parameters;
     QCBORDecode_EnterBstrWrapped(
       &ctx, QCBOR_TAG_REQUIREMENT_NOT_A_TAG, &protected_parameters);
@@ -87,19 +172,33 @@ namespace scitt::cose
 
     enum
     {
+      PROFILE_INDEX,
       ALG_INDEX,
+      CRIT_INDEX,
       ISSUER_INDEX,
       FEED_INDEX,
       KID_INDEX,
       CTY_INDEX,
       X5CHAIN_INDEX,
+      NOTARY_SIGNING_SCHEME_INDEX,
+      NOTARY_SIGNING_TIME_INDEX,
+      NOTARY_AUTHENTIC_SIGNING_TIME_INDEX,
+      NOTARY_EXPIRY_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
 
+    header_items[PROFILE_INDEX].label.int64 = COSE_HEADER_PARAM_PROFILE;
+    header_items[PROFILE_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[PROFILE_INDEX].uDataType = QCBOR_TYPE_INT64;
+
     header_items[ALG_INDEX].label.int64 = COSE_HEADER_PARAM_ALG;
     header_items[ALG_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[ALG_INDEX].uDataType = QCBOR_TYPE_INT64;
+
+    header_items[CRIT_INDEX].label.int64 = COSE_HEADER_PARAM_CRIT;
+    header_items[CRIT_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[CRIT_INDEX].uDataType = QCBOR_TYPE_ARRAY;
 
     header_items[ISSUER_INDEX].label.int64 = COSE_HEADER_PARAM_ISSUER;
     header_items[ISSUER_INDEX].uLabelType = QCBOR_TYPE_INT64;
@@ -121,6 +220,30 @@ namespace scitt::cose
     header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
 
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_SCHEME);
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].uLabelType =
+      QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType =
+      QCBOR_TYPE_TEXT_STRING;
+
+    header_items[NOTARY_SIGNING_TIME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_TIME);
+    header_items[NOTARY_SIGNING_TIME_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_SIGNING_TIME_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME);
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uLabelType =
+      QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType =
+      QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[NOTARY_EXPIRY_INDEX].label.string =
+      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_EXPIRY);
+    header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     QCBORDecode_GetItemsInMap(&ctx, header_items);
@@ -128,76 +251,186 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError("Failed to decode protected header");
+      throw COSEDecodeError(
+        fmt::format("Failed to decode protected header: {}", qcbor_result));
     }
 
-    if (header_items[ALG_INDEX].uDataType == QCBOR_TYPE_NONE)
+    if (header_items[PROFILE_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      throw COSEDecodeError("Missing algorithm in protected header");
+      parsed.profile = cbor::as_string(header_items[PROFILE_INDEX].val.string);
     }
-    if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+    if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.kid = cbor::as_string(header_items[KID_INDEX].val.string);
+      parsed.alg = header_items[ALG_INDEX].val.int64;
     }
     if (header_items[ISSUER_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.issuer = cbor::as_string(header_items[ISSUER_INDEX].val.string);
     }
+    if (header_items[CRIT_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.crit = std::vector<std::variant<int64_t, std::string>>();
+      QCBORItem critItem = header_items[CRIT_INDEX];
+      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_CRIT);
+      while (true)
+      {
+        auto result = QCBORDecode_GetNext(&ctx, &critItem);
+        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        {
+          break;
+        }
+        if (result != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError("Item in crit is not well-formed.");
+        }
+        if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
+        {
+          parsed.crit->push_back(
+            std::string(cbor::as_string(critItem.val.string)));
+        }
+        else if (critItem.uDataType == QCBOR_TYPE_INT64)
+        {
+          parsed.crit->push_back(critItem.val.int64);
+        }
+        else
+        {
+          throw COSEDecodeError(
+            "Next item in crit was not of type text string or "
+            "int64.");
+        }
+      }
+      QCBORDecode_ExitArray(&ctx);
+      if (parsed.crit->empty())
+      {
+        throw COSEDecodeError(
+          "Cannot have crit array of length 0 in COSE protected header.");
+      }
+    }
+    if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.kid = cbor::as_string(header_items[KID_INDEX].val.string);
+    }
     if (header_items[FEED_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.feed = cbor::as_string(header_items[FEED_INDEX].val.string);
     }
-    if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_NONE)
+    if (header_items[CTY_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      throw COSEDecodeError("Missing cty in protected header");
+      parsed.cty = cbor::as_string(header_items[CTY_INDEX].val.string);
     }
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
-      parsed.x5chain = std::vector<std::vector<uint8_t>>();
-      QCBORItem chainItem = header_items[X5CHAIN_INDEX];
-      if (chainItem.uDataType == QCBOR_TYPE_ARRAY)
-      {
-        int lenOfArray = chainItem.val.uCount;
-        if (lenOfArray == 0)
-        {
-          throw COSEDecodeError(
-            "x5chain array length was 0 in cose protected header.");
-        }
-        QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
-        for (int i = 0; i < lenOfArray; i++)
-        {
-          QCBORDecode_GetNext(&ctx, &chainItem);
-          if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-          {
-            parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-          }
-          else
-          {
-            throw COSEDecodeError(
-              "Next item in chain was not of type qcbor byte string.");
-          }
-        }
-        QCBORDecode_ExitArray(&ctx);
-      }
-      else if (chainItem.uDataType == QCBOR_TYPE_BYTE_STRING)
-      {
-        parsed.x5chain->push_back(cbor::as_vector(chainItem.val.string));
-      }
-      else
-      {
-        throw COSEDecodeError(
-          "Value type of x5chain in protected header is not array or byte "
-          "string.");
-      }
+      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
     }
-
-    parsed.alg = header_items[ALG_INDEX].val.int64;
-    parsed.cty = cbor::as_string(header_items[CTY_INDEX].val.string);
+    // Extra Notary header parameters.
+    if (header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_signing_scheme =
+        cbor::as_string(header_items[NOTARY_SIGNING_SCHEME_INDEX].val.string);
+    }
+    if (header_items[NOTARY_SIGNING_TIME_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_signing_time =
+        header_items[NOTARY_SIGNING_TIME_INDEX].val.epochDate.nSeconds;
+    }
+    if (
+      header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType !=
+      QCBOR_TYPE_NONE)
+    {
+      parsed.notary_authentic_signing_time =
+        header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX]
+          .val.epochDate.nSeconds;
+    }
+    if (header_items[NOTARY_EXPIRY_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.notary_expiry =
+        header_items[NOTARY_EXPIRY_INDEX].val.epochDate.nSeconds;
+    }
 
     QCBORDecode_ExitMap(&ctx);
     QCBORDecode_ExitBstrWrapped(&ctx);
 
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError(
+        fmt::format("Failed to decode protected header: {}", qcbor_result));
+    }
+
     return parsed;
+  }
+
+  UnprotectedHeader decode_unprotected_header(QCBORDecodeContext& ctx)
+  {
+    UnprotectedHeader parsed;
+    // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
+    // t_cose doesn't support custom header parameters yet.
+
+    QCBORError qcbor_result;
+
+    QCBORDecode_EnterMap(&ctx, NULL);
+
+    enum
+    {
+      X5CHAIN_INDEX,
+      END_INDEX,
+    };
+    QCBORItem header_items[END_INDEX + 1];
+    header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
+    header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
+    header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
+
+    QCBORDecode_GetItemsInMap(&ctx, header_items);
+
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError(
+        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
+    }
+    if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
+    }
+    QCBORDecode_ExitMap(&ctx);
+
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError(
+        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
+    }
+
+    return parsed;
+  }
+
+  std::tuple<ProtectedHeader, UnprotectedHeader> decode_headers(
+    const std::vector<uint8_t>& cose_sign1)
+  {
+    QCBORError qcbor_result;
+
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(
+      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&ctx, nullptr);
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError("Failed to parse COSE_Sign1 outer array");
+    }
+
+    uint64_t tag = QCBORDecode_GetNthTagOfLast(&ctx, 0);
+    if (tag != CBOR_TAG_COSE_SIGN1)
+    {
+      throw COSEDecodeError("COSE_Sign1 is not tagged");
+    }
+
+    auto phdr = decode_protected_header(ctx);
+    auto uhdr = decode_unprotected_header(ctx);
+
+    return std::make_tuple(phdr, uhdr);
   }
 
   struct COSESignatureValidationError : public std::runtime_error
@@ -206,6 +439,243 @@ namespace scitt::cose
       std::runtime_error(msg)
     {}
   };
+
+  // Temporarily needed for notary_verify().
+  bool is_ecdsa_alg(int64_t cose_alg)
+  {
+    return cose_alg == T_COSE_ALGORITHM_ES256 ||
+      cose_alg == T_COSE_ALGORITHM_ES384 || cose_alg == T_COSE_ALGORITHM_ES512;
+  }
+
+  // Temporarily needed for notary_verify().
+  bool is_rsa_pss_alg(int64_t cose_alg)
+  {
+    return cose_alg == T_COSE_ALGORITHM_PS256 ||
+      cose_alg == T_COSE_ALGORITHM_PS384 || cose_alg == T_COSE_ALGORITHM_PS512;
+  }
+
+  // Temporarily needed for notary_verify().
+  crypto::MDType get_md_type(int64_t cose_alg)
+  {
+    switch (cose_alg)
+    {
+      case T_COSE_ALGORITHM_ES256:
+      case T_COSE_ALGORITHM_PS256:
+        return crypto::MDType::SHA256;
+      case T_COSE_ALGORITHM_ES384:
+      case T_COSE_ALGORITHM_PS384:
+        return crypto::MDType::SHA384;
+      case T_COSE_ALGORITHM_ES512:
+      case T_COSE_ALGORITHM_PS512:
+        return crypto::MDType::SHA512;
+      case T_COSE_ALGORITHM_EDDSA:
+        return crypto::MDType::NONE;
+      default:
+        throw std::runtime_error("Unsupported COSE algorithm");
+    }
+  }
+
+  // Temporarily needed for notary_verify().
+  const EVP_MD* get_openssl_md_type(crypto::MDType type)
+  {
+    switch (type)
+    {
+      case crypto::MDType::NONE:
+        return nullptr;
+      case crypto::MDType::SHA1:
+        return EVP_sha1();
+      case crypto::MDType::SHA256:
+        return EVP_sha256();
+      case crypto::MDType::SHA384:
+        return EVP_sha384();
+      case crypto::MDType::SHA512:
+        return EVP_sha512();
+      default:
+        throw std::runtime_error("Unsupported hash algorithm");
+    }
+    return nullptr;
+  }
+
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> create_sign1_tbs(
+    int cose_size,
+    std::span<const uint8_t> protected_header,
+    std::span<const uint8_t> payload)
+  {
+    // Note: This function does not return the hash of the TBS because
+    // EdDSA does not support pre-hashed messages as input.
+
+    // Sig_structure = [
+    //     context: "Signature1",
+    //     body_protected: empty_or_serialized_map,
+    //     external_aad: bstr,
+    //     payload: bstr
+    // ]
+
+    cbor::encoder ctx(cose_size + 1024);
+    QCBOREncode_OpenArray(ctx);
+
+    // context
+    QCBOREncode_AddSZString(ctx, "Signature1");
+
+    // body_protected: The protected header of the message.
+    QCBOREncode_AddBytes(ctx, cbor::from_bytes(protected_header));
+
+    // external_aad: always empty.
+    QCBOREncode_AddBytes(ctx, NULLUsefulBufC);
+
+    // payload: The payload of the message.
+    QCBOREncode_AddBytes(ctx, cbor::from_bytes(payload));
+
+    QCBOREncode_CloseArray(ctx);
+
+    return ctx.finish();
+  }
+
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> ecdsa_sig_from_r_s(
+    const uint8_t* r,
+    size_t r_size,
+    const uint8_t* s,
+    size_t s_size,
+    bool big_endian = true)
+  {
+    OpenSSL::Unique_BIGNUM r_bn;
+    OpenSSL::Unique_BIGNUM s_bn;
+    if (big_endian)
+    {
+      OpenSSL::CHECKNULL(BN_bin2bn(r, r_size, r_bn));
+      OpenSSL::CHECKNULL(BN_bin2bn(s, s_size, s_bn));
+    }
+    else
+    {
+      OpenSSL::CHECKNULL(BN_lebin2bn(r, r_size, r_bn));
+      OpenSSL::CHECKNULL(BN_lebin2bn(s, s_size, s_bn));
+    }
+    OpenSSL::Unique_ECDSA_SIG sig;
+    OpenSSL::CHECK1(ECDSA_SIG_set0(sig, r_bn, s_bn));
+    // Ignore previous pointers, as they're now managed by ECDSA_SIG_set0
+    // https://www.openssl.org/docs/man1.1.1/man3/ECDSA_SIG_get0.html
+    (void)r_bn.release();
+    (void)s_bn.release();
+    auto der_size = i2d_ECDSA_SIG(sig, nullptr);
+    OpenSSL::CHECK0(der_size);
+    std::vector<uint8_t> der_sig(der_size);
+    auto der_sig_buf = der_sig.data();
+    OpenSSL::CHECK0(i2d_ECDSA_SIG(sig, &der_sig_buf));
+    return der_sig;
+  }
+
+  // Temporarily needed for notary_verify().
+  std::vector<uint8_t> ecdsa_sig_p1363_to_der(
+    std::span<const uint8_t> signature)
+  {
+    auto half_size = signature.size() / 2;
+    return ecdsa_sig_from_r_s(
+      signature.data(), half_size, signature.data() + half_size, half_size);
+  }
+
+  /**
+   * Extract the bstr fields from a COSE Sign1.
+   *
+   * Returns an array containing the protected headers, the payload and the
+   * signature.
+   */
+  inline std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
+    std::span<const uint8_t> cose_sign1)
+  {
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(
+      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&ctx, nullptr);
+
+    QCBORItem item;
+
+    // protected headers
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto phdrs = cbor::as_span(item.val.string);
+
+    // skip unprotected header
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // payload
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto payload = cbor::as_span(item.val.string);
+
+    // signature
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto signature = cbor::as_span(item.val.string);
+
+    QCBORDecode_ExitArray(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
+
+    return {phdrs, payload, signature};
+  }
+
+  // Temporarily needed for notary_verify().
+  /**
+   * Verify the signature of a Notary COSE Sign1 message using the given public
+   * key.
+   *
+   * Beyond the basic verification of key usage and the signature
+   * itself, no particular validation of the message is done.
+   *
+   * This function is a temporary workaround until t_cose supports custom header
+   * parameters in the crit parameter list.
+   */
+  void notary_verify(
+    const std::vector<uint8_t>& cose_sign1,
+    const ProtectedHeader& phdr,
+    const PublicKey& key)
+  {
+    auto header_alg = phdr.alg.value();
+    auto key_alg = key.get_cose_alg();
+    if (key_alg.has_value() && header_alg != key_alg.value())
+    {
+      throw COSESignatureValidationError(
+        "Algorithm mismatch between protected header and public key");
+    }
+
+    auto [protected_header, payload, signature] =
+      extract_sign1_fields(cose_sign1);
+
+    auto md_type = get_md_type(header_alg);
+    auto ossl_md_type = get_openssl_md_type(md_type);
+    auto tbs = create_sign1_tbs(cose_sign1.size(), protected_header, payload);
+
+    std::vector<uint8_t> signature_tmp;
+    if (is_ecdsa_alg(header_alg))
+    {
+      signature_tmp = ecdsa_sig_p1363_to_der(signature);
+      signature = signature_tmp;
+    }
+
+    OpenSSL::Unique_EVP_MD_CTX md_ctx;
+    EVP_MD_CTX_init(md_ctx);
+    EVP_PKEY_CTX* pctx;
+    OpenSSL::CHECK1(EVP_DigestVerifyInit(
+      md_ctx, &pctx, ossl_md_type, nullptr, key.get_evp_pkey()));
+    if (is_rsa_pss_alg(header_alg))
+    {
+      OpenSSL::CHECK1(
+        EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING));
+    }
+
+    auto valid =
+      EVP_DigestVerify(
+        md_ctx, signature.data(), signature.size(), tbs.data(), tbs.size()) ==
+      1;
+
+    if (!valid)
+    {
+      throw COSESignatureValidationError("Signature verification failed");
+    }
+  }
 
   /**
    * Verify the signature of a COSE Sign1 message using the given public key.
@@ -265,48 +735,6 @@ namespace scitt::cose
   }
 
   /**
-   * Extract the bstr fields from a COSE Sign1.
-   *
-   * Returns an array containing the protected headers, the payload and the
-   * signature.
-   */
-  inline std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
-    std::span<const uint8_t> cose_sign1)
-  {
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
-
-    QCBORDecode_EnterArray(&ctx, nullptr);
-
-    QCBORItem item;
-
-    // protected headers
-    QCBORDecode_GetNext(&ctx, &item);
-    auto phdrs = cbor::as_span(item.val.string);
-
-    // skip unprotected header
-    QCBORDecode_VGetNextConsume(&ctx, &item);
-
-    // payload
-    QCBORDecode_GetNext(&ctx, &item);
-    auto payload = cbor::as_span(item.val.string);
-
-    // signature
-    QCBORDecode_GetNext(&ctx, &item);
-    auto signature = cbor::as_span(item.val.string);
-
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
-    }
-
-    return {phdrs, payload, signature};
-  }
-
-  /**
    * Compute the digest of the TBS for a countersignature over a COSE Sign1.
    *
    *  The following structure is hashed incrementally to avoid
@@ -359,35 +787,15 @@ namespace scitt::cose
     // The following code is a low-level workaround.
 
     // Extract fields from the COSE_Sign1 message.
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+    auto [protected_header, payload, signature] =
+      extract_sign1_fields(cose_sign1);
 
-    QCBORDecode_EnterArray(&ctx, nullptr);
-
-    QCBORItem item;
-
-    // protected header
-    QCBORDecode_GetNext(&ctx, &item);
-    auto protected_header = item.val.string;
-
-    // skip unprotected header (we'll create a new one)
-    QCBORDecode_VGetNextConsume(&ctx, &item);
-
-    // payload
-    QCBORDecode_GetNext(&ctx, &item);
-    auto payload = item.val.string;
-
-    // signature
-    QCBORDecode_GetNext(&ctx, &item);
-    auto signature = item.val.string;
-
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
-    }
+    // Decode unprotected header.
+    // TODO: This is a temporary solution to carry over Notary's x5chain
+    // parameter. Ideally, the full unprotected header should be preserved
+    // but that is more tricky to do in QCBOR.
+    UnprotectedHeader uhdr = std::get<1>(cose::decode_headers(cose_sign1));
+    auto x5chain = uhdr.x5chain;
 
     // Serialize COSE_Sign1 with new unprotected header.
     cbor::encoder encoder;
@@ -396,17 +804,27 @@ namespace scitt::cose
 
     QCBOREncode_OpenArray(encoder);
 
-    QCBOREncode_AddBytes(encoder, protected_header);
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(protected_header));
 
     // unprotected header
     QCBOREncode_OpenMap(encoder);
     QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_SCITT_RECEIPTS);
     QCBOREncode_AddEncoded(encoder, cbor::from_bytes(receipt));
     QCBOREncode_CloseArray(encoder);
+    if (x5chain.has_value())
+    {
+      QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_X5CHAIN);
+      auto certs = x5chain.value();
+      for (auto& cert : certs)
+      {
+        QCBOREncode_AddBytes(encoder, cbor::from_bytes(cert));
+      }
+      QCBOREncode_CloseArray(encoder);
+    }
     QCBOREncode_CloseMap(encoder);
 
-    QCBOREncode_AddBytes(encoder, payload);
-    QCBOREncode_AddBytes(encoder, signature);
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(payload));
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(signature));
 
     QCBOREncode_CloseArray(encoder);
 

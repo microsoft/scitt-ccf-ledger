@@ -20,6 +20,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
+    EllipticCurve,
     EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
     EllipticCurvePublicNumbers,
@@ -102,7 +103,9 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
 def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
     if curve not in REGISTERED_EC_CURVES:
         raise NotImplementedError(f"Unsupported curve: {curve}")
-    priv = ec.generate_private_key(curve=REGISTERED_EC_CURVES[curve].curve_obj)
+    curve_obj = REGISTERED_EC_CURVES[curve].curve_obj
+    assert isinstance(curve_obj, EllipticCurve)
+    priv = ec.generate_private_key(curve=curve_obj)
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -213,6 +216,20 @@ def generate_cert(
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.utcnow())
         .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=not ca,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=ca,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
         .sign(issuer_priv_key, hash_alg)
     )
@@ -434,7 +451,9 @@ def from_cryptography_eckey_obj(
         pub_nums = ext_key.public_numbers()
 
     # Create map of cryptography curves to cose curves. E.g. {ec.SECP256R1: P256, ...}
-    registered_crvs = {crv.curve_obj: crv for crv in REGISTERED_EC_CURVES.values()}
+    registered_crvs = {
+        type(crv.curve_obj): crv for crv in REGISTERED_EC_CURVES.values()
+    }
     if type(pub_nums.curve) not in registered_crvs:
         raise ValueError(f"Unsupported EC Curve: {type(pub_nums.curve)}")
     curve = registered_crvs[type(pub_nums.curve)]
@@ -578,7 +597,7 @@ def create_did_document(
         curve = pub_numbers.curve
         # Create map of curves to names. E.g. {ec.SECP256R1: "P-256", ...}
         registered_crvs = {
-            crv.curve_obj: name for name, crv in REGISTERED_EC_CURVES.items()
+            type(crv.curve_obj): name for name, crv in REGISTERED_EC_CURVES.items()
         }
         if type(curve) not in registered_crvs:
             raise ValueError(f"Unsupported EC Curve: {curve}")
@@ -728,7 +747,8 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
     if jwk.get("kty") == "EC":
         x = int.from_bytes(base64.urlsafe_b64decode(jwk["x"]), "big")
         y = int.from_bytes(base64.urlsafe_b64decode(jwk["y"]), "big")
-        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj()
+        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj
+        assert isinstance(crv, EllipticCurve)
         key = EllipticCurvePublicNumbers(x, y, crv).public_key()
     else:
         raise NotImplementedError("Unsupported JWK type")

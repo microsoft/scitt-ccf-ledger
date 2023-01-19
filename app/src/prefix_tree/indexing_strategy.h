@@ -196,7 +196,7 @@ namespace scitt
         cose::ProtectedHeader phdr;
         try
         {
-          phdr = cose::decode_protected_header(*entry);
+          phdr = std::get<0>(cose::decode_headers(*entry));
         }
         catch (const cose::COSEDecodeError& e)
         {
