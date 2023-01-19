@@ -20,6 +20,7 @@
 #include <optional>
 #include <qcbor/qcbor.h>
 #include <qcbor/qcbor_spiffy_decode.h>
+#include <span>
 #include <string>
 #include <t_cose/t_cose_sign1_verify.h>
 #include <vector>
@@ -508,8 +509,8 @@ namespace scitt::cose
 
   // Temporarily needed for notary_verify().
   std::vector<uint8_t> create_sign1_tbs(
-    size_t cose_size,
-    std::span<const uint8_t> protected,
+    int cose_size,
+    std::span<const uint8_t> protected_header,
     std::span<const uint8_t> payload)
   {
     // Note: This function does not return the hash of the TBS because
@@ -529,7 +530,7 @@ namespace scitt::cose
     QCBOREncode_AddSZString(ctx, "Signature1");
 
     // body_protected: The protected header of the message.
-    QCBOREncode_AddBytes(ctx, cbor::from_bytes(protected));
+    QCBOREncode_AddBytes(ctx, cbor::from_bytes(protected_header));
 
     // external_aad: always empty.
     QCBOREncode_AddBytes(ctx, NULLUsefulBufC);
@@ -578,11 +579,53 @@ namespace scitt::cose
 
   // Temporarily needed for notary_verify().
   std::vector<uint8_t> ecdsa_sig_p1363_to_der(
-    const std::vector<uint8_t>& signature)
+    std::span<const uint8_t> signature)
   {
     auto half_size = signature.size() / 2;
     return ecdsa_sig_from_r_s(
       signature.data(), half_size, signature.data() + half_size, half_size);
+  }
+
+  /**
+   * Extract the bstr fields from a COSE Sign1.
+   *
+   * Returns an array containing the protected headers, the payload and the
+   * signature.
+   */
+  inline std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
+    std::span<const uint8_t> cose_sign1)
+  {
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(
+      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&ctx, nullptr);
+
+    QCBORItem item;
+
+    // protected headers
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto phdrs = cbor::as_span(item.val.string);
+
+    // skip unprotected header
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // payload
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto payload = cbor::as_span(item.val.string);
+
+    // signature
+    QCBORDecode_VGetNext(&ctx, &item);
+    auto signature = cbor::as_span(item.val.string);
+
+    QCBORDecode_ExitArray(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
+
+    return {phdrs, payload, signature};
   }
 
   // Temporarily needed for notary_verify().
@@ -609,11 +652,12 @@ namespace scitt::cose
         "Algorithm mismatch between protected header and public key");
     }
 
-    auto [protected, payload, signature] = extract_sign1_fields(cose_sign1);
+    auto [protected_header, payload, signature] =
+      extract_sign1_fields(cose_sign1);
 
     auto md_type = get_md_type(header_alg);
     auto ossl_md_type = get_openssl_md_type(md_type);
-    auto tbs = create_sign1_tbs(cose_sign1.size(), protected, payload);
+    auto tbs = create_sign1_tbs(cose_sign1.size(), protected_header, payload);
 
     std::vector<uint8_t> signature_tmp;
     if (is_ecdsa_alg(header_alg))
@@ -699,48 +743,6 @@ namespace scitt::cose
     {
       throw COSESignatureValidationError("Signature verification failed");
     }
-  }
-
-  /**
-   * Extract the bstr fields from a COSE Sign1.
-   *
-   * Returns an array containing the protected headers, the payload and the
-   * signature.
-   */
-  inline std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
-    std::span<const uint8_t> cose_sign1)
-  {
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
-
-    QCBORDecode_EnterArray(&ctx, nullptr);
-
-    QCBORItem item;
-
-    // protected headers
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto phdrs = cbor::as_span(item.val.string);
-
-    // skip unprotected header
-    QCBORDecode_VGetNextConsume(&ctx, &item);
-
-    // payload
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto payload = cbor::as_span(item.val.string);
-
-    // signature
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto signature = cbor::as_span(item.val.string);
-
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
-    }
-
-    return {phdrs, payload, signature};
   }
 
   /**
