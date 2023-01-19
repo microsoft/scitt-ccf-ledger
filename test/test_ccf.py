@@ -161,7 +161,7 @@ def test_submit_claim_notary_x509(
     claim = msg.encode(tag=True)
 
     receipt = client.submit_claim(claim).receipt
-    crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+    verify_receipt(claim, trust_store, receipt)
 
 
 def test_default_did_port(client: Client, trust_store, tmp_path):
