@@ -12,6 +12,9 @@
 
 namespace scitt::did
 {
+  static constexpr std::string_view VERIFICATION_METHOD_TYPE_JWK =
+    "JsonWebKey2020";
+
   struct Jwk
   {
     std::string kty;
@@ -21,12 +24,13 @@ namespace scitt::did
     std::optional<std::string> crv;
     std::optional<std::string> x;
     std::optional<std::string> y;
+    std::optional<std::vector<std::string>> x5c;
 
     bool operator==(const Jwk&) const = default;
   };
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Jwk);
   DECLARE_JSON_REQUIRED_FIELDS(Jwk, kty);
-  DECLARE_JSON_OPTIONAL_FIELDS(Jwk, alg, n, e, crv, x, y);
+  DECLARE_JSON_OPTIONAL_FIELDS(Jwk, alg, n, e, crv, x, y, x5c);
 
   struct DidVerificationMethod
   {

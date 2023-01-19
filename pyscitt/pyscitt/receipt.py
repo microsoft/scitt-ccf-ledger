@@ -5,17 +5,19 @@ import base64
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cbor2
 import ccf.receipt
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.x509 import load_der_x509_certificate
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
 
 from . import crypto
+
+if TYPE_CHECKING:
+    from .verify import ServiceParameters
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
@@ -48,7 +50,7 @@ class LeafInfo:
 
 class ReceiptContents(ABC):
     @abstractmethod
-    def verify(self, tbs: bytes, service_params: dict):
+    def verify(self, tbs: bytes, service: "ServiceParameters"):
         pass
 
     @abstractmethod
@@ -87,20 +89,18 @@ class CCFReceiptContents(ReceiptContents):
 
         return bytes.fromhex(ccf.receipt.root(leaf, proof))
 
-    def verify(self, tbs: bytes, service_params: dict):
-        if service_params.get("treeAlgorithm") != "CCF":
+    def verify(self, tbs: bytes, service: "ServiceParameters"):
+        if service.tree_algorithm != "CCF":
             raise ValueError("treeAlgorithm must be CCF")
-        if service_params.get("signatureAlgorithm") != "ES256":
+        if service.signature_algorithm != "ES256":
             raise ValueError("signatureAlgorithm must be ES256")
 
-        service_cert_der = base64.b64decode(service_params["serviceCertificate"])
-        service_cert = load_der_x509_certificate(service_cert_der)
+        claims_digest = hashlib.sha256(tbs).digest()
 
+        service_cert = load_der_x509_certificate(service.certificate)
         node_cert = load_der_x509_certificate(self.node_certificate)
         if not isinstance(node_cert.public_key(), ec.EllipticCurvePublicKey):
             raise ValueError("Invalid node public key algorithm")
-
-        claims_digest = hashlib.sha256(tbs).digest()
 
         root = self.root(claims_digest).hex()
 
@@ -164,7 +164,7 @@ class Receipt:
         ]
         return cbor2.dumps(countersign_structure)
 
-    def verify(self, claim: Sign1Message, service_params: dict):
+    def verify(self, claim: Sign1Message, service_params: "ServiceParameters"):
         tbs = self.countersign_structure(claim)
         self.contents.verify(tbs, service_params)
 

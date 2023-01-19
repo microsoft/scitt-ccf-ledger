@@ -9,8 +9,11 @@ from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional, Union
+from urllib.parse import urlparse
 
 import certifi
+
+from pyscitt.did import format_did_web
 
 from .. import governance
 from ..client import Client
@@ -199,8 +202,14 @@ def setup_local_development(
     proposal = governance.set_ca_bundle_proposal("did_web_tls_roots", bundle)
     client.governance.propose(proposal, must_pass=True)
 
-    print("Disabling authentication...")
-    config = {"authentication": {"allow_unauthenticated": True}}
+    print("Configuring service...")
+    url = urlparse(client.url)
+    assert url.hostname is not None
+
+    config = {
+        "authentication": {"allow_unauthenticated": True},
+        "service_identifier": format_did_web(url.hostname, url.port, "scitt"),
+    }
     proposal = governance.set_scitt_configuration_proposal(config)
     client.governance.propose(proposal, must_pass=True)
 
@@ -215,7 +224,7 @@ def setup_local_development(
     if trust_store_dir:
         print(f"Adding service to {trust_store_dir} ...")
         trust_store_dir.mkdir(parents=True, exist_ok=True)
-        parameters = client.get_parameters()
+        parameters = client.get_parameters().as_dict()
         service_id = parameters["serviceId"]
         path = trust_store_dir.joinpath(service_id + ".json")
         path.write_text(json.dumps(parameters))

@@ -5,8 +5,8 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
-from .. import crypto
 from ..client import Client
+from ..verify import StaticTrustStore, verify_receipt
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -39,8 +39,8 @@ def submit_signed_claimset(
         print(f"Received {receipt_path}")
 
     if service_trust_store_path:
-        service_trust_store = crypto.read_service_trust_store(service_trust_store_path)
-        crypto.verify_cose_with_receipt(
+        service_trust_store = StaticTrustStore.load(service_trust_store_path)
+        verify_receipt(
             signed_claimset,
             receipt=submission.receipt,
             service_trust_store=service_trust_store,
