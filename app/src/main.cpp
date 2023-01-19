@@ -815,7 +815,7 @@ namespace scitt
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
 
-      register_service_endpoints(*this);
+      register_service_endpoints(context, *this);
 
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);

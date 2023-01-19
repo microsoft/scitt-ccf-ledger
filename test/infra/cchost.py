@@ -9,8 +9,6 @@ import shutil
 import signal
 import ssl
 import subprocess
-import sys
-import threading
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,9 +17,7 @@ from loguru import logger as LOG
 
 from pyscitt import crypto
 
-
-class ShutdownRequestException(Exception):
-    ...
+from .async_utils import EventLoopThread, race_tasks
 
 
 class UnexpectedExitException(Exception):
@@ -45,7 +41,7 @@ def match_taskgroup_error(group: aiotools.TaskGroupError, expected: type):
     return False
 
 
-class CCHost:
+class CCHost(EventLoopThread):
     binary: str
     enclave_file: Path
     platform: str
@@ -57,32 +53,20 @@ class CCHost:
     listen_rpc_port: int
     listen_node_port: int
 
-    # The effective port number on which cchost is listening. This is equal to
-    # listen_rpc_port, unless the latter was zero in which case this field
-    # reflects the randomly assigned port number.
-    #
-    # This field is only available after the service has started.
-    rpc_port: int
-
     # Cryptographic material of the member
     member_private_key: crypto.Pem
     member_cert: crypto.Pem
     encryption_private_key: crypto.Pem
 
-    # Background thread on which an asyncio event loop runs
-    thread: threading.Thread
-    loop: asyncio.AbstractEventLoop
+    # The effective port number on which cchost is listening. This is equal
+    # to listen_rpc_port, unless the latter was zero in which case this field
+    # reflects the randomly assigned port number.
+    #
+    # This field is only available after the service has started, and may
+    # change each time `restart()` is called.
+    rpc_port: int
 
-    # Events used to communicate from the main thread to the asyncio thread.
-    # These must not be set directly from the main thread, but instead using
-    # `loop.call_soon_threadsafe`
-    shutdown_request: asyncio.Event
-
-    # State used to communicate from the asyncio thread back to the main thread.
-    # The condition variable is signaled whenever these change.
-    cond: threading.Condition
-    ready: bool  # True once the service is accepting connections
-    thread_exception: Optional[BaseException]
+    restart_request: asyncio.Event
 
     def __init__(
         self,
@@ -94,6 +78,8 @@ class CCHost:
         rpc_port: int = 0,
         node_port: int = 0,
     ):
+        super().__init__()
+
         self.binary = binary
         self.listen_rpc_port = rpc_port
         self.listen_node_port = node_port
@@ -123,75 +109,45 @@ class CCHost:
             encryption_public_key
         )
 
-        self.thread = threading.Thread(target=self._execute)
+        self.restart_request = self._create_event()
 
-        self.cond = threading.Condition()
-        self.ready = False
-        self.thread_exception = None
+    def restart(self) -> None:
+        self._set_event(self.restart_request)
+        self.wait_ready()
 
-        self.loop = asyncio.new_event_loop()
-
-        # Event objects must be created on the loop they will be accessed from.
-        async def create_event():
-            return asyncio.Event()
-
-        self.shutdown_request = self.loop.run_until_complete(create_event())
-
-    def __enter__(self):
-        self.thread.start()
-
-        try:
-            with self.cond:
-                while not self.ready and self.thread_exception is None:
-                    self.cond.wait()
-
-                if self.thread_exception is not None:
-                    raise self.thread_exception
-
-        except:
-            # This is to handle the case where the wait is interrupted,
-            # by a KeyboardInterrupt for example.
-            self.loop.call_soon_threadsafe(self.shutdown_request.set)
-            self.thread.join()
-            raise
-
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        try:
-            self.loop.call_soon_threadsafe(self.shutdown_request.set)
-        finally:
-            self.thread.join()
-
-        if self.thread_exception is not None:
-            raise self.thread_exception
-
-    def _execute(self):
+    async def run(self) -> None:
         """
-        Entrypoint for the background thread.
-        """
-        try:
-            self.loop.run_until_complete(self._start_service())
-        except BaseException as e:
-            with self.cond:
-                self.thread_exception = e
-                self.cond.notify_all()
+        Invoked by EventLoopThread when the Proxy is started.
 
-    async def _start_service(self):
+        Runs cchost in a loop, restarting it every time a restart request is
+        received. Aside from errors, this function only returns when the task
+        is cancelled, which happens when the EventLoopThread context manager is
+        exited.
         """
-        Run cchost in a loop, handling shutdown requests.
+        first_start = True
+        while True:
+            self._populate_workspace(start=first_start)
+            first_start = False
+
+            # We use race_tasks as a reliable way to make the restart_request
+            # signal cancel the _start_process task, which in turn will kill
+            # the process. _start_process never terminates gracefully, so we
+            # don't expect it to ever win the race.
+            self.restart_request.clear()
+            await race_tasks(
+                self.restart_request.wait(),
+                self._start_process(),
+            )
+
+    async def _start_process(self) -> None:
         """
-        self._populate_workspace()
+        Start and monitor a cchost process.
 
-        try:
-            await self._start_process()
-        except aiotools.TaskGroupError as e:
-            if match_taskgroup_error(e, ShutdownRequestException):
-                return
-            else:
-                raise
+        Once the service is accepting connections, EventLoopThread's
+        `set_ready` method is called. The service will keep running until the
+        task is cancelled.
+        """
 
-    async def _start_process(self):
         # Ensure SGX_AESM_ADDR is not set when starting cchost.
         cchost_env = os.environ.copy()
         cchost_env.pop("SGX_AESM_ADDR", None)
@@ -209,46 +165,45 @@ class CCHost:
             env=cchost_env,
         )
 
-        # We use two nested task groups. The reason for this is we want the log
-        # processing tasks to keep running all the way until after the process
-        # has exited.
-        async with aiotools.TaskGroup() as tg_logs:
-            tg_logs.create_task(self._process_stdout(process.stdout))
-            tg_logs.create_task(self._process_stderr(process.stderr))
+        async with aiotools.TaskGroup() as tg:
+            # These sub-tasks will get cancelled automatically when this one
+            # is. They only get cancelled after we leave the `async with` block,
+            # which allows us to wait for the process to quit first. This
+            # works nicely as it makes sure the log processing tasks get to see
+            # the final log messages emitted by cchost on its way out.
+            tg.create_task(self._process_stdout(process.stdout))
+            tg.create_task(self._process_stderr(process.stderr))
+            tg.create_task(self._wait_ready())
 
+            await self._wait_for_process(process)
+
+    async def _wait_for_process(self, process: asyncio.subprocess.Process) -> None:
+        """
+        Wait for the cchost process to terminate.
+
+        If this task is cancelled, the process will be killed, gracefully at
+        first the forcibly. If instead the process terminates of its own
+        accord, then an `UnexpectedExitException` is raised.
+        """
+        try:
+            await process.wait()
+            raise UnexpectedExitException()
+        finally:
             try:
-                async with aiotools.TaskGroup() as tg:
-                    tg.create_task(self._wait_ready())
-
-                    # This method will raise exceptions when requests come
-                    # in from the main thread. The exceptions will cancel the
-                    # other tasks and be handled by the caller.
-                    tg.create_task(self._handle_shutdown(process))
-
-                    await process.wait()
-                    raise UnexpectedExitException()
-
-            finally:
-                # We want to kill the process whatever happens.
+                process.terminate()
                 try:
-                    process.terminate()
-                    try:
-                        LOG.info("Waiting for cchost process to terminate gracefully")
-                        await asyncio.wait_for(process.wait(), timeout=5)
-                    except asyncio.TimeoutError:
-                        LOG.info(
-                            "cchost process failed to terminate gracefully, sending SIGKILL"
-                        )
-                        process.kill()
-                        await process.wait()
+                    LOG.info("Waiting for cchost process to terminate gracefully")
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    LOG.info(
+                        "cchost process failed to terminate gracefully, sending SIGKILL"
+                    )
+                    process.kill()
+                    await process.wait()
 
-                except ProcessLookupError:
-                    # This can happen if the process is already dead.
-                    pass
-
-    async def _handle_shutdown(self, process):
-        await self.shutdown_request.wait()
-        raise ShutdownRequestException()
+            except ProcessLookupError:
+                # This can happen if the process is already dead.
+                pass
 
     async def _process_stdout(self, stream):
         while True:
@@ -266,11 +221,11 @@ class CCHost:
                 # We use the presence of an enclave timestamp (e_ts) to distinguish
                 # between host and enclave messages.
                 level = msg["level"].upper()
-                context = {"function": msg["file"], "line": msg["number"]}
-                if "e_ts" in msg:
-                    context["name"] = "enclave"
-                else:
-                    context["name"] = "host"
+                context = {
+                    "function": msg["file"],
+                    "line": msg["number"],
+                    "name": "enclave" if "e_ts" in msg else "host",
+                }
                 LOG.patch(lambda r: r.update(context)).log(level, "{}", msg["msg"])
 
     async def _process_stderr(self, stream):
@@ -292,9 +247,7 @@ class CCHost:
             if port is not None:
                 LOG.info(f"cchost is ready and listening on port {port}")
                 self.rpc_port = port
-                with self.cond:
-                    self.ready = True
-                    self.cond.notify_all()
+                self.set_ready()
                 return
 
             await asyncio.sleep(0.5)
@@ -322,8 +275,12 @@ class CCHost:
             # ports file, or we couldn't establish a connection to it.
             return None
 
-    def _populate_workspace(self):
+    def _populate_workspace(self, start=True):
         service_cert = self.workspace / "service_cert.pem"
+        previous_service_cert = self.workspace / "previous_service_cert.pem"
+
+        if service_cert.exists():
+            service_cert.rename(previous_service_cert)
 
         PLATFORMS = {
             "sgx": {"platform": "SGX", "type": "Release"},
@@ -349,7 +306,10 @@ class CCHost:
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
             },
-            "command": {
+        }
+
+        if start:
+            config["command"] = {
                 "type": "Start",
                 "service_certificate_file": str(service_cert),
                 "start": {
@@ -365,8 +325,16 @@ class CCHost:
                         }
                     ],
                 },
-            },
-        }
+            }
+        else:
+            config["command"] = {
+                "type": "Recover",
+                "service_certificate_file": str(service_cert),
+                "recover": {
+                    "initial_service_certificate_validity_days": 1,
+                    "previous_service_identity_file": str(previous_service_cert),
+                },
+            }
 
         with open(self.workspace / "config.json", "w") as f:
             json.dump(config, f)

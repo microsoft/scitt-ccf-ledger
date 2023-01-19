@@ -35,7 +35,7 @@ def submit_signed_claimset(
 
     if receipt_path:
         with open(receipt_path, "wb") as f:
-            f.write(submission.receipt)
+            f.write(submission.raw_receipt)
         print(f"Received {receipt_path}")
 
     if service_trust_store_path:

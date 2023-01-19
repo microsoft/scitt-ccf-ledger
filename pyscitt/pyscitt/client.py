@@ -65,7 +65,7 @@ class HttpSig(httpx.Auth):
 
 @dataclass
 class ServiceError(Exception):
-    headers: dict
+    headers: httpx.Headers
     code: str
     message: str
 
@@ -198,7 +198,7 @@ class BaseClient:
         sign_request=False,
         wait_for_confirmation=False,
         **kwargs,
-    ):
+    ) -> httpx.Response:
         """
         Issue a request to the server.
 
@@ -226,6 +226,10 @@ class BaseClient:
                 raise ValueError("Cannot use `auth` with `sign_request`")
             else:
                 kwargs["auth"] = self.member_http_sig
+
+            if method == "GET":
+                # Content-length is necessary for signing, even on GET requests.
+                kwargs.setdefault("headers", {}).setdefault("Content-Length", "0")
 
         default_wait_time = 2
         timeout = 30
@@ -284,7 +288,7 @@ class BaseClient:
         In the latter case, an exception is raised.
         """
         response = self.get(
-            "/tx",
+            "/node/tx",
             params={"transaction_id": tx},
             retry_on=[lambda r: r.is_success and r.json()["status"] == "Pending"],
         )
@@ -295,10 +299,10 @@ class BaseClient:
                 f"Transaction {tx} was not committed. Status is {status}"
             )
 
-    def get(self, *args, **kwargs):
+    def get(self, *args, **kwargs) -> httpx.Response:
         return self.request("GET", *args, **kwargs)
 
-    def post(self, *args, **kwargs):
+    def post(self, *args, **kwargs) -> httpx.Response:
         return self.request("POST", *args, **kwargs)
 
     def get_historical(self, *args, retry_on=[], **kwargs):
@@ -317,24 +321,27 @@ class BaseClient:
         )
 
 
-T = TypeVar("T", bound=Optional[bytes], covariant=True)
-
-
 @dataclass
-class Submission(Generic[T]):
+class Submission:
     """
     The result of submitting a claim to the service.
-    The presence and format of the receipt is depends on arguments passed to the `submit_claim`
-    method.
     """
 
     tx: str
-    receipt: T
 
     @property
     def seqno(self) -> int:
         view, seqno = self.tx.split(".")
         return int(seqno)
+
+
+@dataclass
+class SubmissionReceipt(Submission):
+    raw_receipt: bytes
+
+    @property
+    def receipt(self) -> Receipt:
+        return Receipt.decode(self.raw_receipt)
 
 
 class Client(BaseClient):
@@ -360,18 +367,18 @@ class Client(BaseClient):
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[False] = False
-    ) -> Submission[bytes]:
+    ) -> SubmissionReceipt:
         ...
 
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[True]
-    ) -> Submission[None]:
+    ) -> Submission:
         ...
 
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False
-    ) -> Union[Submission[bytes], Submission[None]]:
+    ) -> Union[SubmissionReceipt, Submission]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
@@ -384,10 +391,10 @@ class Client(BaseClient):
 
         tx = response.headers[CCF_TX_ID_HEADER]
         if skip_confirmation:
-            return Submission(tx, None)
+            return Submission(tx)
         else:
             receipt = self.get_receipt(tx, decode=False)
-            return Submission(tx, receipt)
+            return SubmissionReceipt(tx, receipt)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
@@ -446,6 +453,14 @@ class Client(BaseClient):
             "/node/network",
             retry_on=[lambda r: r.is_success and r.json()["service_status"] != "Open"],
         )
+
+    def get_service_certificate(self) -> crypto.Pem:
+        return self.get("/node/network").json()["service_certificate"]
+
+    def get_previous_service_identity(self) -> crypto.Pem:
+        return self.get("/node/service/previous_identity").json()[
+            "previous_service_identity"
+        ]
 
     @property
     def governance(self):

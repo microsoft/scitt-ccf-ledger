@@ -5,6 +5,7 @@ from typing import Optional
 from urllib.parse import quote, unquote
 
 import httpx
+from loguru import logger as LOG
 
 from .crypto import Pem, Signer
 
@@ -95,6 +96,8 @@ class Resolver:
             raise ValueError(f"Unsupported DID method {parts[1]!r}")
 
         url = did_web_document_url(did)
+
+        LOG.debug(f"Resolving {did!r} at {url!r}")
         r = httpx.get(url, verify=self.verify)
         r.raise_for_status()
         return r.json()
