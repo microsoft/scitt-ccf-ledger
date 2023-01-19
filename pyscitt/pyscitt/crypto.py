@@ -744,7 +744,7 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
     if jwk.get("kty") == "EC":
         x = int.from_bytes(base64.urlsafe_b64decode(jwk["x"]), "big")
         y = int.from_bytes(base64.urlsafe_b64decode(jwk["y"]), "big")
-        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj()
+        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj
         key = EllipticCurvePublicNumbers(x, y, crv).public_key()
     else:
         raise NotImplementedError("Unsupported JWK type")
