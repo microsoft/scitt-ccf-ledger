@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from .crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
 from .receipt import ReceiptContents, hdr_as_dict
+from .verify import ServiceParameters
 
 
 class bitvector:
@@ -105,7 +106,9 @@ class ReadReceipt:
     def decode(cls, data: bytes):
         return cls.from_cose_obj(cbor2.loads(data))
 
-    def verify(self, claim: Union[Sign1Message, bytes], service_params: dict):
+    def verify(
+        self, claim: Union[Sign1Message, bytes], service_params: ServiceParameters
+    ):
         if isinstance(claim, bytes):
             claim = CoseMessage.decode(claim)
         assert isinstance(claim, Sign1Message)

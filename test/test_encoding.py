@@ -9,6 +9,7 @@ from pycose.messages import Sign1Message
 
 from pyscitt import crypto
 from pyscitt.client import Client
+from pyscitt.verify import verify_receipt
 
 
 class TestNonCanonicalEncoding:
@@ -61,7 +62,7 @@ class TestNonCanonicalEncoding:
         """We should be able to verify the produced receipt."""
         # Once the xfail is fixed, this test can be merged with test_submit_claim.
         receipt = client.submit_claim(claim).receipt
-        crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+        verify_receipt(claim, trust_store, receipt)
 
     def test_embed_receipt(self, client: Client, trust_store, claim):
         """When embedding a receipt in a claim, the ledger should not affect the original encoding."""
