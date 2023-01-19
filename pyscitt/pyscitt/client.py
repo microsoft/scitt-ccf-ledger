@@ -4,6 +4,7 @@
 import base64
 import hashlib
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Generic, Iterable, Literal, Optional, Tuple, TypeVar, Union, overload
@@ -23,15 +24,23 @@ from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
+
+class MemberAuthenticationMethod(ABC):
+    cert: str
+
+    @abstractmethod
+    def sign(self, data: bytes) -> bytes:
+        pass
+
+
 # copied from CCF/tests/infra/clients.py
 class HttpSig(httpx.Auth):
+    member_auth_client: MemberAuthenticationMethod
     requires_request_body = True
 
-    def __init__(self, key_id: str, pem_private_key: str):
-        self.key_id = key_id
-        self.private_key = load_pem_private_key(
-            pem_private_key.encode("ascii"), password=None
-        )
+    def __init__(self, member_auth_client: MemberAuthenticationMethod):
+        self.member_auth_client = member_auth_client
+        self.key_id = crypto.get_cert_fingerprint(member_auth_client.cert)
 
     def auth_flow(self, request):
         body_digest = base64.b64encode(hashlib.sha256(request.content).digest()).decode(
@@ -45,12 +54,8 @@ class HttpSig(httpx.Auth):
                 f"content-length: {len(request.content)}",
             ]
         ).encode("utf-8")
-        digest_algo = {256: hashes.SHA256(), 384: hashes.SHA384()}[
-            self.private_key.curve.key_size
-        ]
-        signature = self.private_key.sign(
-            signature_algorithm=ec.ECDSA(algorithm=digest_algo), data=string_to_sign
-        )
+
+        signature = self.member_auth_client.sign(string_to_sign)
         b64signature = base64.b64encode(signature).decode("ascii")
         request.headers[
             "authorization"
@@ -60,6 +65,7 @@ class HttpSig(httpx.Auth):
 
 @dataclass
 class ServiceError(Exception):
+    headers: dict
     code: str
     message: str
 
@@ -81,7 +87,7 @@ class BaseClient:
 
     url: str
     auth_token: Optional[str]
-    member_auth: Optional[Tuple[str, str]]
+    member_auth: Optional[MemberAuthenticationMethod]
     wait_time: Optional[float]
     tcp_nodelay_patch: bool
     development: bool
@@ -94,7 +100,7 @@ class BaseClient:
         url: str,
         *,
         auth_token: Optional[str] = None,
-        member_auth: Optional[Tuple[str, str]] = None,
+        member_auth: Optional[MemberAuthenticationMethod] = None,
         wait_time: Optional[float] = None,
         tcp_nodelay_patch: bool = False,
         development: bool = False,
@@ -106,7 +112,7 @@ class BaseClient:
             A bearer token for all requests made by this instance.
 
         member_auth:
-            A pair of certificate and private key in PEM format, used to sign requests.
+            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login idenity, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
         wait_time:
@@ -131,9 +137,7 @@ class BaseClient:
             headers["Authorization"] = "Bearer " + auth_token
 
         if member_auth:
-            cert, key = member_auth
-            key_id = crypto.get_cert_fingerprint(cert)
-            self.member_http_sig = HttpSig(key_id, key)
+            self.member_http_sig = HttpSig(member_auth)
         else:
             self.member_http_sig = None
 
@@ -266,7 +270,7 @@ class BaseClient:
 
         if not response.is_success:
             error = response.json()["error"]
-            raise ServiceError(error["code"], error["message"])
+            raise ServiceError(response.headers, error["code"], error["message"])
 
         if wait_for_confirmation:
             self.wait_for_confirmation(response.headers[CCF_TX_ID_HEADER])
