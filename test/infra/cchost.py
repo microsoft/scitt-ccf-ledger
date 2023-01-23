@@ -117,7 +117,7 @@ class CCHost(EventLoopThread):
 
     async def run(self) -> None:
         """
-        Invoked by EventLoopThread when the Proxy is started.
+        Invoked by EventLoopThread when the context manager is entered.
 
         Runs cchost in a loop, restarting it every time a restart request is
         received. Aside from errors, this function only returns when the task
@@ -182,8 +182,8 @@ class CCHost(EventLoopThread):
         Wait for the cchost process to terminate.
 
         If this task is cancelled, the process will be killed, gracefully at
-        first the forcibly. If instead the process terminates of its own
-        accord, then an `UnexpectedExitException` is raised.
+        first and then forcibly. If instead the process terminates of its own
+        volition, an `UnexpectedExitException` error is raised.
         """
         try:
             await process.wait()

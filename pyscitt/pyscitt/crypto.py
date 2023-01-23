@@ -758,7 +758,12 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
     )
 
 
-def decrypt_recovery_share(key_pem: str, encrypted_share: bytes) -> bytes:
+def decrypt_recovery_share(key_pem: Pem, encrypted_share: bytes) -> bytes:
+    """
+    Decrypt a CCF recovery share, using the member's encryption private key.
+
+    https://microsoft.github.io/CCF/release/3.x/governance/accept_recovery.html
+    """
     key = load_pem_private_key(key_pem.encode("ascii"), None)
     assert isinstance(key, RSAPrivateKey)
     return key.decrypt(

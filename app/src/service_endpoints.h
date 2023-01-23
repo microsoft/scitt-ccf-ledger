@@ -84,9 +84,9 @@ namespace scitt
         crypto::b64_from_raw(service_cert_der),
       }};
 
-      // It is possible for multiple entries in the ServiceInfo to contain the
-      // same certificate, eg. if the service status changes. Using an std::map
-      // removes duplicates.
+      // It is possible for multiple entries in the ServiceInfo table to contain
+      // the same certificate, eg. if the service status changes. Using an
+      // std::map removes duplicates.
       service_keys[key_id] = jwk;
     }
 

@@ -9,7 +9,7 @@ from typing import Any, Awaitable, List, Optional
 import aiotools
 
 
-async def race_tasks(*aws: Awaitable[Any]):
+async def race_tasks(*awaitables: Awaitable[Any]):
     """
     Run a collection of awaitable objects as tasks, concurrently, until at least one
     of them completes or terminates with an exception. All uncompleted tasks
@@ -19,7 +19,7 @@ async def race_tasks(*aws: Awaitable[Any]):
     TaskGroupError containing all of them is raised.
     """
     async with aiotools.TaskGroup() as tg:
-        tasks = [tg.create_task(a) for a in aws]
+        tasks = [tg.create_task(a) for a in awaitables]
         (done, pending) = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
@@ -34,19 +34,19 @@ class EventLoopThread(ABC):
     Instances of this class are used as a context manager, as part of a `with`
     block.
 
-    When the context manager is entered, a an asyncio event loop is created
-    on a new background thread, and is used to execute the `run` function as
-    a new task. The main thread, which created and entered this context
-    manager, will block until the `run` implementation calls `set_ready`.
+    When the context manager is entered, an asyncio event loop is created on a
+    new background thread, and is used to execute the `run` function as a new
+    task. The main thread, which created and entered this context manager, will
+    block until the `run` implementation calls `set_ready`.
 
     When the context manager is exited, the task that was started sent a cancel
     request. It may still perform any necessary cleanup before exiting. The
     main thread will block until the task has exited.
 
-    Any unhandled exception that happen in the `run` function will be re-raised
-    on the main thread, at the first opportunity. This may be while entering
-    the context manager, if an exception is raised during startup, or when
-    exiting it if the exception is raised later.
+    Unhandled exceptions that happen in the `run` function will be re-raised on
+    the main thread, at the first opportunity. This may be while entering the
+    context manager, if an exception is raised during startup, or when exiting
+    it if the exception is raised later.
     """
 
     # Background thread on which the asyncio event loop runs

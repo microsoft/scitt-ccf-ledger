@@ -21,7 +21,8 @@ class Proxy(EventLoopThread):
 
     The configured upstream can be modified after instantiation by calling
     `set_upstream`. The change only affects future connections, not existing
-    established ones.
+    established ones. In our use case, the previous upstream service is shut
+    down, which closes these established connectionsa anyway.
 
     This is used to provide a stable hostname and port number for tests to use,
     even as the cchost process is restarted and assigned a different port number.
