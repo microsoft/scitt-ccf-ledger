@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.2.0]
+### Added
+- Add support for Notary COSE profile (#73). Note that this is currently experimental and not supported by the IETF specifications that are being developed.
+- Add support for `x-ms-request-id`/`x-ms-client-request-id` correlation headers (#79). All log messages originating from the app include the request id and, if available, the client request id. Note that support for W3C Trace Context headers may be added in the future.
+- Emit log messages for each request (#79).
+- Add `GET /scitt/did.json` endpoint that returns a DID document of the service in support of resolvable service identifiers in receipts (#68). Note that this is still experimental and will likely change. For now, only the current service identity key is included in the DID document, which means that receipts issued with old identities cannot be validated yet.
+- Add option in `pyscitt` to sign governance proposals using Azure Key Vault (#54).
+
+### Changed
+- Change test clients to not use `/app` prefix when making API calls during testing (#64). Note that CCF started exposing app endpoints both at the root as well as the old `/app` prefix. It is recommended that clients remove the `/app` prefix.
+- Change `kid` to be a relative DID URL by prefixing with `#` (#67). This is a breaking change in claims that use DIDs as issuers.
+- Enable authentication for read-only app endpoints (#78). Previously, only `POST /entries` used authentication.
+- Reduce `retry-after` response header value from 3 to 1 second for historical queries (#76).
+
+### Removed
+- Remove the `/constitution` endpoint in favour of CCF's built-in `/gov/kv/constitution` endpoint (#65). This endpoint is currently used in `pyscitt` to patch an existing constitution.
+
+### Fixed
+- Change the signature in receipts from ASN1/DER to IEEE encoding (#61). Note that this is a breaking change.
+
 ## [0.1.0]
 ### Added
 - Add a `update_scitt_constitution` governance command to pyscitt (#3). This allows to update just the SCITT part of an existing constitution, leaving the rest intact.
@@ -22,5 +42,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
+[0.2.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0-dev.1...0.1.0
 [0.1.0-dev.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.1.0-dev.1

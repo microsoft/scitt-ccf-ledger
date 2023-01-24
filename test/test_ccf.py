@@ -1,14 +1,38 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import json
 import os
+import time
 
+import cbor2
+import pycose
+import pycose.headers
 import pytest
+from pycose.messages import Sign1Message
 
 from infra.did_web_server import DIDWebServer
 from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
 from pyscitt.client import Client, ServiceError
+from pyscitt.verify import verify_receipt
+
+
+# Temporary monkey-patch for pycose until https://github.com/TimothyClaeys/pycose/pull/107
+# is released.
+def crit_is_array(value):
+    if (
+        not isinstance(value, list)
+        or len(value) < 1
+        or not all(isinstance(x, (int, str)) for x in value)
+    ):
+        raise ValueError(
+            "CRITICAL should be a list with at least one integer or string element"
+        )
+    return value
+
+
+pycose.headers.Critical.value_parser = crit_is_array
 
 
 @pytest.mark.parametrize(
@@ -34,11 +58,10 @@ def test_submit_claim(client: Client, did_web, trust_store, params):
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims).receipt
-
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
-    crypto.verify_cose_with_receipt(embedded, trust_store, None)
+    verify_receipt(embedded, trust_store, None)
 
 
 @pytest.mark.parametrize(
@@ -68,10 +91,10 @@ def test_submit_claim_x5c(client: Client, trust_store, params: dict, x5c_len: in
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims).receipt
-    crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+    verify_receipt(claims, trust_store, receipt)
 
 
-def test_invalid_x5c(client: Client, trust_store):
+def test_invalid_x5c(client: Client):
     x5c_ca = X5ChainCertificateAuthority(alg="ES256", kty="ec")
     client.governance.propose(
         governance.set_ca_bundle_proposal("x509_roots", x5c_ca.cert_bundle),
@@ -85,6 +108,67 @@ def test_invalid_x5c(client: Client, trust_store):
 
     with pytest.raises(ServiceError, match="Signature verification failed"):
         client.submit_claim(claims)
+
+
+@pytest.mark.parametrize(
+    "params,x5c_len",
+    [
+        ({"alg": "PS384", "kty": "rsa"}, 1),
+        ({"alg": "ES256", "kty": "ec", "ec_curve": "P-256"}, 1),
+    ],
+)
+def test_submit_claim_notary_x509(
+    client: Client, trust_store, params: dict, x5c_len: int
+):
+    """
+    Submit claims to the SCITT CCF ledger and verify the resulting receipts for x5c.
+
+    Test is parametrized over different signing parameters.
+    """
+    x5c_ca = X5ChainCertificateAuthority(**params)
+
+    client.governance.propose(
+        governance.set_ca_bundle_proposal("x509_roots", x5c_ca.cert_bundle),
+        must_pass=True,
+    )
+
+    identity = x5c_ca.create_identity(x5c_len, **params)
+
+    phdr: dict = {}
+    phdr[pycose.headers.Algorithm] = identity.algorithm
+    phdr[pycose.headers.ContentType] = "application/vnd.cncf.notary.payload.v1+json"
+    phdr[pycose.headers.Critical] = ["io.cncf.notary.signingScheme"]
+    phdr["io.cncf.notary.signingTime"] = cbor2.CBORTag(1, int(time.time()))
+    phdr["io.cncf.notary.signingScheme"] = "notary.x509"
+
+    uhdr: dict = {}
+    assert identity.x5c is not None
+    uhdr[pycose.headers.X5chain] = [crypto.cert_pem_to_der(x5) for x5 in identity.x5c]
+    uhdr["io.cncf.notary.signingAgent"] = "Notation/1.0.0"
+
+    payload = json.dumps(
+        {
+            "targetArtifact": {
+                "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                "digest": "sha256:beac45bd57e10fa6b607fb84daa51dce8d81928f173d215f1f3544c07f90c8c1",
+                "size": 942,
+            }
+        }
+    ).encode("utf-8")
+
+    msg = Sign1Message(phdr=phdr, uhdr=uhdr, payload=payload)
+    msg.key = crypto.cose_private_key_from_pem(identity.private_key)
+    claim = msg.encode(tag=True)
+
+    submission = client.submit_claim(claim)
+    verify_receipt(claim, trust_store, submission.receipt)
+
+    # Embedding the receipt requires re-encoding the unprotected header.
+    # Notary has x5chain in the unprotected header.
+    # This checks whether x5chain is preserved after re-encoding by simply
+    # submitting the claim again.
+    claim_with_receipt = client.get_claim(submission.tx, embed_receipt=True)
+    client.submit_claim(claim_with_receipt)
 
 
 def test_default_did_port(client: Client, trust_store, tmp_path):
@@ -119,7 +203,7 @@ def test_default_did_port(client: Client, trust_store, tmp_path):
         # Sign and submit a dummy claim using our new identity
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
         receipt = client.submit_claim(claims).receipt
-        crypto.verify_cose_with_receipt(claims, trust_store, receipt)
+        verify_receipt(claims, trust_store, receipt)
 
 
 def test_consistent_kid(client, did_web, trust_store):
@@ -139,7 +223,7 @@ def test_consistent_kid(client, did_web, trust_store):
 
     # Submit the claim and verify the resulting receipt.
     receipt = client.submit_claim(claim).receipt
-    crypto.verify_cose_with_receipt(claim, trust_store, receipt)
+    verify_receipt(claim, trust_store, receipt)
 
     # Check that the resolved DID document contains the expected assertion
     # method id.

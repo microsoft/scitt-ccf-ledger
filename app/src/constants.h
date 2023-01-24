@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "generated/constants.h"
-
 #include <chrono>
 #include <string>
 #include <vector>
@@ -37,6 +35,7 @@ namespace scitt
     const std::string PayloadTooLarge = "PayloadTooLarge";
     const std::string UnknownFeed = "UnknownFeed";
     const std::string NoPrefixTree = "NoPrefixTree";
+    const std::string NotFound = "NotFound";
   } // namespace errors
 
 } // namespace scitt

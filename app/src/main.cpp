@@ -13,6 +13,7 @@
 #include "http_error.h"
 #include "kv_types.h"
 #include "receipt.h"
+#include "service_endpoints.h"
 #include "tracing.h"
 #include "util.h"
 #include "verifier.h"
@@ -219,9 +220,10 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
+        ClaimProfile claim_profile;
         try
         {
-          verifier->verify_claim(
+          claim_profile = verifier->verify_claim(
             body, ctx.tx, time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
         }
         catch (const did::DIDMethodNotSupportedError& e)
@@ -247,23 +249,19 @@ namespace scitt
         auto service_cert_digest =
           crypto::Sha256Hash(service_cert_der).hex_str();
 
-        // Take the service's DID from the configuration, if present. For the
-        // time being, the kid is the same as the service certificate hash.
-        // Eventually, this may change to become eg. an RFC7638 JWK thumbprint.
+        // Take the service's DID from the configuration, if present.
         std::vector<uint8_t> sign_protected;
         if (cfg.service_identifier.has_value())
         {
-          // TODO: clarify the format of KID. We currently use the hex digest,
-          // encoded in ASCII. Since the COSE field is a bstr, we could skip the
-          // hex/ASCII encoding part of it and embed the digest directly, but
-          // this would not be valid as-is in the corresponding JWK.
-          std::span<const uint8_t> kid = {
-            reinterpret_cast<const uint8_t*>(service_cert_digest.data()),
-            service_cert_digest.size(),
-          };
+          // The kid is the same as the service certificate hash (prefixed with
+          // a # to make it a relative DID-url). Eventually, this may change to
+          // become eg. an RFC7638 JWK thumbprint.
+          std::string kid = fmt::format("#{}", service_cert_digest);
+          std::span<const uint8_t> kid_bytes(
+            reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
 
           sign_protected = create_countersign_protected_header(
-            time, *cfg.service_identifier, kid, service_cert_digest);
+            time, *cfg.service_identifier, kid_bytes, service_cert_digest);
         }
         else
         {
@@ -291,8 +289,8 @@ namespace scitt
 
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
 
-        // TODO log CoseProfile
-        SCITT_INFO("ClaimSizeKb={}", body.size() / 1024);
+        SCITT_INFO(
+          "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
       };
 
       make_endpoint(post_entry_path, HTTP_POST, post_entry, authn_policy)
@@ -816,6 +814,8 @@ namespace scitt
         .set_auto_schema<void, GetVersion::Out>()
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
+
+      register_service_endpoints(*this);
 
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);

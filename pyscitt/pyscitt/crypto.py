@@ -20,8 +20,10 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
+    EllipticCurve,
     EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
+    EllipticCurvePublicNumbers,
 )
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -62,9 +64,7 @@ from pycose.keys.keyparam import (
 )
 from pycose.keys.okp import OKPKey
 from pycose.keys.rsa import RSAKey
-from pycose.messages import CoseMessage, Sign1Message
-
-from .receipt import Receipt
+from pycose.messages import Sign1Message
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
@@ -103,7 +103,9 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
 def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
     if curve not in REGISTERED_EC_CURVES:
         raise NotImplementedError(f"Unsupported curve: {curve}")
-    priv = ec.generate_private_key(curve=REGISTERED_EC_CURVES[curve].curve_obj)
+    curve_obj = REGISTERED_EC_CURVES[curve].curve_obj
+    assert isinstance(curve_obj, EllipticCurve)
+    priv = ec.generate_private_key(curve=curve_obj)
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -214,6 +216,20 @@ def generate_cert(
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.utcnow())
         .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=not ca,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=ca,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
         .sign(issuer_priv_key, hash_alg)
     )
@@ -246,6 +262,14 @@ def get_cert_info(pem: str) -> dict:
     cert = load_pem_x509_certificate(pem.encode("ascii"))
     cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     return {"cn": cn}
+
+
+def get_cert_public_key(pem: Pem) -> Pem:
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
+    key = cert.public_key()
+    return key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode(
+        "ascii"
+    )
 
 
 def get_cert_fingerprint(pem: Pem) -> str:
@@ -319,22 +343,6 @@ def default_algorithm_for_key(key) -> str:
 def default_algorithm_for_private_key(key_pem: Pem) -> str:
     key = load_pem_private_key(key_pem.encode("ascii"), None)
     return default_algorithm_for_key(key)
-
-
-def verify_cose_sign1(buf: bytes, cert_pem: str):
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
-    key = cert.public_key()
-    if isinstance(key, RSAPublicKey):
-        cose_key = from_cryptography_rsakey_obj(key)
-    elif isinstance(key, EllipticCurvePublicKey):
-        cose_key = from_cryptography_eckey_obj(key)
-    else:
-        raise NotImplementedError("unsupported key type")
-
-    msg = Sign1Message.decode(buf)
-    msg.key = cose_key
-    if not msg.verify_signature():
-        raise ValueError("signature is invalid")
 
 
 def cose_header_to_jws_header(cose_header: dict) -> dict:
@@ -443,7 +451,9 @@ def from_cryptography_eckey_obj(
         pub_nums = ext_key.public_numbers()
 
     # Create map of cryptography curves to cose curves. E.g. {ec.SECP256R1: P256, ...}
-    registered_crvs = {crv.curve_obj: crv for crv in REGISTERED_EC_CURVES.values()}
+    registered_crvs = {
+        type(crv.curve_obj): crv for crv in REGISTERED_EC_CURVES.values()
+    }
     if type(pub_nums.curve) not in registered_crvs:
         raise ValueError(f"Unsupported EC Curve: {type(pub_nums.curve)}")
     curve = registered_crvs[type(pub_nums.curve)]
@@ -545,27 +555,6 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
     return cbor2.dumps(outer)
 
 
-def verify_cose_with_receipt(
-    buf: bytes, service_trust_store: dict, receipt: Optional[bytes] = None
-) -> None:
-    msg = CoseMessage.decode(buf)
-    assert isinstance(msg, Sign1Message)
-
-    if receipt is None:
-        parsed_receipts = msg.uhdr[COSE_HEADER_PARAM_SCITT_RECEIPTS]
-        # For now, assume there is only one receipt
-        assert len(parsed_receipts) == 1
-        parsed_receipt = parsed_receipts[0]
-    else:
-        parsed_receipt = cbor2.loads(receipt)
-
-    decoded_receipt = Receipt.from_cose_obj(parsed_receipt)
-
-    service_id = decoded_receipt.phdr["service_id"]
-    service_params = get_service_parameters(service_id, service_trust_store)
-    decoded_receipt.verify(msg, service_params)
-
-
 def load_private_key(key_path: Path) -> Pem:
     with open(key_path) as f:
         key_priv_pem = f.read()
@@ -608,7 +597,7 @@ def create_did_document(
         curve = pub_numbers.curve
         # Create map of curves to names. E.g. {ec.SECP256R1: "P-256", ...}
         registered_crvs = {
-            crv.curve_obj: name for name, crv in REGISTERED_EC_CURVES.items()
+            type(crv.curve_obj): name for name, crv in REGISTERED_EC_CURVES.items()
         }
         if type(curve) not in registered_crvs:
             raise ValueError(f"Unsupported EC Curve: {curve}")
@@ -724,30 +713,6 @@ def sign_json_claimset(
     )
 
 
-def read_service_trust_store(path: Path) -> dict:
-    store = {}
-    for path in path.glob("**/*.json"):
-        with open(path) as f:
-            params = json.load(f)
-
-        service_id = params.get("serviceId")
-        if not isinstance(service_id, str) or not service_id:
-            raise ValueError("serviceId must be a non-empty string")
-        if service_id in store:
-            raise ValueError(
-                f"Duplicate service ID while reading trust store: {service_id}"
-            )
-
-        store[service_id] = params
-    return store
-
-
-def get_service_parameters(service_id: str, service_trust_store: dict) -> dict:
-    if service_id not in service_trust_store:
-        raise ValueError(f"Service ID not found in trust store: {service_id}")
-    return service_trust_store[service_id]
-
-
 def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:
     """
     Decode an ECDSA signature from its IEEE P1363 encoding into its r and s
@@ -776,3 +741,18 @@ def convert_p1363_signature_to_dss(signature: bytes) -> bytes:
     """
     r, s = decode_p1363_signature(signature)
     return encode_dss_signature(r, s)
+
+
+def convert_jwk_to_pem(jwk: dict) -> Pem:
+    if jwk.get("kty") == "EC":
+        x = int.from_bytes(base64.urlsafe_b64decode(jwk["x"]), "big")
+        y = int.from_bytes(base64.urlsafe_b64decode(jwk["y"]), "big")
+        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj
+        assert isinstance(crv, EllipticCurve)
+        key = EllipticCurvePublicNumbers(x, y, crv).public_key()
+    else:
+        raise NotImplementedError("Unsupported JWK type")
+
+    return key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode(
+        "ascii"
+    )

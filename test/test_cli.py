@@ -48,7 +48,9 @@ def run(request):
 def test_smoke_test(run, client, tmp_path: Path):
     trust_store_path = tmp_path / "store"
     trust_store_path.mkdir()
-    (trust_store_path / "service.json").write_text(json.dumps(client.get_parameters()))
+    (trust_store_path / "service.json").write_text(
+        json.dumps(client.get_parameters().as_dict())
+    )
 
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 

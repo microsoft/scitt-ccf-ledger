@@ -7,6 +7,7 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
+from pyscitt.verify import verify_receipt
 
 
 class TestHistorical:
@@ -42,20 +43,20 @@ class TestHistorical:
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
             receipt = client.get_receipt(s.tx, decode=False)
-            crypto.verify_cose_with_receipt(s.claim, trust_store, receipt)
+            verify_receipt(s.claim, trust_store, receipt)
 
     def test_get_claim(self, client: Client, trust_store, submissions):
         for s in submissions:
             claim = client.get_claim(s.tx)
-            crypto.verify_cose_with_receipt(claim, trust_store, s.receipt)
+            verify_receipt(claim, trust_store, s.receipt)
 
     def test_get_claim_with_embedded_receipt(
         self, client: Client, trust_store, submissions
     ):
         for s in submissions:
             claim = client.get_claim(s.tx, embed_receipt=True)
-            crypto.verify_cose_with_receipt(claim, trust_store)
+            verify_receipt(claim, trust_store)
 
             # The original receipt can still be used on the claim, even after
             # the ledger has embedded a new copy of it.
-            crypto.verify_cose_with_receipt(claim, trust_store, s.receipt)
+            verify_receipt(claim, trust_store, s.receipt)

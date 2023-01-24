@@ -6,8 +6,10 @@
 #include "cose.h"
 #include "did/resolver.h"
 #include "openssl_wrappers.h"
+#include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
+#include "tracing.h"
 
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
@@ -33,30 +35,20 @@ namespace scitt::verifier
       resolver(std::move(resolver))
     {}
 
-    void verify_claim(
-      const std::vector<uint8_t>& data,
-      kv::Tx& tx,
-      ::timespec current_time,
-      std::chrono::seconds resolution_cache_expiry,
-      const Configuration& configuration)
+    void check_is_accepted_algorithm(
+      const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
-      cose::ProtectedHeader phdr;
-      try
-      {
-        phdr = cose::decode_protected_header(data);
-      }
-      catch (const cose::COSEDecodeError& e)
-      {
-        throw VerificationError(e.what());
-      }
-
       std::string_view algorithm;
       try
       {
         // We use the equivalent JOSE human-readable names in the
         // configuration, rather than the obscure integer values
         // from COSE.
-        algorithm = get_jose_alg_from_cose_alg(phdr.alg);
+        if (!phdr.alg.has_value())
+        {
+          VerificationError("Missing algorithm in protected header");
+        }
+        algorithm = get_jose_alg_from_cose_alg(phdr.alg.value());
       }
       catch (const InvalidSignatureAlgorithm& e)
       {
@@ -66,76 +58,322 @@ namespace scitt::verifier
       {
         throw VerificationError("Unsupported algorithm in protected header");
       }
+    }
+
+    PublicKey process_ietf_profile(
+      cose::ProtectedHeader& phdr,
+      kv::Tx& tx,
+      ::timespec current_time,
+      std::chrono::seconds resolution_cache_expiry,
+      const Configuration& configuration)
+    {
+      // IETF SCITT profile validation.
+
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.cty.has_value())
+      {
+        throw cose::COSEDecodeError("Missing cty in protected header");
+      }
 
       auto issuer = phdr.issuer;
       auto kid = phdr.kid;
-      auto x5chain = phdr.x5chain;
-      if (
-        issuer.has_value() &&
-        !configuration.policy.is_accepted_issuer(issuer.value()))
+
+      if (!phdr.issuer.has_value())
+      {
+        throw cose::COSEDecodeError("Missing issuer in protected header");
+      }
+      if (!configuration.policy.is_accepted_issuer(issuer.value()))
       {
         throw VerificationError("Unsupported DID issuer in protected header");
       }
 
-      PublicKey key;
-      if (x5chain.has_value())
+      std::optional<std::string> assertion_method_id;
+      if (!issuer.has_value())
       {
-        // Verify the chain of certs against the x509 root store.
-        auto roots = x509_root_store(tx);
-        auto cert = verify_chain(roots, x5chain.value());
-        key = PublicKey(cert, std::nullopt);
+        throw VerificationError(
+          "Issuer was missing as a part of the decoded header.");
+      }
+
+      if (kid.has_value())
+      {
+        if (!kid.value().starts_with("#"))
+        {
+          throw VerificationError("kid must start with '#'.");
+        }
+        assertion_method_id = fmt::format("{}{}", issuer.value(), kid.value());
+      }
+
+      auto resolution_options = did::DidResolutionOptions{
+        .current_time = current_time,
+        .did_web_options = did::DidWebOptions{
+          .tx = tx,
+          .max_age = resolution_cache_expiry,
+          .if_assertion_method_id_match = assertion_method_id}};
+
+      // Perform DID resolution for the given issuer.
+      // Note: Any DIDResolutionError is expected to be handled by the caller.
+      auto resolution = resolver->resolve(issuer.value(), resolution_options);
+
+      // Locate the right JWK in the resolved DID document.
+      did::Jwk jwk;
+      try
+      {
+        jwk = did::find_assertion_method_jwk_in_did_document(
+          resolution.did_doc, assertion_method_id);
+      }
+      catch (const did::DIDAssertionMethodError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // Convert the JWK into something we can actually use.
+      auto key = get_jwk_public_key(jwk);
+
+      return key;
+    }
+
+    PublicKey process_x509_profile(
+      cose::ProtectedHeader& phdr,
+      kv::Tx& tx,
+      const Configuration& configuration)
+    {
+      // X.509 SCITT profile validation.
+
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.cty.has_value())
+      {
+        throw cose::COSEDecodeError("Missing cty in protected header");
+      }
+      if (!phdr.x5chain.has_value())
+      {
+        throw cose::COSEDecodeError("Missing x5chain in protected header");
+      }
+
+      auto x5chain = phdr.x5chain;
+
+      // Verify the chain of certs against the x509 root store.
+      auto roots = x509_root_store(tx);
+      auto cert = verify_chain(roots, x5chain.value());
+      auto key = PublicKey(cert, std::nullopt);
+
+      return key;
+    }
+
+    void validate_notary_protected_header(
+      const cose::ProtectedHeader& phdr, const Configuration& configuration)
+    {
+      auto cty = phdr.cty;
+      auto notary_signing_scheme = phdr.notary_signing_scheme;
+      auto notary_signing_time = phdr.notary_signing_time;
+      auto notary_authentic_signing_time = phdr.notary_authentic_signing_time;
+      auto notary_expiry = phdr.notary_expiry;
+
+      // alg, crit, cty, io.cncf.notary.signingScheme are required.
+
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.crit.has_value())
+      {
+        throw cose::COSEDecodeError("Missing crit in protected header");
+      }
+      if (!cty.has_value())
+      {
+        throw cose::COSEDecodeError("Missing cty in protected header");
+      }
+      if (!notary_signing_scheme.has_value())
+      {
+        throw cose::COSEDecodeError(
+          "Missing io.cncf.notary.signingScheme in protected header");
+      }
+      auto crit = phdr.crit.value();
+
+      // decode_protected_header checks crit is not empty
+
+      // TODO: For each param in crit check it is in known params and that it is
+      // in the protected header, else fail. Or wait until t_cose supports
+      // custom header parameters in crit and then we get this for free when we
+      // use t_cose for signature validation.
+
+      if (!phdr.is_critical("io.cncf.notary.signingScheme"))
+      {
+        throw cose::COSEDecodeError(
+          "crit must contain 'io.cncf.notary.signingScheme'");
+      }
+
+      if (cty.value() != "application/vnd.cncf.notary.payload.v1+json")
+      {
+        throw cose::COSEDecodeError(
+          "cty must be 'application/vnd.cncf.notary.payload.v1+json' for "
+          "Notary claims");
+      }
+
+      if (notary_signing_scheme.value() == "notary.x509")
+      {
+        // notary_signing_time is not critical but is required iff notary.x509
+        if (!notary_signing_time.has_value())
+        {
+          throw cose::COSEDecodeError(
+            "Missing io.cncf.notary.signingTime in protected header");
+        }
+        if (notary_authentic_signing_time.has_value())
+        {
+          throw cose::COSEDecodeError(
+            "io.cncf.notary.authenticSigningTime not allowed in protected "
+            "header when io.cncf.notary.signingScheme is `notary.x509`");
+        }
+      }
+      else if (notary_signing_scheme.value() == "notary.x509.signingAuthority")
+      {
+        // notary_authentic_signing_time is critical and required iff
+        // notary.x509.signingAuthority
+        if (notary_signing_time.has_value())
+        {
+          throw cose::COSEDecodeError(
+            "Notary io.cncf.notary.signingTime not allowed in protected header "
+            "when io.cncf.notary.signingScheme is "
+            "`notary.x509.signingAuthority`");
+        }
+        if (!notary_authentic_signing_time.has_value())
+        {
+          throw cose::COSEDecodeError(
+            "Missing io.cncf.notary.authenticSigningTime in protected header");
+        }
+        if (!phdr.is_critical("io.cncf.notary.authenticSigningTime"))
+        {
+          throw cose::COSEDecodeError(
+            "Missing io.cncf.notary.authenticSigningTime in crit parameters");
+        }
       }
       else
       {
-        std::optional<std::string> assertion_method_id;
-        if (!issuer.has_value())
-        {
-          throw VerificationError(
-            "Issuer was missing as a part of the decoded header.");
-        }
-
-        if (kid.has_value())
-        {
-          if (!kid.value().starts_with("#"))
-          {
-            throw VerificationError("kid must start with '#'.");
-          }
-          assertion_method_id =
-            fmt::format("{}{}", issuer.value(), kid.value());
-        }
-
-        auto resolution_options = did::DidResolutionOptions{
-          .current_time = current_time,
-          .did_web_options = did::DidWebOptions{
-            .tx = tx,
-            .max_age = resolution_cache_expiry,
-            .if_assertion_method_id_match = assertion_method_id}};
-
-        // Perform DID resolution for the given issuer.
-        // Note: Any DIDResolutionError is expected to be handled by the caller.
-        auto resolution = resolver->resolve(issuer.value(), resolution_options);
-
-        // Locate the right JWK in the resolved DID document.
-        did::Jwk jwk;
-        try
-        {
-          jwk = did::find_assertion_method_jwk_in_did_document(
-            resolution.did_doc, assertion_method_id);
-        }
-        catch (const did::DIDAssertionMethodError& e)
-        {
-          throw VerificationError(e.what());
-        }
-
-        // Convert the JWK into something we can actually use.
-        key = get_jwk_public_key(jwk);
+        throw cose::COSEDecodeError(
+          "Notary io.cncf.notary.signingScheme must be `notary.x509` or "
+          "`notary.x509.signingAuthority`");
       }
 
+      if (notary_expiry.has_value())
+      {
+        // notary_expiry is critial but not required.
+        if (!phdr.is_critical("io.cncf.notary.expiry"))
+        {
+          throw cose::COSEDecodeError(
+            "Missing io.cncf.notary.expiry in crit parameters");
+        }
+      }
+    }
+
+    PublicKey process_notary_profile(
+      cose::UnprotectedHeader& uhdr,
+      cose::ProtectedHeader& phdr,
+      kv::Tx& tx,
+      const Configuration& configuration)
+    {
+      // Validate protected header
+      validate_notary_protected_header(phdr, configuration);
+
+      // Validate unprotected header
+      // Unprotected header must contain x5chain else the notary claim cannot be
+      // verified.
+      if (!uhdr.x5chain.has_value())
+      {
+        throw VerificationError(
+          "Notary claim's unprotected header is missing an x5chain (label 33) "
+          "parameter.");
+      }
+
+      PublicKey key;
+      // Verify the chain of certs against the x509 root store.
+      auto roots = x509_root_store(tx);
+      auto cert = verify_chain(roots, uhdr.x5chain.value());
+      key = PublicKey(cert, std::nullopt);
+      return key;
+    }
+
+    ClaimProfile verify_claim(
+      const std::vector<uint8_t>& data,
+      kv::Tx& tx,
+      ::timespec current_time,
+      std::chrono::seconds resolution_cache_expiry,
+      const Configuration& configuration)
+    {
+      cose::ProtectedHeader phdr;
+      cose::UnprotectedHeader uhdr;
       try
       {
-        cose::verify(data, key);
+        std::tie(phdr, uhdr) = cose::decode_headers(data);
+
+        // Validate_profile and retrieve key.
+        PublicKey key;
+        if (phdr.notary_signing_scheme.has_value())
+        {
+          // Notary claim
+          // Verify profile
+          key = process_notary_profile(uhdr, phdr, tx, configuration);
+
+          // Verify signature.
+          try
+          {
+            // TODO: replace with cose::verify() once the t_cose workarounds are
+            // removed.
+            cose::notary_verify(data, phdr, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::Notary;
+        }
+        else if (phdr.issuer.has_value())
+        {
+          // IETF SCITT claim
+          key = process_ietf_profile(
+            phdr, tx, current_time, resolution_cache_expiry, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::IETF;
+        }
+        else if (phdr.x5chain.has_value())
+        {
+          // X.509 SCITT claim
+          key = process_x509_profile(phdr, tx, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
+          }
+
+          return ClaimProfile::X509;
+        }
+        else if (phdr.profile.has_value())
+        {
+          SCITT_INFO(
+            "Unknown COSE profile in protected header: {}",
+            phdr.profile.value());
+          throw cose::COSEDecodeError(
+            "Unknown COSE profile in protected header");
+        }
+        else
+        {
+          SCITT_INFO("Unknown COSE profile");
+          throw cose::COSEDecodeError("Unknown COSE profile");
+        }
       }
-      catch (const cose::COSESignatureValidationError& e)
+      catch (const cose::COSEDecodeError& e)
       {
         throw VerificationError(e.what());
       }
