@@ -57,7 +57,7 @@ def test_submit_claim(client: Client, did_web, trust_store, params):
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims).receipt
+    receipt = client.submit_claim(claims).raw_receipt
     verify_receipt(claims, trust_store, receipt)
 
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
@@ -244,3 +244,22 @@ def test_invalid_kid(client, did_web):
 
     with pytest.raises(ServiceError, match="kid must start with '#'"):
         client.submit_claim(claim)
+
+
+@pytest.mark.needs_cchost
+@pytest.mark.isolated_test
+def test_recovery(client, did_web, restart_service):
+    identity = did_web.create_identity()
+    client.submit_claim(crypto.sign_json_claimset(identity, {"foo": "bar"}))
+
+    old_network = client.get("/node/network").json()
+    assert old_network["recovery_count"] == 0
+
+    restart_service()
+
+    new_network = client.get("/node/network").json()
+    assert new_network["recovery_count"] == 1
+    assert new_network["service_certificate"] != old_network["service_certificate"]
+
+    # Check that the service is still operating correctly
+    client.submit_claim(crypto.sign_json_claimset(identity, {"foo": "hello"}))

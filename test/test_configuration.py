@@ -108,7 +108,6 @@ class TestAcceptedDIDIssuers:
 
 def test_service_identifier(
     client: Client,
-    configure_service,
     service_identifier: str,
     did_web: DIDWebServer,
 ):
@@ -116,7 +115,7 @@ def test_service_identifier(
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # Receipts include an issuer and kid.
-    receipt = Receipt.decode(client.submit_claim(claim).receipt)
+    receipt = client.submit_claim(claim).receipt
     assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
     assert pycose.headers.KID in receipt.phdr
 
@@ -141,7 +140,7 @@ def test_without_service_identifier(
     assert httpx.get(url, verify=False).status_code == 404
 
     # The receipts it returns have no issuer or kid.
-    receipt = Receipt.decode(client.submit_claim(claim).receipt)
+    receipt = client.submit_claim(claim).receipt
     assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
     assert pycose.headers.KID not in receipt.phdr
 
@@ -162,3 +161,42 @@ def test_consistent_jwk(client, service_identifier):
         cert_key = crypto.get_cert_public_key(certificate)
 
         assert crypto.pub_key_pem_to_der(key) == crypto.pub_key_pem_to_der(cert_key)
+
+
+@pytest.mark.needs_cchost
+@pytest.mark.isolated_test
+def test_did_multiple_service_keys(
+    client: Client,
+    did_web: DIDWebServer,
+    restart_service,
+    service_identifier: str,
+):
+    resolver = Resolver(verify=False)
+    trust_store = DIDResolverTrustStore(resolver)
+
+    # Initially the DID document only has a single assertion method
+    did_doc = resolver.resolve(service_identifier)
+    assert len(did_doc["assertionMethod"]) == 1
+    old_assertion_method = did_doc["assertionMethod"][0]
+
+    # Create a claim and get a receipt before the service is restarted.
+    identity = did_web.create_identity()
+    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    receipt = client.submit_claim(claims).receipt
+    verify_receipt(claims, trust_store, receipt)
+
+    restart_service()
+
+    did_doc = resolver.resolve(service_identifier)
+    assert len(did_doc["assertionMethod"]) == 2
+    assert old_assertion_method in did_doc["assertionMethod"]
+
+    # Thanks to the DID document containing all past service identities, the
+    # old receipt can still be verified even though the current identity has
+    # changed.
+    verify_receipt(claims, trust_store, receipt)
+
+    # We can also get new receipts, which will use the new identity, and these
+    # can also be verified.
+    new_receipt = client.submit_claim(claims).receipt
+    verify_receipt(claims, trust_store, new_receipt)

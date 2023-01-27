@@ -20,6 +20,7 @@ from pyscitt.verify import ServiceParameters, StaticTrustStore
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer
+from .proxy import Proxy
 
 # This file defines a collection of pytest fixtures used to manage and
 # interact with the SCITT ledger.
@@ -40,6 +41,10 @@ class ManagedCCHostFixtures:
         config.addinivalue_line(
             "markers",
             "isolated_test: run this test with its own class-scoped cchost process.",
+        )
+        config.addinivalue_line(
+            "markers",
+            "disable_proxy: run this test without a proxy in front of the cchost process",
         )
 
     def pytest_collection_modifyitems(self, config, items):
@@ -157,8 +162,36 @@ class ManagedCCHostFixtures:
             return request.getfixturevalue("shared_cchost")
 
     @pytest.fixture(scope="class")
-    def service_url(self, cchost):
-        return f"https://127.0.0.1:{cchost.rpc_port}"
+    def proxy(self, cchost, request):
+        """
+        Creates a Proxy instance that is pointed at the currently running
+        cchost instance's RPC port.
+
+        The proxy provides a stable port on which the service can be reached
+        at, even as the service is restarted and its port changes.
+        """
+        if "disable_proxy" in request.keywords:
+            raise RuntimeError(
+                "Proxy is disabled for this test, cannot use the `proxy` fixture"
+            )
+
+        with Proxy("localhost", cchost.rpc_port) as proxy:
+            yield proxy
+
+    @pytest.fixture(scope="class")
+    def service_url(self, request):
+        # The proxy allows us to later restart the cchost process,
+        # listening on a different port number, while still providing a
+        # stable hostname and port number for the service.
+        #
+        # While the proxy is completely transparent, some tests may want
+        # to disable this feature, as it may affect performance.
+        if "disable_proxy" in request.keywords:
+            cchost = request.getfixturevalue("cchost")
+            return f"https://127.0.0.1:{cchost.rpc_port}"
+        else:
+            proxy = request.getfixturevalue("proxy")
+            return f"https://127.0.0.1:{proxy.port}"
 
     @pytest.fixture(scope="class")
     def member_auth(self, cchost):
@@ -170,6 +203,21 @@ class ManagedCCHostFixtures:
         path.joinpath("member0_cert.pem").write_text(member_auth.cert)
         path.joinpath("member0_privk.pem").write_text(member_auth.key)
         return (path.joinpath("member0_cert.pem"), path.joinpath("member0_privk.pem"))
+
+    @pytest.fixture(scope="class")
+    def restart_service(self, cchost, proxy, client):
+        """
+        Restart the cchost process and perform recovery on the process.
+
+        The proxy is updated to point to the new process.
+        """
+
+        def f():
+            cchost.restart()
+            proxy.set_upstream("localhost", cchost.rpc_port)
+            client.governance.recover_service(cchost.encryption_private_key)
+
+        return f
 
 
 class ExternalLedgerFixtures:

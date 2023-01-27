@@ -4,11 +4,14 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .client import BaseClient
+    from .client import Client
 
+import base64
 import json
 from dataclasses import dataclass
 from typing import Optional, Union
+
+from . import crypto
 
 
 @dataclass
@@ -30,9 +33,9 @@ class ProposalNotAccepted(Exception):
 
 
 class GovernanceClient:
-    client: "BaseClient"
+    client: "Client"
 
-    def __init__(self, client: "BaseClient"):
+    def __init__(self, client: "Client"):
         self.client = client
 
     def propose(
@@ -99,6 +102,44 @@ class GovernanceClient:
 
         return result
 
+    def get_recovery_share(self, key: Optional[crypto.Pem] = None) -> bytes:
+        encoded_share = self.client.get(
+            "/gov/recovery_share", sign_request=True
+        ).json()["encrypted_share"]
+        encrypted_share = base64.b64decode(encoded_share)
+
+        if key is not None:
+            return crypto.decrypt_recovery_share(key, encrypted_share)
+        else:
+            return encrypted_share
+
+    def submit_recovery_share(self, share: bytes) -> None:
+        self.client.post(
+            "/gov/recovery_share",
+            sign_request=True,
+            json={"share": base64.b64encode(share).decode("ascii")},
+        )
+
+    def recover_service(self, encryption_private_key: crypto.Pem) -> None:
+        """
+        Perform a disaster recovery of the service. This assumes the service
+        has a single member.
+
+        https://microsoft.github.io/CCF/release/3.x/operations/recovery.html
+        https://microsoft.github.io/CCF/release/3.x/governance/accept_recovery.html
+        """
+        recovery_share = self.get_recovery_share(encryption_private_key)
+        previous_service_identity = self.client.get_previous_service_identity()
+        next_service_identity = self.client.get_service_certificate()
+
+        proposal = transition_service_to_open_proposal(
+            next_service_identity,
+            previous_service_identity,
+        )
+        self.propose(proposal, must_pass=True)
+        self.submit_recovery_share(recovery_share)
+        self.client.wait_for_network_open()
+
     def activate_member(self):
         r = self.client.post("/gov/ack/update_state_digest", sign_request=True)
         self.client.post("/gov/ack", content=r.content, sign_request=True)
@@ -128,12 +169,19 @@ def set_ca_bundle_proposal(name: str, bundle: str) -> dict:
     }
 
 
-def transition_service_to_open_proposal(next_service_identity: str) -> dict:
+def transition_service_to_open_proposal(
+    next_service_identity: str, previous_service_identity: Optional[str] = None
+) -> dict:
+    args = {"next_service_identity": next_service_identity}
+
+    if previous_service_identity:
+        args["previous_service_identity"] = previous_service_identity
+
     return {
         "actions": [
             {
                 "name": "transition_service_to_open",
-                "args": {"next_service_identity": next_service_identity},
+                "args": args,
             }
         ]
     }

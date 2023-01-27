@@ -46,6 +46,7 @@ def measure_latency(fn, arg_fn=None, n=150):
 
 
 @pytest.mark.perf
+@pytest.mark.disable_proxy
 class TestPerf:
     def test_latency(self, client, did_web, x5c_ca):
         payload = {"foo": "bar"}

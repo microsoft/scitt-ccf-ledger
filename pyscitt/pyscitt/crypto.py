@@ -18,7 +18,7 @@ import pycose.algorithms
 import pycose.headers
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import (
     EllipticCurve,
     EllipticCurvePrivateKey,
@@ -755,4 +755,22 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
 
     return key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo).decode(
         "ascii"
+    )
+
+
+def decrypt_recovery_share(key_pem: Pem, encrypted_share: bytes) -> bytes:
+    """
+    Decrypt a CCF recovery share, using the member's encryption private key.
+
+    https://microsoft.github.io/CCF/release/3.x/governance/accept_recovery.html
+    """
+    key = load_pem_private_key(key_pem.encode("ascii"), None)
+    assert isinstance(key, RSAPrivateKey)
+    return key.decrypt(
+        encrypted_share,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
     )
