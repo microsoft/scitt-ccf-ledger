@@ -48,25 +48,37 @@ namespace scitt
     return fmt::format("{:x}", ENTROPY->random64());
   }
 
+// The ## syntax is GCC extension, for which we need to disable warnings.
+// C++20 has a standard alternative, __VA_OPT__, we could use, but clang has a
+// bug still throws warnings at the call site. The bug is fixed in clang-14.
+// https://github.com/llvm/llvm-project/commit/af971365a2a8b0d982814c0652bb86844fd19cda
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+
+// These macros could be invoked from anywhere, including outside of the scitt
+// namespace. All references to global symbols must therefore be fully qualified
+// (ie. using ::scitt::foo).
 #define SCITT_INFO(s, ...) \
-  if (client_request_id.has_value()) \
+  if (::scitt::client_request_id.has_value()) \
     CCF_APP_INFO( \
       "ClientRequestId={} RequestId={} " s, \
-      client_request_id.value(), \
-      request_id, \
+      ::scitt::client_request_id.value(), \
+      ::scitt::request_id, \
       ##__VA_ARGS__); \
   else \
-    CCF_APP_INFO("RequestId={} " s, request_id, ##__VA_ARGS__)
+    CCF_APP_INFO("RequestId={} " s, ::scitt::request_id, ##__VA_ARGS__)
 
 #define SCITT_FAIL(s, ...) \
-  if (client_request_id.has_value()) \
+  if (::scitt::client_request_id.has_value()) \
     CCF_APP_FAIL( \
       "ClientRequestId={} RequestId={} " s, \
-      client_request_id.value(), \
-      request_id, \
+      ::scitt::client_request_id.value(), \
+      ::scitt::request_id, \
       ##__VA_ARGS__); \
   else \
-    CCF_APP_FAIL("RequestId={} " s, request_id, ##__VA_ARGS__)
+    CCF_APP_FAIL("RequestId={} " s, ::scitt::request_id, ##__VA_ARGS__)
+
+#pragma clang diagnostic pop
 
   template <typename Fn, typename Ctx>
   Fn generic_tracing_adapter(
