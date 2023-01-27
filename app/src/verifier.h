@@ -270,7 +270,7 @@ namespace scitt::verifier
 
       std::vector<std::vector<uint8_t>> x5chain{};
 
-      if (phdr.x5chain.has_value() and uhdr.x5chain.has_value())
+      if (phdr.x5chain.has_value() && uhdr.x5chain.has_value())
       {
         throw VerificationError(
           "Notary claim has an x5chain (label 33) "
