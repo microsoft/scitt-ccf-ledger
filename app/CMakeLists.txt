@@ -58,7 +58,7 @@ add_ccf_app(scitt
 if (COMPILE_TARGET STREQUAL "sgx")
   target_include_directories(scitt.enclave PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 elseif (COMPILE_TARGET STREQUAL "virtual")
-  target_include_directories(scitt.virtual PUBLIC src ${CMAKE_CURRENT_BINARY_DIR}/src)
+  target_include_directories(scitt.virtual PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 endif ()
 
 if (COMPILE_TARGET STREQUAL "sgx")
