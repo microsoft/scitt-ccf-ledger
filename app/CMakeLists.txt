@@ -47,9 +47,19 @@ configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
 add_ccf_app(scitt
   SRCS src/main.cpp
-  INCLUDE_DIRS src ${CMAKE_CURRENT_BINARY_DIR}/src ${CCF_DIR}/include/ccf/_private
+  INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private
   INSTALL_LIBS ON
 )
+
+# The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
+# -isystem, which silences any warnings in them, which is undesirable for our
+# own code. We manually add them instead to workaround this and make sure -I
+# gets used.
+if (COMPILE_TARGET STREQUAL "sgx")
+  target_include_directories(scitt.enclave PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
+elseif (COMPILE_TARGET STREQUAL "virtual")
+  target_include_directories(scitt.virtual PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
+endif ()
 
 if (COMPILE_TARGET STREQUAL "sgx")
   # Generate an ephemeral signing key

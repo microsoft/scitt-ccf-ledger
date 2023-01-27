@@ -192,7 +192,7 @@ namespace scitt
       auto entry = tx.template ro<EntryTable>(ENTRY_TABLE)->get();
       if (entry.has_value())
       {
-        LOG_INFO_FMT("Found SCITT entry at {}", tx_id.seqno);
+        CCF_APP_INFO("Found SCITT entry at {}", tx_id.seqno);
         cose::ProtectedHeader phdr;
         try
         {
@@ -200,7 +200,7 @@ namespace scitt
         }
         catch (const cose::COSEDecodeError& e)
         {
-          LOG_INFO_FMT(
+          CCF_APP_INFO(
             "Could not decode entry at {}: {}", tx_id.seqno, e.what());
           return;
         }
@@ -211,7 +211,7 @@ namespace scitt
         }
         else
         {
-          LOG_INFO_FMT(
+          CCF_APP_INFO(
             "SCITT entry at {} does not have an issuer", tx_id.seqno);
           return;
         }
@@ -243,7 +243,7 @@ namespace scitt
       std::unique_lock l(pending_mutex_);
 
       pt::bitvector<32> index = hash_key(issuer, feed);
-      LOG_INFO_FMT(
+      CCF_APP_INFO(
         "Submitting entry to PT seqno={} issuer={} feed={} hash={}",
         seqno,
         issuer,
@@ -274,7 +274,7 @@ namespace scitt
       tree.flush(info.upper_bound);
       prefix_tree_seqno_ = tx_id.seqno;
 
-      LOG_INFO_FMT(
+      CCF_APP_INFO(
         "Flushed prefix tree seqno={} upper_bound={}",
         tx_id.seqno,
         info.upper_bound);

@@ -882,7 +882,7 @@ namespace scitt::pt
       bool visited_left = false;
 
       const position* right = nullptr;
-      size_t length;
+      size_t length = 0;
     };
 
     std::vector<cursor> stack;
