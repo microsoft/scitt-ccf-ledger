@@ -33,11 +33,6 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
 
-  // Temporary made up profile label, we don't expect claims to contain a
-  // profile header parameter yet, but it's useful to have a label so we can
-  // easily act on the absence of a profile.
-  static constexpr int64_t COSE_HEADER_PARAM_PROFILE = 6861;
-
   // Temporary assignments from draft-birkholz-scitt-architecture
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
@@ -62,7 +57,6 @@ namespace scitt::cose
   {
     // All headers are optional here but optionality will later be validated
     // according to the COSE profile of the claim.
-    std::optional<std::string> profile;
 
     // Vanilla SCITT protected header parameters
     // Issuer is used when verifying with did:web
@@ -140,6 +134,14 @@ namespace scitt::cose
       {
         throw COSEDecodeError("x5chain array length was 0 in COSE header.");
       }
+      if (parsed.size() == 1)
+      {
+        // IETF-COSE-X509 Draft mandates a single cert is placed in a CBOR
+        // byte string, not an array.
+        // But other implementations mistakenly serialise single certs as bstrs
+        // in arrays, so we are not strict here.
+        CCF_APP_INFO("Single cert found in x5chain array in COSE header.");
+      }
     }
     else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
     {
@@ -165,14 +167,11 @@ namespace scitt::cose
 
     QCBORError qcbor_result;
 
-    struct q_useful_buf_c protected_parameters;
-    QCBORDecode_EnterBstrWrapped(
-      &ctx, QCBOR_TAG_REQUIREMENT_NOT_A_TAG, &protected_parameters);
+    QCBORDecode_EnterBstrWrapped(&ctx, QCBOR_TAG_REQUIREMENT_NOT_A_TAG, NULL);
     QCBORDecode_EnterMap(&ctx, NULL);
 
     enum
     {
-      PROFILE_INDEX,
       ALG_INDEX,
       CRIT_INDEX,
       ISSUER_INDEX,
@@ -187,10 +186,6 @@ namespace scitt::cose
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
-
-    header_items[PROFILE_INDEX].label.int64 = COSE_HEADER_PARAM_PROFILE;
-    header_items[PROFILE_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[PROFILE_INDEX].uDataType = QCBOR_TYPE_INT64;
 
     header_items[ALG_INDEX].label.int64 = COSE_HEADER_PARAM_ALG;
     header_items[ALG_INDEX].uLabelType = QCBOR_TYPE_INT64;
@@ -255,10 +250,6 @@ namespace scitt::cose
         fmt::format("Failed to decode protected header: {}", qcbor_result));
     }
 
-    if (header_items[PROFILE_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.profile = cbor::as_string(header_items[PROFILE_INDEX].val.string);
-    }
     if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.alg = header_items[ALG_INDEX].val.int64;
@@ -430,6 +421,12 @@ namespace scitt::cose
     auto phdr = decode_protected_header(ctx);
     auto uhdr = decode_unprotected_header(ctx);
 
+    QCBORDecode_ExitArray(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign1");
+    }
     return std::make_tuple(phdr, uhdr);
   }
 
@@ -498,9 +495,7 @@ namespace scitt::cose
 
   // Temporarily needed for notary_verify().
   std::vector<uint8_t> create_sign1_tbs(
-    int cose_size,
-    std::span<const uint8_t> protected_header,
-    std::span<const uint8_t> payload)
+    std::span<const uint8_t> protected_header, std::span<const uint8_t> payload)
   {
     // Note: This function does not return the hash of the TBS because
     // EdDSA does not support pre-hashed messages as input.
@@ -512,7 +507,7 @@ namespace scitt::cose
     //     payload: bstr
     // ]
 
-    cbor::encoder ctx(cose_size + 1024);
+    cbor::encoder ctx(protected_header.size() + payload.size() + 1024);
     QCBOREncode_OpenArray(ctx);
 
     // context
@@ -590,22 +585,22 @@ namespace scitt::cose
 
     QCBORDecode_EnterArray(&ctx, nullptr);
 
-    QCBORItem item;
-
+    UsefulBufC bstr_item;
     // protected headers
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto phdrs = cbor::as_span(item.val.string);
+    QCBORDecode_GetByteString(&ctx, &bstr_item);
+    auto phdrs = cbor::as_span(bstr_item);
 
+    QCBORItem item;
     // skip unprotected header
     QCBORDecode_VGetNextConsume(&ctx, &item);
 
     // payload
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto payload = cbor::as_span(item.val.string);
+    QCBORDecode_GetByteString(&ctx, &bstr_item);
+    auto payload = cbor::as_span(bstr_item);
 
     // signature
-    QCBORDecode_VGetNext(&ctx, &item);
-    auto signature = cbor::as_span(item.val.string);
+    QCBORDecode_GetByteString(&ctx, &bstr_item);
+    auto signature = cbor::as_span(bstr_item);
 
     QCBORDecode_ExitArray(&ctx);
     auto error = QCBORDecode_Finish(&ctx);
@@ -646,7 +641,7 @@ namespace scitt::cose
 
     auto md_type = get_md_type(header_alg);
     auto ossl_md_type = get_openssl_md_type(md_type);
-    auto tbs = create_sign1_tbs(cose_sign1.size(), protected_header, payload);
+    auto tbs = create_sign1_tbs(protected_header, payload);
 
     std::vector<uint8_t> signature_tmp;
     if (is_ecdsa_alg(header_alg))
@@ -813,13 +808,23 @@ namespace scitt::cose
     QCBOREncode_CloseArray(encoder);
     if (x5chain.has_value())
     {
-      QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_X5CHAIN);
       auto certs = x5chain.value();
-      for (auto& cert : certs)
+      if (certs.size() == 1)
       {
-        QCBOREncode_AddBytes(encoder, cbor::from_bytes(cert));
+        // To obey the IETF COSE X509 draft;
+        // A single cert MUST be serialized as a single bstr.
+        QCBOREncode_AddBytes(encoder, cbor::from_bytes(certs[0]));
       }
-      QCBOREncode_CloseArray(encoder);
+      else
+      {
+        // And multiple certs MUST be serialized as an array of bstrs.
+        QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_X5CHAIN);
+        for (auto& cert : certs)
+        {
+          QCBOREncode_AddBytes(encoder, cbor::from_bytes(cert));
+        }
+        QCBOREncode_CloseArray(encoder);
+      }
     }
     QCBOREncode_CloseMap(encoder);
 

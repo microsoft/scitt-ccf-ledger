@@ -54,10 +54,6 @@ class TestNonCanonicalEncoding:
         """The ledger should accept claims even if not canonically encoded."""
         client.submit_claim(claim)
 
-    @pytest.mark.xfail(
-        reason="pycose does not preserve the original encoding (https://github.com/TimothyClaeys/pycose/pull/91)",
-        raises=InvalidSignature,
-    )
     def test_verify_receipt(self, client: Client, trust_store, claim):
         """We should be able to verify the produced receipt."""
         # Once the xfail is fixed, this test can be merged with test_submit_claim.
