@@ -79,7 +79,7 @@ namespace scitt::verifier
       auto issuer = phdr.issuer;
       auto kid = phdr.kid;
 
-      if (!phdr.issuer.has_value())
+      if (!issuer.has_value())
       {
         throw cose::COSEDecodeError("Missing issuer in protected header");
       }
@@ -89,11 +89,6 @@ namespace scitt::verifier
       }
 
       std::optional<std::string> assertion_method_id;
-      if (!issuer.has_value())
-      {
-        throw VerificationError(
-          "Issuer was missing as a part of the decoded header.");
-      }
 
       if (kid.has_value())
       {
@@ -273,22 +268,35 @@ namespace scitt::verifier
       // Validate protected header
       validate_notary_protected_header(phdr, configuration);
 
-      // Validate unprotected header
-      // Unprotected header must contain x5chain else the notary claim cannot be
-      // verified.
-      if (!uhdr.x5chain.has_value())
+      std::vector<std::vector<uint8_t>> x5chain{};
+
+      if (phdr.x5chain.has_value() && uhdr.x5chain.has_value())
       {
         throw VerificationError(
-          "Notary claim's unprotected header is missing an x5chain (label 33) "
-          "parameter.");
+          "Notary claim has an x5chain (label 33) "
+          "parameter in both its protected and unprotected header.");
+      }
+      else if (phdr.x5chain.has_value())
+      {
+        SCITT_INFO("Notary x5chain in protected header.");
+        x5chain = phdr.x5chain.value();
+      }
+      else if (uhdr.x5chain.has_value())
+      {
+        SCITT_INFO("Notary x5chain in unprotected header.");
+        x5chain = uhdr.x5chain.value();
+      }
+      else
+      {
+        throw VerificationError(
+          "Notary claim is missing an x5chain (label 33) "
+          "parameter in its headers.");
       }
 
-      PublicKey key;
       // Verify the chain of certs against the x509 root store.
       auto roots = x509_root_store(tx);
-      auto cert = verify_chain(roots, uhdr.x5chain.value());
-      key = PublicKey(cert, std::nullopt);
-      return key;
+      auto cert = verify_chain(roots, x5chain);
+      return PublicKey(cert, std::nullopt);
     }
 
     ClaimProfile verify_claim(
@@ -358,14 +366,6 @@ namespace scitt::verifier
           }
 
           return ClaimProfile::X509;
-        }
-        else if (phdr.profile.has_value())
-        {
-          SCITT_INFO(
-            "Unknown COSE profile in protected header: {}",
-            phdr.profile.value());
-          throw cose::COSEDecodeError(
-            "Unknown COSE profile in protected header");
         }
         else
         {
