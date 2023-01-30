@@ -426,7 +426,7 @@ namespace scitt::cose
     auto error = QCBORDecode_Finish(&ctx);
     if (error)
     {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
+      throw COSEDecodeError("Failed to decode COSE_Sign1");
     }
     return std::make_tuple(phdr, uhdr);
   }
