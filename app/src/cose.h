@@ -6,6 +6,7 @@
 #include "cbor.h"
 #include "openssl_wrappers.h"
 #include "public_key.h"
+#include "tracing.h"
 #include "util.h"
 
 #include <ccf/crypto/base64.h>
@@ -140,7 +141,7 @@ namespace scitt::cose
         // byte string, not an array.
         // But other implementations mistakenly serialise single certs as bstrs
         // in arrays, so we are not strict here.
-        CCF_APP_INFO("Single cert found in x5chain array in COSE header.");
+        SCITT_INFO("Single cert found in x5chain array in COSE header.");
       }
     }
     else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
@@ -149,7 +150,7 @@ namespace scitt::cose
     }
     else
     {
-      CCF_APP_FAIL("Type: {}", x5chain.uDataType);
+      SCITT_FAIL("Type: {}", x5chain.uDataType);
       throw COSEDecodeError(
         "Value type of x5chain in COSE header is not array or byte "
         "string.");
