@@ -566,7 +566,6 @@ def load_private_key(key_path: Path) -> Pem:
 def create_did_document(
     did: str, pub_key_pem: Pem, alg: Optional[str] = None, kid: Optional[str] = None
 ) -> dict:
-
     pub_key = load_pem_public_key(pub_key_pem.encode("ascii"))
     der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 

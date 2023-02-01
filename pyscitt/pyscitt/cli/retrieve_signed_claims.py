@@ -17,7 +17,6 @@ def retrieve_signed_claimsets(
     to_seqno: Optional[int],
     service_trust_store_path: Optional[Path],
 ):
-
     base_path.mkdir(parents=True, exist_ok=True)
 
     if service_trust_store_path:
