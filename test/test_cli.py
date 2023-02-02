@@ -10,7 +10,6 @@ import pytest
 from loguru import logger as LOG
 from pycose.messages import CoseMessage
 
-from infra.did_web_server import DIDWebServer
 from pyscitt import crypto, did
 from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_END,
@@ -19,6 +18,8 @@ from pyscitt.cli.governance import (
 from pyscitt.cli.main import main
 from pyscitt.client import Client, ServiceError
 from pyscitt.governance import ProposalNotAccepted
+
+from .infra.did_web_server import DIDWebServer
 
 
 @pytest.fixture

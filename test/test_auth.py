@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from infra.jwt_issuer import JwtIssuer
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
+
+from .infra.jwt_issuer import JwtIssuer
 
 
 class TestAuthentication:
