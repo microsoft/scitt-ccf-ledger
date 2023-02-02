@@ -48,6 +48,8 @@ namespace scitt::did::web
         const auto& primary_interface =
           node_info->rpc_interfaces.begin()->second;
 
+        // Note that bind_address can be 0.0.0.0. This is fine here
+        // as Linux routes that address to localhost.
         return fmt::format(
           "https://{}/did/{}/doc", primary_interface.bind_address, did);
       }
