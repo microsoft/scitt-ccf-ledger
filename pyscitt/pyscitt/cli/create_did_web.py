@@ -25,7 +25,6 @@ def create_did_web(
     kty: str,
     alg: Optional[str],
 ):
-
     parsed = urlsplit(base_url)
     assert parsed.hostname
     did = format_did_web(

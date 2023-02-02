@@ -6,8 +6,9 @@ import time
 
 import pytest
 
-from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
+
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 X5C_PARAMS = dict(alg="ES256", kty="ec", ec_curve="P-256")
 

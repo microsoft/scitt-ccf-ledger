@@ -7,12 +7,13 @@ import httpx
 import pycose
 import pytest
 
-from infra.did_web_server import DIDWebServer
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
 from pyscitt.did import Resolver, did_web_document_url
 from pyscitt.receipt import Receipt
 from pyscitt.verify import DIDResolverTrustStore, verify_receipt
+
+from .infra.did_web_server import DIDWebServer
 
 
 class TestAcceptedAlgorithms:

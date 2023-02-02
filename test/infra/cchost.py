@@ -29,6 +29,7 @@ class UnexpectedExitException(Exception):
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
+
 # Python 3.11 would make this obsolete with 'except*'
 def match_taskgroup_error(group: aiotools.TaskGroupError, expected: type):
     errors = group.__errors__

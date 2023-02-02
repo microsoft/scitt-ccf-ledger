@@ -27,7 +27,7 @@ source venv/bin/activate
 pip install --disable-pip-version-check -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
-exec python3.8 test/infra/cchost.py \
+exec python3.8 -m test.infra.cchost \
     --port 8000 \
     --cchost $CCF_DIR/bin/cchost \
     --package $SCITT_DIR/lib/libscitt \

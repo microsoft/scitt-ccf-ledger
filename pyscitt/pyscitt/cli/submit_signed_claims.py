@@ -17,7 +17,6 @@ def submit_signed_claimset(
     service_trust_store_path: Optional[Path],
     skip_confirmation: bool,
 ):
-
     if path.suffix != ".cose":
         raise ValueError("unsupported file extension")
 

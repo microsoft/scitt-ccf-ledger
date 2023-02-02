@@ -32,7 +32,6 @@ def prefix_tree_get_receipt(
     output: Optional[Path],
     service_trust_store_path: Path,
 ):
-
     if claim_path:
         claim = CoseMessage.decode(claim_path.read_bytes())
 

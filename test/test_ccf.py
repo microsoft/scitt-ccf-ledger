@@ -11,11 +11,12 @@ import pycose.headers
 import pytest
 from pycose.messages import Sign1Message
 
-from infra.did_web_server import DIDWebServer
-from infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 from pyscitt import crypto, governance
 from pyscitt.client import Client, ServiceError
 from pyscitt.verify import verify_receipt
+
+from .infra.did_web_server import DIDWebServer
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 # Temporary monkey-patch for pycose until https://github.com/TimothyClaeys/pycose/pull/107

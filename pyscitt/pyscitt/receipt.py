@@ -28,8 +28,20 @@ def hdr_as_dict(phdr: dict) -> dict:
     Return a representation of a list of COSE header parameters that
     is amenable to pretty-printing.
     """
-    display = lambda v: v.__name__ if hasattr(v, "__name__") else v
-    return {display(k): display(v) for k, v in phdr.items()}
+
+    def display(item):
+        if hasattr(item, "__name__"):
+            return item.__name__
+        if type(item) is bytes:
+            return item.hex()
+        return item
+
+    # Decode KID into a 'readable' text string if present.
+    hdr_dict = {display(k): display(v) for k, v in phdr.items()}
+    if hdr_dict.get("KID"):
+        hdr_dict["KID"] = bytes.fromhex(hdr_dict["KID"]).decode()
+
+    return hdr_dict
 
 
 @dataclass
