@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.2.1]
+### Changed
+- Include all past service identities in the DID endpoint (#85).
+
+### Fixed
+- Don't hardcode localhost in did:web resolver callback address (#92).
+
 ## [0.2.0]
 ### Added
 - Add support for Notary COSE profile (#73). Note that this is currently experimental and not supported by the IETF specifications that are being developed.
@@ -42,6 +49,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
+[0.2.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0-dev.1...0.1.0
 [0.1.0-dev.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.1.0-dev.1
