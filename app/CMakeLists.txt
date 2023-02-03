@@ -15,7 +15,6 @@ project(scitt
 )
 
 set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
-option(ENABLE_DEBUG_MALLOC "Enable Open Enclave's debug malloc for enclave builds" OFF)
 set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
 message(STATUS "ATTESTED_FETCH_MRENCLAVE_HEX=${ATTESTED_FETCH_MRENCLAVE_HEX}")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
@@ -93,7 +92,7 @@ if (BUILD_TESTS)
     message(FATAL_ERROR "Unit tests are not supported on SGX builds. Set BUILD_TESTS=OFF to disable them.")
   endif()
 
-  # Avoid Gtest files ending up in the scitt install directory   
+  # Avoid Gtest files ending up in the scitt install directory
   set(INSTALL_GTEST OFF)
   include(FetchContent)
   FetchContent_Declare(
