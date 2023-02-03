@@ -47,7 +47,8 @@ echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
     python3.8 -m venv "venv"
 fi
-source venv/bin/activate 
+source venv/bin/activate
+pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
