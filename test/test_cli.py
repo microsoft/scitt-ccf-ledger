@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 import json
-import os
 import shlex
 from pathlib import Path
 
@@ -16,7 +15,7 @@ from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_START,
 )
 from pyscitt.cli.main import main
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import ServiceError
 from pyscitt.governance import ProposalNotAccepted
 
 from .infra.did_web_server import DIDWebServer

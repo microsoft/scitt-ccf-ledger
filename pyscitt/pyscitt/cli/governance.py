@@ -5,7 +5,6 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional, Union

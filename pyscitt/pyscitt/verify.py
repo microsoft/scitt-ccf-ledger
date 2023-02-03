@@ -6,26 +6,19 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 
 import cbor2
 import pycose
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.x509 import load_pem_x509_certificate
 from pycose.keys.ec2 import EC2Key
 from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
-from .crypto import (
-    COSE_HEADER_PARAM_ISSUER,
-    COSE_HEADER_PARAM_SCITT_RECEIPTS,
-    Pem,
-    cert_der_to_pem,
-    convert_jwk_to_pem,
-    get_cert_public_key,
-)
+from .crypto import COSE_HEADER_PARAM_ISSUER, COSE_HEADER_PARAM_SCITT_RECEIPTS
 from .receipt import Receipt
 
 

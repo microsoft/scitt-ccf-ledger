@@ -3,7 +3,6 @@
 
 import cbor2
 import pytest
-from cryptography.exceptions import InvalidSignature
 from pycose import algorithms, headers
 from pycose.messages import Sign1Message
 

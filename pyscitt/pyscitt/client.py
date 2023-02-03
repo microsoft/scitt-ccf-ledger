@@ -7,13 +7,10 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Generic, Iterable, Literal, Optional, Tuple, TypeVar, Union, overload
+from typing import Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
 import httpx
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from loguru import logger as LOG
 
 from . import crypto
