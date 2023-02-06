@@ -5,7 +5,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
-from loguru import logger as LOG
 
 from pyscitt.client import MemberAuthenticationMethod
 

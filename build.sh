@@ -56,7 +56,6 @@ CC="$CC" CXX="$CXX" \
     -DENABLE_PREFIX_TREE="${ENABLE_PREFIX_TREE}" \
     -DBUILD_TESTS="${BUILD_TESTS}" \
     -DLVI_MITIGATIONS=OFF \
-    -DENABLE_DEBUG_MALLOC=OFF \
     -DCMAKE_INSTALL_PREFIX=$install_dir \
     "$root_dir/app"
 

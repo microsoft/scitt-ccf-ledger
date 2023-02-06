@@ -1,9 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import itertools
 import os
-import time
 from contextlib import contextmanager
 from http import HTTPStatus
 from pathlib import Path
@@ -16,7 +14,7 @@ from pyscitt import governance
 from pyscitt.client import Client
 from pyscitt.did import format_did_web
 from pyscitt.local_key_sign_client import LocalKeySignClient
-from pyscitt.verify import ServiceParameters, StaticTrustStore
+from pyscitt.verify import StaticTrustStore
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer

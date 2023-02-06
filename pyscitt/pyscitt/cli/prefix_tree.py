@@ -7,7 +7,7 @@ from typing import Optional
 
 from pycose.messages import CoseMessage
 
-from .. import crypto, prefix_tree
+from .. import prefix_tree
 from ..client import Client
 from ..crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
 from ..verify import StaticTrustStore

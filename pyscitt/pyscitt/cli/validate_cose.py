@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
-from .. import crypto
 from ..verify import StaticTrustStore, verify_receipt
 
 
