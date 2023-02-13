@@ -158,14 +158,24 @@ TEST(Verifier, EmptyChain)
 TEST(Verifier, GarbageCert)
 {
   auto root = create_cert("CN=root", true);
-  std::vector<uint8_t> leaf = {0xde, 0xad, 0xbe, 0xef};
+  auto leaf = create_cert("CN=leaf", false, &root);
+  std::vector<uint8_t> garbage = {0xde, 0xad, 0xbe, 0xef};
 
   EXPECT_THROW(
     Verifier::verify_chain(
       {{root.first}},
       {{
-        leaf,
+        garbage,
         crypto::cert_pem_to_der(root.first),
+      }}),
+    VerificationError);
+
+  EXPECT_THROW(
+    Verifier::verify_chain(
+      {{root.first}},
+      {{
+        crypto::cert_pem_to_der(leaf.first),
+        garbage,
       }}),
     VerificationError);
 }

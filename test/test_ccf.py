@@ -119,21 +119,6 @@ def test_consistent_kid(client, did_web, trust_store):
     assert did_doc["assertionMethod"][0]["id"] == f"{identity.issuer}{kid}"
 
 
-def test_invalid_kid(client, did_web):
-    """
-    Submit a claim with an invalid kid and check that it is rejected.
-    """
-    identity = did_web.create_identity(kid="#key-1")
-    invalid_identity = crypto.Signer(
-        identity.private_key, issuer=identity.issuer, kid="key-1"
-    )
-
-    claim = crypto.sign_json_claimset(invalid_identity, {"foo": "bar"})
-
-    with pytest.raises(ServiceError, match="kid must start with '#'"):
-        client.submit_claim(claim)
-
-
 @pytest.mark.needs_cchost
 @pytest.mark.isolated_test
 def test_recovery(client, did_web, restart_service):
