@@ -82,7 +82,7 @@ namespace scitt
   size_t get_certificate_ecdsa_curve_size(std::span<const uint8_t> der)
   {
     OpenSSL::Unique_X509 cert(OpenSSL::Unique_BIO(der), false, true);
-    EVP_PKEY* pk = X509_get_pubkey(cert);
+    OpenSSL::Unique_PKEY pk(X509_get_pubkey(cert), EVP_PKEY_free);
 
     size_t bits = EVP_PKEY_bits(pk);
     return (bits + 7) / 8;
