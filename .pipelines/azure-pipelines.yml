@@ -94,6 +94,8 @@ stages:
           Environment:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
+            # Fast unwinder only gives us partial stack traces in LeakSanitzer
+            ASAN_OPTIONS: fast_unwind_on_malloc=0
           FunctionalTestArguments: '--enable-prefix-tree'
 
       - job: format

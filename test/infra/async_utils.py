@@ -11,18 +11,59 @@ import aiotools
 
 async def race_tasks(*awaitables: Awaitable[Any]):
     """
-    Run a collection of awaitable objects as tasks, concurrently, until at least one
-    of them completes or terminates with an exception. All uncompleted tasks
+    Run a collection of awaitable objects as tasks, concurrently, until at least
+    one of them completes or terminates with an exception. All uncompleted tasks
     will then be cancelled.
 
     If one or more tasks raise an error other than `asyncio.CancelledError`, a
     TaskGroupError containing all of them is raised.
     """
+
+    cancellation = None
     async with aiotools.TaskGroup() as tg:
         tasks = [tg.create_task(a) for a in awaitables]
-        (done, pending) = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for t in pending:
-            t.cancel()
+
+        try:
+            (done, pending) = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+            # The default TaskGroup behaviour is to wait for all child tasks on
+            # exit. What we actually want to do is cancel anything that is
+            # remaining.
+            for t in pending:
+                t.cancel()
+
+        # If the main task is cancelled, the TaskGroup automatically cancels
+        # the child tasks and waits for them to complete.
+        #
+        # Unfortunately, the TaskGroup implementation we use drops any
+        # exception thrown by child tasks during the cancellation and instead
+        # only re-raises the CancelledError, which can hide errors that
+        # happened during cleanup.
+        #
+        # To avoid this behaviour, we catch the cancellation ourselves, cancel
+        # all child tasks and exit the TaskGroup context manager normally. Like
+        # during any normal exit, the TaskGroup will await for all child tasks,
+        # and any error raised by them will correctly be re-raised by the
+        # TaskGroup (as part of a TaskGroupError).
+        #
+        # If none of the child tasks have raised errors, we'll reach the
+        # `if cancellation is not None` check further down, and raise the
+        # CancelledError again.
+        #
+        # This behaviour has actually been fixed in upstream Python since
+        # 3.11+, but we use the aiotools package to backport it to our current
+        # Python version, and aiotools still has this bug.
+        #
+        # See https://github.com/python/cpython/issues/95704 for the upstream
+        # fix.
+        except asyncio.CancelledError as e:
+            for t in tasks:
+                t.cancel()
+            cancellation = e
+
+    if cancellation is not None:
+        raise cancellation
 
 
 class EventLoopThread(ABC):
