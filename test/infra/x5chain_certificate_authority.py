@@ -8,35 +8,37 @@ from pyscitt.crypto import Pem
 
 
 class X5ChainCertificateAuthority:
-    def __init__(self, cn: str = "localhost", **kwargs):
-        self.cn = cn
-        self.algorithm = kwargs.pop("alg")
+    def __init__(self, **kwargs):
         self.root_key_pem, _ = crypto.generate_keypair(**kwargs)
-        self.root_cert_pem = crypto.generate_cert(self.root_key_pem, cn=cn, ca=True)
+        self.root_cert_pem = crypto.generate_cert(self.root_key_pem, ca=True)
 
     @property
     def cert_bundle(self) -> str:
         return self.root_cert_pem
 
-    def create_identity(self, length: int, **kwargs) -> crypto.Signer:
+    def create_identity(
+        self, *, alg: str, length: int = 1, ca: bool = False, **kwargs
+    ) -> crypto.Signer:
         """
         Create a new identity for x5c signer
         """
-        algorithm = kwargs.pop("alg")
-        x5c, private_key = self.create_chain(length, **kwargs)
-        return crypto.Signer(private_key, algorithm=algorithm, x5c=x5c)
+        x5c, private_key = self.create_chain(length=length, ca=ca, **kwargs)
+        return crypto.Signer(private_key, algorithm=alg, x5c=x5c)
 
-    def create_chain(self, length: int, **kwargs) -> Tuple[List[Pem], Pem]:
-        x5c = [self.root_cert_pem]
-        private_key = self.root_key_pem
+    def create_chain(
+        self, *, length: int = 1, ca: bool = False, **kwargs
+    ) -> Tuple[List[Pem], Pem]:
+        assert length > 0
 
+        chain = [(self.root_cert_pem, self.root_key_pem)]
         for i in range(length):
-            next_private_key, _ = crypto.generate_keypair(**kwargs)
-            ca = i < length
+            private_key, _ = crypto.generate_keypair(**kwargs)
             cert_pem = crypto.generate_cert(
-                next_private_key, x5c[-1], private_key, ca=ca
+                private_key_pem=private_key,
+                issuer=chain[-1],
+                ca=(i < length - 1) or ca,
             )
-            x5c.append(cert_pem)
-            private_key = next_private_key
+            chain.append((cert_pem, private_key))
 
-        return x5c[::-1], private_key
+        _, private_key = chain[-1]
+        return [cert for (cert, _) in reversed(chain)], private_key

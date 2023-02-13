@@ -415,13 +415,18 @@ namespace scitt::verifier
       }
 
       OpenSSL::Unique_X509_STORE_CTX store_ctx;
-      OpenSSL::CHECK1(X509_STORE_set_flags(store, X509_V_FLAG_PARTIAL_CHAIN));
       OpenSSL::CHECK1(X509_STORE_CTX_init(store_ctx, store, leaf, chain_stack));
 
       if (X509_verify_cert(store_ctx) != 1)
       {
+        int err = X509_STORE_CTX_get_error(store_ctx);
+        SCITT_INFO(
+          "Certificate chain is invalid: {}",
+          X509_verify_cert_error_string(err));
         throw VerificationError("Certificate chain is invalid");
       }
+
+      check_certificate_policy(chain_stack, leaf);
 
       return leaf;
     }
@@ -561,6 +566,55 @@ namespace scitt::verifier
       }
 
       throw VerificationError("JWK has no valid supported key");
+    }
+
+    /**
+     * Assuming a verified chain and leaf certificate, enforce additional
+     * policies.
+     */
+    static void check_certificate_policy(STACK_OF(X509) * chain, X509* leaf)
+    {
+      if (sk_X509_num(chain) == 0)
+      {
+        throw VerificationError(
+          "Certificate chain must include at least one CA certificate");
+      }
+
+      // OpenSSL doesn't require the chain to include the final trust anchor
+      // certificate, since it can find it in the trust store. However, for
+      // auditability reasons, it is preferable for all claims to be verifiable
+      // in isolation. For this reason, we require that the last certificate of
+      // the chain be self-signed.
+      X509* root = sk_X509_value(chain, sk_X509_num(chain) - 1);
+      if (!(X509_get_extension_flags(root) & EXFLAG_SS))
+      {
+        throw VerificationError("Chain root must be self-signed");
+      }
+
+      // OpenSSL versions 1.1.1g and older, including the one included in
+      // Ubuntu Focal and used by our virtual builds, have a bug that prevent
+      // self-signed end-entity certificates from being recognised, even if
+      // they are part of the trust store. This is fixed in OpenSSL 1.1.1h.
+      //
+      // As of Feb 2023, OpenEnclave uses version 1.1.1q. Our SGX builds could
+      // therefore support this usecase.
+      //
+      // However, in order to ensure consistent behaviour across our builds, we
+      // outright reject these self-signed end-entity certs. We may revisit
+      // this in the future, when our virtual builds switch to a more recent
+      // release.
+      //
+      // See https://github.com/microsoft/scitt-ccf-ledger/pull/104 for context
+      // and https://github.com/openssl/openssl/pull/12357 for the OpenSSL fix.
+      if (X509_get_extension_flags(leaf) & EXFLAG_SS)
+      {
+        throw VerificationError("Signing certificate is self-signed");
+      }
+
+      if (X509_get_extension_flags(leaf) & EXFLAG_CA)
+      {
+        throw VerificationError("Signing certificate is CA");
+      }
     }
 
     std::unique_ptr<did::Resolver> resolver;
