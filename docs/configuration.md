@@ -9,7 +9,7 @@ Members can then make and vote on [proposals](https://microsoft.github.io/CCF/ma
 Once SCITT is appropriately configured members can vote to [open the service](https://microsoft.github.io/CCF/main/governance/open_network.html#opening-the-network).
 - Note: SCITT does not require CCF-style "users" to be configured.
 
-# SCITT Configuration
+## SCITT Configuration
 
 SCITT configuration can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
 
