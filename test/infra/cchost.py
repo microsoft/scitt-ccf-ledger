@@ -19,27 +19,10 @@ from pyscitt import crypto
 
 from .async_utils import EventLoopThread, race_tasks
 
-
-class UnexpectedExitException(Exception):
-    ...
-
-
 # Register some log levels used by cchost that have, by default, no equivalent
 # in loguru.
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
-
-
-# Python 3.11 would make this obsolete with 'except*'
-def match_taskgroup_error(group: aiotools.TaskGroupError, expected: type):
-    errors = group.__errors__
-    if len(errors) == 1:
-        if isinstance(errors[0], expected):
-            return True
-        elif isinstance(errors[0], aiotools.TaskGroupError):
-            return match_taskgroup_error(errors[0], expected)
-
-    return False
 
 
 class CCHost(EventLoopThread):
@@ -166,17 +149,30 @@ class CCHost(EventLoopThread):
             env=cchost_env,
         )
 
-        async with aiotools.TaskGroup() as tg:
-            # These sub-tasks will get cancelled automatically when this one
-            # is. They only get cancelled after we leave the `async with` block,
-            # which allows us to wait for the process to quit first. This
-            # works nicely as it makes sure the log processing tasks get to see
-            # the final log messages emitted by cchost on its way out.
-            tg.create_task(self._process_stdout(process.stdout))
-            tg.create_task(self._process_stderr(process.stderr))
-            tg.create_task(self._wait_ready())
+        try:
+            async with aiotools.TaskGroup() as tg:
+                # These sub-tasks will get cancelled automatically when this one
+                # is. They only get cancelled after we leave the `async with` block,
+                # which allows us to wait for the process to quit first. This
+                # works nicely as it makes sure the log processing tasks get to see
+                # the final log messages emitted by cchost on its way out.
+                tg.create_task(self._process_stdout(process.stdout))
+                tg.create_task(self._process_stderr(process.stderr))
+                tg.create_task(self._wait_ready())
 
-            await self._wait_for_process(process)
+                await self._wait_for_process(process)
+
+        finally:
+            # Old asyncio versions don't always clean up the subprocess'
+            # correctly. The cleanup is delayed and frequently happens after
+            # the event loop has closed, which leads to noise on out console
+            # output. The only readily available workaround it to poke at the
+            # implementation details of the process object, and call close() on
+            # the transport manually.
+            #
+            # This is fixed in Python 3.11.1, at which point we won't have to do
+            # anything. See https://github.com/python/cpython/issues/88050.
+            process._transport.close()  # type: ignore[attr-defined]
 
     async def _wait_for_process(self, process: asyncio.subprocess.Process) -> None:
         """
@@ -184,11 +180,10 @@ class CCHost(EventLoopThread):
 
         If this task is cancelled, the process will be killed, gracefully at
         first and then forcibly. If instead the process terminates of its own
-        volition, an `UnexpectedExitException` error is raised.
+        volition, an exception is raised.
         """
         try:
             await process.wait()
-            raise UnexpectedExitException()
         finally:
             try:
                 process.terminate()
@@ -203,8 +198,20 @@ class CCHost(EventLoopThread):
                     await process.wait()
 
             except ProcessLookupError:
-                # This can happen if the process is already dead.
+                # This can happen if the process is already dead. We could check
+                # if process.returncode is not None ahead of time, but this
+                # might be vulnerable to race conditions: https://stackoverflow.com/a/64342461
                 pass
+
+            if process.returncode != 0:
+                raise RuntimeError(
+                    f"cchost process terminated with a non-zero status: {process.returncode}"
+                )
+
+        # The only way we can reach this point is if cchost terminates with a
+        # zero return code, and our task was not cancelled (otherwise the wait
+        # would have been aborted by a CancelledError).
+        raise RuntimeError("cchost process terminated early")
 
     async def _process_stdout(self, stream):
         while True:
