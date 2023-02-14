@@ -1,19 +1,19 @@
-# A Rough Guide to SCITT Configuration
+# SCITT Configuration Guide
 
-When SCITT-CCF nodes are first deployed, they are booted with initial [node configuration](https://microsoft.github.io/CCF/main/operations/configuration.html).
+When SCITT-CCF nodes are first deployed, they are started with an initial [node configuration](https://microsoft.github.io/CCF/main/operations/configuration.html).
 
-Members registered in the inital node configuration must then be [activated](https://microsoft.github.io/CCF/main/governance/adding_member.html#activating-a-new-member).
+Members registered in the initial node configuration must then be [activated](https://microsoft.github.io/CCF/main/governance/adding_member.html#activating-a-new-member).
 
 Members can then make and vote on [proposals](https://microsoft.github.io/CCF/main/governance/proposals.html) to update SCITT service configuration.
 
-Once SCITT is apropriately configured members can vote to [open](https://microsoft.github.io/CCF/main/governance/open_network.html#opening-the-network) the service.
-- Note: SCITT does not require CCF style `Users` to be configured.
+Once SCITT is appropriately configured members can vote to [open the service](https://microsoft.github.io/CCF/main/governance/open_network.html#opening-the-network).
+- Note: SCITT does not require CCF-style "users" to be configured.
 
 # SCITT Configuration
 
-SCITT config can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
+SCITT configuration can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
 
-Example config proposal:
+Example configuration proposal:
 ```
 {
   "actions": [
@@ -22,7 +22,7 @@ Example config proposal:
       "args": {
         "configuration": {
           "authentication": <auth-snippet-omitted-for-brevity>,
-          "service_identifier": "did:web:example.com%3A8000:scitt"
+          "service_identifier": "did:web:example.com:scitt"
         }
       }
     }
@@ -69,7 +69,7 @@ If set, it will be used to populate the issuer field of receipts.
 
 Example `set_scitt_configuration` snippet:
 ```
-"service_identifier": "did:web:example.com%3A8000:scitt"
+"service_identifier": "did:web:example.com:scitt"
 ```
 
 ## Accepted algorithms
@@ -78,11 +78,11 @@ List of accepted COSE signature algorithms when verifying signatures in submitte
 
 Example `set_scitt_configuration` snippet:
 ```
-"accepted_algorithms": [ES256, ES384, ES512, PS256, PS384, PS512, EDDSA]
+"accepted_algorithms": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EDDSA"]
 ```
 
-## Truststores
-SCITT has two truststores that can be configured; `x509_roots`, and `did_web_tls_roots`.
+## Trust stores
+SCITT has two trust stores that can be configured: `x509_roots` and `did_web_tls_roots`.
 
 ### X509 Roots
 CA certificates which are used as trusted roots during verification of submitted claims which use an X509 certificate for identity rather than a DID.
