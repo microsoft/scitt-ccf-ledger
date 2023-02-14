@@ -74,6 +74,7 @@ Example `set_scitt_configuration` snippet:
 
 ## Accepted algorithms
 List of accepted COSE signature algorithms when verifying signatures in submitted claims.
+If not set, the default accepted algorithms are shown in the example snippet below.
 - Note: Items in the accepted algorithms list are case sensitive.
 
 Example `set_scitt_configuration` snippet:
