@@ -168,8 +168,8 @@ def ssh_public_key_to_pem(ssh_pub_key: str) -> Pem:
 
 def generate_cert(
     private_key_pem: Pem,
-    issuer_cert_pem: Optional[Pem] = None,
-    issuer_private_key_pem: Optional[Pem] = None,
+    *,
+    issuer: Optional[Tuple[Pem, Pem]] = None,
     ca: bool = False,
     cn: Optional[str] = None,
 ):
@@ -182,7 +182,7 @@ def generate_cert(
 
     subject_pub_key = subject_priv.public_key()
 
-    subject = x509.Name(
+    subject_name = x509.Name(
         [
             x509.NameAttribute(NameOID.COMMON_NAME, cn),
         ]
@@ -193,25 +193,23 @@ def generate_cert(
     else:
         hash_alg = hashes.SHA256()
 
-    if issuer_cert_pem:
-        issuer = load_pem_x509_certificate(issuer_cert_pem.encode("ascii")).subject
-    else:
-        issuer = subject
-
-    if issuer_private_key_pem:
-        issuer_priv_key = load_pem_private_key(
-            issuer_private_key_pem.encode("ascii"),
+    if issuer is not None:
+        issuer_name = load_pem_x509_certificate(issuer[0].encode("ascii")).subject
+        issuer_key = load_pem_private_key(
+            issuer[1].encode("ascii"),
             None,
         )
         assert isinstance(
-            issuer_priv_key, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
+            issuer_key, (RSAPrivateKey, EllipticCurvePrivateKey, Ed25519PrivateKey)
         )
     else:
-        issuer_priv_key = subject_priv
+        issuer_name = subject_name
+        issuer_key = subject_priv
+
     cert = (
         x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
+        .subject_name(subject_name)
+        .issuer_name(issuer_name)
         .public_key(subject_pub_key)
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.utcnow())
@@ -231,7 +229,7 @@ def generate_cert(
             critical=True,
         )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-        .sign(issuer_priv_key, hash_alg)
+        .sign(issuer_key, hash_alg)
     )
     return cert.public_bytes(Encoding.PEM).decode("ascii")
 

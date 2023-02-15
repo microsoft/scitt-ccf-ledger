@@ -17,6 +17,7 @@ namespace
    */
   std::pair<crypto::Pem, crypto::KeyPairPtr> create_cert(
     const std::string& subject_name,
+    bool ca,
     const std::pair<crypto::Pem, crypto::KeyPairPtr>* parent = nullptr)
   {
     std::string valid_from = "19700101000000Z";
@@ -27,51 +28,144 @@ namespace
     {
       auto csr = kp->create_csr(subject_name);
       auto cert =
-        parent->second->sign_csr(parent->first, csr, valid_from, valid_to);
+        parent->second->sign_csr(parent->first, csr, valid_from, valid_to, ca);
 
       return {cert, std::move(kp)};
     }
     else
     {
-      auto cert = kp->self_sign(subject_name, valid_from, valid_to);
+      auto cert =
+        kp->self_sign(subject_name, valid_from, valid_to, std::nullopt, ca);
       return {cert, std::move(kp)};
     }
   }
+
+  /**
+   * Call the Verifier::verify_chain method.
+   *
+   * This function has a peculiar signature, designed to work together with
+   * create_cert. In particular, is takes in the private key even though it
+   * doesn't use it.
+   */
+  void verify_chain(
+    std::initializer_list<
+      std::reference_wrapper<std::pair<crypto::Pem, crypto::KeyPairPtr>>> store,
+    std::initializer_list<
+      std::reference_wrapper<std::pair<crypto::Pem, crypto::KeyPairPtr>>> chain)
+  {
+    std::vector<crypto::Pem> store_certs;
+    for (const auto& c : store)
+    {
+      store_certs.push_back(c.get().first);
+    }
+    std::vector<std::vector<uint8_t>> chain_certs;
+    for (const auto& c : chain)
+    {
+      chain_certs.push_back(crypto::cert_pem_to_der(c.get().first));
+    }
+    Verifier::verify_chain(store_certs, chain_certs);
+  }
 }
 
-TEST(Verifier, VerifyValidChain)
+TEST(Verifier, ValidChain)
 {
-  auto root = create_cert("CN=root");
-  auto leaf = create_cert("CN=leaf", &root);
+  auto root = create_cert("CN=root", true);
+  auto leaf = create_cert("CN=leaf", false, &root);
 
-  auto leaf_der = crypto::cert_pem_to_der(leaf.first);
-  EXPECT_NO_THROW(Verifier::verify_chain({{root.first}}, {{leaf_der}}));
+  EXPECT_NO_THROW(verify_chain({root}, {leaf, root}));
 }
 
-TEST(Verifier, VerifyUntrustedChain)
+TEST(Verifier, ValidChainWithIntermediate)
 {
-  auto trusted = create_cert("CN=trusted");
+  auto root = create_cert("CN=root", true);
+  auto intermediate = create_cert("CN=intermediate", true, &root);
+  auto leaf = create_cert("CN=leaf", false, &intermediate);
 
-  auto root = create_cert("CN=root");
-  auto leaf = create_cert("CN=leaf", &root);
-
-  auto leaf_der = crypto::cert_pem_to_der(leaf.first);
-  EXPECT_THROW(
-    Verifier::verify_chain({{trusted.first}}, {{leaf_der}}), VerificationError);
+  EXPECT_NO_THROW(verify_chain({root}, {leaf, intermediate, root}));
 }
 
-TEST(Verifier, VerifyGarbage)
+TEST(Verifier, SelfSigned)
 {
-  auto root = create_cert("CN=root");
+  auto cert = create_cert("CN=self-signed", false);
+  EXPECT_THROW(verify_chain({cert}, {cert}), VerificationError);
+}
+
+TEST(Verifier, SelfSignedCA)
+{
+  auto cert = create_cert("CN=self-signed", true);
+  EXPECT_THROW(verify_chain({cert}, {cert}), VerificationError);
+}
+
+TEST(Verifier, MissingRoot)
+{
+  auto root = create_cert("CN=root", true);
+  auto intermediate = create_cert("CN=intermediate", true, &root);
+  auto leaf = create_cert("CN=leaf", false, &intermediate);
+
+  EXPECT_THROW(verify_chain({root}, {leaf, intermediate}), VerificationError);
+}
+
+TEST(Verifier, MissingIntermediate)
+{
+  auto root = create_cert("CN=root", true);
+  auto intermediate = create_cert("CN=intermediate", true, &root);
+  auto leaf = create_cert("CN=leaf", false, &intermediate);
+
+  EXPECT_THROW(verify_chain({root}, {leaf, root}), VerificationError);
+}
+
+TEST(Verifier, EmptyTrustStore)
+{
+  auto root = create_cert("CN=root", true);
+  auto leaf = create_cert("CN=leaf", false, &root);
+
+  EXPECT_THROW(verify_chain({}, {leaf, root}), VerificationError);
+}
+
+TEST(Verifier, UntrustedChain)
+{
+  auto trusted = create_cert("CN=trusted", true);
+
+  auto untrusted = create_cert("CN=untrusted", true);
+  auto leaf = create_cert("CN=leaf", false, &untrusted);
+
+  EXPECT_THROW(verify_chain({trusted}, {leaf, untrusted}), VerificationError);
+}
+
+TEST(Verifier, NonCARoot)
+{
+  auto root = create_cert("CN=root", false);
+  auto leaf = create_cert("CN=leaf", false, &root);
+
+  EXPECT_THROW(verify_chain({root}, {leaf, root}), VerificationError);
+}
+
+TEST(Verifier, CALeaf)
+{
+  auto root = create_cert("CN=root", true);
+  auto leaf = create_cert("CN=leaf", true, &root);
+
+  EXPECT_THROW(verify_chain({root}, {leaf, root}), VerificationError);
+}
+
+TEST(Verifier, EmptyChain)
+{
+  auto root = create_cert("CN=root", true);
+
+  EXPECT_THROW(verify_chain({root}, {}), VerificationError);
+}
+
+TEST(Verifier, GarbageCert)
+{
+  auto root = create_cert("CN=root", true);
   std::vector<uint8_t> leaf = {0xde, 0xad, 0xbe, 0xef};
 
   EXPECT_THROW(
-    Verifier::verify_chain({{root.first}}, {{leaf}}), VerificationError);
-}
-
-TEST(Verifier, VerifyEmptyChain)
-{
-  auto root = create_cert("CN=root");
-
-  EXPECT_THROW(Verifier::verify_chain({{root.first}}, {}), VerificationError);
+    Verifier::verify_chain(
+      {{root.first}},
+      {{
+        leaf,
+        crypto::cert_pem_to_der(root.first),
+      }}),
+    VerificationError);
 }

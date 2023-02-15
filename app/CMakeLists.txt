@@ -129,6 +129,7 @@ if (BUILD_TESTS)
 
   add_executable(
     unit_tests
+    unit-tests/main.cpp
     unit-tests/cbor_test.cpp
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
@@ -142,7 +143,7 @@ if (BUILD_TESTS)
   target_compile_options(unit_tests PUBLIC ${COMPILE_LIBCXX})
   target_link_libraries(
     unit_tests PRIVATE
-    GTest::gmock_main
+    GTest::gmock
     rapidcheck
     rapidcheck_gtest
     t_cose.host

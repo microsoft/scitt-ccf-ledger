@@ -19,6 +19,7 @@ from pyscitt.verify import StaticTrustStore
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
 from .did_web_server import DIDWebServer
 from .proxy import Proxy
+from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 # This file defines a collection of pytest fixtures used to manage and
 # interact with the SCITT ledger.
@@ -374,6 +375,19 @@ def did_web(client, tmp_path_factory):
         )
 
         yield did_web_server
+
+
+@pytest.fixture(scope="class")
+def trusted_ca(client) -> X5ChainCertificateAuthority:
+    """
+    Create a X5ChainCertificateAuthority and add its root to the SCITT service.
+
+    The service will accept claims signed using certificates issued by the CA.
+    """
+    ca = X5ChainCertificateAuthority(kty="ec")
+    proposal = governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle)
+    client.governance.propose(proposal, must_pass=True)
+    return ca
 
 
 @pytest.fixture(scope="class")

@@ -8,22 +8,6 @@ import pytest
 
 from pyscitt import crypto, governance
 
-from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
-
-X5C_PARAMS = dict(alg="ES256", kty="ec", ec_curve="P-256")
-
-
-@pytest.fixture(scope="class")
-def x5c_ca(client):
-    ca = X5ChainCertificateAuthority(**X5C_PARAMS)
-
-    client.governance.propose(
-        governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle),
-        must_pass=True,
-    )
-
-    return ca
-
 
 def measure_latency(fn, arg_fn=None, n=150):
     if arg_fn is None:
@@ -49,7 +33,7 @@ def measure_latency(fn, arg_fn=None, n=150):
 @pytest.mark.perf
 @pytest.mark.disable_proxy
 class TestPerf:
-    def test_latency(self, client, did_web, x5c_ca):
+    def test_latency(self, client, did_web, trusted_ca):
         payload = {"foo": "bar"}
 
         client = client.replace(wait_time=0.01, tcp_nodelay_patch=True)
@@ -82,7 +66,9 @@ class TestPerf:
         )
 
         # Test x5c performance.
-        identity = x5c_ca.create_identity(1, **X5C_PARAMS)
+        identity = trusted_ca.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256"
+        )
         claim = crypto.sign_json_claimset(identity, payload)
 
         latency_x5c_submit_s = measure_latency(
