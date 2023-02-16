@@ -2,13 +2,13 @@
 # Licensed under the MIT License.
 import argparse
 import base64
+import http
 import json
 import logging
 import ssl
 import subprocess
 import tempfile
 import time
-import http
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -35,7 +35,6 @@ def fetch_unattested(url, nonce):
 
 
 def fetch_attested(url, nonce):
-    success = False
     retries = HTTP_RETRIES
     with tempfile.NamedTemporaryFile() as out_path:
         args = [
@@ -46,13 +45,12 @@ def fetch_attested(url, nonce):
             nonce,
         ]
         logging.info(f"Starting {' '.join(args)}")
-        while not success and retries >= 0:
+        while True:
             retries -= 1
             try:
                 subprocess.run(
                     args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
                 )
-                success = True
                 break
             except subprocess.CalledProcessError as e:
                 logging.error(f"afetch failed with code {e.returncode}: {e.stdout}")
@@ -63,10 +61,9 @@ def fetch_attested(url, nonce):
                 time.sleep(HTTP_DEFAULT_RETRY_AFTER)
             else:
                 raise e
-        if success:
-            with open(out_path.name, "rb") as f:
-                result = f.read()
-            logging.info(f"afetch succeeded, output size is {len(result)} bytes")
+        with open(out_path.name, "rb") as f:
+            result = f.read()
+        logging.info(f"afetch succeeded, output size is {len(result)} bytes")
 
     return result
 
@@ -101,7 +98,10 @@ def request(url, data=None, headers=None):
             body = e.read()
             retry_after = int(e.headers.get("Retry-After", HTTP_DEFAULT_RETRY_AFTER))
             logging.error(f"HTTP status {status_code}: {body}")
-            if status_code not in [http.HTTPStatus.TOO_MANY_REQUESTS, http.HTTPStatus.SERVICE_UNAVAILABLE]:
+            if status_code not in [
+                http.HTTPStatus.TOO_MANY_REQUESTS,
+                http.HTTPStatus.SERVICE_UNAVAILABLE,
+            ]:
                 break
         except URLError as e:
             retry_after = HTTP_DEFAULT_RETRY_AFTER
