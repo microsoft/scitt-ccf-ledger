@@ -22,6 +22,7 @@ ARG CCF_VERSION
 # curl needed by fetch-did-web-doc-unattested.sh
 RUN apt-get update && apt-get install -y \
     curl \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
@@ -29,6 +30,7 @@ COPY --from=builder /usr/src/app/lib/libscitt.virtual.so libscitt.virtual.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 
 COPY app/fetch-did-web-doc-unattested.sh /tmp/scitt/fetch-did-web-doc-unattested.sh
+COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 
 WORKDIR /host/node
 

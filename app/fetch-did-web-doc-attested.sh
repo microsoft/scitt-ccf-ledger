@@ -16,36 +16,6 @@ AFETCH_DIR="/tmp/scitt"
 url=$1
 nonce=$2
 callback_url=$3
-out_path=$(mktemp "${AFETCH_DIR}/out.XXXXXX")
-trap "rm -f ${out_path}" 0 2 3 15
 
-"${AFETCH_DIR}/afetch" \
-    "${AFETCH_DIR}/libafetch.enclave.so.signed" \
-    "${out_path}" "${url}" "${nonce}"
-
-exit_code=$?
-if [ $exit_code -ne 0 ]; then
-  echo "attested-fetch failed"
-  exit 1
-fi
-
-cat "${out_path}"
-
-retries_left=3
-while [ $retries_left -gt 0 ]; do
-    curl -k -f --data-binary "@${out_path}" -H "Content-Type: application/json" "${callback_url}"
-    exit_code=$?
-    if [ $exit_code -eq 0 ]; then
-        break
-    fi
-    echo "curl failed, retrying..."
-    ((retries_left--))
-    sleep 1
-done
-
-if [ $exit_code -ne 0 ]; then
-    # Send again without -f to get server output for debugging.
-    curl -k --data-binary "@${out_path}" -H "Content-Type: application/json" "${callback_url}"
-    echo "curl failed: ${callback_url}"
-    exit 2
-fi
+exec python3 "${AFETCH_DIR}/fetch-did-web-doc.py" \
+    "${url}" "${nonce}" "${callback_url}"

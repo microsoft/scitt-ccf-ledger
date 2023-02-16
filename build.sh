@@ -41,6 +41,7 @@ else
     echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
     exit 1
 fi
+cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
 mkdir -p build/$BUILD_DIR
 pushd build/$BUILD_DIR
