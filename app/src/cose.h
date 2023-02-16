@@ -438,139 +438,6 @@ namespace scitt::cose
     {}
   };
 
-  // Temporarily needed for notary_verify().
-  bool is_ecdsa_alg(int64_t cose_alg)
-  {
-    return cose_alg == T_COSE_ALGORITHM_ES256 ||
-      cose_alg == T_COSE_ALGORITHM_ES384 || cose_alg == T_COSE_ALGORITHM_ES512;
-  }
-
-  // Temporarily needed for notary_verify().
-  bool is_rsa_pss_alg(int64_t cose_alg)
-  {
-    return cose_alg == T_COSE_ALGORITHM_PS256 ||
-      cose_alg == T_COSE_ALGORITHM_PS384 || cose_alg == T_COSE_ALGORITHM_PS512;
-  }
-
-  // Temporarily needed for notary_verify().
-  crypto::MDType get_md_type(int64_t cose_alg)
-  {
-    switch (cose_alg)
-    {
-      case T_COSE_ALGORITHM_ES256:
-      case T_COSE_ALGORITHM_PS256:
-        return crypto::MDType::SHA256;
-      case T_COSE_ALGORITHM_ES384:
-      case T_COSE_ALGORITHM_PS384:
-        return crypto::MDType::SHA384;
-      case T_COSE_ALGORITHM_ES512:
-      case T_COSE_ALGORITHM_PS512:
-        return crypto::MDType::SHA512;
-      case T_COSE_ALGORITHM_EDDSA:
-        return crypto::MDType::NONE;
-      default:
-        throw std::runtime_error("Unsupported COSE algorithm");
-    }
-  }
-
-  // Temporarily needed for notary_verify().
-  const EVP_MD* get_openssl_md_type(crypto::MDType type)
-  {
-    switch (type)
-    {
-      case crypto::MDType::NONE:
-        return nullptr;
-      case crypto::MDType::SHA1:
-        return EVP_sha1();
-      case crypto::MDType::SHA256:
-        return EVP_sha256();
-      case crypto::MDType::SHA384:
-        return EVP_sha384();
-      case crypto::MDType::SHA512:
-        return EVP_sha512();
-      default:
-        throw std::runtime_error("Unsupported hash algorithm");
-    }
-    return nullptr;
-  }
-
-  // Temporarily needed for notary_verify().
-  std::vector<uint8_t> create_sign1_tbs(
-    std::span<const uint8_t> protected_header, std::span<const uint8_t> payload)
-  {
-    // Note: This function does not return the hash of the TBS because
-    // EdDSA does not support pre-hashed messages as input.
-
-    // Sig_structure = [
-    //     context: "Signature1",
-    //     body_protected: empty_or_serialized_map,
-    //     external_aad: bstr,
-    //     payload: bstr
-    // ]
-
-    cbor::encoder ctx(protected_header.size() + payload.size() + 1024);
-    QCBOREncode_OpenArray(ctx);
-
-    // context
-    QCBOREncode_AddSZString(ctx, "Signature1");
-
-    // body_protected: The protected header of the message.
-    QCBOREncode_AddBytes(ctx, cbor::from_bytes(protected_header));
-
-    // external_aad: always empty.
-    QCBOREncode_AddBytes(ctx, NULLUsefulBufC);
-
-    // payload: The payload of the message.
-    QCBOREncode_AddBytes(ctx, cbor::from_bytes(payload));
-
-    QCBOREncode_CloseArray(ctx);
-
-    return ctx.finish();
-  }
-
-  // Temporarily needed for notary_verify().
-  std::vector<uint8_t> ecdsa_sig_from_r_s(
-    const uint8_t* r,
-    size_t r_size,
-    const uint8_t* s,
-    size_t s_size,
-    bool big_endian = true)
-  {
-    OpenSSL::Unique_BIGNUM r_bn;
-    OpenSSL::Unique_BIGNUM s_bn;
-    if (big_endian)
-    {
-      OpenSSL::CHECKNULL(BN_bin2bn(r, r_size, r_bn));
-      OpenSSL::CHECKNULL(BN_bin2bn(s, s_size, s_bn));
-    }
-    else
-    {
-      OpenSSL::CHECKNULL(BN_lebin2bn(r, r_size, r_bn));
-      OpenSSL::CHECKNULL(BN_lebin2bn(s, s_size, s_bn));
-    }
-    OpenSSL::Unique_ECDSA_SIG sig;
-    OpenSSL::CHECK1(ECDSA_SIG_set0(sig, r_bn, s_bn));
-    // Ignore previous pointers, as they're now managed by ECDSA_SIG_set0
-    // https://www.openssl.org/docs/man1.1.1/man3/ECDSA_SIG_get0.html
-    (void)r_bn.release();
-    (void)s_bn.release();
-    auto der_size = i2d_ECDSA_SIG(sig, nullptr);
-    OpenSSL::CHECK0(der_size);
-    std::vector<uint8_t> der_sig(der_size);
-    auto der_sig_buf = der_sig.data();
-    OpenSSL::CHECK0(i2d_ECDSA_SIG(sig, &der_sig_buf));
-    return der_sig;
-  }
-
-  // Temporarily needed for notary_verify().
-  std::vector<uint8_t> ecdsa_sig_p1363_to_der(
-    std::span<const uint8_t> signature)
-  {
-    auto half_size = signature.size() / 2;
-    return ecdsa_sig_from_r_s(
-      signature.data(), half_size, signature.data() + half_size, half_size);
-  }
-
   /**
    * Extract the bstr fields from a COSE Sign1.
    *
@@ -613,66 +480,6 @@ namespace scitt::cose
     return {phdrs, payload, signature};
   }
 
-  // Temporarily needed for notary_verify().
-  /**
-   * Verify the signature of a Notary COSE Sign1 message using the given public
-   * key.
-   *
-   * Beyond the basic verification of key usage and the signature
-   * itself, no particular validation of the message is done.
-   *
-   * This function is a temporary workaround until t_cose supports custom header
-   * parameters in the crit parameter list.
-   */
-  void notary_verify(
-    const std::vector<uint8_t>& cose_sign1,
-    const ProtectedHeader& phdr,
-    const PublicKey& key)
-  {
-    auto header_alg = phdr.alg.value();
-    auto key_alg = key.get_cose_alg();
-    if (key_alg.has_value() && header_alg != key_alg.value())
-    {
-      throw COSESignatureValidationError(
-        "Algorithm mismatch between protected header and public key");
-    }
-
-    auto [protected_header, payload, signature] =
-      extract_sign1_fields(cose_sign1);
-
-    auto md_type = get_md_type(header_alg);
-    auto ossl_md_type = get_openssl_md_type(md_type);
-    auto tbs = create_sign1_tbs(protected_header, payload);
-
-    std::vector<uint8_t> signature_tmp;
-    if (is_ecdsa_alg(header_alg))
-    {
-      signature_tmp = ecdsa_sig_p1363_to_der(signature);
-      signature = signature_tmp;
-    }
-
-    OpenSSL::Unique_EVP_MD_CTX md_ctx;
-    EVP_MD_CTX_init(md_ctx);
-    EVP_PKEY_CTX* pctx;
-    OpenSSL::CHECK1(EVP_DigestVerifyInit(
-      md_ctx, &pctx, ossl_md_type, nullptr, key.get_evp_pkey()));
-    if (is_rsa_pss_alg(header_alg))
-    {
-      OpenSSL::CHECK1(
-        EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING));
-    }
-
-    auto valid =
-      EVP_DigestVerify(
-        md_ctx, signature.data(), signature.size(), tbs.data(), tbs.size()) ==
-      1;
-
-    if (!valid)
-    {
-      throw COSESignatureValidationError("Signature verification failed");
-    }
-  }
-
   /**
    * Verify the signature of a COSE Sign1 message using the given public key.
    *
@@ -691,7 +498,7 @@ namespace scitt::cose
     // auxiliary buffer size.
     t_cose_parameters params;
     t_cose_sign1_verify_init(
-      &verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY);
+      &verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
     t_cose_err_t error =
       t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, &params);
     if (error)
@@ -714,7 +521,7 @@ namespace scitt::cose
     EVP_PKEY* evp_key = key.get_evp_pkey();
     cose_key.k.key_ptr = evp_key;
 
-    t_cose_sign1_verify_init(&verify_ctx, T_COSE_OPT_TAG_REQUIRED);
+    t_cose_sign1_verify_init(&verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
     t_cose_sign1_set_verification_key(&verify_ctx, cose_key);
 
     // EdDSA signature verification needs an auxiliary buffer.

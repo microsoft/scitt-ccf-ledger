@@ -323,9 +323,7 @@ namespace scitt::verifier
           // Verify signature.
           try
           {
-            // TODO: replace with cose::verify() once the t_cose workarounds are
-            // removed.
-            cose::notary_verify(data, phdr, key);
+            cose::verify(data, key);
           }
           catch (const cose::COSESignatureValidationError& e)
           {
