@@ -1,4 +1,4 @@
-# Development guidelines 
+# Development guidelines
 
 The following explains how to build, run, and test scitt-ccf-ledger outside of Docker.
 
@@ -10,13 +10,13 @@ This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
 
-For *virtual* mode development only, instead of following the steps below, you can also use GitHub Codespaces and then continue with the "Building" section: 
+For *virtual* mode development only, instead of following the steps below, you can also use GitHub Codespaces and then continue with the "Building" section:
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=562968818&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestEurope)
 
 Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
 
-1. Set up machine: 
+1. Set up machine:
     - If using SGX, it is recommended that you provision a virtual machine:
       - On Azure, provision a DC-series VM, for example, [DCsv2](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv2-series)
       - Enable running SGX enclaves: `sudo usermod -a -G sgx_prv $(whoami)`
@@ -24,10 +24,10 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-3.0.2.tar.gz
-    tar xvzf ccf-3.0.2.tar.gz
-    cd CCF-ccf-3.0.2/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=3.0.2 -e platform=<sgx|virtual>
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-3.0.6.tar.gz
+    tar xvzf ccf-3.0.6.tar.gz
+    cd CCF-ccf-3.0.6/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=3.0.6 -e platform=<sgx|virtual>
     ```
 
 ## Building

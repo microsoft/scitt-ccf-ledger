@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.2
+ARG CCF_VERSION=3.0.6
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE

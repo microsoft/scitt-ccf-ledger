@@ -9,7 +9,7 @@ trigger:
 parameters:
   - name: CCF_VERSION
     type: string
-    default: 3.0.2
+    default: 3.0.6
 
 resources:
   containers:
@@ -22,7 +22,7 @@ resources:
 
 variables:
   # This is used in functional tests to make certain tests mandatory
-  # in CI, but optional during local development. 
+  # in CI, but optional during local development.
   SCITT_CI: 1
 
   ACR_REGISTRY: scittoss.azurecr.io
@@ -109,7 +109,7 @@ stages:
 
           - script: ./scripts/ci-checks.sh
             displayName: "CI checks"
-            
+
       - job: scanbuild
         displayName: Static Analysis
         container: virtual
@@ -123,7 +123,7 @@ stages:
 
           - script: ./scripts/scan-build.sh
             displayName: "Scan build"
-  
+
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
       jobs:
@@ -141,7 +141,7 @@ stages:
           - script: |
               echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/tags/}"
             displayName: Get image tag from git tag
-          
+
           - script: |
               docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-sgx.tar
               docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
