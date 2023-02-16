@@ -1,19 +1,22 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 import argparse
-import subprocess
-import tempfile
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
-import ssl
 import base64
 import json
-import time
 import logging
+import ssl
+import subprocess
+import tempfile
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 CONNECT_TIMEOUT = 5
 HTTP_RETRIES = 5
 HTTP_DEFAULT_RETRY_AFTER = 1
 
 AFETCH_DIR = "/tmp/scitt"
+
 
 def fetch_unattested(url, nonce):
     response = request(url)
