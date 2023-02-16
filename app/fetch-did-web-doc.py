@@ -8,6 +8,7 @@ import ssl
 import subprocess
 import tempfile
 import time
+import http
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -100,7 +101,7 @@ def request(url, data=None, headers=None):
             body = e.read()
             retry_after = int(e.headers.get("Retry-After", HTTP_DEFAULT_RETRY_AFTER))
             logging.error(f"HTTP status {status_code}: {body}")
-            if status_code not in [429, 503]:
+            if status_code not in [http.HTTPStatus.TOO_MANY_REQUESTS, http.HTTPStatus.SERVICE_UNAVAILABLE]:
                 break
         except URLError as e:
             retry_after = HTTP_DEFAULT_RETRY_AFTER
