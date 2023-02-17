@@ -498,7 +498,9 @@ namespace scitt::cose
     // auxiliary buffer size.
     t_cose_parameters params;
     t_cose_sign1_verify_init(
-      &verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
+      &verify_ctx,
+      T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY |
+        T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
     t_cose_err_t error =
       t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, &params);
     if (error)
@@ -521,7 +523,8 @@ namespace scitt::cose
     EVP_PKEY* evp_key = key.get_evp_pkey();
     cose_key.k.key_ptr = evp_key;
 
-    t_cose_sign1_verify_init(&verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
+    t_cose_sign1_verify_init(
+      &verify_ctx, T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED);
     t_cose_sign1_set_verification_key(&verify_ctx, cose_key);
 
     // EdDSA signature verification needs an auxiliary buffer.
