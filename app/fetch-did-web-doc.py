@@ -9,6 +9,11 @@ import ssl
 import subprocess
 import tempfile
 import time
+import hashlib
+import os
+import errno
+import pickle
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -119,14 +124,109 @@ def request(url, data=None, headers=None):
     }
 
 
-def run(url, nonce, callback_url: str, unattested: bool):
-    if unattested:
-        result = fetch_unattested(url, nonce)
-    else:
-        result = fetch_attested(url, nonce)
+def get_queue_dir(url):
+    queue_id = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    queue_dir = f"{AFETCH_DIR}/queue-{queue_id}"
+    return queue_dir
 
-    headers = {"Content-Type": "application/json"}
-    request(callback_url, result, headers)
+
+def queue_request(url: str, nonce: str, callback_url: str, unattested: bool):
+    logging.info(f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url}, unattested: {unattested})")
+
+    queue_dir = get_queue_dir(url)
+    request = {
+        "url": url,
+        "nonce": nonce,
+        "callback_url": callback_url,
+        "unattested": unattested,
+    }
+    request_id = uuid.uuid4().hex
+    request_path = os.path.join(queue_dir, f"{request_id}.pkl")
+
+    with tempfile.NamedTemporaryFile(dir=queue_dir, delete=False) as f:
+        pickle.dump(request, f)
+
+    try:
+        while True:
+            # Create the queue folder if it doesn't exist yet.
+            try:
+                os.mkdir(queue_dir)
+            except OSError as e:
+                if e.errno == errno.EEXIST:
+                    is_first = False
+                else:
+                    raise e
+            else:
+                logging.info(f"Created queue folder {queue_dir}")
+                is_first = True
+
+            # Move the request file to the queue folder.
+            try:
+                os.rename(f.name, request_path)
+            except OSError as e:
+                # If the queue folder was deleted in the meantime, try again.
+                if e.errno == errno.ENOENT:
+                    continue
+                else:
+                    raise e
+            else:
+                logging.info(f"Queued request {request_path}")
+            break
+    except Exception as e:
+        logging.error(f"Error while queuing request: {e}")
+        os.remove(f.name)
+        raise e
+    
+    return is_first
+
+
+def process_requests(url):
+    queue_dir = get_queue_dir(url)
+
+    # TODO: what if this fails? more entries will be queued but never processed
+
+    is_first = True
+    while True:
+        for fname in os.listdir(queue_dir):
+            request_path = os.path.join(queue_dir, fname)
+            logging.info(f"Processing request {request_path}")
+            with open(request_path, "r") as f:
+                request = pickle.load(f)
+            
+            if is_first:
+                if request["unattested"]:
+                    result = fetch_unattested(url, request["nonce"])
+                else:
+                    result = fetch_attested(url, request["nonce"])
+            else:
+                result = b""
+            
+            headers = {"Content-Type": "application/json"}
+            request(request["callback_url"], result, headers)
+
+            logging.info(f"Removing request {request_path}")
+            os.remove(request_path)
+            
+            is_first = False
+        
+        try:
+            os.rmdir(queue_dir)
+        except OSError as e:
+            if e.errno == errno.ENOTEMPTY:
+                continue
+            raise e
+        logging.info(f"Removed queue {queue_dir}")
+        break
+
+
+def run(url, nonce, callback_url: str, unattested: bool):
+    is_new_url = queue_request(url, nonce, callback_url, unattested)
+
+    # If this is the first request for this URL, process it
+    # and all other requests that were queued in the meantime.
+    # Processing finishes when the queue is empty and removed.
+    if is_new_url:
+        process_requests(url)
 
 
 if __name__ == "__main__":
