@@ -46,7 +46,7 @@ namespace scitt::verifier
         // from COSE.
         if (!phdr.alg.has_value())
         {
-          VerificationError("Missing algorithm in protected header");
+          throw VerificationError("Missing algorithm in protected header");
         }
         algorithm = get_jose_alg_from_cose_alg(phdr.alg.value());
       }
@@ -61,7 +61,7 @@ namespace scitt::verifier
     }
 
     PublicKey process_ietf_profile(
-      cose::ProtectedHeader& phdr,
+      const cose::ProtectedHeader& phdr,
       kv::Tx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
@@ -129,7 +129,7 @@ namespace scitt::verifier
     }
 
     PublicKey process_x509_profile(
-      cose::ProtectedHeader& phdr,
+      const cose::ProtectedHeader& phdr,
       kv::Tx& tx,
       const Configuration& configuration)
     {
@@ -197,7 +197,10 @@ namespace scitt::verifier
           "crit must contain 'io.cncf.notary.signingScheme'");
       }
 
-      if (cty.value() != "application/vnd.cncf.notary.payload.v1+json")
+      if (
+        !std::holds_alternative<std::string>(cty.value()) ||
+        std::get<std::string>(cty.value()) !=
+          "application/vnd.cncf.notary.payload.v1+json")
       {
         throw cose::COSEDecodeError(
           "cty must be 'application/vnd.cncf.notary.payload.v1+json' for "
@@ -260,8 +263,8 @@ namespace scitt::verifier
     }
 
     PublicKey process_notary_profile(
-      cose::UnprotectedHeader& uhdr,
-      cose::ProtectedHeader& phdr,
+      const cose::ProtectedHeader& phdr,
+      const cose::UnprotectedHeader& uhdr,
       kv::Tx& tx,
       const Configuration& configuration)
     {
@@ -318,7 +321,7 @@ namespace scitt::verifier
         {
           // Notary claim
           // Verify profile
-          key = process_notary_profile(uhdr, phdr, tx, configuration);
+          key = process_notary_profile(phdr, uhdr, tx, configuration);
 
           // Verify signature.
           try
@@ -436,14 +439,30 @@ namespace scitt::verifier
     static OpenSSL::Unique_X509 parse_certificate(const crypto::Pem& pem)
     {
       OpenSSL::Unique_BIO bio(pem);
-      return OpenSSL::Unique_X509(bio, true);
+      OpenSSL::Unique_X509 cert(bio, true);
+      if (!cert)
+      {
+        unsigned long ec = ERR_get_error();
+        SCITT_INFO(
+          "Could not parse PEM certificate: {}", OpenSSL::error_string(ec));
+        throw VerificationError("Could not parse certificate");
+      }
+      return cert;
     }
 
     /** Parse a DER certificate */
     static OpenSSL::Unique_X509 parse_certificate(std::span<const uint8_t> der)
     {
       OpenSSL::Unique_BIO bio(der);
-      return OpenSSL::Unique_X509(bio, false);
+      OpenSSL::Unique_X509 cert(bio, false);
+      if (!cert)
+      {
+        unsigned long ec = ERR_get_error();
+        SCITT_INFO(
+          "Could not parse DER certificate: {}", OpenSSL::error_string(ec));
+        throw VerificationError("Could not parse certificate");
+      }
+      return cert;
     }
 
     /**

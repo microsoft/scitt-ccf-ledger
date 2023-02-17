@@ -67,7 +67,7 @@ namespace scitt::cose
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
-    std::optional<std::string> cty;
+    std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
 
     // Extra Notary protected header parameters.
@@ -306,10 +306,22 @@ namespace scitt::cose
     {
       parsed.feed = cbor::as_string(header_items[FEED_INDEX].val.string);
     }
-    if (header_items[CTY_INDEX].uDataType != QCBOR_TYPE_NONE)
+
+    if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_TEXT_STRING)
     {
-      parsed.cty = cbor::as_string(header_items[CTY_INDEX].val.string);
+      parsed.cty =
+        std::string(cbor::as_string(header_items[CTY_INDEX].val.string));
     }
+    else if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_INT64)
+    {
+      parsed.cty = header_items[CTY_INDEX].val.int64;
+    }
+    else if (header_items[CTY_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      throw COSEDecodeError(
+        "Content-type must be of type text string or int64");
+    }
+
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
@@ -814,7 +826,8 @@ namespace scitt::cose
       {
         // To obey the IETF COSE X509 draft;
         // A single cert MUST be serialized as a single bstr.
-        QCBOREncode_AddBytes(encoder, cbor::from_bytes(certs[0]));
+        QCBOREncode_AddBytesToMapN(
+          encoder, COSE_HEADER_PARAM_X5CHAIN, cbor::from_bytes(certs[0]));
       }
       else
       {
