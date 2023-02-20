@@ -30,37 +30,33 @@ from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class ManagedCCHostFixtures:
-    def __init__(self, binary, platform, enclave_file, constitution):
+    def __init__(self, binary, platform, enclave_file, constitution, enable_faketime):
         self.binary = binary
         self.platform = platform
         self.enclave_file = enclave_file
         self.constitution = constitution
-
-    def pytest_configure(self, config):
-        config.addinivalue_line(
-            "markers",
-            "isolated_test: run this test with its own class-scoped cchost process.",
-        )
-        config.addinivalue_line(
-            "markers",
-            "disable_proxy: run this test without a proxy in front of the cchost process",
-        )
+        self.enable_faketime = enable_faketime
 
     def pytest_collection_modifyitems(self, config, items):
-        # The isolated_test marker cannot be used on functions, only on classes.
-        # The reason is that the `cchost` fixture has a class scope, therefore
-        # only has access to class markers.
-        #
-        # Functions which are defined directly at the module level are an
-        # exception: the class-scoped fixture will have access to markers set on
-        # the function.
+        faketime_skip = pytest.mark.skip(reason="faketime support was not enabled")
+
         for item in items:
-            if isinstance(item.parent, pytest.Class):
-                for m in item.own_markers:
-                    if m.name == "isolated_test":
+            for m in item.own_markers:
+                if m.name == "isolated_test":
+                    # The isolated_test marker cannot be used on functions, only on classes.
+                    # The reason is that the `cchost` fixture has a class scope, therefore
+                    # only has access to class markers.
+                    #
+                    # Functions which are defined directly at the module level are an
+                    # exception: the class-scoped fixture will have access to markers set on
+                    # the function.
+                    if isinstance(item.parent, pytest.Class):
                         raise pytest.UsageError(
                             f"'isolated_test' marker may not be used on class method {item.nodeid!r}"
                         )
+
+                    if m.kwargs.get("enable_faketime") and not self.enable_faketime:
+                        item.add_marker(faketime_skip)
 
     @pytest.fixture(scope="session")
     def start_cchost(self, tmp_path_factory):
@@ -82,7 +78,7 @@ class ManagedCCHostFixtures:
         ]
 
         @contextmanager
-        def f():
+        def f(**kwargs):
             workspace = tmp_path_factory.mktemp("workspace")
 
             cchost = CCHost(
@@ -91,6 +87,7 @@ class ManagedCCHostFixtures:
                 self.enclave_file,
                 workspace=workspace,
                 constitution=constitution_files,
+                **kwargs,
             )
 
             with cchost:
@@ -134,19 +131,7 @@ class ManagedCCHostFixtures:
             yield cchost
 
     @pytest.fixture(scope="class")
-    def isolated_cchost(self, start_cchost, request):
-        """
-        Create a cchost process, scoped to the current test class.
-
-        This fixture should not be used directly in tests. Instead the cchost
-        fixture should be used along with a isolated_test marker.
-        """
-        LOG.info(f"Starting isolated cchost process for {request.node.nodeid!r}")
-        with start_cchost() as cchost:
-            yield cchost
-
-    @pytest.fixture(scope="class")
-    def cchost(self, request):
+    def cchost(self, start_cchost, request):
         """
         Get a reference to the cchost instance associated with the current test.
 
@@ -156,9 +141,11 @@ class ManagedCCHostFixtures:
         """
         marker = request.node.get_closest_marker("isolated_test")
         if marker is not None:
-            return request.getfixturevalue("isolated_cchost")
+            LOG.info(f"Starting isolated cchost process for {request.node.nodeid!r}")
+            with start_cchost(**marker.kwargs) as cchost:
+                yield cchost
         else:
-            return request.getfixturevalue("shared_cchost")
+            yield request.getfixturevalue("shared_cchost")
 
     @pytest.fixture(scope="class")
     def proxy(self, cchost, request):
@@ -266,12 +253,20 @@ def pytest_addoption(parser):
         default="/tmp/scitt/share/scitt/constitution",
         help="Path to the directory containing the constitution. Requires --start-cchost.",
     )
+    parser.addoption(
+        "--enable-faketime",
+        action="store_true",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "needs_cchost: only run test if cchost is managed by the test framework.",
+        "isolated_test: run this test with its own class-scoped cchost process.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "disable_proxy: run this test without a proxy in front of the cchost process",
     )
 
     if config.getoption("--start-cchost"):
@@ -282,8 +277,11 @@ def pytest_configure(config):
         )
         constitution = config.getoption("--constitution")
         enclave_file = get_enclave_path(platform, enclave_package)
+        enable_faketime = config.getoption("--enable-faketime")
         config.pluginmanager.register(
-            ManagedCCHostFixtures(binary, platform, enclave_file, constitution)
+            ManagedCCHostFixtures(
+                binary, platform, enclave_file, constitution, enable_faketime
+            )
         )
     else:
         config.pluginmanager.register(ExternalLedgerFixtures())
@@ -295,7 +293,7 @@ def pytest_collection_modifyitems(config, items):
             reason="Test requires a managed cchost process"
         )
         for item in items:
-            if "needs_cchost" in item.keywords:
+            if "isolated_test" in item.keywords:
                 item.add_marker(needs_cchost_skip)
 
 

@@ -77,32 +77,6 @@ def test_default_did_port(client: Client, trust_store, tmp_path):
         verify_receipt(claims, trust_store, receipt)
 
 
-def test_consistent_kid(client, did_web, trust_store):
-    """
-    Submit a claim with a known kid and check that it is consistent
-    in the claim header and DID document.
-    """
-    kid = "#key-1"
-    identity = did_web.create_identity(kid=kid)
-
-    # Sign a dummy claim using our new identity.
-    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
-
-    # Check that the COSE header contains the expected kid.
-    header, _ = crypto.parse_cose_sign1(claim)
-    assert header["kid"] == kid
-
-    # Submit the claim and verify the resulting receipt.
-    receipt = client.submit_claim(claim).receipt
-    verify_receipt(claim, trust_store, receipt)
-
-    # Check that the resolved DID document contains the expected assertion
-    # method id.
-    did_doc = client.get_did_document(identity.issuer)
-    assert did_doc["assertionMethod"][0]["id"] == f"{identity.issuer}{kid}"
-
-
-@pytest.mark.needs_cchost
 @pytest.mark.isolated_test
 def test_recovery(client, did_web, restart_service):
     identity = did_web.create_identity()

@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+// When changing any of the values here, make sure to update the corresponding
+// entries in test/constants.py
 namespace scitt
 {
   const uint64_t MAX_ENTRY_SIZE_BYTES = 1024 * 1024;

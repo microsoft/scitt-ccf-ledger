@@ -49,7 +49,7 @@ stages:
           Pool: 1es-dcv3
           Environment:
             ENABLE_PREFIX_TREE: ON
-          FunctionalTestArguments: '--enable-prefix-tree'
+          FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
 
       - template: common.yml
         parameters:
@@ -58,7 +58,7 @@ stages:
           Platform: virtual
           Environment:
             ENABLE_PREFIX_TREE: ON
-          FunctionalTestArguments: '--enable-prefix-tree'
+          FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
 
       - template: common.yml
         parameters:
@@ -96,6 +96,8 @@ stages:
             ENABLE_PREFIX_TREE: ON
             # Fast unwinder only gives us partial stack traces in LeakSanitzer
             ASAN_OPTIONS: fast_unwind_on_malloc=0
+
+          # faketime does not play well with ASAN so don't enable it here.
           FunctionalTestArguments: '--enable-prefix-tree'
 
       - job: format
