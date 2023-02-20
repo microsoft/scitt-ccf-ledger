@@ -5,7 +5,9 @@ import re
 
 import pytest
 
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import Client
+
+from .infra.assertions import service_error
 
 REQUEST_ID_HEADER = "x-ms-request-id"
 CLIENT_REQUEST_ID_HEADER = "x-ms-client-request-id"
@@ -21,8 +23,9 @@ def test_tracing_headers(client: Client):
     assert response.headers[CLIENT_REQUEST_ID_HEADER] == "123"
     assert REQUEST_ID_REGEX.match(response.headers[REQUEST_ID_HEADER])
 
-    with pytest.raises(ServiceError, match="InvalidInput") as exc_info:
+    with service_error("InvalidInput: Invalid client request id") as exc_info:
         client.get("/version", headers={CLIENT_REQUEST_ID_HEADER: "123 456"})
+
     error = exc_info.value
     assert CLIENT_REQUEST_ID_HEADER not in error.headers
     assert REQUEST_ID_REGEX.match(error.headers[REQUEST_ID_HEADER])

@@ -14,6 +14,7 @@ from pyscitt.client import Client, ServiceError
 from pyscitt.crypto import cert_pem_to_der
 from pyscitt.verify import verify_receipt
 
+from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
@@ -161,10 +162,6 @@ class TestNonCanonicalEncoding:
         assert original_pieces[0] == updated_pieces[0]
         assert original_pieces[2] == updated_pieces[2]
         assert original_pieces[3] == updated_pieces[3]
-
-
-def service_error(match):
-    return pytest.raises(ServiceError, match=match)
 
 
 class TestHeaderParameters:

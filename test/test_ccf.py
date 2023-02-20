@@ -7,27 +7,10 @@ import pycose.headers
 import pytest
 
 from pyscitt import crypto, governance
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import Client
 from pyscitt.verify import verify_receipt
 
 from .infra.did_web_server import DIDWebServer
-
-
-# Temporary monkey-patch for pycose until https://github.com/TimothyClaeys/pycose/pull/107
-# is released.
-def crit_is_array(value):
-    if (
-        not isinstance(value, list)
-        or len(value) < 1
-        or not all(isinstance(x, (int, str)) for x in value)
-    ):
-        raise ValueError(
-            "CRITICAL should be a list with at least one integer or string element"
-        )
-    return value
-
-
-pycose.headers.Critical.value_parser = crit_is_array
 
 
 @pytest.mark.parametrize(
