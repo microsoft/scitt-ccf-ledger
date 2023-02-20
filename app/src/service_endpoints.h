@@ -4,40 +4,16 @@
 #pragma once
 
 #include "did/document.h"
+#include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
-#include <ccf/indexing/strategies/visit_each_entry_in_map.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
 
 namespace scitt
 {
-  /**
-   * A wrapper around VisitEachEntryInMap that works with any kv::TypedValue,
-   * providing access to the deserialized value.
-   */
-  template <typename M>
-  class VisitEachEntryInValueTyped
-    : public ccf::indexing::strategies::VisitEachEntryInMap
-  {
-  public:
-    using VisitEachEntryInMap::VisitEachEntryInMap;
-
-  protected:
-    void visit_entry(
-      const ccf::TxID& tx_id,
-      const ccf::ByteVector& k,
-      const ccf::ByteVector& v) final
-    {
-      visit_entry(tx_id, M::ValueSerialiser::from_serialised(v));
-    }
-
-    virtual void visit_entry(
-      const ccf::TxID& tx_id, const typename M::Value& value) = 0;
-  };
-
   GetServiceParameters::Out certificate_to_service_parameters(
     const std::vector<uint8_t>& certificate_der)
   {
@@ -210,8 +186,9 @@ namespace scitt
   void register_service_endpoints(
     ccfapp::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
   {
-    const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
     using namespace std::placeholders;
+
+    const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
 
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();

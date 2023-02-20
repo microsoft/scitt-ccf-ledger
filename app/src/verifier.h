@@ -62,7 +62,7 @@ namespace scitt::verifier
 
     PublicKey process_ietf_profile(
       const cose::ProtectedHeader& phdr,
-      kv::Tx& tx,
+      kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
@@ -130,7 +130,7 @@ namespace scitt::verifier
 
     PublicKey process_x509_profile(
       const cose::ProtectedHeader& phdr,
-      kv::Tx& tx,
+      kv::ReadOnlyTx& tx,
       const Configuration& configuration)
     {
       // X.509 SCITT profile validation.
@@ -265,7 +265,7 @@ namespace scitt::verifier
     PublicKey process_notary_profile(
       const cose::ProtectedHeader& phdr,
       const cose::UnprotectedHeader& uhdr,
-      kv::Tx& tx,
+      kv::ReadOnlyTx& tx,
       const Configuration& configuration)
     {
       // Validate protected header
@@ -304,7 +304,7 @@ namespace scitt::verifier
 
     ClaimProfile verify_claim(
       const std::vector<uint8_t>& data,
-      kv::Tx& tx,
+      kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
@@ -468,7 +468,7 @@ namespace scitt::verifier
     /**
      * Get the set of trusted x509 CAs from the KV.
      */
-    static std::vector<crypto::Pem> x509_root_store(kv::Tx& tx)
+    static std::vector<crypto::Pem> x509_root_store(kv::ReadOnlyTx& tx)
     {
       // TODO: move bundle name to constants and make more specific.
       auto ca_certs =
