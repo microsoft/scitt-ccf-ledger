@@ -151,17 +151,10 @@ def test_key_expiry(client, did_web, cchost):
 
     # The cached document can't be used anymore since it has expired. The
     # ledger has to re-fetch it, but will eventually fail since the document
-    # now contains a new key.
-    #
-    # The ledger will re-resolve the DID, and won't find the old key anymore.
+    # now contains a new key. When it does, the document won't contain the old
+    # key anymore and resolution will fail.
     with service_error("Missing assertion method in DID document"):
         client.submit_claim(claim)
-
-    # TODO: exiting while a resolution is in progress causes libuv to fail with
-    # EBUSY, since the external process is still running. Once we have a better
-    # way of monitoring the status of DID resolution we can be a bit smarter
-    # about this.
-    time.sleep(5)
 
 
 def test_multiple_keys(
