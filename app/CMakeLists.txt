@@ -135,6 +135,7 @@ if (BUILD_TESTS)
     unit-tests/configurable_auth_test.cpp
     unit-tests/did/resolver_test.cpp
     unit-tests/did/web/syntax_test.cpp
+    unit-tests/historical/lru_test.cpp
     unit-tests/prefix_tree/bitvector_test.cpp
     unit-tests/prefix_tree/prefix_tree_test.cpp
     unit-tests/prefix_tree/batched_prefix_tree_test.cpp
