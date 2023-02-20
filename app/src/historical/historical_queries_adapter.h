@@ -82,7 +82,7 @@ namespace scitt::historical
         }
         case HistoricalTxStatus::PendingOrUnknown:
         {
-          throw NotFoundError(
+          throw ServiceUnavailableError(
             ccf::errors::TransactionPendingOrUnknown, std::move(error_reason));
         }
         case HistoricalTxStatus::Invalid:
