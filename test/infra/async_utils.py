@@ -201,3 +201,12 @@ class EventLoopThread(ABC):
 
             # Clear the flag, so it can be re-used by subclasses.
             self._ready = False
+
+    def join(self) -> None:
+        """
+        Wait for the event loop thread to exit.
+        """
+        self._thread.join()
+
+        if self._exception is not None:
+            raise self._exception

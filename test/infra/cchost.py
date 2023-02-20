@@ -5,12 +5,13 @@ import argparse
 import asyncio
 import json
 import os
+import shlex
 import shutil
 import signal
 import ssl
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import aiotools
 from loguru import logger as LOG
@@ -56,6 +57,8 @@ class CCHost(EventLoopThread):
     faketime_lib: Optional[Path]
     clock_offset: int
 
+    with_gdb: Optional[str]
+
     def __init__(
         self,
         binary: str,
@@ -66,6 +69,7 @@ class CCHost(EventLoopThread):
         rpc_port: int = 0,
         node_port: int = 0,
         enable_faketime: bool = False,
+        with_gdb: Optional[str] = None,
     ):
         super().__init__()
 
@@ -120,6 +124,8 @@ class CCHost(EventLoopThread):
             else:
                 LOG.warning("Could not find faketime library")
 
+        self.with_gdb = with_gdb
+
     def restart(self) -> None:
         self._set_event(self.restart_request)
         self.wait_ready()
@@ -164,6 +170,8 @@ class CCHost(EventLoopThread):
         task is cancelled.
         """
 
+        LOG.debug("Starting cchost process...")
+
         # Ensure SGX_AESM_ADDR is not set when starting cchost.
         cchost_env = os.environ.copy()
         cchost_env.pop("SGX_AESM_ADDR", None)
@@ -174,17 +182,30 @@ class CCHost(EventLoopThread):
             cchost_env["FAKETIME_NO_CACHE"] = "1"
 
         LOG.debug("Starting cchost process...")
-        process = await asyncio.create_subprocess_exec(
+
+        cmd: List[Union[str, Path]] = [
             self.binary,
             "--config",
             self.workspace / "config.json",
-            cwd=self.workspace,
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=cchost_env,
-        )
+        ]
+
+        if self.with_gdb is not None:
+            process = await asyncio.create_subprocess_exec(
+                *shlex.split(self.with_gdb),
+                *cmd,
+                cwd=self.workspace,
+                env=cchost_env,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=self.workspace,
+                env=cchost_env,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
 
         try:
             async with aiotools.TaskGroup() as tg:
@@ -193,8 +214,9 @@ class CCHost(EventLoopThread):
                 # which allows us to wait for the process to quit first. This
                 # works nicely as it makes sure the log processing tasks get to see
                 # the final log messages emitted by cchost on its way out.
-                tg.create_task(self._process_stdout(process.stdout))
-                tg.create_task(self._process_stderr(process.stderr))
+                if not self.with_gdb:
+                    tg.create_task(self._process_stdout(process.stdout))
+                    tg.create_task(self._process_stderr(process.stderr))
                 tg.create_task(self._wait_ready())
 
                 await self._wait_for_process(process)
@@ -347,7 +369,10 @@ class CCHost(EventLoopThread):
                     "bind_address": f"0.0.0.0:{self.listen_node_port}"
                 },
             },
-            "logging": {"format": "Json", "host_level": "Info"},
+            "logging": {
+                "format": "Text" if self.with_gdb else "Json",
+                "host_level": "Info",
+            },
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
             },
@@ -440,7 +465,12 @@ def main():
     parser.add_argument(
         "--enable-faketime",
         help="Enable faketime support. The `faketime` file in the workspace can be used to adjust the time as seen by cchost",
-        action="store_true",
+    )
+    parser.add_argument(
+        "--with-gdb",
+        help="Run cchost with GDB attached to it.",
+        nargs="?",
+        const="gdb --args",
     )
 
     args = parser.parse_args()
@@ -450,6 +480,7 @@ def main():
 
     enclave_file = get_enclave_path(args.platform, args.package)
     binary = args.cchost or get_default_cchost_path(args.platform)
+
     with CCHost(
         binary,
         args.platform,
@@ -459,9 +490,9 @@ def main():
         rpc_port=args.port,
         node_port=args.node_port,
         enable_faketime=args.enable_faketime,
+        with_gdb=args.with_gdb,
     ) as cchost:
-        while True:
-            signal.pause()
+        cchost.join()
 
 
 if __name__ == "__main__":
