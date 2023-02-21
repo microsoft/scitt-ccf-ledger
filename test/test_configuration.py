@@ -8,18 +8,15 @@ import pycose
 import pytest
 
 from pyscitt import crypto
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import Client
 from pyscitt.did import Resolver, did_web_document_url
 from pyscitt.verify import DIDResolverTrustStore, verify_receipt
 
+from .infra.assertions import service_error
 from .infra.did_web_server import DIDWebServer
 
 
 class TestAcceptedAlgorithms:
-    def not_allowed(self, f):
-        with pytest.raises(ServiceError, match="InvalidInput: Unsupported algorithm"):
-            f()
-
     @pytest.fixture
     def submit(self, client: Client, did_web: DIDWebServer):
         def f(**kwargs):
@@ -34,17 +31,27 @@ class TestAcceptedAlgorithms:
         # Configure the service with no accepted algorithms.
         # The service should reject anything we submit to it.
         configure_service({"policy": {"accepted_algorithms": []}})
-        self.not_allowed(lambda: submit(alg="ES256", kty="ec", ec_curve="P-256"))
-        self.not_allowed(lambda: submit(alg="ES384", kty="ec", ec_curve="P-384"))
-        self.not_allowed(lambda: submit(alg="PS256", kty="rsa"))
+
+        with service_error("InvalidInput: Unsupported algorithm"):
+            submit(alg="ES256", kty="ec", ec_curve="P-256")
+
+        with service_error("InvalidInput: Unsupported algorithm"):
+            submit(alg="ES384", kty="ec", ec_curve="P-384")
+
+        with service_error("InvalidInput: Unsupported algorithm"):
+            submit(alg="PS256", kty="rsa")
 
     def test_allow_select_algorithm(self, configure_service, submit):
         # Add just one algorithm to the policy. Claims signed with this
         # algorithm are accepted but not the others.
         configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
-        self.not_allowed(lambda: submit(alg="ES384", kty="ec", ec_curve="P-384"))
-        self.not_allowed(lambda: submit(alg="PS256", kty="rsa"))
+
+        with service_error("InvalidInput: Unsupported algorithm"):
+            submit(alg="ES384", kty="ec", ec_curve="P-384")
+
+        with service_error("InvalidInput: Unsupported algorithm"):
+            submit(alg="PS256", kty="rsa")
 
     def test_default_allows_anything(self, configure_service, submit):
         # If no accepted_algorithms are defined in the policy, any algorithm
@@ -56,13 +63,6 @@ class TestAcceptedAlgorithms:
 
 
 class TestAcceptedDIDIssuers:
-    def not_allowed(self, f):
-        with pytest.raises(
-            ServiceError,
-            match="InvalidInput: Unsupported DID issuer in protected header",
-        ):
-            f()
-
     @pytest.fixture(scope="class")
     def identity(self, did_web):
         return did_web.create_identity()
@@ -75,13 +75,17 @@ class TestAcceptedDIDIssuers:
         # Start with a configuration with no accepted issuers.
         # The service should reject anything we submit to it.
         configure_service({"policy": {"accepted_did_issuers": []}})
-        self.not_allowed(lambda: client.submit_claim(claims))
+
+        with service_error("InvalidInput: Unsupported DID issuer in protected header"):
+            client.submit_claim(claims)
 
     def test_wrong_accepted_issuer(self, client: Client, configure_service, claims):
         # Add just one issuer to the policy. Claims signed not with this
         # issuer are rejected.
         configure_service({"policy": {"accepted_did_issuers": ["else"]}})
-        self.not_allowed(lambda: client.submit_claim(claims))
+
+        with service_error("InvalidInput: Unsupported DID issuer in protected header"):
+            client.submit_claim(claims)
 
     def test_allow_any_issuer(self, client: Client, configure_service, claims):
         # If no accepted_issuers are defined in the policy, any issuers

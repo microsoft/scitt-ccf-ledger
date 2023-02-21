@@ -5,7 +5,8 @@ import pytest
 from cryptography.exceptions import InvalidSignature
 
 from pyscitt import crypto
-from pyscitt.client import ServiceError
+
+from .infra.assertions import service_error
 
 
 @pytest.mark.needs_prefix_tree
@@ -20,7 +21,7 @@ def test_prefix_tree(did_web, client):
     pt = client.prefix_tree
 
     # Until we flush the prefix tree, the claim does not appear
-    with pytest.raises(ServiceError, match="UnknownFeed"):
+    with service_error("UnknownFeed: No claim found for given issuer and feed"):
         pt.get_read_receipt(identity.issuer, feed)
 
     pt.flush()
@@ -71,14 +72,14 @@ def test_prefix_tree(did_web, client):
         receipt.verify(first_claims, service_parameters)
 
 
-# This test only works on an isolated cchost instance, since we require the service to be blank.
+# This test only works on an isolated cchost instance, since we require the
+# service to be blank.
 @pytest.mark.isolated_test
-@pytest.mark.needs_cchost
 @pytest.mark.needs_prefix_tree
 def test_empty_prefix_tree(client):
     """Before any flush has been committed, fetching the prefix tree receipt returns a graceful error."""
 
-    with pytest.raises(ServiceError, match="NoPrefixTree"):
+    with service_error("NoPrefixTree: No prefix tree has been committed yet"):
         client.get_historical("/prefix_tree")
 
     client.prefix_tree.flush()

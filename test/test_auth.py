@@ -4,18 +4,15 @@
 import pytest
 
 from pyscitt import crypto
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import Client
 
+from .infra.assertions import service_error
 from .infra.jwt_issuer import JwtIssuer
 
 
 class TestAuthentication:
-    def not_allowed(self, f):
-        with pytest.raises(ServiceError, match="InvalidAuthenticationInfo"):
-            f()
-
     @pytest.fixture(scope="class")
-    def claims(self, did_web):
+    def claim(self, did_web):
         identity = did_web.create_identity()
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
@@ -44,9 +41,9 @@ class TestAuthentication:
         return f
 
     @pytest.fixture
-    def submit(self, client: Client, claims):
+    def submit(self, client: Client, claim: bytes):
         def f(**kwargs):
-            client.replace(**kwargs).submit_claim(claims)
+            client.replace(**kwargs).submit_claim(claim)
 
         return f
 
@@ -54,17 +51,26 @@ class TestAuthentication:
         # Start off with a fully closed off service.
         setup(allow_unauthenticated=False)
 
-        self.not_allowed(lambda: submit())
-        self.not_allowed(lambda: submit(auth_token=valid_issuer.create_token()))
-        self.not_allowed(lambda: submit(auth_token=invalid_issuer.create_token()))
+        with service_error("InvalidAuthenticationInfo"):
+            submit()
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=valid_issuer.create_token())
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=invalid_issuer.create_token())
 
     def test_no_required_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
         # Enable JWT with no required claims.
         setup(allow_unauthenticated=False, required_claims={})
 
         submit(auth_token=valid_issuer.create_token())
-        self.not_allowed(lambda: submit())
-        self.not_allowed(lambda: submit(auth_token=invalid_issuer.create_token()))
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit()
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=invalid_issuer.create_token())
 
     def test_require_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
         # Enable JWT with a required "aud" claims.
@@ -72,14 +78,18 @@ class TestAuthentication:
 
         submit(auth_token=valid_issuer.create_token({"aud": "foo"}))
         submit(auth_token=valid_issuer.create_token({"aud": "foo", "iat": 1234567}))
-        self.not_allowed(lambda: submit())
-        self.not_allowed(lambda: submit(auth_token=valid_issuer.create_token()))
-        self.not_allowed(
-            lambda: submit(auth_token=valid_issuer.create_token({"aud": "bar"}))
-        )
-        self.not_allowed(
-            lambda: submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
-        )
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit()
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=valid_issuer.create_token())
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=valid_issuer.create_token({"aud": "bar"}))
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
 
     def test_allow_anything(self, setup, submit, valid_issuer, invalid_issuer):
         # Allow anything

@@ -10,9 +10,10 @@ import pytest
 from pycose.messages import Sign1Message
 
 from pyscitt import crypto, governance
-from pyscitt.client import Client, ServiceError
+from pyscitt.client import Client
 from pyscitt.verify import TrustStore, verify_receipt
 
+from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
@@ -57,7 +58,7 @@ def test_invalid_certificate_chain(
     identity = crypto.Signer(private_key, x5c=x5c)
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    with pytest.raises(ServiceError, match="Certificate chain is invalid"):
+    with service_error("Certificate chain is invalid"):
         client.submit_claim(claims)
 
 
@@ -77,7 +78,7 @@ def test_wrong_certificate(
 
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    with pytest.raises(ServiceError, match="Signature verification failed"):
+    with service_error("Signature verification failed"):
         client.submit_claim(claims)
 
 
@@ -89,7 +90,7 @@ def test_untrusted_ca(client: Client):
     identity = untrusted_ca.create_identity(alg="ES256", kty="ec")
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    with pytest.raises(ServiceError, match="Certificate chain is invalid"):
+    with service_error("Certificate chain is invalid"):
         client.submit_claim(claims)
 
 
@@ -114,7 +115,7 @@ def test_self_signed_trusted(
     # choose to reject this.
     # We're pretty flexible about the error message here, because the exact
     # behaviour depends on the OpenSSL version.
-    with pytest.raises(ServiceError, match="Certificate chain"):
+    with service_error("Certificate chain"):
         client.submit_claim(claims)
 
 
@@ -152,7 +153,7 @@ def test_self_signed_untrusted(client: Client):
     identity = crypto.Signer(private_key, x5c=[cert_pem])
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    with pytest.raises(ServiceError, match="Certificate chain is invalid"):
+    with service_error("Certificate chain is invalid"):
         client.submit_claim(claims)
 
 
@@ -165,7 +166,7 @@ def test_leaf_ca(
     """
     identity = trusted_ca.create_identity(alg="ES256", kty="ec", ca=True)
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    with pytest.raises(ServiceError, match="Signing certificate is CA"):
+    with service_error("Signing certificate is CA"):
         client.submit_claim(claims).receipt
 
 
@@ -179,9 +180,7 @@ def test_root_ca(
 
     identity = crypto.Signer(trusted_ca.root_key_pem, x5c=[trusted_ca.root_cert_pem])
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    with pytest.raises(
-        ServiceError, match="Certificate chain must include at least one CA certificate"
-    ):
+    with service_error("Certificate chain must include at least one CA certificate"):
         client.submit_claim(claims).receipt
 
 
