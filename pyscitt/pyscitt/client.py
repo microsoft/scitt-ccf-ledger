@@ -311,8 +311,6 @@ class BaseClient:
             *args,
             **kwargs,
             retry_on=[
-                HTTPStatus.ACCEPTED,
-                (HTTPStatus.NOT_FOUND, "TransactionPendingOrUnknown"),
                 (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
             ]
             + retry_on,

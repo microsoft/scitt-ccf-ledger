@@ -575,7 +575,7 @@ namespace scitt
    *
    * Asynchronous operations are useful for tasks which depend on an external
    * process to execute. This transaction will record the start of the operation
-   * and set its status to "pending". When the external process completes, it
+   * and set its status to "running". When the external process completes, it
    * must invoke a callback URL, at which point more processing will happen
    * inside the ledger.
    *

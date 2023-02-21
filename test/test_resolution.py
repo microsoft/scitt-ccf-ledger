@@ -233,17 +233,12 @@ class TestDIDMismatch:
     easy way to test the ledger's handling of errors during resolution.
     """
 
-    @pytest.fixture
-    def identity(self, did_web) -> crypto.Signer:
-        issuer = did_web.generate_identifier()
-        private_key, _ = crypto.generate_keypair(kty="ec")
-        return crypto.Signer(private_key, issuer=issuer)
-
-    @pytest.fixture(autouse=True)
-    def create_document(self, did_web: DIDWebServer, identity: crypto.Signer):
-        # Create a document, but write a random DID into that does not
-        # correspond to the location of the document nor the issuer we use in
-        # claims.
+    def write_invalid_document(self, did_web: DIDWebServer, identity: crypto.Signer):
+        """
+        Write a DID document at the location which would be resolved for `identity`,
+        but write a random identifier into it which does not correspond to the location
+        of the document nor the issuer we use in claims.
+        """
         document = did.create_document(
             did=did_web.generate_identifier(),
             public_key=crypto.private_key_to_public(identity.private_key),
@@ -253,7 +248,10 @@ class TestDIDMismatch:
 
         did_web.write_did_document(document, identifier=identity.issuer)
 
-    def test_submit(self, client: Client, identity: crypto.Signer):
+    def test_submit(self, client: Client, did_web: DIDWebServer):
+        identity = did_web.create_identity()
+        self.write_invalid_document(did_web, identity)
+
         claim = crypto.sign_json_claimset(identity, "Payload")
 
         with service_error("DID document ID does not match expected value"):
@@ -263,7 +261,6 @@ class TestDIDMismatch:
         self,
         client: Client,
         did_web: DIDWebServer,
-        identity: crypto.Signer,
         submit_concurrently: Callable[[List[bytes]], List[str]],
     ):
         """
@@ -272,6 +269,8 @@ class TestDIDMismatch:
         The server should aggregate the resolutions into a single request, yet
         correctly report the resolution error on both operations.
         """
+        identity = did_web.create_identity()
+        self.write_invalid_document(did_web, identity)
 
         claim1 = crypto.sign_json_claimset(identity, "Hello")
         claim2 = crypto.sign_json_claimset(identity, "World")
@@ -294,7 +293,6 @@ class TestDIDMismatch:
         client: Client,
         did_web: DIDWebServer,
         trust_store: TrustStore,
-        identity: crypto.Signer,
     ):
         """
         Test that the ledger does not cache failed resolutions.
@@ -302,6 +300,8 @@ class TestDIDMismatch:
         After fixing the cause of the error, the server should immediately be
         able to resolve the DID again.
         """
+        identity = did_web.create_identity()
+        self.write_invalid_document(did_web, identity)
 
         assert identity.issuer is not None
 
@@ -312,7 +312,6 @@ class TestDIDMismatch:
             client.submit_claim(claim)
 
         # Update the published document. This time it uses the correct DID.
-        # (Each test runs with a different DID, so this won't affect others).
         document = did.create_document(
             did=identity.issuer,
             public_key=crypto.private_key_to_public(identity.private_key),
