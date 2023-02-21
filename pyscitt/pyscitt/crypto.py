@@ -7,7 +7,7 @@ import hashlib
 import json
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -273,6 +273,12 @@ def get_cert_public_key(pem: Pem) -> Pem:
 def get_cert_fingerprint(pem: Pem) -> str:
     cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.fingerprint(hashes.SHA256()).hex()
+
+
+def get_public_key_fingerprint(pem: Pem) -> str:
+    pub_key = load_pem_public_key(pem.encode("ascii"))
+    der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    return hashlib.sha256(der).hexdigest()
 
 
 def pub_key_pem_to_der(pem: Pem) -> bytes:
@@ -561,12 +567,12 @@ def load_private_key(key_path: Path) -> Pem:
     return key_priv_pem
 
 
-def create_did_document(
-    did: str, pub_key_pem: Pem, alg: Optional[str] = None, kid: Optional[str] = None
-) -> dict:
-    pub_key = load_pem_public_key(pub_key_pem.encode("ascii"))
-    der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-
+def jwk_from_public_key(
+    pem: Pem,
+    alg: Optional[str] = None,
+    kid: Optional[str] = None,
+):
+    pub_key = load_pem_public_key(pem.encode("ascii"))
     if isinstance(pub_key, RSAPublicKey):
         pub_nums = pub_key.public_numbers()
 
@@ -611,39 +617,14 @@ def create_did_document(
     else:
         raise ValueError("unsupported key type")
 
-    if not did.startswith("did:"):
-        raise ValueError("did must start with 'did:'")
-
-    if kid is None:
-        kid = "#" + hashlib.sha256(der).hexdigest()
-    if not kid.startswith("#"):
-        raise ValueError("kid must start with '#'")
+    if kid is not None:
+        jwk["kid"] = kid
 
     if alg is None:
         alg = default_algorithm_for_key(pub_key)
+    jwk["alg"] = alg
 
-    jwk.update(
-        {
-            "kid": kid[1:],
-            "alg": alg,
-        }
-    )
-
-    return {
-        "@context": [
-            "https://www.w3.org/ns/did/v1",
-            "https://w3id.org/security/suites/jws-2020/v1",
-        ],
-        "id": did,
-        "assertionMethod": [
-            {
-                "id": f"{did}{kid}",
-                "type": "JsonWebKey2020",
-                "controller": did,
-                "publicKeyJwk": jwk,
-            }
-        ],
-    }
+    return jwk
 
 
 class Signer:
@@ -701,7 +682,7 @@ def sign_claimset(
 
 def sign_json_claimset(
     signer: Signer,
-    claims: dict,
+    claims: Any,
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
 ) -> bytes:

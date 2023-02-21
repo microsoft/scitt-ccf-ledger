@@ -68,6 +68,9 @@ jobs:
             path: $(Build.ArtifactStagingDirectory)/${{ parameters.ImageFilename }}
 
       - ${{ if eq(parameters.Variant, 'Local') }}:
+        - script: |
+            sudo apt-get install -y faketime
+
         - script: ./build.sh
           displayName: Build (local)
           env:

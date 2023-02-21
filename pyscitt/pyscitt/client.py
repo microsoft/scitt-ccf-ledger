@@ -363,18 +363,30 @@ class Client(BaseClient):
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+        self,
+        claim: bytes,
+        *,
+        skip_confirmation: Literal[False] = False,
+        allow_retries: bool = True,
     ) -> SubmissionReceipt:
         ...
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[True]
+        self,
+        claim: bytes,
+        *,
+        skip_confirmation: Literal[True],
+        allow_retries: bool = True,
     ) -> Submission:
         ...
 
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False
+        self,
+        claim: bytes,
+        *,
+        skip_confirmation: bool = False,
+        allow_retries: bool = True,
     ) -> Union[SubmissionReceipt, Submission]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
@@ -383,7 +395,9 @@ class Client(BaseClient):
             content=claim,
             retry_on=[
                 (HTTPStatus.SERVICE_UNAVAILABLE, "DIDResolutionInProgressRetryLater")
-            ],
+            ]
+            if allow_retries
+            else [],
         )
 
         tx = response.headers[CCF_TX_ID_HEADER]

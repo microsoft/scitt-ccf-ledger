@@ -167,7 +167,6 @@ def test_consistent_jwk(client, service_identifier):
         assert crypto.pub_key_pem_to_der(key) == crypto.pub_key_pem_to_der(cert_key)
 
 
-@pytest.mark.needs_cchost
 @pytest.mark.isolated_test
 def test_did_multiple_service_keys(
     client: Client,

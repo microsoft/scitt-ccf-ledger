@@ -1,13 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import quote, unquote
 
 import httpx
 from loguru import logger as LOG
 
-from .crypto import Pem, Signer
+from .crypto import Pem, Signer, get_public_key_fingerprint, jwk_from_public_key
 
 DID_FILENAME = "did.json"
 DID_WEB_DOC_URL_SCHEME = "https"
@@ -30,7 +30,7 @@ def format_did_web(
     return did
 
 
-def did_web_document_url(did: str) -> str:
+def did_web_parse(did: str) -> Tuple[str, Optional[str]]:
     parts = did.split(":")
 
     if len(parts) < 3:
@@ -41,28 +41,41 @@ def did_web_document_url(did: str) -> str:
         raise ValueError("Malformed DID-web")
 
     if len(parts) == 3:
-        path = DID_WEB_DOC_WELLKNOWN_PATH
+        path = None
     else:
         path = "/".join(parts[3:])
 
-    return f"{DID_WEB_DOC_URL_SCHEME}://{unquote(location)}/{path}/{DID_FILENAME}"
+    return unquote(location), path
+
+
+def did_web_document_url(did: str) -> str:
+    (location, path) = did_web_parse(did)
+    if path is None:
+        path = DID_WEB_DOC_WELLKNOWN_PATH
+
+    return f"{DID_WEB_DOC_URL_SCHEME}://{location}/{path}/{DID_FILENAME}"
 
 
 def find_assertion_method(did_doc: dict, kid: Optional[str]):
     # TODO: support non-inline verification methods
     assertion_methods = did_doc["assertionMethod"]
     if kid is None:
-        assertion_method = assertion_methods[0]
+        if len(assertion_methods) > 1:
+            raise ValueError("found more than one assertion method")
+        elif len(assertion_methods) == 0:
+            raise ValueError("no assertion method found")
+        else:
+            return assertion_methods[0]
+
     else:
         matches = [
             m for m in assertion_methods if get_verification_method_kid(m) == kid
         ]
         if len(matches) > 1:
             raise ValueError("found more than one assertion method with given kid")
-        if len(matches) == 0:
+        elif len(matches) == 0:
             raise ValueError("no assertion method found with given kid")
-        assertion_method = matches[0]
-    return assertion_method
+        return matches[0]
 
 
 # The "kid" COSE header parameter refers
@@ -79,6 +92,52 @@ def get_signer(private_key: Pem, did_doc: dict, kid: Optional[str] = None) -> Si
     algorithm = assertion_method["publicKeyJwk"]["alg"]
 
     return Signer(private_key, did_doc["id"], kid, algorithm)
+
+
+def create_assertion_method(
+    *,
+    did: str,
+    public_key: Pem,
+    alg: Optional[str] = None,
+    kid: Optional[str] = None,
+):
+    if kid is None:
+        kid = "#" + get_public_key_fingerprint(public_key)
+    if not kid.startswith("#"):
+        raise ValueError("kid must start with '#'")
+
+    return {
+        "id": f"{did}{kid}",
+        "type": "JsonWebKey2020",
+        "controller": did,
+        "publicKeyJwk": jwk_from_public_key(public_key, alg, kid[1:]),
+    }
+
+
+def create_document(
+    *,
+    did: str,
+    assertion_methods: Optional[list] = None,
+    public_key: Optional[Pem] = None,
+) -> dict:
+    if not did.startswith("did:"):
+        raise ValueError("did must start with 'did:'")
+
+    if assertion_methods is None:
+        if public_key is None:
+            raise ValueError(
+                "Either a public key or assertion methods must be provided"
+            )
+        assertion_methods = [create_assertion_method(did=did, public_key=public_key)]
+
+    return {
+        "@context": [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/jws-2020/v1",
+        ],
+        "id": did,
+        "assertionMethod": assertion_methods,
+    }
 
 
 class Resolver:

@@ -184,6 +184,27 @@ namespace scitt
 
       return index->get_did_document(*cfg.service_identifier);
     }
+
+    /**
+     * Endpoint that returns the current time as a Unix timestamp.
+     *
+     * This endpoint isn't meant to be used in production. It is only available
+     * to help integration tests that manipulate the service's clock.
+     */
+    time_t get_time(
+      ccf::BaseEndpointRegistry& registry,
+      ccf::endpoints::EndpointContext& ctx,
+      nlohmann::json&& params)
+    {
+      ::timespec host_time;
+      auto result = registry.get_untrusted_host_time_v1(host_time);
+      if (result != ccf::ApiResult::OK)
+      {
+        throw InternalError(fmt::format(
+          "Failed to get host time: {}", ccf::api_result_to_str(result)));
+      }
+      return host_time.tv_sec;
+    }
   }
 
   void register_service_endpoints(
@@ -237,6 +258,17 @@ namespace scitt
         ccf::json_adapter(endpoints::get_version),
         no_authn_policy)
       .set_auto_schema<void, GetVersion::Out>()
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .install();
+
+    registry
+      .make_endpoint(
+        "/time",
+        HTTP_GET,
+        ccf::json_adapter(
+          std::bind(endpoints::get_time, std::ref(registry), _1, _2)),
+        no_authn_policy)
+      .set_auto_schema<void, time_t>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 

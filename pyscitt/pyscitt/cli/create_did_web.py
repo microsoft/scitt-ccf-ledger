@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
-from .. import crypto
+from .. import crypto, did
 from ..did import did_web_document_url, format_did_web
 
 DID_FILENAME = "did.json"
@@ -27,11 +27,11 @@ def create_did_web(
 ):
     parsed = urlsplit(base_url)
     assert parsed.hostname
-    did = format_did_web(
+    identifier = format_did_web(
         host=parsed.hostname, port=parsed.port, path=parsed.path.lstrip("/")
     )
 
-    did_doc_url = did_web_document_url(did)
+    did_doc_url = did_web_document_url(identifier)
     print(f"did:web document URL: {did_doc_url}")
 
     out_path = out_dir / DID_FILENAME
@@ -53,7 +53,10 @@ def create_did_web(
         else:
             public_key_pem = public_key_pem_path.read_text()
 
-    doc = crypto.create_did_document(did, pub_key_pem=public_key_pem, alg=alg)
+    method = did.create_assertion_method(
+        did=identifier, public_key=public_key_pem, alg=alg
+    )
+    doc = did.create_document(did=identifier, assertion_methods=[method])
     write_file(out_path, json.dumps(doc, indent=2))
 
 
