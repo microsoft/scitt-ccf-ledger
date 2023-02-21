@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app_data.h"
 #include "constants.h"
 #include "util.h"
 
@@ -10,7 +11,6 @@
 #include <ccf/endpoint_context.h>
 #include <functional>
 #include <regex>
-#include <sstream>
 #include <time.h>
 
 namespace scitt
@@ -21,18 +21,12 @@ namespace scitt
 
   const std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
 
-  thread_local std::string request_id;
+  thread_local std::optional<std::string> request_id;
   thread_local std::optional<std::string> client_request_id;
-
-  struct AppData
-  {
-    std::string request_id;
-    std::optional<std::string> client_request_id;
-  };
 
   void clear_trace_state()
   {
-    request_id = "";
+    request_id = std::nullopt;
     client_request_id = std::nullopt;
   }
 
@@ -48,6 +42,24 @@ namespace scitt
     return fmt::format("{:x}", ENTROPY->random64());
   }
 
+  std::string tracing_context()
+  {
+    fmt::memory_buffer out;
+    if (client_request_id.has_value())
+    {
+      fmt::format_to(
+        std::back_inserter(out),
+        "ClientRequestId={} ",
+        client_request_id.value());
+    }
+    if (request_id.has_value())
+    {
+      fmt::format_to(
+        std::back_inserter(out), "RequestId={} ", request_id.value());
+    }
+    return fmt::to_string(out);
+  }
+
 // The ## syntax is GCC extension, for which we need to disable warnings.
 // C++20 has a standard alternative, __VA_OPT__, we could use, but clang has a
 // bug still throws warnings at the call site. The bug is fixed in clang-14.
@@ -58,25 +70,13 @@ namespace scitt
 // These macros could be invoked from anywhere, including outside of the scitt
 // namespace. All references to global symbols must therefore be fully qualified
 // (ie. using ::scitt::foo).
-#define SCITT_INFO(s, ...) \
-  if (::scitt::client_request_id.has_value()) \
-    CCF_APP_INFO( \
-      "ClientRequestId={} RequestId={} " s, \
-      ::scitt::client_request_id.value(), \
-      ::scitt::request_id, \
-      ##__VA_ARGS__); \
-  else \
-    CCF_APP_INFO("RequestId={} " s, ::scitt::request_id, ##__VA_ARGS__)
+#define SCITT_LOG(f, s, ...) \
+  f("{}" s, ::scitt::tracing_context(), ##__VA_ARGS__)
 
-#define SCITT_FAIL(s, ...) \
-  if (::scitt::client_request_id.has_value()) \
-    CCF_APP_FAIL( \
-      "ClientRequestId={} RequestId={} " s, \
-      ::scitt::client_request_id.value(), \
-      ::scitt::request_id, \
-      ##__VA_ARGS__); \
-  else \
-    CCF_APP_FAIL("RequestId={} " s, ::scitt::request_id, ##__VA_ARGS__)
+#define SCITT_TRACE(s, ...) SCITT_LOG(CCF_APP_TRACE, s, ##__VA_ARGS__)
+#define SCITT_DEBUG(s, ...) SCITT_LOG(CCF_APP_DEBUG, s, ##__VA_ARGS__)
+#define SCITT_INFO(s, ...) SCITT_LOG(CCF_APP_INFO, s, ##__VA_ARGS__)
+#define SCITT_FAIL(s, ...) SCITT_LOG(CCF_APP_FAIL, s, ##__VA_ARGS__)
 
 #pragma clang diagnostic pop
 
@@ -90,7 +90,7 @@ namespace scitt
       auto cleanup = finally(clear_trace_state);
 
       request_id = create_request_id();
-      ctx.rpc_ctx->set_response_header(REQUEST_ID_HEADER, request_id);
+      ctx.rpc_ctx->set_response_header(REQUEST_ID_HEADER, request_id.value());
 
       client_request_id =
         ctx.rpc_ctx->get_request_header(CLIENT_REQUEST_ID_HEADER);
@@ -114,10 +114,11 @@ namespace scitt
           "x-ms-client-request-id", client_request_id.value());
       }
 
-      // The user data is used to propagate the request IDs to the local commit
-      // callback
-      ctx.rpc_ctx->set_user_data(
-        std::make_shared<AppData>(AppData{request_id, client_request_id}));
+      // The user data is used to propagate the request IDs to the local
+      // commit callback
+      AppData& app_data = get_app_data(ctx.rpc_ctx);
+      app_data.request_id = request_id;
+      app_data.client_request_id = client_request_id;
 
       auto query = ctx.rpc_ctx->get_request_query();
 
@@ -165,21 +166,21 @@ namespace scitt
     };
   }
 
-  void tracing_local_commit_callback(
-    ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid)
+  ccf::endpoints::LocallyCommittedEndpointFunction tracing_local_commit_adapter(
+    ccf::endpoints::LocallyCommittedEndpointFunction fn)
   {
-    auto cleanup = finally(clear_trace_state);
+    return
+      [fn](ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid) {
+        auto cleanup = finally(clear_trace_state);
 
-    auto user_data = static_cast<AppData*>(ctx.rpc_ctx->get_user_data());
-    if (user_data != nullptr)
-    {
-      request_id = user_data->request_id;
-      client_request_id = user_data->client_request_id;
-    }
+        AppData& app_data = get_app_data(ctx.rpc_ctx);
+        request_id = app_data.request_id;
+        client_request_id = app_data.client_request_id;
 
-    SCITT_INFO("TxId={}", txid.to_str());
+        SCITT_INFO("TxId={}", txid.to_str());
 
-    ccf::endpoints::default_locally_committed_func(ctx, txid);
+        fn(ctx, txid);
+      };
   }
 
   /**

@@ -5,7 +5,7 @@
 
 #include "constants.h"
 #include "did/resolver.h"
-#include "did/web/method.h"
+#include "did/web/syntax.h"
 #include "util.h"
 
 #include <algorithm>

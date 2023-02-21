@@ -15,9 +15,9 @@ from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_START,
 )
 from pyscitt.cli.main import main
-from pyscitt.client import ServiceError
 from pyscitt.governance import ProposalNotAccepted
 
+from .infra.assertions import service_error
 from .infra.did_web_server import DIDWebServer
 
 
@@ -475,7 +475,7 @@ class TestUpdateScittConstitution:
         proposal.write_text(json.dumps({"actions": [{"name": "my_action"}]}))
 
         # The my_action action does not exist yet.
-        with pytest.raises(ServiceError, match="my_action: no such action"):
+        with service_error("my_action: no such action"):
             run(
                 "governance",
                 "propose_generic",
@@ -505,7 +505,7 @@ class TestUpdateScittConstitution:
         # After updating the constitution again, the my_action action will
         # fail to run, showing that we actually modified the SCITT constitution,
         # and didn't just append to it.
-        with pytest.raises(ServiceError, match="my_action: no such action"):
+        with service_error("my_action: no such action"):
             run(
                 "governance",
                 "propose_generic",

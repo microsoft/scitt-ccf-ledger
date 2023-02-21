@@ -4,40 +4,16 @@
 #pragma once
 
 #include "did/document.h"
+#include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
-#include <ccf/indexing/strategies/visit_each_entry_in_map.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
 
 namespace scitt
 {
-  /**
-   * A wrapper around VisitEachEntryInMap that works with any kv::TypedValue,
-   * providing access to the deserialized value.
-   */
-  template <typename M>
-  class VisitEachEntryInValueTyped
-    : public ccf::indexing::strategies::VisitEachEntryInMap
-  {
-  public:
-    using VisitEachEntryInMap::VisitEachEntryInMap;
-
-  protected:
-    void visit_entry(
-      const ccf::TxID& tx_id,
-      const ccf::ByteVector& k,
-      const ccf::ByteVector& v) final
-    {
-      visit_entry(tx_id, M::ValueSerialiser::from_serialised(v));
-    }
-
-    virtual void visit_entry(
-      const ccf::TxID& tx_id, const typename M::Value& value) = 0;
-  };
-
   GetServiceParameters::Out certificate_to_service_parameters(
     const std::vector<uint8_t>& certificate_der)
   {
@@ -184,13 +160,35 @@ namespace scitt
 
       return index->get_did_document(*cfg.service_identifier);
     }
+
+    /**
+     * Endpoint that returns the current time as a Unix timestamp.
+     *
+     * This endpoint isn't meant to be used in production. It is only available
+     * to help integration tests that manipulate the service's clock.
+     */
+    time_t get_time(
+      ccf::BaseEndpointRegistry& registry,
+      ccf::endpoints::EndpointContext& ctx,
+      nlohmann::json&& params)
+    {
+      ::timespec host_time;
+      auto result = registry.get_untrusted_host_time_v1(host_time);
+      if (result != ccf::ApiResult::OK)
+      {
+        throw InternalError(fmt::format(
+          "Failed to get host time: {}", ccf::api_result_to_str(result)));
+      }
+      return host_time.tv_sec;
+    }
   }
 
   void register_service_endpoints(
     ccfapp::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
   {
-    const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
     using namespace std::placeholders;
+
+    const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
 
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();
@@ -237,6 +235,17 @@ namespace scitt
         ccf::json_adapter(endpoints::get_version),
         no_authn_policy)
       .set_auto_schema<void, GetVersion::Out>()
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .install();
+
+    registry
+      .make_endpoint(
+        "/time",
+        HTTP_GET,
+        ccf::json_adapter(
+          std::bind(endpoints::get_time, std::ref(registry), _1, _2)),
+        no_authn_policy)
+      .set_auto_schema<void, time_t>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 

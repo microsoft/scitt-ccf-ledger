@@ -105,18 +105,14 @@ The `needs_prefix_tree` marker will skip the test, unless pytest was invoked
 with the `--enable-prefix-tree` flag. This is necessary as prefix tree support
 is a compile-time opt-in feature of the ledger.
 
-The `needs_cchost` marker will skip the test if running against an external
-service.
-
 The `isolated_test` marker will instruct the test infrastructure to use a
 dedicated ledger instance, shared among all tests in the class. If applied on a
 test function that is not part of a class, then the ledger instance is used for
 this test function only. This is useful for tests that are considered risky,
 and have a high chance of leaving the service in an unusable state (which would
 make all subsequent tests fail), or when the test requires an empty ledger to
-start with. If an external service is used, this marker has no effect and the
-tests will run against that external service, shared with the other tests. If
-this is undesirable, this marker can be combined with `needs_cchost`.
+start with. Tests marked with `isolated_test` are skipped if an external service
+is used.
 
 
 ## Using the existing fixtures
@@ -152,10 +148,15 @@ anchor for `did:web` resolution. Every identity returned by
 `did_web.create_identity()` is unique, thanks to using a random UUID in its
 path, ensuring different test runs don't interfere with each other.
 
+Similar to the `did_web` one, the `trusted_ca` fixture can be used to create
+new X509-based identities. The fixture creates a new Certificate Authority and
+the service is configured to trust its root certificate. New identities are
+created by calling `trusted_ca.create_identity()`.
+
 The `cchost` fixture gives direct access to the underlying `CCHost` instance
 that is managing the service. This fixture is only available if pytest was
 configured to start its own cchost instances. If a test requires this fixture,
-it should therefore be annotated with `@pytest.mark.needs_cchost`. It is rare
+it should therefore be annotated with `@pytest.mark.isolated_test`. It is rare
 to need to interact directly with the running process and use this fixture.
 Most of the time, the `client` fixture is sufficient.
 

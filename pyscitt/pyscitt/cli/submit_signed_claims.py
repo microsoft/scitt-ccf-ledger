@@ -24,8 +24,8 @@ def submit_signed_claimset(
         signed_claimset = f.read()
 
     if skip_confirmation:
-        tx = client.submit_claim(signed_claimset, skip_confirmation=True).tx
-        print(f"Submitted {path} as transaction {tx}")
+        pending = client.submit_claim(signed_claimset, skip_confirmation=True)
+        print(f"Submitted {path} as operation {pending.operation_tx}")
         print("Confirmation of submission was skipped! Claim may not be registered.")
         return
 

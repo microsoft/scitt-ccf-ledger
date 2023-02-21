@@ -3,11 +3,13 @@
 
 #pragma once
 #include "did/document.h"
+#include "odata_error.h"
 #include "signature_algorithms.h"
 
 #include <ccf/ds/json.h>
 #include <ccf/kv/map.h>
 #include <ccf/kv/value.h>
+#include <ccf/tx_id.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <vector>
@@ -21,6 +23,8 @@ namespace scitt
   struct DidWebResolutionMetadata
   {
     std::vector<Pem> tls_certs;
+
+    bool operator==(const DidWebResolutionMetadata&) const = default;
   };
   DECLARE_JSON_TYPE(DidWebResolutionMetadata);
   DECLARE_JSON_REQUIRED_FIELDS(DidWebResolutionMetadata, tls_certs);
@@ -29,24 +33,22 @@ namespace scitt
   {
     Timestamp updated;
     std::optional<DidWebResolutionMetadata> web;
+
+    bool operator==(const DidResolutionMetadata&) const = default;
   };
   DECLARE_JSON_TYPE(DidResolutionMetadata);
   DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated, web);
 
   struct IssuerInfo
   {
-    std::optional<Timestamp> resolution_requested;
-    std::optional<std::string> resolution_nonce;
     std::optional<did::DidDocument> did_document;
     std::optional<DidResolutionMetadata> did_resolution_metadata;
+    std::optional<ODataError> error;
   };
-  DECLARE_JSON_TYPE(IssuerInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(
-    IssuerInfo,
-    resolution_requested,
-    resolution_nonce,
-    did_document,
-    did_resolution_metadata);
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(IssuerInfo);
+  DECLARE_JSON_REQUIRED_FIELDS(IssuerInfo);
+  DECLARE_JSON_OPTIONAL_FIELDS(
+    IssuerInfo, did_document, did_resolution_metadata, error);
 
   struct EntryInfo
   {
@@ -57,6 +59,36 @@ namespace scitt
   };
   DECLARE_JSON_TYPE(EntryInfo);
   DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected);
+
+  enum class OperationStatus
+  {
+    Running,
+    Failed,
+    Succeeded,
+  };
+  DECLARE_JSON_ENUM(
+    OperationStatus,
+    {{OperationStatus::Running, "running"},
+     {OperationStatus::Failed, "failed"},
+     {OperationStatus::Succeeded, "succeeded"}});
+
+  struct OperationLog
+  {
+    OperationStatus status;
+
+    // This is populated for entries that update an existing operation. When
+    // creating a new one, the transaction ID of the entry is used as the new
+    // operation's ID.
+    std::optional<ccf::TxID> operation_id;
+
+    std::optional<time_t> created_at;
+    std::optional<nlohmann::json> context;
+    std::optional<nlohmann::json> error;
+  };
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(OperationLog);
+  DECLARE_JSON_REQUIRED_FIELDS(OperationLog, status);
+  DECLARE_JSON_OPTIONAL_FIELDS(
+    OperationLog, operation_id, created_at, context, error);
 
   /**
    * SCITT Service configuration. This is stored in the KV and updated
@@ -163,6 +195,9 @@ namespace scitt
 
   static constexpr auto ISSUERS_TABLE = "public:scitt.issuers";
   using IssuersTable = kv::Map<Issuer, IssuerInfo>;
+
+  static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
+  using OperationsTable = kv::Value<OperationLog>;
 
   // The `ccf.gov` prefix is necessary to make the table writable
   // through governance.

@@ -311,30 +311,30 @@ class BaseClient:
             *args,
             **kwargs,
             retry_on=[
-                HTTPStatus.ACCEPTED,
-                (HTTPStatus.NOT_FOUND, "TransactionPendingOrUnknown"),
+                (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
             ]
             + retry_on,
         )
 
 
 @dataclass
-class Submission:
+class PendingSubmission:
     """
     The result of submitting a claim to the service.
     """
 
+    operation_tx: str
+
+
+@dataclass
+class Submission(PendingSubmission):
     tx: str
+    raw_receipt: bytes
 
     @property
     def seqno(self) -> int:
         view, seqno = self.tx.split(".")
         return int(seqno)
-
-
-@dataclass
-class SubmissionReceipt(Submission):
-    raw_receipt: bytes
 
     @property
     def receipt(self) -> Receipt:
@@ -364,50 +364,85 @@ class Client(BaseClient):
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[False] = False
-    ) -> SubmissionReceipt:
+    ) -> Submission:
         ...
 
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[True]
-    ) -> Submission:
+    ) -> PendingSubmission:
         ...
 
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False
-    ) -> Union[SubmissionReceipt, Submission]:
+    ) -> Union[Submission, PendingSubmission]:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
             headers=headers,
             content=claim,
-            retry_on=[
-                (HTTPStatus.SERVICE_UNAVAILABLE, "DIDResolutionInProgressRetryLater")
-            ],
-        )
+        ).json()
 
-        tx = response.headers[CCF_TX_ID_HEADER]
+        operation_id = response["operationId"]
         if skip_confirmation:
-            return Submission(tx)
+            return PendingSubmission(operation_id)
         else:
+            tx = self.wait_for_operation(operation_id)
             receipt = self.get_receipt(tx, decode=False)
-            return SubmissionReceipt(tx, receipt)
+            return Submission(operation_id, tx, receipt)
+
+    def wait_for_operation(self, operation: str) -> str:
+        response = self.get(
+            f"/operations/{operation}",
+            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
+        )
+        payload = response.json()
+
+        if payload["status"] == "succeeded":
+            return payload["entryId"]
+        elif payload["status"] == "failed":
+            error = payload["error"]
+            raise ServiceError(response.headers, error["code"], error["message"])
+        else:
+            raise ValueError("Invalid status {}".format(payload["status"]))
+
+    def get_operations(self):
+        return self.get("/operations").json()["operations"]
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
-            f"/entries/{tx}", params={"embedReceipt": embed_receipt}
+            f"/entries/{tx}/claim", params={"embedReceipt": embed_receipt}
         )
         return response.content
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[True] = True) -> Receipt:
+    def get_receipt(
+        self,
+        tx: str,
+        *,
+        operation: bool = False,
+        decode: Literal[True] = True,
+    ) -> Receipt:
         ...
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes:
+    def get_receipt(
+        self, tx: str, *, operation: bool = False, decode: Literal[False]
+    ) -> bytes:
         ...
 
-    def get_receipt(self, tx: str, *, decode=True) -> Union[bytes, Receipt]:
+    def get_receipt(
+        self, tx: str, *, operation: bool = False, decode: bool = True
+    ) -> Union[bytes, Receipt]:
+        """
+        Get a receipt from the ledger.
+
+        If `operation` is true, the tx is treated as an operation ID and is
+        first waited on in order to obtain the actual entry ID.
+        """
+        if operation:
+            tx = self.wait_for_operation(tx)
+
         response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)

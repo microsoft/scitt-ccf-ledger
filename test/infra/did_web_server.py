@@ -6,10 +6,10 @@ import os.path
 import ssl
 import tempfile
 import threading
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, contextmanager
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 from uuid import uuid4
 
 from loguru import logger as LOG
@@ -33,7 +33,25 @@ def _create_tls_context(cert: str, key: str):
     return context
 
 
+class Metrics:
+    request_count: int
+
+    def __init__(self):
+        self.request_count = 0
+
+
 class DIDWebServer(AbstractContextManager):
+    host: str
+    port: Optional[int]
+    data_dir: Path
+    tls_cert_pem: str
+    base_url: str
+
+    httpd: HTTPServer
+    allow_requests: threading.Event
+    metrics: Optional[Metrics]
+    metrics_lock: threading.Lock
+
     def __init__(
         self,
         data_dir: Path,
@@ -54,12 +72,22 @@ class DIDWebServer(AbstractContextManager):
         """
         self.host = host
         self.data_dir = data_dir
+        self.allow_requests = threading.Event()
+        self.allow_requests.set()
 
         # Create a Handler class which specifically serves the directory, data_dir,
         # to avoid needing to change directory, as the default is to serve cwd.
         class Handler(SimpleHTTPRequestHandler):
             def __init__(handler_self, *args, **kwargs):
                 super().__init__(directory=self.data_dir, *args, **kwargs)
+
+            def do_GET(handler_self):
+                self.allow_requests.wait()
+                super().do_GET()
+
+                with self.metrics_lock:
+                    if self.metrics is not None:
+                        self.metrics.request_count += 1
 
         if use_default_port:
             self.httpd = HTTPServer((listen, 443), Handler)
@@ -77,6 +105,9 @@ class DIDWebServer(AbstractContextManager):
         context = _create_tls_context(self.tls_cert_pem, tls_key_pem)
         self.httpd.socket = context.wrap_socket(self.httpd.socket, server_side=True)
 
+        self.metrics = None
+        self.metrics_lock = threading.Lock()
+
     @property
     def cert_bundle(self) -> str:
         return self.tls_cert_pem
@@ -91,6 +122,7 @@ class DIDWebServer(AbstractContextManager):
         return self
 
     def stop(self):
+        self.allow_requests.set()
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join()
@@ -99,9 +131,54 @@ class DIDWebServer(AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
 
+    @contextmanager
+    def suspend(self):
+        """
+        Context manager which suspends all request processing.
+
+        While the context manager is active, the server keeps accepting new
+        connections but will block on requests and not send any responses back.
+
+        The server is unblocked and all held up requests are completed when the
+        context manager exits.
+        """
+        self.allow_requests.clear()
+        try:
+            yield
+        finally:
+            self.allow_requests.set()
+
+    @contextmanager
+    def monitor(self) -> Generator[Metrics, None, None]:
+        """
+        A context manager which tracks requests made to the server.
+
+        It yields a `Metrics` object, which can be inspected after the context
+        manager's scope.
+        """
+        with self.metrics_lock:
+            if self.metrics is not None:
+                raise RuntimeError("DIDWebServer is already being monitored")
+
+            metrics = Metrics()
+            self.metrics = metrics
+
+        try:
+            yield metrics
+        finally:
+            with self.metrics_lock:
+                self.metrics = None
+
+    def generate_identifier(self) -> str:
+        """
+        Generate a random did:web identifier hosted on this server.
+        """
+        path = str(uuid4())
+        return format_did_web(host=self.host, port=self.port, path=path)
+
     def create_identity(
         self,
-        path: Optional[str] = None,
+        identifier: Optional[str] = None,
         *,
         alg: Optional[str] = None,
         kid: Optional[str] = None,
@@ -110,30 +187,47 @@ class DIDWebServer(AbstractContextManager):
         """
         Create a new identity on the server.
 
-        If no path is specified, a randomly generated UUID is used instead,
-        providing a new unique identity.
+        If no `identifier` is passed, a randomly generated UUID is used
+        instead, providing a new unique identity.
 
         The kwargs are used to configure the key generation.
         """
-        if path is None:
-            path = str(uuid4())
+        if identifier is None:
+            identifier = self.generate_identifier()
 
         kwargs.setdefault("kty", "ec")
         private_key, public_key = crypto.generate_keypair(**kwargs)
 
-        identifier = format_did_web(host=self.host, port=self.port, path=path)
-
-        did_doc = crypto.create_did_document(
-            identifier,
-            pub_key_pem=public_key,
+        assertion_method = did.create_assertion_method(
+            did=identifier,
+            public_key=public_key,
             alg=alg,
             kid=kid,
         )
+        document = did.create_document(
+            did=identifier, assertion_methods=[assertion_method]
+        )
+
+        self.write_did_document(document)
+        return did.get_signer(private_key, document, kid=kid)
+
+    def write_did_document(self, document, *, identifier=None):
+        """
+        Store a DID document on the server.
+
+        The path of the JSON file is determined from the identifier found in the
+        document, or the `identifier` argument if supplied.
+        """
+
+        if identifier is None:
+            identifier = document["id"]
+
+        _, path = did.did_web_parse(identifier)
+        if did.format_did_web(self.host, self.port, path) != identifier:
+            raise ValueError(f"Invalid DID {identifier}")
 
         out_dir = self.data_dir / path
         out_dir.mkdir(parents=True, exist_ok=True)
 
         with open(out_dir / "did.json", "w") as f:
-            json.dump(did_doc, f)
-
-        return did.get_signer(private_key, did_doc)
+            json.dump(document, f)
