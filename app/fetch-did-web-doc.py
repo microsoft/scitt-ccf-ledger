@@ -12,7 +12,6 @@ import time
 import hashlib
 import os
 import errno
-import pickle
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -126,7 +125,7 @@ def request(url, data=None, headers=None):
 
 def get_queue_dir(url):
     queue_id = hashlib.sha256(url.encode("utf-8")).hexdigest()
-    queue_dir = f"{AFETCH_DIR}/queue-{queue_id}"
+    queue_dir = os.path.join(tempfile.gettempdir(), f"scitt-fetch-queue-{queue_id}")
     return queue_dir
 
 
@@ -134,17 +133,18 @@ def queue_request(url: str, nonce: str, callback_url: str, unattested: bool):
     logging.info(f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url}, unattested: {unattested})")
 
     queue_dir = get_queue_dir(url)
-    request = {
+    request_metadata = {
         "url": url,
         "nonce": nonce,
         "callback_url": callback_url,
         "unattested": unattested,
     }
     request_id = uuid.uuid4().hex
-    request_path = os.path.join(queue_dir, f"{request_id}.pkl")
+    request_path = os.path.join(queue_dir, f"{request_id}.json")
 
-    with tempfile.NamedTemporaryFile(dir=queue_dir, delete=False) as f:
-        pickle.dump(request, f)
+    # Write the request metadata to a temporary file.
+    with tempfile.NamedTemporaryFile(delete=False) as f:
+        json.dump(request_metadata, f)
 
     try:
         while True:
@@ -190,19 +190,29 @@ def process_requests(url):
         for fname in os.listdir(queue_dir):
             request_path = os.path.join(queue_dir, fname)
             logging.info(f"Processing request {request_path}")
-            with open(request_path, "r") as f:
-                request = pickle.load(f)
+            with open(request_path) as f:
+                request_metadata = json.load(f)
             
             if is_first:
-                if request["unattested"]:
-                    result = fetch_unattested(url, request["nonce"])
+                # Add nonce as query parameter for cache busting.
+                # This reduces the time to observe DID document updates
+                # for some servers like GitHub Pages.
+                url = url + f"?{request_metadata['nonce']}"
+
+                if request_metadata["unattested"]:
+                    result = fetch_unattested(url, request_metadata["nonce"])
                 else:
-                    result = fetch_attested(url, request["nonce"])
+                    result = fetch_attested(url, request_metadata["nonce"])
+                
+                callback_data = {
+                    "result": json.loads(result)
+                }
             else:
-                result = b""
+                callback_data = {}
             
+            body = json.dumps(callback_data).encode("utf-8")
             headers = {"Content-Type": "application/json"}
-            request(request["callback_url"], result, headers)
+            request(request_metadata["callback_url"], body, headers)
 
             logging.info(f"Removing request {request_path}")
             os.remove(request_path)
