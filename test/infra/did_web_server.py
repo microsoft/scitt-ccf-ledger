@@ -48,6 +48,7 @@ class DIDWebServer(AbstractContextManager):
     base_url: str
 
     httpd: HTTPServer
+    allow_requests: threading.Event
     metrics: Optional[Metrics]
     metrics_lock: threading.Lock
 
@@ -71,6 +72,8 @@ class DIDWebServer(AbstractContextManager):
         """
         self.host = host
         self.data_dir = data_dir
+        self.allow_requests = threading.Event()
+        self.allow_requests.set()
 
         # Create a Handler class which specifically serves the directory, data_dir,
         # to avoid needing to change directory, as the default is to serve cwd.
@@ -79,6 +82,7 @@ class DIDWebServer(AbstractContextManager):
                 super().__init__(directory=self.data_dir, *args, **kwargs)
 
             def do_GET(handler_self):
+                self.allow_requests.wait()
                 super().do_GET()
 
                 with self.metrics_lock:
@@ -118,6 +122,7 @@ class DIDWebServer(AbstractContextManager):
         return self
 
     def stop(self):
+        self.allow_requests.set()
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join()
@@ -125,6 +130,23 @@ class DIDWebServer(AbstractContextManager):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
+
+    @contextmanager
+    def suspend(self):
+        """
+        Context manager which suspends all request processing.
+
+        While the context manager is active, the server keeps accepting new
+        connections but will block on requests and not send any responses back.
+
+        The server is unblocked and all held up requests are completed when the
+        context manager exits.
+        """
+        self.allow_requests.clear()
+        try:
+            yield
+        finally:
+            self.allow_requests.set()
 
     @contextmanager
     def monitor(self) -> Generator[Metrics, None, None]:

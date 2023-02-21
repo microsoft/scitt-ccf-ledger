@@ -2,11 +2,6 @@
 // Licensed under the MIT License.
 
 #pragma once
-#ifdef VIRTUAL_ENCLAVE
-#  include "did/unattested.h"
-#else
-#  include "did/attested.h"
-#endif
 #include "kv_types.h"
 
 #include <ccf/ds/json.h>
@@ -16,15 +11,6 @@
 
 namespace scitt
 {
-  struct PostDidResolution
-  {
-#ifdef VIRTUAL_ENCLAVE
-    using In = did::UnattestedResolution;
-#else
-    using In = did::AttestedResolution;
-#endif
-  };
-
   struct GetIssuerInfo
   {
     using Out = IssuerInfo;
@@ -100,5 +86,43 @@ namespace scitt
 
   DECLARE_JSON_TYPE(GetVersion::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, scitt_version);
+
+  struct GetEntry
+  {
+    struct Out
+    {
+      ccf::TxID entry_id;
+    };
+  };
+
+  DECLARE_JSON_TYPE(GetEntry::Out);
+  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(GetEntry::Out, entry_id, "entryId");
+
+  struct GetOperation
+  {
+    struct Out
+    {
+      ccf::TxID operation_id;
+      OperationStatus status;
+      std::optional<ccf::TxID> entry_id;
+      std::optional<nlohmann::json> error;
+    };
+  };
+
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetOperation::Out);
+  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
+    GetOperation::Out, operation_id, "operationId", status, "status");
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    GetOperation::Out, entry_id, "entryId", error, "error");
+
+  struct GetAllOperations
+  {
+    struct Out
+    {
+      std::vector<GetOperation::Out> operations;
+    };
+  };
+  DECLARE_JSON_TYPE(GetAllOperations::Out);
+  DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
 
 } // namespace scitt

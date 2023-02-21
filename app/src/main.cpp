@@ -12,6 +12,7 @@
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
 #include "kv_types.h"
+#include "operations_endpoints.h"
 #include "receipt.h"
 #include "service_endpoints.h"
 #include "tracing.h"
@@ -65,6 +66,15 @@ namespace scitt
 
   using EntrySeqnoIndexingStrategy =
     ccf::indexing::strategies::SeqnosForValue_Bucketed<EntryTable>;
+
+  struct DIDFetchContext
+  {
+    std::vector<uint8_t> body;
+    std::string nonce;
+    std::string issuer;
+  };
+  DECLARE_JSON_TYPE(DIDFetchContext);
+  DECLARE_JSON_REQUIRED_FIELDS(DIDFetchContext, body, nonce, issuer);
 
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
@@ -165,15 +175,111 @@ namespace scitt
 
       auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
         method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
-      endpoint.locally_committed_func = tracing_local_commit_callback;
+      endpoint.locally_committed_func = tracing_local_commit_adapter(
+        ccf::endpoints::default_locally_committed_func);
       return endpoint;
+    }
+
+    ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
+      const std::string& method,
+      ccf::RESTVerb verb,
+      const ccf::endpoints::EndpointFunction& f,
+      const ccf::endpoints::LocallyCommittedEndpointFunction& l,
+      const ccf::AuthnPolicies& ap) override
+    {
+      auto endpoint = make_endpoint(method, verb, f, ap);
+      endpoint.locally_committed_func = tracing_local_commit_adapter(l);
+      return endpoint;
+    }
+
+    /**
+     * This function is called from two different contexts:
+     * - When a client makes a POST /entries. This may raise a
+     *   did::AsyncResolutionNeeded exception (as part of verification), in
+     *   which case the caller triggers an asynchronous resolution.
+     *
+     * - A second time, with the same payload, when the asynchronous resolution
+     *   completes and the attested-fetch script calls the
+     *   /operations/<id>/callback endpoint.
+     */
+    void post_entry_common(
+      EndpointContext& ctx,
+      ::timespec host_time,
+      const std::vector<uint8_t>& body)
+    {
+      auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
+                   ->get()
+                   .value_or(Configuration{});
+
+      ClaimProfile claim_profile;
+      try
+      {
+        claim_profile = verifier->verify_claim(
+          body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
+      }
+      catch (const did::DIDMethodNotSupportedError& e)
+      {
+        throw BadRequestError(errors::DIDMethodNotSupported, e.what());
+      }
+      catch (const verifier::VerificationError& e)
+      {
+        throw BadRequestError(errors::InvalidInput, e.what());
+      }
+
+      // TODO: Apply further acceptance policies.
+
+      auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
+      auto service_info = service->get().value();
+      auto service_cert = service_info.cert;
+      auto service_cert_der = crypto::cert_pem_to_der(service_cert);
+      auto service_cert_digest = crypto::Sha256Hash(service_cert_der).hex_str();
+
+      // Take the service's DID from the configuration, if present.
+      std::vector<uint8_t> sign_protected;
+      if (cfg.service_identifier.has_value())
+      {
+        // The kid is the same as the service certificate hash (prefixed with
+        // a # to make it a relative DID-url). Eventually, this may change to
+        // become eg. an RFC7638 JWK thumbprint.
+        std::string kid = fmt::format("#{}", service_cert_digest);
+        std::span<const uint8_t> kid_bytes(
+          reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
+
+        sign_protected = create_countersign_protected_header(
+          host_time, *cfg.service_identifier, kid_bytes, service_cert_digest);
+      }
+      else
+      {
+        sign_protected = create_countersign_protected_header(
+          host_time, std::nullopt, std::nullopt, service_cert_digest);
+      }
+
+      // Compute the hash of the to-be-signed countersigning structure
+      // and set it as CCF transaction claim for use in receipt validation.
+      auto claims_digest =
+        cose::create_countersign_tbs_hash(body, sign_protected);
+      ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
+
+      // Store the original COSE_Sign1 message in the KV.
+      auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
+      entry_table->put(body);
+
+      // Store the protected headers in a separate table, so the
+      // receipt can be reconstructed.
+      auto entry_info_table =
+        ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
+      entry_info_table->put(EntryInfo{
+        .sign_protected = sign_protected,
+      });
+
+      SCITT_INFO(
+        "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
     }
 
   public:
     AppEndpoints(ccfapp::AbstractNodeContext& context_) :
       ccf::UserEndpointRegistry(context_)
     {
-      const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
       const ccf::AuthnPolicies authn_policy = {
         std::make_shared<ConfigurableEmptyAuthnPolicy>(),
         std::make_shared<ConfigurableJwtAuthnPolicy>(),
@@ -186,12 +292,10 @@ namespace scitt
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
       auto resolver = std::make_unique<did::UniversalResolver>();
-      resolver->register_resolver(
-        std::make_unique<did::web::DidWebResolver>(context));
+      resolver->register_resolver(std::make_unique<did::web::DidWebResolver>());
 
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
-      static constexpr auto post_entry_path = "/entries";
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
@@ -204,96 +308,82 @@ namespace scitt
               MAX_ENTRY_SIZE_BYTES));
         }
 
-        ::timespec time;
-        auto result = this->get_untrusted_host_time_v1(time);
+        ::timespec host_time;
+        auto result = this->get_untrusted_host_time_v1(host_time);
         if (result != ccf::ApiResult::OK)
         {
           throw InternalError(fmt::format(
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
-        // Asynchronous DID resolution responds with 5xx HTTP status which would
-        // prevent writing to the KV by default.
-        ctx.rpc_ctx->set_apply_writes(true);
-
-        auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
-                     ->get()
-                     .value_or(Configuration{});
-
-        ClaimProfile claim_profile;
         try
         {
-          claim_profile = verifier->verify_claim(
-            body, ctx.tx, time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
+          post_entry_common(ctx, host_time, body);
         }
-        catch (const did::DIDMethodNotSupportedError& e)
+        catch (const did::web::AsyncResolutionNeeded& e)
         {
-          throw BadRequestError(errors::DIDMethodNotSupported, e.what());
-        }
-        catch (const did::AsyncResolutionInProgress& e)
-        {
-          throw ServiceUnavailableError(
-            errors::DIDResolutionInProgressRetryLater, e.what(), 5);
-        }
-        catch (const verifier::VerificationError& e)
-        {
-          throw BadRequestError(errors::InvalidInput, e.what());
-        }
-
-        // TODO: Apply further acceptance policies.
-
-        auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
-        auto service_info = service->get().value();
-        auto service_cert = service_info.cert;
-        auto service_cert_der = crypto::cert_pem_to_der(service_cert);
-        auto service_cert_digest =
-          crypto::Sha256Hash(service_cert_der).hex_str();
-
-        // Take the service's DID from the configuration, if present.
-        std::vector<uint8_t> sign_protected;
-        if (cfg.service_identifier.has_value())
-        {
-          // The kid is the same as the service certificate hash (prefixed with
-          // a # to make it a relative DID-url). Eventually, this may change to
-          // become eg. an RFC7638 JWK thumbprint.
-          std::string kid = fmt::format("#{}", service_cert_digest);
-          std::span<const uint8_t> kid_bytes(
-            reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
-
-          sign_protected = create_countersign_protected_header(
-            time, *cfg.service_identifier, kid_bytes, service_cert_digest);
-        }
-        else
-        {
-          sign_protected = create_countersign_protected_header(
-            time, std::nullopt, std::nullopt, service_cert_digest);
+          auto issuer = e.did;
+          auto nonce = ds::to_hex(ENTROPY->random(16));
+          start_asynchronous_operation(
+            host_time,
+            context,
+            ctx,
+            DIDFetchContext{
+              .body = body,
+              .nonce = nonce,
+              .issuer = issuer,
+            },
+            [this, issuer, nonce](const std::string& callback_url) {
+              SCITT_INFO(
+                "Triggering asynchronous DID fetch for {}, callback {}",
+                issuer,
+                callback_url);
+              did::web::DidWebResolver::trigger_asynchronous_resolution(
+                context, callback_url, issuer, nonce);
+            });
+          return;
         }
 
-        // Compute the hash of the to-be-signed countersigning structure
-        // and set it as CCF transaction claim for use in receipt validation.
-        auto claims_digest =
-          cose::create_countersign_tbs_hash(body, sign_protected);
-        ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
-
-        // Store the original COSE_Sign1 message in the KV.
-        auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
-        entry_table->put(body);
-
-        // Store the protected headers in a separate table, so the
-        // receipt can be reconstructed.
-        auto entry_info_table =
-          ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
-        entry_info_table->put(EntryInfo{
-          .sign_protected = sign_protected,
-        });
-
-        ctx.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
-
-        SCITT_INFO(
-          "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
+        SCITT_DEBUG("Claim was submitted synchronously");
+        record_synchronous_operation(host_time, ctx.tx);
       };
 
-      make_endpoint(post_entry_path, HTTP_POST, post_entry, authn_policy)
+      auto post_entry_continuation = [this](
+                                       EndpointContext& ctx,
+                                       const nlohmann::json& callback_context,
+                                       nlohmann::json&& params) {
+        auto post_entry_context = callback_context.get<DIDFetchContext>();
+        auto resolution = params.get<did::web::ResolutionCallbackData>();
+
+        ::timespec host_time;
+        auto result = get_untrusted_host_time_v1(host_time);
+        if (result != ccf::ApiResult::OK)
+        {
+          throw InternalError(
+            fmt::format("Failed to retrieve host time: {}", result));
+        }
+
+        SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
+        did::web::DidWebResolver::update_did_document(
+          host_time,
+          ctx.tx,
+          resolution,
+          post_entry_context.issuer,
+          post_entry_context.nonce);
+
+        // We intentionally don't catch AsyncResolutionNeeded this time around.
+        // If resolution fails despite the updated DID document then the
+        // exception will lead to the operation failing, and the exception's
+        // message will be stored in the KV.
+        post_entry_common(ctx, host_time, post_entry_context.body);
+      };
+
+      make_endpoint_with_local_commit_handler(
+        "/entries",
+        HTTP_POST,
+        post_entry,
+        operation_locally_committed_func,
+        authn_policy)
         .install();
 
       auto is_tx_committed =
@@ -302,22 +392,40 @@ namespace scitt
             consensus, view, seqno, error_reason);
         };
 
-      auto get_tx_id_from_request_path = [](EndpointContext& ctx) {
-        auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
-        const auto tx_id_opt = ccf::TxID::from_str(tx_id_str);
-        if (!tx_id_opt.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format("Invalid transaction ID: {}", tx_id_str));
-        }
-        return tx_id_opt;
-      };
-
       static constexpr auto get_entry_path = "/entries/{txid}";
       auto get_entry = [this](
                          EndpointContext& ctx,
-                         ccf::historical::StatePtr historical_state) {
+                         ccf::historical::StatePtr historical_state,
+                         nlohmann::json&& params) {
+        auto historical_tx = historical_state->store->create_read_only_tx();
+        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+        auto entry = entries->get();
+        if (!entry.has_value())
+        {
+          throw BadRequestError(
+            errors::InvalidInput,
+            fmt::format(
+              "Transaction ID {} does not correspond to a submission.",
+              historical_state->transaction_id.to_str()));
+        }
+
+        return GetEntry::Out{
+          .entry_id = historical_state->transaction_id,
+        };
+      };
+      make_endpoint(
+        get_entry_path,
+        HTTP_GET,
+        scitt::historical::json_adapter(
+          get_entry, state_cache, is_tx_committed),
+        authn_policy)
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .install();
+
+      static constexpr auto get_entry_claim_path = "/entries/{txid}/claim";
+      auto get_entry_claim = [this](
+                               EndpointContext& ctx,
+                               ccf::historical::StatePtr historical_state) {
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
 
@@ -330,11 +438,11 @@ namespace scitt
         auto entry = entries->get();
         if (!entry.has_value())
         {
-          auto tx_id = ctx.rpc_ctx->get_request_path_params().at("txid");
           throw BadRequestError(
             errors::InvalidInput,
             fmt::format(
-              "Transaction ID {} does not correspond to a submission.", tx_id));
+              "Transaction ID {} does not correspond to a submission.",
+              historical_state->transaction_id.to_str()));
         }
 
         std::vector<uint8_t> entry_out;
@@ -367,10 +475,10 @@ namespace scitt
           http::headers::CONTENT_TYPE, "application/cose");
       };
       make_endpoint(
-        get_entry_path,
+        get_entry_claim_path,
         HTTP_GET,
         scitt::historical::adapter(
-          get_entry, state_cache, is_tx_committed, get_tx_id_from_request_path),
+          get_entry_claim, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
@@ -385,11 +493,11 @@ namespace scitt
         auto entry = entries->get();
         if (!entry.has_value())
         {
-          auto tx_id = ctx.rpc_ctx->get_request_path_params().at("txid");
           throw BadRequestError(
             errors::InvalidInput,
             fmt::format(
-              "Transaction ID {} does not correspond to a submission.", tx_id));
+              "Transaction ID {} does not correspond to a submission.",
+              historical_state->transaction_id.to_str()));
         }
 
         auto entry_info_table =
@@ -416,10 +524,7 @@ namespace scitt
         get_entry_receipt_path,
         HTTP_GET,
         scitt::historical::adapter(
-          get_entry_receipt,
-          state_cache,
-          is_tx_committed,
-          get_tx_id_from_request_path),
+          get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
@@ -598,108 +703,9 @@ namespace scitt
         authn_policy)
         .install();
 
-      static constexpr auto update_did_doc_path = "/did/{did}/doc";
-      auto update_did_doc = [this](
-                              EndpointContext& ctx, nlohmann::json&& params) {
-        const auto in = params.get<PostDidResolution::In>();
-
-        auto issuers = ctx.tx.template rw<IssuersTable>(ISSUERS_TABLE);
-
-        // Retrieve host time.
-        ::timespec host_time;
-        auto result = get_untrusted_host_time_v1(host_time);
-        if (result != ccf::ApiResult::OK)
-        {
-          throw InternalError(
-            fmt::format("Failed to retrieve host time: {}", result));
-        }
-
-        // Get issuer from URL path parameter.
-        auto issuer = ctx.rpc_ctx->get_request_path_params().at("did");
-
-        // Check whether the issuer exists.
-        auto issuer_info = issuers->get(issuer);
-        if (!issuer_info.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format("Issuer {} does not exist.", issuer));
-        }
-
-        // Check whether a fresh DID resolution request exists for the issuer.
-        // Note: The resolution nonce is checked during verification below.
-        if (!issuer_info->resolution_requested.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "No DID resolution request found for issuer {}", issuer));
-        }
-        if (
-          host_time.tv_sec - issuer_info->resolution_requested.value_or(0) >
-          DID_RESOLUTION_REQUEST_EXPIRY.count())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "DID resolution request for issuer {} has expired", issuer));
-        }
-
-        auto& nonce = issuer_info->resolution_nonce.value();
-
-#ifdef VIRTUAL_ENCLAVE
-        auto resolution = did::verify_unattested_resolution(issuer, nonce, in);
-#else
-        auto ca_cert_bundles = ctx.tx.template ro<ccf::CACertBundlePEMs>(
-          ccf::Tables::CA_CERT_BUNDLE_PEMS);
-        auto resolution =
-          did::verify_attested_resolution(issuer, nonce, ca_cert_bundles, in);
-#endif
-        resolution.resolution_metadata.updated = host_time.tv_sec;
-
-        issuer_info->resolution_requested = std::nullopt;
-        issuer_info->resolution_nonce = std::nullopt;
-        issuer_info->did_document = std::move(resolution.did_doc);
-        issuer_info->did_resolution_metadata =
-          std::move(resolution.resolution_metadata);
-
-        issuers->put(issuer, issuer_info.value());
-        SCITT_INFO("Updated DID document for {}", issuer);
-
-        return ccf::make_success();
-      };
-
-      make_endpoint(
-        update_did_doc_path,
-        HTTP_POST,
-        ccf::json_adapter(update_did_doc),
-        no_authn_policy)
-        .set_auto_schema<PostDidResolution::In, void>()
-        .install();
-
-      static constexpr auto get_ca_certs_path = "/ca_certs";
-      auto get_ca_certs = [this](
-                            EndpointContext& ctx, nlohmann::json&& params) {
-        auto ca_cert_bundles = ctx.tx.template ro<ccf::CACertBundlePEMs>(
-          ccf::Tables::CA_CERT_BUNDLE_PEMS);
-
-        std::map<std::string, std::string> out;
-
-        ca_cert_bundles->foreach([&out](const auto& name, const auto& bundle) {
-          out.emplace(name, bundle);
-          return true;
-        });
-
-        return out;
-      };
-      make_endpoint(
-        get_ca_certs_path,
-        HTTP_GET,
-        ccf::json_adapter(get_ca_certs),
-        no_authn_policy)
-        .install();
-
       register_service_endpoints(context, *this);
+      register_operations_endpoints(
+        context, *this, is_tx_committed, authn_policy, post_entry_continuation);
 
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);

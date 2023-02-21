@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import json
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
@@ -289,6 +290,15 @@ def pub_key_pem_to_der(pem: Pem) -> bytes:
 def pub_key_pem_to_ssh(pem: Pem) -> str:
     pub_key = load_pem_public_key(pem.encode("ascii"))
     return pub_key.public_bytes(Encoding.OpenSSH, PublicFormat.OpenSSH).decode("ascii")
+
+
+def private_key_to_public(pem: Pem) -> Pem:
+    private_key = load_pem_private_key(pem.encode("ascii"), None)
+    return (
+        private_key.public_key()
+        .public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        .decode("ascii")
+    )
 
 
 def private_key_pem_to_ssh(pem: Pem) -> str:
@@ -627,6 +637,7 @@ def jwk_from_public_key(
     return jwk
 
 
+@dataclass(init=False)
 class Signer:
     private_key: Pem
     issuer: Optional[str]

@@ -101,13 +101,8 @@ namespace scitt
           errors::UnknownFeed, "No claim found for given issuer and feed");
       }
 
-      auto info = fetch_tree_receipt(*ctx.rpc_ctx, entry->prefix_tree_seqno);
-      if (!info)
-      {
-        return;
-      }
-
-      const auto& [protected_headers, receipt] = *info;
+      const auto& [protected_headers, receipt] =
+        fetch_tree_receipt(*ctx.rpc_ctx, entry->prefix_tree_seqno);
       auto body = create_read_receipt(
         protected_headers, entry->headers, entry->proof, receipt);
 
@@ -127,13 +122,8 @@ namespace scitt
 
       auto [seqno, tree] = *current;
 
-      auto info = fetch_tree_receipt(*ctx.rpc_ctx, seqno);
-      if (!info)
-      {
-        return;
-      }
-
-      const auto& [protected_headers, receipt] = *info;
+      const auto& [protected_headers, receipt] =
+        fetch_tree_receipt(*ctx.rpc_ctx, seqno);
       auto body = create_tree_receipt(protected_headers, tree.hash, receipt);
 
       ctx.rpc_ctx->set_response_body(body);
@@ -216,10 +206,7 @@ namespace scitt
      * number.
      *
      * If found, returns a pair with the tree's protected headers and the
-     * corresponding CCF receipt. The function may return std::nullopt if the
-     * historical query is not available yet. In this cases, the RpcContext will
-     * be updated with a status code and headers informing the client to retry
-     * later.
+     * corresponding CCF receipt, otherwise it throws a ServiceUnavailableError.
      *
      * Note, because this accepts a SeqNo rather than a TxID, the caller must
      * ensure the relevant transaction has been committed globally first.
@@ -229,21 +216,17 @@ namespace scitt
      * have to perform a historical query every time.
      * https://github.com/microsoft/CCF/issues/4247
      */
-    std::optional<std::pair<std::vector<uint8_t>, ccf::ReceiptPtr>>
-    fetch_tree_receipt(ccf::RpcContext& ctx, ccf::SeqNo seqno)
+    std::pair<std::vector<uint8_t>, ccf::ReceiptPtr> fetch_tree_receipt(
+      ccf::RpcContext& ctx, ccf::SeqNo seqno)
     {
       auto state = context.get_historical_state().get_state_at(0, seqno);
       if (!state)
       {
-        ctx.set_response_status(HTTP_STATUS_ACCEPTED);
-        constexpr size_t retry_after_seconds = 3;
-        ctx.set_response_header(
-          http::headers::RETRY_AFTER, retry_after_seconds);
-        ctx.set_response_header(
-          http::headers::CONTENT_TYPE, http::headervalues::contenttype::TEXT);
-        ctx.set_response_body(fmt::format(
-          "Historical transaction {} is not currently available.", seqno));
-        return std::nullopt;
+        constexpr uint32_t retry_after_seconds = 1;
+        throw ServiceUnavailableError(
+          errors::TransactionNotCached,
+          fmt::format("Historical transaction {} is not cached.", seqno),
+          retry_after_seconds);
       }
 
       auto tx = state->store->create_read_only_tx();
@@ -259,7 +242,7 @@ namespace scitt
       }
 
       auto receipt = ccf::describe_receipt_v2(*state->receipt);
-      return {{info->protected_headers, receipt}};
+      return {info->protected_headers, receipt};
     }
 
     ccfapp::AbstractNodeContext& context;

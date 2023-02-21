@@ -31,16 +31,9 @@ namespace scitt::did
     {}
   };
 
-  struct AsyncResolutionInProgress : public DIDResolutionError
-  {
-    AsyncResolutionInProgress() :
-      DIDResolutionError("DID resolution in progress, try again soon")
-    {}
-  };
-
   struct DidWebOptions
   {
-    kv::Tx& tx;
+    kv::ReadOnlyTx& tx;
     std::optional<std::chrono::seconds> max_age;
     std::optional<std::string> if_assertion_method_id_match;
   };
