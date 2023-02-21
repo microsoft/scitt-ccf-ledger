@@ -225,8 +225,7 @@ namespace scitt
         constexpr uint32_t retry_after_seconds = 1;
         throw ServiceUnavailableError(
           errors::TransactionNotCached,
-          fmt::format(
-            "Historical transaction {} is not cached.", seqno),
+          fmt::format("Historical transaction {} is not cached.", seqno),
           retry_after_seconds);
       }
 
