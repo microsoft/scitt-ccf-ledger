@@ -353,7 +353,9 @@ namespace scitt
                                        const nlohmann::json& callback_context,
                                        nlohmann::json&& params) {
         auto post_entry_context = callback_context.get<DIDFetchContext>();
-        auto resolution = params.get<PostOperationCallback<did::web::ResolutionCallbackData>::In>();
+        auto resolution =
+          params
+            .get<PostOperationCallback<did::web::ResolutionCallbackData>::In>();
 
         ::timespec host_time;
         auto result = get_untrusted_host_time_v1(host_time);
