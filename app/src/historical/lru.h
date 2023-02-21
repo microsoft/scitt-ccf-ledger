@@ -44,11 +44,11 @@ private:
     {
       const auto& least_recent_entry = entries_list.back();
       iter_map.erase(least_recent_entry.first);
-      entries_list.pop_back();
       if (cull_callback_fn)
       {
         cull_callback_fn(least_recent_entry.first, least_recent_entry.second);
       }
+      entries_list.pop_back();
     }
   }
 
@@ -134,9 +134,9 @@ public:
     return entries_list.begin();
   }
 
-  V& operator[](K&& k)
+  V& operator[](const K& k)
   {
-    auto it = insert(std::forward<K>(k), V{});
+    auto it = insert(k, V{});
     return it->second;
   }
 
