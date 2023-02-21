@@ -133,8 +133,7 @@ namespace scitt
       if (operation_id.seqno < lower_bound)
       {
         throw NotFoundError(
-          errors::OperationExpired,
-          "Operation ID is too old");
+          errors::OperationExpired, "Operation ID is too old");
       }
       else if (operation_id.seqno >= upper_bound)
       {
