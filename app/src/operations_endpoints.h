@@ -241,7 +241,7 @@ namespace scitt
      *
      * This function compares a current and future state and returns true if the
      * transition is allowed. Some of the invalid transactions are logic errors
-     * in the implementations. Others (ie. completing an operation twice) are
+     * in the implementation. Others (ie. completing an operation twice) are
      * just undesirable but unavoidable, and shouldn't be treated as hard
      * errors.
      */
@@ -258,12 +258,14 @@ namespace scitt
       bool valid = false;
       if (!current_status.has_value())
       {
-        valid = ((log.status == Running) || (log.status == Succeeded)) &&
-          log.created_at.has_value();
+        // This is a new operation. They can only be created in the Running or
+        // Succeeded states.
+        valid = (log.status == Running) || (log.status == Succeeded);
+        valid = valid && log.created_at.has_value();
       }
       else if (current_status == Running)
       {
-        valid = (log.status == Succeeded || log.status == Failed);
+        valid = (log.status == Succeeded) || (log.status == Failed);
       }
       else if (current_status == Succeeded || current_status == Failed)
       {
@@ -292,7 +294,7 @@ namespace scitt
             nlohmann::json(log.status).dump(),
             tx_id.to_str(),
             operation_id.to_str(),
-            nlohmann::json(*current_status));
+            nlohmann::json(*current_status).dump());
         }
         else
         {
