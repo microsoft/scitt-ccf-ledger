@@ -132,8 +132,7 @@ namespace scitt
 
       if (operation_id.seqno < lower_bound)
       {
-        throw HTTPError(
-          HTTP_STATUS_GONE,
+        throw NotFoundError(
           errors::OperationExpired,
           "Operation ID is too old");
       }
