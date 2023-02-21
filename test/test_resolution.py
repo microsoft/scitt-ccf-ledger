@@ -21,7 +21,7 @@ def submit_concurrently(
     did_web: DIDWebServer,
 ):
     """
-    A fixture which allows multiple receipts to be submitted concurrently.
+    A fixture which allows multiple claims to be submitted concurrently.
 
     This is achieved by suspending the DID web server, submitting all the
     claims, then finally resuming the server.
