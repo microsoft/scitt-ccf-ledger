@@ -666,10 +666,15 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(
       http::headers::CONTENT_TYPE, http::headervalues::contenttype::JSON);
-    ctx.rpc_ctx->set_response_header(
-      http::headers::LOCATION, fmt::format("/operations/{}", tx_str));
     ctx.rpc_ctx->set_response_body(serdes::pack(operation, serdes::Pack::Text));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
+
+    if (auto host = ctx.rpc_ctx->get_request_header(http::headers::HOST))
+    {
+      ctx.rpc_ctx->set_response_header(
+        http::headers::LOCATION,
+        fmt::format("https://{}/operations/{}", *host, tx_str));
+    }
 
     AppData& app_data = get_app_data(ctx.rpc_ctx);
     if (app_data.asynchronous_operation.has_value())
