@@ -129,17 +129,15 @@ def get_queue_dir(url):
     return queue_dir
 
 
-def queue_request(url: str, nonce: str, callback_url: str, unattested: bool):
+def queue_request(url: str, nonce: str, callback_url: str):
     logging.info(
-        f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url}, unattested: {unattested})"
+        f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url})"
     )
 
     queue_dir = get_queue_dir(url)
     request_metadata = {
-        "url": url,
         "nonce": nonce,
         "callback_url": callback_url,
-        "unattested": unattested,
     }
     request_id = uuid.uuid4().hex
     request_path = os.path.join(queue_dir, f"{request_id}.json")
@@ -182,7 +180,7 @@ def queue_request(url: str, nonce: str, callback_url: str, unattested: bool):
     return is_first
 
 
-def process_requests(url):
+def process_requests(url, unattested):
     queue_dir = get_queue_dir(url)
 
     # TODO: what if this fails? more entries will be queued but never processed
@@ -201,7 +199,7 @@ def process_requests(url):
                 # for some servers like GitHub Pages.
                 url = url + f"?{request_metadata['nonce']}"
 
-                if request_metadata["unattested"]:
+                if unattested:
                     result = fetch_unattested(url, request_metadata["nonce"])
                 else:
                     result = fetch_attested(url, request_metadata["nonce"])
@@ -230,13 +228,13 @@ def process_requests(url):
 
 
 def run(url, nonce, callback_url: str, unattested: bool):
-    is_new_url = queue_request(url, nonce, callback_url, unattested)
+    is_new_url = queue_request(url, nonce, callback_url)
 
     # If this is the first request for this URL, process it
     # and all other requests that were queued in the meantime.
     # Processing finishes when the queue is empty and removed.
     if is_new_url:
-        process_requests(url)
+        process_requests(url, unattested)
 
 
 if __name__ == "__main__":
