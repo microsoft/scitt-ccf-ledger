@@ -92,11 +92,6 @@ def create_client(args: argparse.Namespace):
         "development": args.development,
     }
 
-    if "member_cert" in args:
-        cert = args.member_cert.read_text()
-        key = args.member_key.read_text()
-        kwargs["member_auth"] = (cert, key)
-
     if "akv_configuration" in args and args.akv_configuration:
         akv_configuration = args.akv_configuration.read_text()
         akv_sign_configuration_dict = json.loads(akv_configuration)
