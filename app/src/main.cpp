@@ -168,16 +168,8 @@ namespace scitt
       const ccf::endpoints::EndpointFunction& f,
       const ccf::AuthnPolicies& ap) override
     {
-      std::function<ccf::ApiResult(timespec & time)> get_time =
-        [this](timespec& time) {
-          return this->get_untrusted_host_time_v1(time);
-        };
-
-      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
-      endpoint.locally_committed_func = tracing_local_commit_adapter(
-        ccf::endpoints::default_locally_committed_func);
-      return endpoint;
+      return make_endpoint_with_local_commit_handler(
+        method, verb, f, ccf::endpoints::default_locally_committed_func, ap);
     }
 
     ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
@@ -187,8 +179,15 @@ namespace scitt
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
       const ccf::AuthnPolicies& ap) override
     {
-      auto endpoint = make_endpoint(method, verb, f, ap);
-      endpoint.locally_committed_func = tracing_local_commit_adapter(l);
+      std::function<ccf::ApiResult(timespec & time)> get_time =
+        [this](timespec& time) {
+          return this->get_untrusted_host_time_v1(time);
+        };
+
+      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
+        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
+      endpoint.locally_committed_func =
+        tracing_local_commit_adapter(l, method, get_time);
       return endpoint;
     }
 

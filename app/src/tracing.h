@@ -80,6 +80,51 @@ namespace scitt
 
 #pragma clang diagnostic pop
 
+  void log_request_end(
+    const std::shared_ptr<ccf::RpcContext>& rpc_ctx,
+    const std::string& method,
+    const std::function<ccf::ApiResult(::timespec& time)>& get_time,
+    std::optional<ccf::TxID> txid = std::nullopt)
+  {
+    AppData& app_data = get_app_data(rpc_ctx);
+
+    ::timespec end;
+    ccf::ApiResult result = get_time(end);
+    if (result != ccf::ApiResult::OK)
+    {
+      SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
+      rpc_ctx->set_error(
+        HTTP_STATUS_INTERNAL_SERVER_ERROR,
+        errors::InternalError,
+        "Failed to get time.");
+      return;
+    }
+
+    auto duration_ms = diff_timespec_ms(app_data.start_time, end);
+
+    if (txid.has_value())
+    {
+      SCITT_INFO(
+        "Verb={} Path={} URL={} Status={} TxId={} TimeMs={}",
+        rpc_ctx->get_request_verb().c_str(),
+        method,
+        rpc_ctx->get_request_url(),
+        rpc_ctx->get_response_status(),
+        txid->to_str(),
+        duration_ms);
+    }
+    else
+    {
+      SCITT_INFO(
+        "Verb={} Path={} URL={} Status={} TimeMs={}",
+        rpc_ctx->get_request_verb().c_str(),
+        method,
+        rpc_ctx->get_request_url(),
+        rpc_ctx->get_response_status(),
+        duration_ms);
+    }
+  }
+
   template <typename Fn, typename Ctx>
   Fn generic_tracing_adapter(
     Fn fn,
@@ -129,7 +174,7 @@ namespace scitt
         ctx.rpc_ctx->get_request_url());
 
       ::timespec start;
-      ccf::ApiResult result = get_time(start);
+      ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
         SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
@@ -142,44 +187,34 @@ namespace scitt
 
       fn(ctx);
 
-      ::timespec end;
-      result = get_time(end);
-      if (result != ccf::ApiResult::OK)
+      // If the status is 2xx, CCF will later call our local commit handler,
+      // which may modify the response. We delay printing the end of request
+      // log line until after that point, to get the most accurate status code.
+      int status = ctx.rpc_ctx->get_response_status();
+      if (status < 200 || status >= 300)
       {
-        SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
-        ctx.rpc_ctx->set_error(
-          HTTP_STATUS_INTERNAL_SERVER_ERROR,
-          errors::InternalError,
-          "Failed to get time.");
-        return;
+        log_request_end(ctx.rpc_ctx, method, get_time);
       }
-
-      auto duration_ms = diff_timespec_ms(start, end);
-
-      SCITT_INFO(
-        "Verb={} Path={} URL={} Status={} TimeMs={}",
-        ctx.rpc_ctx->get_request_verb().c_str(),
-        method,
-        ctx.rpc_ctx->get_request_url(),
-        ctx.rpc_ctx->get_response_status(),
-        duration_ms);
     };
   }
 
   ccf::endpoints::LocallyCommittedEndpointFunction tracing_local_commit_adapter(
-    ccf::endpoints::LocallyCommittedEndpointFunction fn)
+    ccf::endpoints::LocallyCommittedEndpointFunction fn,
+    const std::string& method,
+    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return
-      [fn](ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid) {
+      [fn, method, get_time](
+        ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid) {
         auto cleanup = finally(clear_trace_state);
 
         AppData& app_data = get_app_data(ctx.rpc_ctx);
         request_id = app_data.request_id;
         client_request_id = app_data.client_request_id;
 
-        SCITT_INFO("TxId={}", txid.to_str());
-
         fn(ctx, txid);
+
+        log_request_end(ctx.rpc_ctx, method, get_time, txid);
       };
   }
 
