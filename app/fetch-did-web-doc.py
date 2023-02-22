@@ -216,10 +216,10 @@ def process_requests(url, unattested):
             os.remove(request_path)
 
         except Exception as e:
-            logging.warn(
+            logging.error(
                 f"Error while processing first request in {queue_dir}", exc_info=e
             )
-            logging.warn(f"Removing queue {queue_dir} and aborting")
+            logging.info(f"Removing queue {queue_dir} and aborting")
             # Move the queue dir to a temporary location that will be deleted.
             os.rename(queue_dir, tmp_queue_dir)
             raise
