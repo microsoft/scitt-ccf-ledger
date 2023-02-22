@@ -394,37 +394,7 @@ namespace scitt
       static constexpr auto get_entry_path = "/entries/{txid}";
       auto get_entry = [this](
                          EndpointContext& ctx,
-                         ccf::historical::StatePtr historical_state,
-                         nlohmann::json&& params) {
-        auto historical_tx = historical_state->store->create_read_only_tx();
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
-
-        return GetEntry::Out{
-          .entry_id = historical_state->transaction_id,
-        };
-      };
-      make_endpoint(
-        get_entry_path,
-        HTTP_GET,
-        scitt::historical::json_adapter(
-          get_entry, state_cache, is_tx_committed),
-        authn_policy)
-        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-        .install();
-
-      static constexpr auto get_entry_claim_path = "/entries/{txid}/claim";
-      auto get_entry_claim = [this](
-                               EndpointContext& ctx,
-                               ccf::historical::StatePtr historical_state) {
+                         ccf::historical::StatePtr historical_state) {
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
 
@@ -474,10 +444,9 @@ namespace scitt
           http::headers::CONTENT_TYPE, "application/cose");
       };
       make_endpoint(
-        get_entry_claim_path,
+        get_entry_path,
         HTTP_GET,
-        scitt::historical::adapter(
-          get_entry_claim, state_cache, is_tx_committed),
+        scitt::historical::adapter(get_entry, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();

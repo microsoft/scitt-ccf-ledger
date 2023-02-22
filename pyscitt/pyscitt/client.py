@@ -411,7 +411,7 @@ class Client(BaseClient):
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
-            f"/entries/{tx}/claim", params={"embedReceipt": embed_receipt}
+            f"/entries/{tx}", params={"embedReceipt": embed_receipt}
         )
         return response.content
 
