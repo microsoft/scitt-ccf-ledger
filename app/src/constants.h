@@ -17,13 +17,7 @@ namespace scitt
 
   const std::chrono::seconds DID_RESOLUTION_CACHE_EXPIRY{60 * 30};
 
-#ifdef VIRTUAL_ENCLAVE
-  const std::string DID_WEB_RESOLVER_SCRIPT =
-    "/tmp/scitt/fetch-did-web-doc-unattested.sh";
-#else
-  const std::string DID_WEB_RESOLVER_SCRIPT =
-    "/tmp/scitt/fetch-did-web-doc-attested.sh";
-#endif
+  const std::string DID_WEB_RESOLVER_SCRIPT = "/tmp/scitt/fetch-did-web-doc.sh";
 
   namespace errors
   {

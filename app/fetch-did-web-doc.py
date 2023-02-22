@@ -21,22 +21,12 @@ HTTP_RETRIES = 5
 FETCH_RETRIES = 5
 HTTP_DEFAULT_RETRY_AFTER = 1
 
+RETRIABLE_STATUS_CODES = {
+    http.HTTPStatus.TOO_MANY_REQUESTS,
+    http.HTTPStatus.SERVICE_UNAVAILABLE,
+}
+
 AFETCH_DIR = "/tmp/scitt"
-
-
-def fetch_unattested(url, nonce):
-    response = request(url)
-
-    result = json.dumps(
-        {
-            "url": url,
-            "nonce": nonce,
-            "status_code": response["status_code"],
-            "body": base64.b64encode(response["body"]).decode("utf-8"),
-        }
-    ).encode("utf-8")
-
-    return result
 
 
 def refetchable(result):
@@ -51,10 +41,7 @@ def refetchable(result):
     if "result" in data:
         status = data["result"]["status"]
         logging.info(f"afetch got http response: {status}")
-        if status in [
-            http.HTTPStatus.TOO_MANY_REQUESTS,
-            http.HTTPStatus.SERVICE_UNAVAILABLE,
-        ]:
+        if status in RETRIABLE_STATUS_CODES:
             return True
     return False
 
@@ -99,6 +86,7 @@ def request(url, data=None, headers=None):
     if headers is None:
         headers = {}
     req = Request(url, data, headers)
+
     # Transport-level security is not required here as the content
     # sent back to CCF is signed by the attested-fetch enclave through
     # hardware attestation. Because of that, we can safely disable
@@ -106,17 +94,13 @@ def request(url, data=None, headers=None):
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+
     retries = HTTP_RETRIES
-    success = False
-    status_code = 0
-    body = b""
-    while not success and retries >= 0:
+    while retries >= 0:
         retries -= 1
         try:
             response = urlopen(req, context=ctx, timeout=CONNECT_TIMEOUT)
             status_code = response.getcode()
-            body = response.read()
-            success = True
             logging.info(f"HTTP status {status_code}")
             break
         except HTTPError as e:
@@ -124,10 +108,7 @@ def request(url, data=None, headers=None):
             body = e.read()
             retry_after = int(e.headers.get("Retry-After", HTTP_DEFAULT_RETRY_AFTER))
             logging.error(f"HTTP status {status_code}: {body}")
-            if status_code not in [
-                http.HTTPStatus.TOO_MANY_REQUESTS,
-                http.HTTPStatus.SERVICE_UNAVAILABLE,
-            ]:
+            if status_code not in RETRIABLE_STATUS_CODES:
                 break
         except URLError as e:
             retry_after = HTTP_DEFAULT_RETRY_AFTER
@@ -135,14 +116,10 @@ def request(url, data=None, headers=None):
         except Exception as e:
             retry_after = HTTP_DEFAULT_RETRY_AFTER
             logging.error(f"Unknown error: {e}")
+
         if retries >= 0:
             logging.info(f"Retrying in {retry_after} seconds")
             time.sleep(retry_after)
-    return {
-        "success": success,
-        "status_code": status_code,
-        "body": body,
-    }
 
 
 def get_queue_dir(url):
@@ -203,7 +180,7 @@ def queue_request(url: str, nonce: str, callback_url: str):
     return is_new_queue
 
 
-def process_requests(url, unattested):
+def process_requests(url):
     queue_dir = get_queue_dir(url)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -223,10 +200,7 @@ def process_requests(url, unattested):
             # for some servers like GitHub Pages.
             url = url + f"?{request_metadata['nonce']}"
 
-            if unattested:
-                result = fetch_unattested(url, request_metadata["nonce"])
-            else:
-                result = fetch_attested(url, request_metadata["nonce"])
+            result = fetch_attested(url, request_metadata["nonce"])
 
             # Send back the result to the callback URL.
             callback_data = {"result": json.loads(result)}
@@ -262,10 +236,10 @@ def process_requests(url, unattested):
             request(request_metadata["callback_url"], body, headers)
 
 
-def run(url, nonce, callback_url: str, unattested: bool):
+def run(url, nonce, callback_url: str):
     is_new_queue = queue_request(url, nonce, callback_url)
     if is_new_queue:
-        process_requests(url, unattested)
+        process_requests(url)
 
 
 if __name__ == "__main__":
@@ -279,7 +253,6 @@ if __name__ == "__main__":
     parser.add_argument("url")
     parser.add_argument("nonce")
     parser.add_argument("callback_url")
-    parser.add_argument("--unattested", action="store_true")
     args = parser.parse_args()
 
-    run(args.url, args.nonce, args.callback_url, args.unattested)
+    run(args.url, args.nonce, args.callback_url)

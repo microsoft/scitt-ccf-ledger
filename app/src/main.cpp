@@ -19,12 +19,6 @@
 #include "util.h"
 #include "verifier.h"
 
-#ifdef VIRTUAL_ENCLAVE
-#  include "did/unattested.h"
-#else
-#  include "did/attested.h"
-#endif
-
 #ifdef ENABLE_PREFIX_TREE
 #  include "prefix_tree/frontend.h"
 #endif
@@ -353,8 +347,7 @@ namespace scitt
                                        nlohmann::json&& params) {
         auto post_entry_context = callback_context.get<DIDFetchContext>();
         auto resolution =
-          params
-            .get<PostOperationCallback<did::web::ResolutionCallbackData>::In>();
+          params.get<PostOperationCallback<did::AttestedResolution>::In>();
 
         ::timespec host_time;
         auto result = get_untrusted_host_time_v1(host_time);

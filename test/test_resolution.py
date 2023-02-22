@@ -1,8 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import os
 import time
+from pathlib import Path
 from typing import Callable, List
 
 import pytest
@@ -319,23 +319,42 @@ class TestDIDMismatch:
         receipt = client.submit_claim(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
-    @pytest.mark.skipif(os.getenv("PLATFORM") == "virtual", reason="requires SGX")
-    def test_fetch_error(
-        self,
-        client: Client,
-        did_web: DIDWebServer,
-    ):
-        """
-        Test that the ledger returns an error message for failed attested fetch resolutions.
-        """
-        private_key, _ = crypto.generate_keypair(kty="ec")
-        issuer = did_web.generate_identifier()
 
-        identity = crypto.Signer(issuer=issuer, private_key=private_key)
+def test_fetch_not_found(
+    client: Client,
+    did_web: DIDWebServer,
+):
+    """
+    Test that the ledger returns an error message for failed attested fetch resolutions.
+    """
+    private_key, _ = crypto.generate_keypair(kty="ec")
+    issuer = did_web.generate_identifier()
+
+    identity = crypto.Signer(issuer=issuer, private_key=private_key)
+    claim = crypto.sign_json_claimset(identity, "Payload")
+
+    with service_error("DID Resolution failed with status code: 404"):
+        client.submit_claim(claim)
+
+
+def test_untrusted_server(
+    client: Client,
+    tmp_path: Path,
+):
+    """
+    Submit a claim with a DID document hosted with an untrusted TLS certificate.
+    """
+
+    private_key, _ = crypto.generate_keypair(kty="ec")
+
+    # Create a distinct DID web server, whose certificate is never added to
+    # the ledger's CA root store.
+    with DIDWebServer(tmp_path) as untrusted_did_web:
+        identity = untrusted_did_web.create_identity(kty="ec")
         claim = crypto.sign_json_claimset(identity, "Payload")
 
-        with service_error("DID Resolution failed with status code: 404"):
-            client.submit_claim(claim).receipt
+        with service_error("DIDResolutionError: Certificate chain is invalid"):
+            client.submit_claim(claim)
 
 
 def test_consistent_kid(

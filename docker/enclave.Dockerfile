@@ -60,7 +60,7 @@ COPY --from=builder /usr/src/app/lib/libscitt.enclave.so.signed libscitt.enclave
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY --from=builder /usr/src/app/mrenclave.txt mrenclave.txt
 
-COPY app/fetch-did-web-doc-attested.sh /tmp/scitt/fetch-did-web-doc-attested.sh
+COPY app/fetch-did-web-doc.sh /tmp/scitt/fetch-did-web-doc.sh
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 

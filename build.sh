@@ -22,35 +22,33 @@ install_dir=/tmp/scitt
 
 mkdir -p $install_dir
 
+mkdir -p build/attested-fetch
+CC="$CC" CXX="$CXX" \
+    cmake -GNinja -B build/attested-fetch \
+    -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
+    -DCMAKE_INSTALL_PREFIX=$install_dir \
+    -DCOMPILE_TARGET="${PLATFORM}" \
+    "$root_dir/3rdparty/attested-fetch"
+
+ninja -C build/attested-fetch ${NINJA_FLAGS} --verbose
+ninja -C build/attested-fetch ${NINJA_FLAGS} install
+
 if [ "$PLATFORM" = "sgx" ]; then
-    mkdir -p build/attested-fetch
-    pushd build/attested-fetch
-    CC="$CC" CXX="$CXX" cmake -GNinja -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
-        -DCMAKE_INSTALL_PREFIX=$install_dir \
-        "$root_dir/3rdparty/attested-fetch"
-    ninja ${NINJA_FLAGS} --verbose
-    ninja ${NINJA_FLAGS} install
-    /opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed > oesign.dump && \
-        awk '/^mrenclave=/' oesign.dump | sed "s/mrenclave=//" > mrenclave.txt
-    ATTESTED_FETCH_MRENCLAVE_HEX=$(<mrenclave.txt)
-    popd
-    cp "$root_dir"/app/fetch-did-web-doc-attested.sh $install_dir
+    ATTESTED_FETCH_MRENCLAVE_HEX=$(/opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed | sed -n "s/mrenclave=//p")
 elif [ "$PLATFORM" = "virtual" ]; then
     ATTESTED_FETCH_MRENCLAVE_HEX=""
-    cp "$root_dir"/app/fetch-did-web-doc-unattested.sh $install_dir
 else
     echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
     exit 1
 fi
-cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
-mkdir -p build/app
-pushd build/app
+cp "$root_dir"/app/fetch-did-web-doc.sh $install_dir
+cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
 # Note: LVI mitigations are disabled as this is a development build.
 # See docker/ for a non-development build.
 CC="$CC" CXX="$CXX" \
-    cmake -GNinja \
+    cmake -GNinja -B build/app \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
     -DATTESTED_FETCH_MRENCLAVE_HEX="${ATTESTED_FETCH_MRENCLAVE_HEX}" \
     -DCOMPILE_TARGET="${PLATFORM}" \
@@ -62,6 +60,5 @@ CC="$CC" CXX="$CXX" \
     -DENABLE_CLANG_TIDY="${ENABLE_CLANG_TIDY}" \
     "$root_dir/app"
 
-ninja ${NINJA_FLAGS} --verbose
-ninja ${NINJA_FLAGS} install
-popd
+ninja -C build/app ${NINJA_FLAGS} --verbose
+ninja -C build/app ${NINJA_FLAGS} install

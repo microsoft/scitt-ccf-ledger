@@ -3,12 +3,8 @@
 
 #pragma once
 
-#ifdef VIRTUAL_ENCLAVE
-#  include "did/unattested.h"
-#else
-#  include "did/attested.h"
-#endif
 #include "constants.h"
+#include "did/attested.h"
 #include "did/resolver.h"
 #include "did/web/syntax.h"
 #include "http_error.h"
@@ -23,14 +19,6 @@
 
 namespace scitt::did::web
 {
-#ifdef VIRTUAL_ENCLAVE
-  using ResolutionCallbackData = UnattestedResolution;
-  using ResolutionValidationError = UnattestedResolutionError;
-#else
-  using ResolutionCallbackData = AttestedResolution;
-  using ResolutionValidationError = AttestedResolutionError;
-#endif
-
   /**
    * This exception is used to interrupt processing of a claim and ask the
    * caller to schedule an asynchronous resolution, using
@@ -147,24 +135,19 @@ namespace scitt::did::web
     static void update_did_document(
       ::timespec host_time,
       kv::Tx& tx,
-      const ResolutionCallbackData& result,
+      const AttestedResolution& result,
       const std::string& issuer,
       const std::string& expected_nonce)
     {
       DidResolutionResult resolution;
       try
       {
-#ifdef VIRTUAL_ENCLAVE
-        resolution =
-          verify_unattested_resolution(issuer, expected_nonce, result);
-#else
         auto ca_cert_bundles = tx.template ro<ccf::CACertBundlePEMs>(
           ccf::Tables::CA_CERT_BUNDLE_PEMS);
         resolution = verify_attested_resolution(
           issuer, expected_nonce, ca_cert_bundles, result);
-#endif
       }
-      catch (const ResolutionValidationError& e)
+      catch (const AttestedResolutionError& e)
       {
         // Generally, the error we write into the KV won't be used: the next
         // time the same issuer is requested we will ignore the error and send
