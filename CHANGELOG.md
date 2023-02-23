@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.3.0]
+### Added
+- Add [documentation](https://github.com/microsoft/scitt-ccf-ledger/blob/main/docs/configuration.md) on configuration (#103).
+
+### Changes
+- Update to CCF 3.0.6 (#118).
+- REST API has been updated to reflect changes in the IETF specificiation (#108). Note that this is a breaking change.
+- Tighten certificate validation for X.509-based claim profiles (#104). Note that self-signed end-entity certificates are not supported anymore as trust anchors.
+
+### Fixed
+- Fix a memory leak when generating receipts (#102).
+- Fix a crash when decoding malformed X.509 certificates (#97).
+- Fix decoding of non-string content type COSE header parameter (#97).
+- Fix a use-after-free bug in the historic query LRU cache (#109).
+
 ## [0.2.1]
 ### Changed
 - Include all past service identities in the DID endpoint (#85).
@@ -49,6 +64,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
+[0.3.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0-dev.1...0.1.0
