@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 #pragma once
+#include "did/web/method.h"
 #include "kv_types.h"
 
 #include <ccf/ds/json.h>
@@ -124,5 +125,21 @@ namespace scitt
   };
   DECLARE_JSON_TYPE(GetAllOperations::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
+
+  template <typename T>
+  struct PostOperationCallback
+  {
+    struct In
+    {
+      std::optional<T> result;
+    };
+  };
+
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(
+    PostOperationCallback<did::web::ResolutionCallbackData>::In);
+  DECLARE_JSON_REQUIRED_FIELDS(
+    PostOperationCallback<did::web::ResolutionCallbackData>::In);
+  DECLARE_JSON_OPTIONAL_FIELDS(
+    PostOperationCallback<did::web::ResolutionCallbackData>::In, result);
 
 } // namespace scitt

@@ -2,13 +2,17 @@
 # Licensed under the MIT License.
 import argparse
 import base64
+import errno
+import hashlib
 import http
 import json
 import logging
+import os
 import ssl
 import subprocess
 import tempfile
 import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -142,17 +146,131 @@ def request(url, data=None, headers=None):
     }
 
 
-def run(url, nonce, callback_url: str, unattested: bool):
-    fetch = fetch_unattested if unattested else fetch_attested
-    retry = True
-    tries = 0
-    while retry and tries < FETCH_RETRIES:
-        result = fetch(url, nonce)
-        retry = refetchable(result)
-        tries += 1
+def get_queue_dir(url):
+    queue_id = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    queue_dir = os.path.join(tempfile.gettempdir(), f"scitt-fetch-queue-{queue_id}")
+    return queue_dir
 
-    headers = {"Content-Type": "application/json"}
-    request(callback_url, result, headers)
+
+def queue_request(url: str, nonce: str, callback_url: str):
+    logging.info(
+        f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url})"
+    )
+
+    queue_dir = get_queue_dir(url)
+
+    request_metadata = {
+        "nonce": nonce,
+        "callback_url": callback_url,
+    }
+    request_id = uuid.uuid4().hex
+    request_path = os.path.join(queue_dir, f"{request_id}.json")
+
+    # Write the request metadata to a temporary file.
+    with tempfile.NamedTemporaryFile("w", delete=False) as f:
+        json.dump(request_metadata, f)
+
+    try:
+        while True:
+            # Create the queue folder if it doesn't exist yet.
+            try:
+                os.mkdir(queue_dir)
+            except OSError as e:
+                if e.errno == errno.EEXIST:
+                    is_new_queue = False
+                else:
+                    raise e
+            else:
+                logging.info(f"Created queue folder {queue_dir}")
+                is_new_queue = True
+
+            # Move the request file to the queue folder.
+            try:
+                os.rename(f.name, request_path)
+            except OSError as e:
+                # If the queue folder was deleted in the meantime, try again.
+                if e.errno == errno.ENOENT:
+                    continue
+                else:
+                    raise e
+            else:
+                logging.info(f"Queued request {request_path}")
+            break
+    except Exception as e:
+        logging.error(f"Error while queuing request", exc_info=e)
+        os.remove(f.name)
+        raise e
+
+    return is_new_queue
+
+
+def process_requests(url, unattested):
+    queue_dir = get_queue_dir(url)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_queue_dir = os.path.join(tmp_dir, "queue")
+
+        try:
+            # Process the first request by doing an actual fetch.
+            # The queue folder is not moved yet, so that more requests
+            # for the same URL can be queued while the fetch is in progress.
+            request_path = os.path.join(queue_dir, os.listdir(queue_dir)[0])
+            logging.info(f"Processing first request {request_path}")
+            with open(request_path) as f:
+                request_metadata = json.load(f)
+
+            # Add nonce as query parameter for cache busting.
+            # This reduces the time to observe DID document updates
+            # for some servers like GitHub Pages.
+            url = url + f"?{request_metadata['nonce']}"
+
+            fetch = fetch_unattested if unattested else fetch_attested
+            retry = True
+            tries = 0
+            while retry and tries < FETCH_RETRIES:
+                result = fetch(url, request_metadata["nonce"])
+                retry = refetchable(result)
+                tries += 1
+
+
+            # Send back the result to the callback URL.
+            callback_data = {"result": json.loads(result)}
+            body = json.dumps(callback_data).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            request(request_metadata["callback_url"], body, headers)
+
+            # Remove the request file to prevent it from being processed again below.
+            os.remove(request_path)
+
+        except Exception as e:
+            logging.error(
+                f"Error while processing first request in {queue_dir}", exc_info=e
+            )
+            logging.info(f"Removing queue {queue_dir} and aborting")
+            raise
+        finally:
+            # Move the queue folder to a temporary location that will be deleted and
+            # process any remaining requests that were added in the meantime.
+            os.rename(queue_dir, tmp_queue_dir)
+
+        for fname in os.listdir(tmp_queue_dir):
+            # Process remaining requests by relying on the resolution
+            # cache maintained in the ledger KV.
+            request_path = os.path.join(tmp_queue_dir, fname)
+            logging.info(f"Processing remaining request {request_path}")
+            with open(request_path) as f:
+                request_metadata = json.load(f)
+
+            callback_data = {}
+            body = json.dumps(callback_data).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            request(request_metadata["callback_url"], body, headers)
+
+
+def run(url, nonce, callback_url: str, unattested: bool):
+    is_new_queue = queue_request(url, nonce, callback_url)
+    if is_new_queue:
+        process_requests(url, unattested)
 
 
 if __name__ == "__main__":

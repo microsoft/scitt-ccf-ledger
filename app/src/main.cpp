@@ -168,16 +168,8 @@ namespace scitt
       const ccf::endpoints::EndpointFunction& f,
       const ccf::AuthnPolicies& ap) override
     {
-      std::function<ccf::ApiResult(timespec & time)> get_time =
-        [this](timespec& time) {
-          return this->get_untrusted_host_time_v1(time);
-        };
-
-      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
-      endpoint.locally_committed_func = tracing_local_commit_adapter(
-        ccf::endpoints::default_locally_committed_func);
-      return endpoint;
+      return make_endpoint_with_local_commit_handler(
+        method, verb, f, ccf::endpoints::default_locally_committed_func, ap);
     }
 
     ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
@@ -187,8 +179,15 @@ namespace scitt
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
       const ccf::AuthnPolicies& ap) override
     {
-      auto endpoint = make_endpoint(method, verb, f, ap);
-      endpoint.locally_committed_func = tracing_local_commit_adapter(l);
+      std::function<ccf::ApiResult(timespec & time)> get_time =
+        [this](timespec& time) {
+          return this->get_untrusted_host_time_v1(time);
+        };
+
+      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
+        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
+      endpoint.locally_committed_func =
+        tracing_local_commit_adapter(l, method, get_time);
       return endpoint;
     }
 
@@ -353,7 +352,9 @@ namespace scitt
                                        const nlohmann::json& callback_context,
                                        nlohmann::json&& params) {
         auto post_entry_context = callback_context.get<DIDFetchContext>();
-        auto resolution = params.get<did::web::ResolutionCallbackData>();
+        auto resolution =
+          params
+            .get<PostOperationCallback<did::web::ResolutionCallbackData>::In>();
 
         ::timespec host_time;
         auto result = get_untrusted_host_time_v1(host_time);
@@ -363,13 +364,16 @@ namespace scitt
             fmt::format("Failed to retrieve host time: {}", result));
         }
 
-        SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
-        did::web::DidWebResolver::update_did_document(
-          host_time,
-          ctx.tx,
-          resolution,
-          post_entry_context.issuer,
-          post_entry_context.nonce);
+        if (resolution.result.has_value())
+        {
+          SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
+          did::web::DidWebResolver::update_did_document(
+            host_time,
+            ctx.tx,
+            resolution.result.value(),
+            post_entry_context.issuer,
+            post_entry_context.nonce);
+        }
 
         // We intentionally don't catch AsyncResolutionNeeded this time around.
         // If resolution fails despite the updated DID document then the
@@ -395,37 +399,7 @@ namespace scitt
       static constexpr auto get_entry_path = "/entries/{txid}";
       auto get_entry = [this](
                          EndpointContext& ctx,
-                         ccf::historical::StatePtr historical_state,
-                         nlohmann::json&& params) {
-        auto historical_tx = historical_state->store->create_read_only_tx();
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
-
-        return GetEntry::Out{
-          .entry_id = historical_state->transaction_id,
-        };
-      };
-      make_endpoint(
-        get_entry_path,
-        HTTP_GET,
-        scitt::historical::json_adapter(
-          get_entry, state_cache, is_tx_committed),
-        authn_policy)
-        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-        .install();
-
-      static constexpr auto get_entry_claim_path = "/entries/{txid}/claim";
-      auto get_entry_claim = [this](
-                               EndpointContext& ctx,
-                               ccf::historical::StatePtr historical_state) {
+                         ccf::historical::StatePtr historical_state) {
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
 
@@ -475,10 +449,9 @@ namespace scitt
           http::headers::CONTENT_TYPE, "application/cose");
       };
       make_endpoint(
-        get_entry_claim_path,
+        get_entry_path,
         HTTP_GET,
-        scitt::historical::adapter(
-          get_entry_claim, state_cache, is_tx_committed),
+        scitt::historical::adapter(get_entry, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
