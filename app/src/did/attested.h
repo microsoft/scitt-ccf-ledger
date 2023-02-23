@@ -50,6 +50,8 @@ namespace scitt::did
     std::string evidence;
     std::string endorsements;
     std::string data;
+
+    bool operator==(const AttestedResolution& other) const = default;
   };
 
   DECLARE_JSON_TYPE(AttestedResolution);

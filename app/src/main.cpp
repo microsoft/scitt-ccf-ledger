@@ -352,7 +352,9 @@ namespace scitt
                                        const nlohmann::json& callback_context,
                                        nlohmann::json&& params) {
         auto post_entry_context = callback_context.get<DIDFetchContext>();
-        auto resolution = params.get<did::web::ResolutionCallbackData>();
+        auto resolution =
+          params
+            .get<PostOperationCallback<did::web::ResolutionCallbackData>::In>();
 
         ::timespec host_time;
         auto result = get_untrusted_host_time_v1(host_time);
@@ -362,13 +364,16 @@ namespace scitt
             fmt::format("Failed to retrieve host time: {}", result));
         }
 
-        SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
-        did::web::DidWebResolver::update_did_document(
-          host_time,
-          ctx.tx,
-          resolution,
-          post_entry_context.issuer,
-          post_entry_context.nonce);
+        if (resolution.result.has_value())
+        {
+          SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
+          did::web::DidWebResolver::update_did_document(
+            host_time,
+            ctx.tx,
+            resolution.result.value(),
+            post_entry_context.issuer,
+            post_entry_context.nonce);
+        }
 
         // We intentionally don't catch AsyncResolutionNeeded this time around.
         // If resolution fails despite the updated DID document then the
