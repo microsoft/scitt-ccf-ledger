@@ -23,6 +23,8 @@ namespace scitt::did
     std::string url;
     std::string nonce;
     std::string body;
+
+    bool operator==(const UnattestedResolution& other) const = default;
   };
   DECLARE_JSON_TYPE(UnattestedResolution);
   DECLARE_JSON_REQUIRED_FIELDS(UnattestedResolution, url, nonce, body);
