@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 import time
-from typing import Callable, List, Tuple
+from typing import Callable, List
 
 import pytest
 
@@ -321,6 +321,26 @@ class TestDIDMismatch:
         # Submitting the same claim now works just fine.
         receipt = client.submit_claim(claim).receipt
         verify_receipt(claim, trust_store, receipt)
+
+    def test_fetch_error(
+        self,
+        client: Client,
+        did_web: DIDWebServer,
+    ):
+        """
+        Test that the ledger does not cache failed resolutions.
+
+        After fixing the cause of the error, the server should immediately be
+        able to resolve the DID again.
+        """
+        private_key, _ = crypto.generate_keypair(kty="ec")
+        issuer = did_web.generate_identifier()
+
+        identity = crypto.Signer(issuer=issuer, private_key=private_key)
+        claim = crypto.sign_json_claimset(identity, "Payload")
+
+        with service_error("DID Resolution failed with status code: 404"):
+            client.submit_claim(claim).receipt
 
 
 def test_consistent_kid(

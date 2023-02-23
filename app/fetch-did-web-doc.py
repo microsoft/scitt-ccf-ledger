@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 
 CONNECT_TIMEOUT = 5
 HTTP_RETRIES = 5
+FETCH_RETRIES = 5
 HTTP_DEFAULT_RETRY_AFTER = 1
 
 AFETCH_DIR = "/tmp/scitt"
@@ -26,8 +27,11 @@ def fetch_unattested(url, nonce):
         {
             "url": url,
             "nonce": nonce,
-            "status_code": response["status_code"],
-            "body": base64.b64encode(response["body"]).decode("utf-8"),
+            "result": {
+                "status": response["status_code"],
+                "body": base64.b64encode(response["body"]).decode("utf-8"),
+                "cert_chain": [],
+            },
         }
     ).encode("utf-8")
 
@@ -66,6 +70,25 @@ def fetch_attested(url, nonce):
         logging.info(f"afetch succeeded, output size is {len(result)} bytes")
 
     return result
+
+
+def refetchable(result):
+    """Parse result to decide if it should be refetched."""
+    fetch_data = json.loads(result)["data"]
+    decoded_data = base64.b64decode(fetch_data)
+    data = json.loads(decoded_data)
+
+    if "error" in data:
+        logging.error(f"afetch failed: {data['error'].get('message')}")
+        return True
+    if "result" in data:
+        status = data["result"].get("status")
+        if status in [
+            http.HTTPStatus.TOO_MANY_REQUESTS,
+            http.HTTPStatus.SERVICE_UNAVAILABLE,
+        ]:
+            return True
+    return False
 
 
 def request(url, data=None, headers=None):
@@ -120,10 +143,13 @@ def request(url, data=None, headers=None):
 
 
 def run(url, nonce, callback_url: str, unattested: bool):
-    if unattested:
-        result = fetch_unattested(url, nonce)
-    else:
-        result = fetch_attested(url, nonce)
+    fetch = fetch_unattested if unattested else fetch_attested
+    retry = True
+    tries = 0
+    while retry and tries < FETCH_RETRIES:
+        result = fetch(url, nonce)
+        retry = refetchable(result)
+        tries += 1
 
     headers = {"Content-Type": "application/json"}
     request(callback_url, result, headers)
