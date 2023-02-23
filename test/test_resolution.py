@@ -319,14 +319,14 @@ class TestDIDMismatch:
         receipt = client.submit_claim(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
-    @pytest.mark.skipif(os.getenv("PLATFORM") == "virtual")
+    @pytest.mark.skipif(os.getenv("PLATFORM") == "virtual", reason="requires SGX")
     def test_fetch_error(
         self,
         client: Client,
         did_web: DIDWebServer,
     ):
         """
-        Test that the ledger returns an error message for failed resolutions.
+        Test that the ledger returns an error message for failed attested fetch resolutions.
         """
         private_key, _ = crypto.generate_keypair(kty="ec")
         issuer = did_web.generate_identifier()
