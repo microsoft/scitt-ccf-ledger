@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [0.3.0]
 ### Added
 - Add [documentation](https://github.com/microsoft/scitt-ccf-ledger/blob/main/docs/configuration.md) on configuration (#103).
+- did:web resolution failures are now logged and returned to clients through the updated REST API (#125).
 
 ### Changes
 - Update to CCF 3.0.6 (#118).
