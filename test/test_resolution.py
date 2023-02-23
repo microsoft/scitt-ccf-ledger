@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 import time
 from typing import Callable, List
 
@@ -318,6 +319,7 @@ class TestDIDMismatch:
         receipt = client.submit_claim(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
+    @pytest.mark.skipif(os.getenv("PLATFORM") == "virtual")
     def test_fetch_error(
         self,
         client: Client,
