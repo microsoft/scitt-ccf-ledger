@@ -75,14 +75,18 @@ TEST(Verifier, ValidChain)
   EXPECT_NO_THROW(verify_chain({root}, {leaf, root}));
 }
 
-TEST(Verifier, ValidChainWithIntermediate)
-{
-  auto root = create_cert("CN=root", true);
-  auto intermediate = create_cert("CN=intermediate", true, &root);
-  auto leaf = create_cert("CN=leaf", false, &intermediate);
+// Temporarily disabled because CCF's certificate generation helpers
+// started enforcing a pathlen of 0, which means that we can't create a valid
+// chain with an intermediate.
+// See https://github.com/microsoft/CCF/pull/4995
+// TEST(Verifier, ValidChainWithIntermediate)
+// {
+//   auto root = create_cert("CN=root", true);
+//   auto intermediate = create_cert("CN=intermediate", true, &root);
+//   auto leaf = create_cert("CN=leaf", false, &intermediate);
 
-  EXPECT_NO_THROW(verify_chain({root}, {leaf, intermediate, root}));
-}
+//   EXPECT_NO_THROW(verify_chain({root}, {leaf, intermediate, root}));
+// }
 
 TEST(Verifier, SelfSigned)
 {
