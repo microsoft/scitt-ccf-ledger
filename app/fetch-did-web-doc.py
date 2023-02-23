@@ -220,13 +220,11 @@ def process_requests(url, unattested):
                 f"Error while processing first request in {queue_dir}", exc_info=e
             )
             logging.info(f"Removing queue {queue_dir} and aborting")
-            # Move the queue dir to a temporary location that will be deleted.
-            os.rename(queue_dir, tmp_queue_dir)
             raise
-
-        # Move the queue folder to a temporary location that will be deleted and
-        # process any remaining requests that were added in the meantime.
-        os.rename(queue_dir, tmp_queue_dir)
+        finally:
+            # Move the queue folder to a temporary location that will be deleted and
+            # process any remaining requests that were added in the meantime.
+            os.rename(queue_dir, tmp_queue_dir)
 
         for fname in os.listdir(tmp_queue_dir):
             # Process remaining requests by relying on the resolution
