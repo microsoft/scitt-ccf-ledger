@@ -80,7 +80,7 @@ def refetchable(result):
     data = json.loads(decoded_data)
 
     if "error" in data:
-        logging.error(f"afetch failed: {data['error'].get('message')}")
+        logging.error(f"afetch failed: {data['error']['message']}")
         return True
     if "result" in data:
         status = data["result"].get("status")
