@@ -25,15 +25,15 @@ namespace scitt::did
 {
   enum class EvidenceFormat
   {
-    ATTESTED_FETCH_OE_SGX_ECDSA = 0
+    ATTESTED_FETCH_OE_SGX_ECDSA_V2 = 0
   };
 
   std::string to_string(EvidenceFormat format)
   {
     switch (format)
     {
-      case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA:
-        return "ATTESTED_FETCH_OE_SGX_ECDSA";
+      case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2:
+        return "ATTESTED_FETCH_OE_SGX_ECDSA_V2";
       default:
         throw std::runtime_error("Unknown evidence format");
     }
@@ -41,8 +41,8 @@ namespace scitt::did
 
   DECLARE_JSON_ENUM(
     EvidenceFormat,
-    {{EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA,
-      "ATTESTED_FETCH_OE_SGX_ECDSA"}});
+    {{EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2,
+      "ATTESTED_FETCH_OE_SGX_ECDSA_V2"}});
 
   struct AttestedResolution
   {
@@ -58,16 +58,40 @@ namespace scitt::did
   DECLARE_JSON_REQUIRED_FIELDS(
     AttestedResolution, format, evidence, endorsements, data);
 
-  // "data" field of AttestedResolution for ATTESTED_FETCH_OE_SGX_ECDSA
+  // "error" field within "data" in AttestedResolution for
+  // ATTESTED_FETCH_OE_SGX_ECDSA_V2
+  struct AttestedFetchError
+  {
+    std::string message;
+
+    bool operator==(const AttestedFetchError&) const = default;
+  };
+  // "result" field within "data" in AttestedResolution for
+  // ATTESTED_FETCH_OE_SGX_ECDSA_V2
+  struct AttestedFetchResult
+  {
+    int64_t status;
+    std::string body;
+    std::vector<std::string> certs;
+
+    bool operator==(const AttestedFetchResult&) const = default;
+  };
+  // "data" field of AttestedResolution for ATTESTED_FETCH_OE_SGX_ECDSA_V2
   struct AttestedFetchData
   {
     std::string url;
     std::string nonce;
-    std::vector<std::string> certs;
-    std::string body;
+    std::optional<AttestedFetchResult> result;
+    std::optional<AttestedFetchError> error;
   };
-  DECLARE_JSON_TYPE(AttestedFetchData);
-  DECLARE_JSON_REQUIRED_FIELDS(AttestedFetchData, url, nonce, certs, body);
+
+  DECLARE_JSON_TYPE(AttestedFetchResult);
+  DECLARE_JSON_REQUIRED_FIELDS(AttestedFetchResult, status, body, certs);
+  DECLARE_JSON_TYPE(AttestedFetchError);
+  DECLARE_JSON_REQUIRED_FIELDS(AttestedFetchError, message);
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(AttestedFetchData);
+  DECLARE_JSON_REQUIRED_FIELDS(AttestedFetchData, url, nonce);
+  DECLARE_JSON_OPTIONAL_FIELDS(AttestedFetchData, error, result);
 
   struct AttestedResolutionError : public std::runtime_error
   {
@@ -82,7 +106,7 @@ namespace scitt::did
   {
     // Check that the evidence format is supported.
     // For now, only a single format is supported.
-    if (resolution.format != EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA)
+    if (resolution.format != EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2)
     {
       throw AttestedResolutionError(
         fmt::format("Unsupported evidence format: {}", resolution.format));
@@ -160,6 +184,25 @@ namespace scitt::did
       throw AttestedResolutionError(
         "Data could not be parsed as JSON according to schema.");
     }
+    // Check for an attested error.
+    if (fetch_data.error.has_value())
+    {
+      std::string msg = fetch_data.error->message;
+      throw AttestedResolutionError(msg);
+    }
+
+    // Else we should have a result.
+    if (!fetch_data.result.has_value())
+    {
+      throw AttestedResolutionError("No fetch data found.");
+    }
+    int64_t status = fetch_data.result->status;
+    if (status < 200 or status >= 300)
+    {
+      std::string msg =
+        fmt::format("DID Resolution failed with status code: {}", status);
+      throw AttestedResolutionError(msg);
+    }
 
     // Compute DID from URL in data.
     std::string computed_did;
@@ -190,7 +233,7 @@ namespace scitt::did
     std::vector<uint8_t> body;
     try
     {
-      body = crypto::raw_from_b64(fetch_data.body);
+      body = crypto::raw_from_b64(fetch_data.result->body);
     }
     catch (const std::exception& e)
     {
@@ -229,7 +272,7 @@ namespace scitt::did
 
     // Verify TLS certificate chain against Root CAs.
     std::vector<crypto::Pem> chain_vec;
-    for (auto& cert : fetch_data.certs)
+    for (auto& cert : fetch_data.result->certs)
     {
       chain_vec.push_back(crypto::Pem(cert));
     }
@@ -252,7 +295,7 @@ namespace scitt::did
       throw AttestedResolutionError("Certificate chain is invalid");
 
     DidWebResolutionMetadata did_web_resolution_metadata;
-    did_web_resolution_metadata.tls_certs = fetch_data.certs;
+    did_web_resolution_metadata.tls_certs = fetch_data.result->certs;
 
     DidResolutionMetadata did_resolution_metadata;
     did_resolution_metadata.web = did_web_resolution_metadata;
