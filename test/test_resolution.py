@@ -1,8 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 import time
-from typing import Callable, List, Tuple
+from typing import Callable, List
 
 import pytest
 
@@ -317,6 +318,24 @@ class TestDIDMismatch:
         # Submitting the same claim now works just fine.
         receipt = client.submit_claim(claim).receipt
         verify_receipt(claim, trust_store, receipt)
+
+    @pytest.mark.skipif(os.getenv("PLATFORM") == "virtual", reason="requires SGX")
+    def test_fetch_error(
+        self,
+        client: Client,
+        did_web: DIDWebServer,
+    ):
+        """
+        Test that the ledger returns an error message for failed attested fetch resolutions.
+        """
+        private_key, _ = crypto.generate_keypair(kty="ec")
+        issuer = did_web.generate_identifier()
+
+        identity = crypto.Signer(issuer=issuer, private_key=private_key)
+        claim = crypto.sign_json_claimset(identity, "Payload")
+
+        with service_error("DID Resolution failed with status code: 404"):
+            client.submit_claim(claim).receipt
 
 
 def test_consistent_kid(
