@@ -232,7 +232,6 @@ def process_requests(url, unattested):
                 retry = refetchable(result)
                 tries += 1
 
-
             # Send back the result to the callback URL.
             callback_data = {"result": json.loads(result)}
             body = json.dumps(callback_data).encode("utf-8")

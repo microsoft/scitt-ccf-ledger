@@ -324,10 +324,7 @@ class TestDIDMismatch:
         did_web: DIDWebServer,
     ):
         """
-        Test that the ledger does not cache failed resolutions.
-
-        After fixing the cause of the error, the server should immediately be
-        able to resolve the DID again.
+        Test that the ledger returns an error message for failed resolutions.
         """
         private_key, _ = crypto.generate_keypair(kty="ec")
         issuer = did_web.generate_identifier()
