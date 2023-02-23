@@ -91,9 +91,7 @@ def test_concurrent_resolution(
         receipt1 = client.get_receipt(tx1, operation=True)
         receipt2 = client.get_receipt(tx2, operation=True)
 
-    # TODO: Aggregation of resolution is not yet implemented.
-    # Once it is, we should change this to `== 1`
-    assert metrics.request_count == 2
+    assert metrics.request_count == 1
     verify_receipt(claim1, trust_store, receipt1)
     verify_receipt(claim2, trust_store, receipt2)
 
@@ -284,9 +282,7 @@ class TestDIDMismatch:
             with service_error("DID document ID does not match expected value"):
                 client.wait_for_operation(tx2)
 
-        # TODO: Aggregation of resolution is not yet implemented.
-        # Once it is, we should change this to `== 1`
-        assert metrics.request_count == 2
+        assert metrics.request_count == 1
 
     def test_dont_cache_error(
         self,

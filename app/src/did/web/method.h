@@ -131,8 +131,7 @@ namespace scitt::did::web
       const std::string& did,
       const std::string& nonce)
     {
-      // add nonce to query param for cache busting
-      auto url = get_did_web_doc_url_from_did(did) + "?" + nonce;
+      auto url = get_did_web_doc_url_from_did(did);
 
       auto host_processes = context.get_subsystem<ccf::AbstractHostProcesses>();
       host_processes->trigger_host_process_launch(
