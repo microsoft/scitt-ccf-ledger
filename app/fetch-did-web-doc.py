@@ -83,7 +83,7 @@ def refetchable(result):
         logging.error(f"afetch failed: {data['error']['message']}")
         return True
     if "result" in data:
-        status = data["result"].get("status")
+        status = data["result"]["status"]
         if status in [
             http.HTTPStatus.TOO_MANY_REQUESTS,
             http.HTTPStatus.SERVICE_UNAVAILABLE,
