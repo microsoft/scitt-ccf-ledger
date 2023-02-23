@@ -31,11 +31,8 @@ def fetch_unattested(url, nonce):
         {
             "url": url,
             "nonce": nonce,
-            "result": {
-                "status": response["status_code"],
-                "body": base64.b64encode(response["body"]).decode("utf-8"),
-                "cert_chain": [],
-            },
+            "status_code": response["status_code"],
+            "body": base64.b64encode(response["body"]).decode("utf-8"),
         }
     ).encode("utf-8")
 
@@ -224,13 +221,15 @@ def process_requests(url, unattested):
             # for some servers like GitHub Pages.
             url = url + f"?{request_metadata['nonce']}"
 
-            fetch = fetch_unattested if unattested else fetch_attested
-            retry = True
-            tries = 0
-            while retry and tries < FETCH_RETRIES:
-                result = fetch(url, request_metadata["nonce"])
-                retry = refetchable(result)
-                tries += 1
+            if unattested:
+                result = fetch_unattested(url, request_metadata["nonce"])
+            else:
+                retry = True
+                tries = 0
+                while retry and tries < FETCH_RETRIES:
+                    result = fetch_attested(url, request_metadata["nonce"])
+                    retry = refetchable(result)
+                    tries += 1
 
             # Send back the result to the callback URL.
             callback_data = {"result": json.loads(result)}
