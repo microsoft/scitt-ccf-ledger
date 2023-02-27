@@ -307,11 +307,7 @@ def service_identifier(service_url: str) -> str:
 
     result = urlparse(service_url)
     assert result.hostname is not None
-
-    # CCF currently won't let us host the DID document under `/.well-known`,
-    # which prevents us from using a top-level DID. The `scitt` path is a
-    # temporary workaround.
-    return format_did_web(result.hostname, result.port, "scitt")
+    return format_did_web(result.hostname, result.port)
 
 
 @pytest.fixture(scope="class")
