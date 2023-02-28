@@ -363,19 +363,26 @@ class Client(BaseClient):
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[False] = False
+        self, claim: bytes, *, skip_confirmation: Literal[False] = False, headers=None
     ) -> Submission:
         ...
 
     @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[True], headers = {"Content-Type": "application/cose"}
+        self, claim: bytes, *, skip_confirmation: Literal[True], headers=None
     ) -> PendingSubmission:
         ...
 
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False, headers = {"Content-Type": "application/cose"}
+        self, claim: bytes, *, skip_confirmation=False, headers=None
     ) -> Union[Submission, PendingSubmission]:
+        header_default = {"Content-Type": "application/cose"}
+
+        if headers:
+            headers = header_default.update(headers)
+        else:
+            headers = header_default
+
         response = self.post(
             "/entries",
             headers=headers,

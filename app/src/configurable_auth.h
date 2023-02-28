@@ -27,8 +27,11 @@ namespace scitt
     {
       auto identity = JwtAuthnPolicy::authenticate(tx, ctx, error_reason);
       if (!identity)
-      { 
-        SCITT_INFO("ClientRequestId={} ErrorMessage={}", ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""), error_reason);
+      {
+        SCITT_INFO(
+          "ClientRequestId={} ErrorMessage={}",
+          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+          error_reason);
         return nullptr;
       }
 
@@ -45,7 +48,10 @@ namespace scitt
       if (!required_claims.is_object())
       {
         error_reason = "JWT authentication is not enabled";
-        SCITT_INFO("ClientRequestId={} ErrorMessage={}", ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""), error_reason);
+        SCITT_INFO(
+          "ClientRequestId={} ErrorMessage={}",
+          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+          error_reason);
         return nullptr;
       }
 
@@ -55,7 +61,10 @@ namespace scitt
       }
       else
       {
-        SCITT_INFO("ClientRequestId={} ErrorMessage={}", ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""), error_reason);
+        SCITT_INFO(
+          "ClientRequestId={} ErrorMessage={}",
+          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+          error_reason);
         return nullptr;
       }
     }

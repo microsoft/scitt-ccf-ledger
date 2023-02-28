@@ -198,7 +198,8 @@ namespace scitt
     };
   }
 
-  inline ccf::endpoints::LocallyCommittedEndpointFunction tracing_local_commit_adapter(
+  inline ccf::endpoints::LocallyCommittedEndpointFunction
+  tracing_local_commit_adapter(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
