@@ -4,9 +4,9 @@
 #pragma once
 
 #include "kv_types.h"
-#include "tracing.h"
 
 #include <ccf/common_auth_policies.h>
+#include <ccf/rpc_context.h>
 
 namespace scitt
 {
@@ -28,9 +28,11 @@ namespace scitt
       auto identity = JwtAuthnPolicy::authenticate(tx, ctx, error_reason);
       if (!identity)
       {
-        SCITT_INFO(
-          "ClientRequestId={} ErrorMessage={}",
-          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+        CCF_APP_INFO(
+          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
+          ctx->get_request_header("x-ms-client-request-id").value_or(""),
+          ctx->get_request_verb().c_str(),
+          ctx->get_request_url(),
           error_reason);
         return nullptr;
       }
@@ -48,9 +50,11 @@ namespace scitt
       if (!required_claims.is_object())
       {
         error_reason = "JWT authentication is not enabled";
-        SCITT_INFO(
-          "ClientRequestId={} ErrorMessage={}",
-          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+        CCF_APP_INFO(
+          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
+          ctx->get_request_header("x-ms-client-request-id").value_or(""),
+          ctx->get_request_verb().c_str(),
+          ctx->get_request_url(),
           error_reason);
         return nullptr;
       }
@@ -61,9 +65,11 @@ namespace scitt
       }
       else
       {
-        SCITT_INFO(
-          "ClientRequestId={} ErrorMessage={}",
-          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+        CCF_APP_INFO(
+          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
+          ctx->get_request_header("x-ms-client-request-id").value_or(""),
+          ctx->get_request_verb().c_str(),
+          ctx->get_request_url(),
           error_reason);
         return nullptr;
       }

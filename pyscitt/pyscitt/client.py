@@ -376,12 +376,12 @@ class Client(BaseClient):
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False, headers=None
     ) -> Union[Submission, PendingSubmission]:
-        header_default = {"Content-Type": "application/cose"}
+        request_header = {"Content-Type": "application/cose"}
 
         if headers:
-            headers = header_default.update(headers)
+            request_header.update(headers)
         else:
-            headers = header_default
+            request_header
 
         response = self.post(
             "/entries",

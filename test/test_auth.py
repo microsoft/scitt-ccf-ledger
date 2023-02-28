@@ -43,7 +43,9 @@ class TestAuthentication:
     @pytest.fixture
     def submit(self, client: Client, claim: bytes):
         def f(**kwargs):
-            client.replace(**kwargs).submit_claim(claim)
+            client.replace(**kwargs).submit_claim(
+                claim, headers={"x-ms-client-request-id": "foo"}
+            )
 
         return f
 
