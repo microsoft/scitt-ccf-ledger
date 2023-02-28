@@ -380,8 +380,6 @@ class Client(BaseClient):
 
         if headers:
             request_header.update(headers)
-        else:
-            request_header
 
         response = self.post(
             "/entries",
