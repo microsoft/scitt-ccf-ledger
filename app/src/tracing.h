@@ -21,28 +21,28 @@ namespace scitt
 
   const std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
 
-  thread_local std::optional<std::string> request_id;
-  thread_local std::optional<std::string> client_request_id;
+  inline thread_local std::optional<std::string> request_id;
+  inline thread_local std::optional<std::string> client_request_id;
 
-  void clear_trace_state()
+  inline void clear_trace_state()
   {
     request_id = std::nullopt;
     client_request_id = std::nullopt;
   }
 
-  int diff_timespec_ms(
+  inline int diff_timespec_ms(
     const struct timespec& time0, const struct timespec& time1)
   {
     return (time1.tv_sec - time0.tv_sec) * 1000 +
       (time1.tv_nsec - time0.tv_nsec) / 1000000;
   }
 
-  std::string create_request_id()
+  inline std::string create_request_id()
   {
     return fmt::format("{:x}", ENTROPY->random64());
   }
 
-  std::string tracing_context()
+  inline std::string tracing_context()
   {
     fmt::memory_buffer out;
     if (client_request_id.has_value())
@@ -80,7 +80,7 @@ namespace scitt
 
 #pragma clang diagnostic pop
 
-  void log_request_end(
+  inline void log_request_end(
     const std::shared_ptr<ccf::RpcContext>& rpc_ctx,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time,
@@ -126,7 +126,7 @@ namespace scitt
   }
 
   template <typename Fn, typename Ctx>
-  Fn generic_tracing_adapter(
+  inline Fn generic_tracing_adapter(
     Fn fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
@@ -198,7 +198,7 @@ namespace scitt
     };
   }
 
-  ccf::endpoints::LocallyCommittedEndpointFunction tracing_local_commit_adapter(
+  inline ccf::endpoints::LocallyCommittedEndpointFunction tracing_local_commit_adapter(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
@@ -221,7 +221,7 @@ namespace scitt
   /**
    * Create an adapter around an existing EndpointFunction to handle tracing.
    */
-  ccf::endpoints::EndpointFunction tracing_adapter(
+  inline ccf::endpoints::EndpointFunction tracing_adapter(
     ccf::endpoints::EndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
@@ -231,7 +231,7 @@ namespace scitt
       ccf::endpoints::EndpointContext>(fn, method, get_time);
   }
 
-  ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
+  inline ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
     ccf::endpoints::ReadOnlyEndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
@@ -241,7 +241,7 @@ namespace scitt
       ccf::endpoints::ReadOnlyEndpointContext>(fn, method, get_time);
   }
 
-  ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
+  inline ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
     ccf::endpoints::CommandEndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
