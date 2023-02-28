@@ -249,11 +249,18 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
-    // A top-level DID (eg. did:web:example.com) would require serving the DID
-    // document at `/.well-known/did.json`, which CCF does not yet support:
-    // https://github.com/microsoft/CCF/issues/4810
-    //
-    // As a workaround, we currently use `did:web:example.com:scitt` as the DID.
+    registry
+      .make_endpoint(
+        "/.well-known/did.json",
+        HTTP_GET,
+        ccf::json_adapter(std::bind(
+          endpoints::get_did_document, service_certificate_index, _1, _2)),
+        {ccf::empty_auth_policy})
+      .install();
+
+    // The DID document used to be served under this endpoint only, until we
+    // added the .well-known path above. As a transitional measure, we keep
+    // both of them around for a bit.
     registry
       .make_endpoint(
         "/scitt/did.json",
