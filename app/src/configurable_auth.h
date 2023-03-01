@@ -28,12 +28,7 @@ namespace scitt
       auto identity = JwtAuthnPolicy::authenticate(tx, ctx, error_reason);
       if (!identity)
       {
-        CCF_APP_INFO(
-          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
-          ctx->get_request_header("x-ms-client-request-id").value_or(""),
-          ctx->get_request_verb().c_str(),
-          ctx->get_request_url(),
-          error_reason);
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
 
@@ -50,12 +45,7 @@ namespace scitt
       if (!required_claims.is_object())
       {
         error_reason = "JWT authentication is not enabled";
-        CCF_APP_INFO(
-          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
-          ctx->get_request_header("x-ms-client-request-id").value_or(""),
-          ctx->get_request_verb().c_str(),
-          ctx->get_request_url(),
-          error_reason);
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
 
@@ -65,12 +55,7 @@ namespace scitt
       }
       else
       {
-        CCF_APP_INFO(
-          "ClientRequestId={} Verb={} URL={} ErrorMessage={}",
-          ctx->get_request_header("x-ms-client-request-id").value_or(""),
-          ctx->get_request_verb().c_str(),
-          ctx->get_request_url(),
-          error_reason);
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
     }
@@ -96,6 +81,21 @@ namespace scitt
         }
       }
       return true;
+    }
+
+    static void log_auth_error(
+      const std::shared_ptr<ccf::RpcContext>& ctx, std::string& error_reason)
+    {
+      // CCF returns any errors in the auth policy with a 401 status
+      CCF_APP_INFO(
+        "ClientRequestId={} Verb={} URL={} Status_code=401",
+        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        ctx->get_request_verb().c_str(),
+        ctx->get_request_url());
+      CCF_APP_INFO(
+        "ClientRequestId={} Code=InvalidAuthenticationInfo {}",
+        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        error_reason);
     }
   };
 
