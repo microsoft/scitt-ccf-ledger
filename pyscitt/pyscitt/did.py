@@ -18,7 +18,7 @@ DID_WEB_PREFIX = "did:web:"
 def format_did_web(
     host: str,
     port: Optional[int],
-    path: Optional[str],
+    path: Optional[str] = None,
 ) -> str:
     did = DID_WEB_PREFIX + host
     if port:

@@ -207,7 +207,7 @@ def setup_local_development(
 
     config = {
         "authentication": {"allow_unauthenticated": True},
-        "service_identifier": format_did_web(url.hostname, url.port, "scitt"),
+        "service_identifier": format_did_web(url.hostname, url.port),
     }
     proposal = governance.set_scitt_configuration_proposal(config)
     client.governance.propose(proposal, must_pass=True)

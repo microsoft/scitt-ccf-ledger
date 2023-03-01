@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 CONNECT_TIMEOUT = 5
 HTTP_RETRIES = 5
+FETCH_RETRIES = 5
 HTTP_DEFAULT_RETRY_AFTER = 1
 
 AFETCH_DIR = "/tmp/scitt"
@@ -70,6 +71,25 @@ def fetch_attested(url, nonce):
         logging.info(f"afetch succeeded, output size is {len(result)} bytes")
 
     return result
+
+
+def refetchable(result):
+    """Parse result to decide if it should be refetched."""
+    fetch_data = json.loads(result)["data"]
+    decoded_data = base64.b64decode(fetch_data)
+    data = json.loads(decoded_data)
+
+    if "error" in data:
+        logging.error(f"afetch failed: {data['error']['message']}")
+        return True
+    if "result" in data:
+        status = data["result"]["status"]
+        if status in [
+            http.HTTPStatus.TOO_MANY_REQUESTS,
+            http.HTTPStatus.SERVICE_UNAVAILABLE,
+        ]:
+            return True
+    return False
 
 
 def request(url, data=None, headers=None):
@@ -204,7 +224,12 @@ def process_requests(url, unattested):
             if unattested:
                 result = fetch_unattested(url, request_metadata["nonce"])
             else:
-                result = fetch_attested(url, request_metadata["nonce"])
+                retry = True
+                tries = 0
+                while retry and tries < FETCH_RETRIES:
+                    result = fetch_attested(url, request_metadata["nonce"])
+                    retry = refetchable(result)
+                    tries += 1
 
             # Send back the result to the callback URL.
             callback_data = {"result": json.loads(result)}
