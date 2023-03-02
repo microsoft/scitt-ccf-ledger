@@ -39,40 +39,6 @@ def fetch_unattested(url, nonce):
     return result
 
 
-def fetch_attested(url, nonce):
-    retries = HTTP_RETRIES
-    with tempfile.NamedTemporaryFile() as out_path:
-        args = [
-            f"{AFETCH_DIR}/afetch",
-            f"{AFETCH_DIR}/libafetch.enclave.so.signed",
-            out_path.name,
-            url,
-            nonce,
-        ]
-        logging.info(f"Starting {' '.join(args)}")
-        while True:
-            retries -= 1
-            try:
-                subprocess.run(
-                    args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
-                )
-                break
-            except subprocess.CalledProcessError as e:
-                logging.error(f"afetch failed with code {e.returncode}: {e.stdout}")
-            except Exception as e:
-                logging.error(f"Unknown error: {e}")
-            if retries >= 0:
-                logging.info(f"Retrying in {HTTP_DEFAULT_RETRY_AFTER} seconds")
-                time.sleep(HTTP_DEFAULT_RETRY_AFTER)
-            else:
-                raise e
-        with open(out_path.name, "rb") as f:
-            result = f.read()
-        logging.info(f"afetch succeeded, output size is {len(result)} bytes")
-
-    return result
-
-
 def refetchable(result):
     """Parse result to decide if it should be refetched."""
     fetch_data = json.loads(result)["data"]
@@ -84,12 +50,48 @@ def refetchable(result):
         return True
     if "result" in data:
         status = data["result"]["status"]
+        logging.info(f"afetch got http response: {status}")
         if status in [
             http.HTTPStatus.TOO_MANY_REQUESTS,
             http.HTTPStatus.SERVICE_UNAVAILABLE,
         ]:
             return True
     return False
+
+
+def fetch_attested(url, nonce):
+    retries = HTTP_RETRIES
+    while retries > 0:
+        retries -= 1
+        with tempfile.NamedTemporaryFile() as out_path:
+            args = [
+                f"{AFETCH_DIR}/afetch",
+                f"{AFETCH_DIR}/libafetch.enclave.so.signed",
+                out_path.name,
+                url,
+                nonce,
+            ]
+            logging.info(f"Starting {' '.join(args)}")
+            try:
+                subprocess.run(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                logging.error(f"afetch failed with code {e.returncode}: {e.stdout}")
+                raise e
+            except Exception as e:
+                logging.error(f"Unknown error: {e}")
+                raise e
+            with open(out_path.name, "rb") as f:
+                result = f.read()
+            if not refetchable(result):
+                break
+        if retries != 0:
+            logging.info(f"Retrying afetch in {HTTP_DEFAULT_RETRY_AFTER} seconds")
+            time.sleep(HTTP_DEFAULT_RETRY_AFTER)
+    logging.info(f"afetch finished, output size is {len(result)} bytes")
+
+    return result
 
 
 def request(url, data=None, headers=None):
@@ -224,12 +226,7 @@ def process_requests(url, unattested):
             if unattested:
                 result = fetch_unattested(url, request_metadata["nonce"])
             else:
-                retry = True
-                tries = 0
-                while retry and tries < FETCH_RETRIES:
-                    result = fetch_attested(url, request_metadata["nonce"])
-                    retry = refetchable(result)
-                    tries += 1
+                result = fetch_attested(url, request_metadata["nonce"])
 
             # Send back the result to the callback URL.
             callback_data = {"result": json.loads(result)}
