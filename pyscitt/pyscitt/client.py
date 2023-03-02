@@ -377,7 +377,6 @@ class Client(BaseClient):
         self, claim: bytes, *, skip_confirmation=False
     ) -> Union[Submission, PendingSubmission]:
         headers = {"Content-Type": "application/cose"}
-
         response = self.post(
             "/entries",
             headers=headers,
