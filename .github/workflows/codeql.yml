@@ -72,7 +72,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libcurl4-openssl-dev
-        CMAKE_BUILD_TYPE=Debug PLATFORM=virtual BUILD_TESTS=OFF ./build.sh
 
     - if: matrix.language == 'cpp'
       name: Build C++
