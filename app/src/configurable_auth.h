@@ -88,7 +88,7 @@ namespace scitt
     {
       // CCF returns any errors in the auth policy with a 401 status
       CCF_APP_INFO(
-        "ClientRequestId={} Verb={} URL={} Status_code=401",
+        "ClientRequestId={} Verb={} URL={} Status=401",
         ctx->get_request_header("x-ms-client-request-id").value_or(""),
         ctx->get_request_verb().c_str(),
         ctx->get_request_url());
