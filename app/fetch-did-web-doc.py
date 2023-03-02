@@ -88,6 +88,7 @@ def fetch_attested(url, nonce):
                 break
         if retries != 0:
             logging.info(f"Retrying afetch in {HTTP_DEFAULT_RETRY_AFTER} seconds")
+            time.sleep(HTTP_DEFAULT_RETRY_AFTER)
     logging.info(f"afetch finished, output size is {len(result)} bytes")
 
     return result
