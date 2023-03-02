@@ -60,7 +60,7 @@ stages:
           Environment:
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
-          InstallPackages: [ faketime ]
+          InstallPackages: [ libcurl4-openssl-dev faketime ]
 
       - template: common.yml
         parameters:
@@ -101,6 +101,7 @@ stages:
 
           # faketime does not play well with ASAN so don't enable it here.
           FunctionalTestArguments: '--enable-prefix-tree'
+          InstallPackages: [ libcurl4-openssl-dev ]
 
       - template: common.yml
         parameters:
@@ -112,7 +113,7 @@ stages:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
             ENABLE_CLANG_TIDY: ON
-          InstallPackages: [ clang-tidy-10 ]
+          InstallPackages: [ libcurl4-openssl-dev clang-tidy-10 ]
 
       - job: format
         displayName: Code Formatting
