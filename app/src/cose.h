@@ -199,7 +199,7 @@ namespace scitt::cose
     }
 
     // Returns a bool representing whether the input label is a known
-    // parameter in the context of a notary profile.
+    // parameter in the context of a profile.
     bool is_known(
       const std::variant<int64_t, std::string>& label,
       std::set<std::variant<int64_t, std::string>> profile_paramters) const
