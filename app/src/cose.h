@@ -21,6 +21,7 @@
 #include <optional>
 #include <qcbor/qcbor.h>
 #include <qcbor/qcbor_spiffy_decode.h>
+#include <set>
 #include <span>
 #include <string>
 #include <t_cose/t_cose_sign1_verify.h>
@@ -34,7 +35,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
 
-  std::vector<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
+  std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
     COSE_HEADER_PARAM_CRIT,
     COSE_HEADER_PARAM_CTY,
@@ -47,7 +48,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
 
-  std::vector<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
+  std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
     COSE_HEADER_PARAM_ISSUER,
     COSE_HEADER_PARAM_FEED,
     COSE_HEADER_PARAM_SCITT_RECEIPTS,
@@ -63,7 +64,7 @@ namespace scitt::cose
   static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
     "io.cncf.notary.expiry";
 
-  std::vector<std::variant<int64_t, std::string>> NOTARY_HEADER_PARAMS{
+  std::set<std::variant<int64_t, std::string>> NOTARY_HEADER_PARAMS{
     NOTARY_HEADER_PARAM_SIGNING_SCHEME,
     NOTARY_HEADER_PARAM_SIGNING_TIME,
     NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
@@ -199,32 +200,18 @@ namespace scitt::cose
 
     // Returns a bool representing whether the input label is a known
     // parameter in the context of a notary profile.
-    bool is_known_in_notary(
-      const std::variant<int64_t, std::string>& label) const
+    bool is_known(
+      const std::variant<int64_t, std::string>& label,
+      std::set<std::variant<int64_t, std::string>> profile_paramters) const
     {
-      // List of known header parameters in a notary profile
-      auto notary_known_params(BASIC_HEADER_PARAMS);
-      notary_known_params.insert(
-        notary_known_params.end(),
-        EXTRA_HEADER_PARAMS.begin(),
-        EXTRA_HEADER_PARAMS.end());
-      notary_known_params.insert(
-        notary_known_params.end(),
-        NOTARY_HEADER_PARAMS.begin(),
-        NOTARY_HEADER_PARAMS.end());
-
       if (
-        std::find(
-          std::begin(notary_known_params),
-          std::end(notary_known_params),
-          label) == std::end(notary_known_params))
-      {
-        return false;
-      }
-      else
+        BASIC_HEADER_PARAMS.contains(label) ||
+        EXTRA_HEADER_PARAMS.contains(label) ||
+        profile_paramters.contains(label))
       {
         return true;
       }
+      return false;
     }
   };
 
