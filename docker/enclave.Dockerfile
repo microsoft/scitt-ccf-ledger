@@ -44,11 +44,7 @@ RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.enclave.so.signed > oesign.
 FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-sgx
 ARG CCF_VERSION
 
-RUN apt update && \
-    apt install -y \
-    wget \
-    curl \
-    python3
+RUN apt update && apt install -y python3 wget
 
 # Install SGX quote library, which is required for out-of-proc attestation.
 RUN wget -qO - https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key | apt-key add -

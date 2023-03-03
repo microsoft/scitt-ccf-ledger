@@ -3,6 +3,8 @@ FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
+RUN apt-get update && apt-get install -y libcurl4-openssl-dev
+
 # Build CCF app
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \
@@ -19,8 +21,7 @@ RUN mkdir /tmp/app-build && \
 FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-virtual
 ARG CCF_VERSION
 
-RUN apt-get update && apt-get install -y \
-    python3 \
+RUN apt-get update && apt-get install -y python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
