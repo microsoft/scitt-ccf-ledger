@@ -645,17 +645,12 @@ namespace scitt::cose
     t_cose_sign1_verify_ctx verify_ctx;
 
     // Do some preliminary decoding, to get the header parameters and potential
-    // auxiliary buffer size. T_COSE_OPT_UNKNOWN_CRIT_ALLOWED
+    // auxiliary buffer size.
     t_cose_parameters params;
-    uint32_t prelim_options;
+    uint32_t prelim_options = T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY;
     if (allow_unknown_crit)
     {
-      prelim_options = T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY |
-        T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
-    }
-    else
-    {
-      prelim_options = T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY;
+      prelim_options |= T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
     }
     t_cose_sign1_verify_init(&verify_ctx, prelim_options);
     t_cose_err_t error =
@@ -680,14 +675,10 @@ namespace scitt::cose
     EVP_PKEY* evp_key = key.get_evp_pkey();
     cose_key.k.key_ptr = evp_key;
 
-    uint32_t options;
+    uint32_t options = T_COSE_OPT_TAG_REQUIRED;
     if (allow_unknown_crit)
     {
-      options = T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
-    }
-    else
-    {
-      options = T_COSE_OPT_TAG_REQUIRED;
+      options |= T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
     }
     t_cose_sign1_verify_init(&verify_ctx, options);
     t_cose_sign1_set_verification_key(&verify_ctx, cose_key);

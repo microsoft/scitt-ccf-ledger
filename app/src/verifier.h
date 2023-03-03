@@ -200,9 +200,9 @@ namespace scitt::verifier
           if (!phdr.is_present(crit_param))
           {
             SCITT_INFO(
-              "Critical param {} missing from protected header", crit_param);
+              "Critical parameter {} missing from protected header", crit_param);
             throw cose::COSEDecodeError(
-              "Critial param missing from protected header");
+              "Critial parameter missing from protected header");
           }
         }
       }
