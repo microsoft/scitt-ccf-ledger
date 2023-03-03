@@ -186,10 +186,26 @@ namespace scitt::verifier
 
       // decode_protected_header checks crit is not empty
 
-      // TODO: For each param in crit check it is in known params and that it is
-      // in the protected header, else fail. Or wait until t_cose supports
-      // custom header parameters in crit and then we get this for free when we
-      // use t_cose for signature validation.
+      // TODO: Replace all of this critical param checking once t_cose properly
+      // supports custom header parameters in crit.
+      for (const auto& crit_param : crit)
+      {
+        if (!phdr.is_known_in_notary(crit_param))
+        {
+          SCITT_INFO("Unknown critical parameter: {}", crit_param);
+          throw cose::COSEDecodeError("Unknown parameter found in crit");
+        }
+        else
+        {
+          if (!phdr.is_present(crit_param))
+          {
+            SCITT_INFO(
+              "Critical param {} missing from protected header", crit_param);
+            throw cose::COSEDecodeError(
+              "Critial param missing from protected header");
+          }
+        }
+      }
 
       if (!phdr.is_critical("io.cncf.notary.signingScheme"))
       {
@@ -326,9 +342,7 @@ namespace scitt::verifier
           // Verify signature.
           try
           {
-            // TODO: replace with cose::verify() once the t_cose workarounds are
-            // removed.
-            cose::notary_verify(data, phdr, key);
+            cose::verify(data, key, true);
           }
           catch (const cose::COSESignatureValidationError& e)
           {
