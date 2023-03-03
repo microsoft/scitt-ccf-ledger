@@ -202,12 +202,12 @@ namespace scitt::cose
     // parameter in the context of a profile.
     bool is_known(
       const std::variant<int64_t, std::string>& label,
-      std::set<std::variant<int64_t, std::string>> profile_paramters) const
+      std::set<std::variant<int64_t, std::string>> profile_parameters) const
     {
       if (
         BASIC_HEADER_PARAMS.contains(label) ||
         EXTRA_HEADER_PARAMS.contains(label) ||
-        profile_paramters.contains(label))
+        profile_parameters.contains(label))
       {
         return true;
       }
