@@ -6,6 +6,7 @@
 #include "kv_types.h"
 
 #include <ccf/common_auth_policies.h>
+#include <ccf/rpc_context.h>
 
 namespace scitt
 {
@@ -27,6 +28,7 @@ namespace scitt
       auto identity = JwtAuthnPolicy::authenticate(tx, ctx, error_reason);
       if (!identity)
       {
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
 
@@ -43,6 +45,7 @@ namespace scitt
       if (!required_claims.is_object())
       {
         error_reason = "JWT authentication is not enabled";
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
 
@@ -52,6 +55,7 @@ namespace scitt
       }
       else
       {
+        log_auth_error(ctx, error_reason);
         return nullptr;
       }
     }
@@ -77,6 +81,21 @@ namespace scitt
         }
       }
       return true;
+    }
+
+    static void log_auth_error(
+      const std::shared_ptr<ccf::RpcContext>& ctx, std::string& error_reason)
+    {
+      // CCF returns any errors in the auth policy with a 401 status
+      CCF_APP_INFO(
+        "ClientRequestId={} Verb={} URL={} Status=401",
+        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        ctx->get_request_verb().c_str(),
+        ctx->get_request_url());
+      CCF_APP_INFO(
+        "ClientRequestId={} Code=InvalidAuthenticationInfo {}",
+        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        error_reason);
     }
   };
 
