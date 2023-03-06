@@ -3,8 +3,6 @@ FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
-WORKDIR /usr/src/app/
-
 # Component specific to the CCF app
 COPY ./3rdparty/attested-fetch /tmp/attested-fetch/
 RUN mkdir /tmp/attested-fetch-build && \
@@ -16,13 +14,8 @@ RUN mkdir /tmp/attested-fetch-build && \
     /tmp/attested-fetch && \
     ninja && ninja install
 
-WORKDIR /usr/src/app/attested-fetch
-
 # Save MRENCLAVE
-RUN /opt/openenclave/bin/oesign dump -e libafetch.enclave.so.signed > oesign.dump && \
-    awk '/^mrenclave=/' oesign.dump | sed "s/mrenclave=//" > mrenclave.txt
-
-WORKDIR /usr/src/app
+RUN /opt/openenclave/bin/oesign dump -e libafetch.enclave.so.signed | sed -n "s/mrenclave=//p" > mrenclave.txt
 
 # Build CCF app
 COPY ./app /tmp/app/
@@ -39,8 +32,7 @@ RUN mkdir /tmp/app-build && \
     ninja && ninja install
 
 # Save MRENCLAVE
-RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.enclave.so.signed > oesign.dump && \
-    awk '/^mrenclave=/' oesign.dump | sed "s/mrenclave=//" > mrenclave.txt
+RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.enclave.so.signed | sed -n "s/mrenclave=//p" > mrenclave.txt
 
 FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-sgx
 ARG CCF_VERSION

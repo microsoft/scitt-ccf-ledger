@@ -3,11 +3,8 @@ FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
-WORKDIR /usr/src/app/
-
-RUN apt-get update && apt-get install -y libcurl4-openssl-dev
-
 # Component specific to the CCF app
+RUN apt-get update && apt-get install -y libcurl4-openssl-dev
 COPY ./3rdparty/attested-fetch /tmp/attested-fetch/
 RUN mkdir /tmp/attested-fetch-build && \
     cd /tmp/attested-fetch-build && \
