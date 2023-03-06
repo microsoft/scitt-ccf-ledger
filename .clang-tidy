@@ -36,7 +36,7 @@ Checks: >
   -readability-else-after-return,
   -readability-magic-numbers,
   -readability-qualified-auto,
-  -readability-implicit-bool-conversion, # xxx
+  -readability-implicit-bool-conversion,
   -readability-convert-member-functions-to-static,
   -readability-braces-around-statements,
   cert-*,-cert-err58-cpp,
