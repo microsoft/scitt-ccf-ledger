@@ -3,6 +3,8 @@ FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
+WORKDIR /usr/src/app/
+
 RUN apt-get update && apt-get install -y libcurl4-openssl-dev
 
 # Component specific to the CCF app
