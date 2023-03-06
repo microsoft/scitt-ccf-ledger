@@ -106,7 +106,7 @@ namespace scitt::historical
     {
       std::unique_lock<std::mutex> guard(ACTIVE_HANDLES_MUTEX);
       ACTIVE_HANDLES_LRU.set_cull_callback(
-        [&state_cache](ccf::SeqNo key, bool) {
+        [&state_cache](ccf::SeqNo key, bool value) {
           SCITT_INFO("Dropping cached transaction {}", key);
           state_cache.drop_cached_states(key);
         });

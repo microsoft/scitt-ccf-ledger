@@ -9,9 +9,9 @@
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/endpoint_context.h>
+#include <ctime>
 #include <functional>
 #include <regex>
-#include <time.h>
 
 namespace scitt
 {
@@ -30,7 +30,7 @@ namespace scitt
     client_request_id = std::nullopt;
   }
 
-  int diff_timespec_ms(
+  long diff_timespec_ms(
     const struct timespec& time0, const struct timespec& time1)
   {
     return (time1.tv_sec - time0.tv_sec) * 1000 +

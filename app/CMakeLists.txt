@@ -156,15 +156,15 @@ if (BUILD_TESTS)
     http_parser.host
   )
   target_include_directories(
-    unit_tests PRIVATE
-    src
-    unit-tests
+    unit_tests PRIVATE src unit-tests
+  )
+  target_include_directories(
+    unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
 
     # openssl_wrappers depends on ds/x509_time_fmt.h
-    ${CCF_DIR}/include/ccf/_private
-  )
+    ${CCF_DIR}/include/ccf/_private)
 
   include(GoogleTest)
   gtest_discover_tests(unit_tests)

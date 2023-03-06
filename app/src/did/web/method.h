@@ -58,13 +58,13 @@ namespace scitt::did::web
   class DidWebResolver : public MethodResolver
   {
   public:
-    std::string_view get_method_prefix() const
+    std::string_view get_method_prefix() const override
     {
       return DID_WEB_PREFIX;
     }
 
     DidResolutionResult resolve(
-      const Did& did, const DidResolutionOptions& options) const
+      const Did& did, const DidResolutionOptions& options) const override
     {
       if (!options.did_web_options.has_value())
       {

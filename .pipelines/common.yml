@@ -22,14 +22,21 @@ parameters:
   - name: FunctionalTestArguments
     type: string
     default: ''
+  - name: RunTests
+    type: boolean
+    default: true
   - name: PublishPerfResults
     type: boolean
     default: false
+  - name: InstallPackages
+    type: list
+    default: []
 jobs:
   - job: ${{ parameters.Name }}
     displayName: ${{ parameters.DisplayName }}
     variables:
       PLATFORM: ${{ parameters.Platform }}
+      CXXFLAGS: -ferror-limit=0
       ${{ insert }}: ${{ parameters.Environment }}
 
     container: ${{ parameters.Platform }}
@@ -42,6 +49,10 @@ jobs:
         fetchDepth: 0
         clean: true
         lfs: false
+
+      - script: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ join(" ", parameters.InstallPackages) }})
 
       - ${{ if parameters.BuildCCF }}:
         - template: ccf.yml
@@ -68,21 +79,19 @@ jobs:
             path: $(Build.ArtifactStagingDirectory)/${{ parameters.ImageFilename }}
 
       - ${{ if eq(parameters.Variant, 'Local') }}:
-        - script: |
-            sudo apt-get install -y faketime
-
         - script: ./build.sh
           displayName: Build (local)
           env:
             ${{ if eq(parameters.Platform, 'SGX') }}:
               BUILD_TESTS: OFF
 
-        - ${{ if ne(parameters.Platform, 'SGX') }}:
+        - ${{ if and(parameters.RunTests, ne(parameters.Platform, 'SGX')) }}:
           - script: ./run_unit_tests.sh
             displayName: Run Unit tests
 
-      - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
-        displayName: Run Functional Tests
+      - ${{ if parameters.RunTests }}:
+        - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
+          displayName: Run Functional Tests
 
       - ${{ if parameters.PublishPerfResults }}:
         - task: PublishPipelineArtifact@1

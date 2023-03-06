@@ -12,6 +12,7 @@ BUILD_TESTS=${BUILD_TESTS:-ON}
 BUILD_DIR=${BUILD_DIR:-app}
 CC=${CC:-clang-10}
 CXX=${CXX:-clang++-10}
+CLANG_TIDY=${CLANG_TIDY:-}
 
 git submodule sync
 git submodule update --init --recursive
@@ -58,6 +59,8 @@ CC="$CC" CXX="$CXX" \
     -DBUILD_TESTS="${BUILD_TESTS}" \
     -DLVI_MITIGATIONS=OFF \
     -DCMAKE_INSTALL_PREFIX=$install_dir \
+    -DCMAKE_C_CLANG_TIDY=${CLANG_TIDY} \
+    -DCMAKE_CXX_CLANG_TIDY=${CLANG_TIDY} \
     "$root_dir/app"
 
 ninja --verbose
