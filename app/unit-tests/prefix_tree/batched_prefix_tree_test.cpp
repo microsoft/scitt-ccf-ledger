@@ -12,7 +12,7 @@
 using namespace scitt::pt;
 namespace
 {
-  static constexpr size_t INDEX_SIZE = 2;
+  constexpr size_t INDEX_SIZE = 2;
   typedef bitvector<INDEX_SIZE> index_t;
   typedef batched_prefix_tree<
     uint64_t,
@@ -81,6 +81,7 @@ namespace
       }
       else
       {
+        hash(false);
         return {flushed_upper_bound, hash(false)};
       }
     }
@@ -91,7 +92,7 @@ namespace
    */
   struct Submit : public rc::state::Command<Model, tree_t>
   {
-    explicit Submit() : leaf(*rc::gen::arbitrary<tree_t::leaf_t>()) {}
+    explicit Submit() : leaf(*rc::gen::arbitrary<tree_t::leaf_t>()) = default;
 
     void run(const Model& model, tree_t& tree) const override
     {

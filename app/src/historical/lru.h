@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 #pragma once
 
+#include <cstddef>
 #include <list>
+#include <functional>
 #include <map>
 
 /**

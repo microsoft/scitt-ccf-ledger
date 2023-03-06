@@ -29,7 +29,7 @@ parameters:
     type: boolean
     default: false
   - name: InstallPackages
-    type: list
+    type: object
     default: []
 jobs:
   - job: ${{ parameters.Name }}
@@ -52,7 +52,7 @@ jobs:
 
       - script: |
           sudo apt-get update
-          sudo apt-get install -y ${{ join(" ", parameters.InstallPackages) }})
+          sudo apt-get install -y ${{ join(' ', parameters.InstallPackages) }})
 
       - ${{ if parameters.BuildCCF }}:
         - template: ccf.yml

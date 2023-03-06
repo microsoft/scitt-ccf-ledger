@@ -14,7 +14,7 @@ using namespace scitt::pt;
 
 namespace
 {
-  static constexpr size_t INDEX_SIZE = 2;
+  constexpr size_t INDEX_SIZE = 2;
   typedef prefix_tree<uint64_t, crypto::Sha256Hash, INDEX_SIZE> tree_t;
 
   RC_GTEST_PROP(PrefixTreeTest, BatchInsertIsEquivalent, ())
