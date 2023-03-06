@@ -14,7 +14,7 @@
 
 namespace scitt
 {
-  GetServiceParameters::Out certificate_to_service_parameters(
+  static GetServiceParameters::Out certificate_to_service_parameters(
     const std::vector<uint8_t>& certificate_der)
   {
     auto service_id = crypto::Sha256Hash(certificate_der).hex_str();
@@ -30,7 +30,7 @@ namespace scitt
     return out;
   }
 
-  did::DidVerificationMethod certificate_to_verification_method(
+  static did::DidVerificationMethod certificate_to_verification_method(
     std::string_view service_identifier,
     const std::vector<uint8_t>& certificate_der)
   {
@@ -109,7 +109,7 @@ namespace scitt
 
   namespace endpoints
   {
-    GetServiceParameters::Out get_service_parameters(
+    static GetServiceParameters::Out get_service_parameters(
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
@@ -118,7 +118,7 @@ namespace scitt
       return certificate_to_service_parameters(service_cert_der);
     }
 
-    GetHistoricServiceParameters::Out get_historic_service_parameters(
+    static GetHistoricServiceParameters::Out get_historic_service_parameters(
       const std::shared_ptr<ServiceCertificateIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
@@ -128,7 +128,7 @@ namespace scitt
       return out;
     }
 
-    Configuration get_configuration(
+    static Configuration get_configuration(
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       return ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
@@ -136,7 +136,7 @@ namespace scitt
         .value_or(Configuration{});
     };
 
-    GetVersion::Out get_version(
+    static GetVersion::Out get_version(
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       GetVersion::Out out;
@@ -144,7 +144,7 @@ namespace scitt
       return out;
     };
 
-    did::DidDocument get_did_document(
+    static did::DidDocument get_did_document(
       const std::shared_ptr<ServiceCertificateIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
@@ -167,7 +167,7 @@ namespace scitt
      * This endpoint isn't meant to be used in production. It is only available
      * to help integration tests that manipulate the service's clock.
      */
-    time_t get_time(
+    static time_t get_time(
       ccf::BaseEndpointRegistry& registry,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
@@ -183,7 +183,7 @@ namespace scitt
     }
   }
 
-  void register_service_endpoints(
+  static void register_service_endpoints(
     ccfapp::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
   {
     using namespace std::placeholders;

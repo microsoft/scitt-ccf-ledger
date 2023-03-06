@@ -41,10 +41,10 @@ namespace scitt::historical
   // TODO: move this to constants.h and describe how it influences memory
   // consumption
   constexpr size_t MAX_ACTIVE_HANDLES = 100;
-  static ActiveHandlesLRU ACTIVE_HANDLES_LRU(MAX_ACTIVE_HANDLES);
-  static std::mutex ACTIVE_HANDLES_MUTEX;
+  inline ActiveHandlesLRU ACTIVE_HANDLES_LRU(MAX_ACTIVE_HANDLES);
+  inline std::mutex ACTIVE_HANDLES_MUTEX;
 
-  ccf::TxID get_tx_id_from_request_path(EndpointContext& ctx)
+  static ccf::TxID get_tx_id_from_request_path(EndpointContext& ctx)
   {
     auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
 
@@ -58,7 +58,7 @@ namespace scitt::historical
     return tx_id.value();
   }
 
-  StatePtr get_historical_state(
+  static StatePtr get_historical_state(
     AbstractStateCache& state_cache,
     const CheckHistoricalTxStatus& available,
     const TxIDExtractor& extractor,
@@ -132,7 +132,7 @@ namespace scitt::historical
     return historical_state;
   }
 
-  EndpointFunction adapter(
+  static EndpointFunction adapter(
     const HandleHistoricalQuery& f,
     AbstractStateCache& state_cache,
     const CheckHistoricalTxStatus& available,
@@ -154,7 +154,7 @@ namespace scitt::historical
    * Because the signatures are incompatible, the two adapaters don't natively
    * compose. This combined adapter may be used instead.
    */
-  EndpointFunction json_adapter(
+  static EndpointFunction json_adapter(
     const HandleJsonHistoricalQuery& f,
     AbstractStateCache& state_cache,
     const CheckHistoricalTxStatus& available,

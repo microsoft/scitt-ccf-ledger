@@ -34,7 +34,7 @@ namespace scitt
     std::optional<AsynchronousOperation> asynchronous_operation;
   };
 
-  AppData& get_app_data(const std::shared_ptr<ccf::RpcContext>& ctx)
+  static AppData& get_app_data(const std::shared_ptr<ccf::RpcContext>& ctx)
   {
     auto user_data = static_cast<AppData*>(ctx->get_user_data());
     if (user_data != nullptr)

@@ -387,7 +387,7 @@ namespace scitt
 
   namespace endpoints
   {
-    GetAllOperations::Out get_all_operations(
+    static GetAllOperations::Out get_all_operations(
       const std::shared_ptr<OperationsIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
@@ -397,7 +397,7 @@ namespace scitt
       };
     }
 
-    GetOperation::Out get_operation(
+    static GetOperation::Out get_operation(
       const std::shared_ptr<OperationsIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
@@ -423,7 +423,7 @@ namespace scitt
      * error are recorded in the operations table. The error details will be
      * returned to future clients polling for the operation's status.
      */
-    auto post_operation_callback(
+    static auto post_operation_callback(
       OperationCallback& callback,
       ccf::endpoints::EndpointContext& ctx,
       ccf::historical::StatePtr state,
@@ -448,9 +448,13 @@ namespace scitt
       catch (const HTTPError& e)
       {
         if (e.code == errors::InternalError)
+        {
           SCITT_FAIL("Callback error code={} {}", e.code, e.what());
+        }
         else
+        {
           SCITT_INFO("Callback error code={}", e.code);
+        }
 
         auto operations_table =
           ctx.tx.template rw<OperationsTable>(OPERATIONS_TABLE);
@@ -483,7 +487,7 @@ namespace scitt
     }
   }
 
-  void register_operations_endpoints(
+  static void register_operations_endpoints(
     ccfapp::AbstractNodeContext& context,
     ccf::BaseEndpointRegistry& registry,
     ccf::historical::CheckHistoricalTxStatus is_tx_committed,
@@ -545,7 +549,7 @@ namespace scitt
    * This works even if cchost was given port 0 in its configuration, as it
    * will have updated the node information after the port is bound.
    */
-  std::string get_bind_address(
+  static std::string get_bind_address(
     ccfapp::AbstractNodeContext& context, kv::ReadOnlyTx& tx)
   {
     auto nodes = tx.ro<ccf::Nodes>(ccf::Tables::NODES);
@@ -587,7 +591,7 @@ namespace scitt
    * asynchronous operation, and will be available to the handler when the
    * background process completes and invokes the callback URL.
    */
-  void start_asynchronous_operation(
+  static void start_asynchronous_operation(
     timespec current_time,
     ccfapp::AbstractNodeContext& node_context,
     ccf::endpoints::EndpointContext& endpoint_context,
@@ -616,7 +620,7 @@ namespace scitt
   /**
    * Mark this transaction as having executed a synchronous operation.
    */
-  void record_synchronous_operation(timespec current_time, kv::Tx& tx)
+  static void record_synchronous_operation(timespec current_time, kv::Tx& tx)
   {
     auto operations_table = tx.template rw<OperationsTable>(OPERATIONS_TABLE);
     operations_table->put(OperationLog{
@@ -647,7 +651,7 @@ namespace scitt
    * the erroneous status code.
    *
    */
-  void operation_locally_committed_func(
+  static void operation_locally_committed_func(
     ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
   {
     std::string tx_str = tx_id.to_str();

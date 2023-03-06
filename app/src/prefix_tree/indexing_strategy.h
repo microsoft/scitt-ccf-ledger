@@ -23,7 +23,7 @@ namespace scitt
    * It is defined as sha256(cbor_encode([ issuer, feed ])), where cbor_encode
    * uses canonical encoding, and issue and feed are text strings.
    */
-  pt::bitvector<32> hash_key(std::string_view issuer, std::string_view feed)
+  static pt::bitvector<32> hash_key(std::string_view issuer, std::string_view feed)
   {
     cbor::hasher hasher;
     hasher.open_array(2);
@@ -38,7 +38,7 @@ namespace scitt
    * This is defined as sha256(index || digest), where digest is the hash of the
    * COSE TBS bytes of the entry.
    */
-  crypto::Sha256Hash hash_leaf(
+  static crypto::Sha256Hash hash_leaf(
     pt::bitvector<32> index, const crypto::Sha256Hash& digest)
   {
     auto h = crypto::make_incremental_sha256();

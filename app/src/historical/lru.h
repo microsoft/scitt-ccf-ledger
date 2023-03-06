@@ -3,8 +3,8 @@
 #pragma once
 
 #include <cstddef>
-#include <list>
 #include <functional>
+#include <list>
 #include <map>
 
 /**

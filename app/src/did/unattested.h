@@ -35,7 +35,7 @@ namespace scitt::did
     {}
   };
 
-  DidResolutionResult verify_unattested_resolution(
+  static DidResolutionResult verify_unattested_resolution(
     const std::string& did,
     const std::string& nonce,
     const UnattestedResolution& resolution)

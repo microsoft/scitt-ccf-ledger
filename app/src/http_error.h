@@ -60,9 +60,13 @@ namespace scitt
     static HTTPError::Headers make_headers(std::optional<uint32_t> retry_after)
     {
       if (retry_after)
+      {
         return {{"Retry-After", std::to_string(retry_after.value())}};
+      }
       else
+      {
         return {};
+      }
     }
   };
 
@@ -91,9 +95,14 @@ namespace scitt
       catch (const HTTPError& e)
       {
         if (e.code == errors::InternalError)
+        {
           SCITT_FAIL("Code={} {}", e.code, e.what());
+        }
         else
+        {
           SCITT_INFO("Code={}", e.code);
+        }
+
         ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
         for (const auto& [header_name, header_value] : e.headers)
         {
@@ -112,7 +121,7 @@ namespace scitt
    * Create an adapter around an existing EndpointFunction to handle thrown
    * HTTPError exceptions.
    */
-  ccf::endpoints::EndpointFunction error_adapter(
+  static ccf::endpoints::EndpointFunction error_adapter(
     ccf::endpoints::EndpointFunction fn)
   {
     return generic_error_adapter<
@@ -120,7 +129,7 @@ namespace scitt
       ccf::endpoints::EndpointContext>(fn);
   }
 
-  ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
+  static ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
     ccf::endpoints::ReadOnlyEndpointFunction fn)
   {
     return generic_error_adapter<
@@ -128,7 +137,7 @@ namespace scitt
       ccf::endpoints::ReadOnlyEndpointContext>(fn);
   }
 
-  ccf::endpoints::CommandEndpointFunction error_command_adapter(
+  static ccf::endpoints::CommandEndpointFunction error_command_adapter(
     ccf::endpoints::CommandEndpointFunction fn)
   {
     return generic_error_adapter<

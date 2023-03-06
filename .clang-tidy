@@ -1,10 +1,8 @@
 # Some of these we should fix:
-# - misc-definitions-in-headers
 # - misc-non-private-member-variables-in-classes
 # - performance-move-const-arg
 # - performance-unnecessary-value-param
 # - readability-braces-around-statements
-# - readability-else-after-return
 # - readability-implicit-bool-conversion
 # - readability-qualified-auto
 #
@@ -12,34 +10,33 @@
 Checks: >
   -*,
   bugprone-*,
+  cert-*,
+  -cert-err58-cpp,
   clang-analyzer-*,
   concurrency-*,
   misc-*,
-  -misc-unused-parameters,
   -misc-non-private-member-variables-in-classes,
-  -misc-definitions-in-headers,
+  -misc-unused-parameters,
   modernize-*,
-  -modernize-use-trailing-return-type,
-  -modernize-use-emplace,
-  -modernize-avoid-c-arrays,
-  -modernize-use-nullptr,
-  -modernize-use-nodiscard,
   -modernize-avoid-bind,
-  -modernize-use-using,
+  -modernize-avoid-c-arrays,
   -modernize-pass-by-value,
   -modernize-use-auto,
+  -modernize-use-emplace,
+  -modernize-use-nodiscard,
+  -modernize-use-nullptr,
+  -modernize-use-trailing-return-type,
+  -modernize-use-using,
   performance-*,
-  -performance-unnecessary-value-param,
   -performance-move-const-arg,
+  -performance-unnecessary-value-param,
   portability-*,
   readability-*,
+  -readability-convert-member-functions-to-static,
   -readability-else-after-return,
+  -readability-implicit-bool-conversion,
   -readability-magic-numbers,
   -readability-qualified-auto,
-  -readability-implicit-bool-conversion,
-  -readability-convert-member-functions-to-static,
-  -readability-braces-around-statements,
-  cert-*,-cert-err58-cpp,
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: 'app/.*'

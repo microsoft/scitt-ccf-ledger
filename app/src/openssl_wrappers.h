@@ -108,7 +108,9 @@ namespace scitt
         p(ptr, dtor)
       {
         if (check_null)
+        {
           CHECKNULL(p.get());
+        }
       }
       /// Type cast to underlying pointer
       operator T*()
