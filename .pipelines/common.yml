@@ -52,7 +52,7 @@ jobs:
 
       - script: |
           sudo apt-get update
-          sudo apt-get install -y ${{ join(' ', parameters.InstallPackages) }})
+          sudo apt-get install -y ${{ join(' ', parameters.InstallPackages) }}
 
       - ${{ if parameters.BuildCCF }}:
         - template: ccf.yml
