@@ -15,6 +15,7 @@ RUN mkdir /tmp/attested-fetch-build && \
     ninja && ninja install
 
 # Save MRENCLAVE
+WORKDIR /usr/src/app/attested-fetch
 RUN /opt/openenclave/bin/oesign dump -e libafetch.enclave.so.signed | sed -n "s/mrenclave=//p" > mrenclave.txt
 
 # Build CCF app
@@ -32,6 +33,7 @@ RUN mkdir /tmp/app-build && \
     ninja && ninja install
 
 # Save MRENCLAVE
+WORKDIR /usr/src/app
 RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.enclave.so.signed | sed -n "s/mrenclave=//p" > mrenclave.txt
 
 FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-sgx
