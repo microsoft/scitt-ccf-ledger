@@ -10,6 +10,7 @@ COPY ./3rdparty/attested-fetch /tmp/attested-fetch/
 RUN mkdir /tmp/attested-fetch-build && \
     cd /tmp/attested-fetch-build && \
     CC="/opt/oe_lvi/clang-10" CXX="/opt/oe_lvi/clang++-10" cmake -GNinja \
+    -DCOMPILE_TARGET="sgx" \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app/attested-fetch \
     /tmp/attested-fetch && \
