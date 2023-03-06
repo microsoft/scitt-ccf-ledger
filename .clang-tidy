@@ -1,5 +1,14 @@
 # Some of these we should fix:
 # - misc-definitions-in-headers
+# - misc-non-private-member-variables-in-classes
+# - performance-move-const-arg
+# - performance-unnecessary-value-param
+# - readability-braces-around-statements
+# - readability-else-after-return
+# - readability-implicit-bool-conversion
+# - readability-qualified-auto
+#
+# The others are a bit more subjective and not really worth doing anything about.
 Checks: >
   -*,
   bugprone-*,
@@ -27,7 +36,7 @@ Checks: >
   -readability-else-after-return,
   -readability-magic-numbers,
   -readability-qualified-auto,
-  -readability-implicit-bool-conversion,
+  -readability-implicit-bool-conversion, # xxx
   -readability-convert-member-functions-to-static,
   -readability-braces-around-statements,
   cert-*,-cert-err58-cpp,

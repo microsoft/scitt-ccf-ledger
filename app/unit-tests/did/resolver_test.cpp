@@ -10,7 +10,6 @@
 
 using namespace scitt::did;
 using ::testing::_;
-using ::testing::StrictMock;
 
 namespace
 {

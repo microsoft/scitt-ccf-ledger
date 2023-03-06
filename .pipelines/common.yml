@@ -36,8 +36,11 @@ jobs:
     displayName: ${{ parameters.DisplayName }}
     variables:
       PLATFORM: ${{ parameters.Platform }}
-      CXXFLAGS: -ferror-limit=0
       ${{ insert }}: ${{ parameters.Environment }}
+
+      # These make CI print all the errors, rather than stopping early.
+      CXXFLAGS: -ferror-limit=0
+      NINJA_FLAGS: -k 0
 
     container: ${{ parameters.Platform }}
     ${{ if parameters.Pool }}:

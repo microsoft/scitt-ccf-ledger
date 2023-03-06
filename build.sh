@@ -13,6 +13,7 @@ BUILD_DIR=${BUILD_DIR:-app}
 CC=${CC:-clang-10}
 CXX=${CXX:-clang++-10}
 CLANG_TIDY=${CLANG_TIDY:-}
+NINJA_FLAGS=${NINJA_FLAGS:-}
 
 git submodule sync
 git submodule update --init --recursive
@@ -28,8 +29,8 @@ if [ "$PLATFORM" = "sgx" ]; then
     CC="$CC" CXX="$CXX" cmake -GNinja -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
         -DCMAKE_INSTALL_PREFIX=$install_dir \
         "$root_dir/3rdparty/attested-fetch"
-    ninja --verbose
-    ninja install
+    ninja ${NINJA_FLAGS} --verbose
+    ninja ${NINJA_FLAGS} install
     /opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed > oesign.dump && \
         awk '/^mrenclave=/' oesign.dump | sed "s/mrenclave=//" > mrenclave.txt
     ATTESTED_FETCH_MRENCLAVE_HEX=$(<mrenclave.txt)
@@ -63,6 +64,6 @@ CC="$CC" CXX="$CXX" \
     -DCMAKE_CXX_CLANG_TIDY=${CLANG_TIDY} \
     "$root_dir/app"
 
-ninja --verbose
-ninja install
+ninja ${NINJA_FLAGS} --verbose
+ninja ${NINJA_FLAGS} install
 popd
