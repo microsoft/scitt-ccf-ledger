@@ -136,10 +136,10 @@ namespace scitt
   };
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(
-    PostOperationCallback<did::web::ResolutionCallbackData>::In);
+    PostOperationCallback<did::AttestedResolution>::In);
   DECLARE_JSON_REQUIRED_FIELDS(
-    PostOperationCallback<did::web::ResolutionCallbackData>::In);
+    PostOperationCallback<did::AttestedResolution>::In);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    PostOperationCallback<did::web::ResolutionCallbackData>::In, result);
+    PostOperationCallback<did::AttestedResolution>::In, result);
 
 } // namespace scitt

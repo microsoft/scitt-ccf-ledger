@@ -25,15 +25,18 @@ namespace scitt::did
 {
   enum class EvidenceFormat
   {
-    ATTESTED_FETCH_OE_SGX_ECDSA_V2 = 0
+    ATTESTED_FETCH_OE_SGX_ECDSA_V2 = 0,
+    ATTESTED_FETCH_VIRTUAL = 1,
   };
 
-  std::string to_string(EvidenceFormat format)
+  static std::string to_string(EvidenceFormat format)
   {
     switch (format)
     {
       case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2:
         return "ATTESTED_FETCH_OE_SGX_ECDSA_V2";
+      case EvidenceFormat::ATTESTED_FETCH_VIRTUAL:
+        return "ATTESTED_FETCH_VIRTUAL";
       default:
         throw std::runtime_error("Unknown evidence format");
     }
@@ -41,22 +44,31 @@ namespace scitt::did
 
   DECLARE_JSON_ENUM(
     EvidenceFormat,
-    {{EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2,
-      "ATTESTED_FETCH_OE_SGX_ECDSA_V2"}});
+    {
+      {
+        EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2,
+        "ATTESTED_FETCH_OE_SGX_ECDSA_V2",
+      },
+      {
+        EvidenceFormat::ATTESTED_FETCH_VIRTUAL,
+        "ATTESTED_FETCH_VIRTUAL",
+      },
+    });
 
   struct AttestedResolution
   {
     EvidenceFormat format;
-    std::string evidence;
-    std::string endorsements;
-    std::string data;
+    std::vector<uint8_t> data;
+
+    std::optional<std::vector<uint8_t>> evidence;
+    std::optional<std::vector<uint8_t>> endorsements;
 
     bool operator==(const AttestedResolution& other) const = default;
   };
 
-  DECLARE_JSON_TYPE(AttestedResolution);
-  DECLARE_JSON_REQUIRED_FIELDS(
-    AttestedResolution, format, evidence, endorsements, data);
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(AttestedResolution);
+  DECLARE_JSON_REQUIRED_FIELDS(AttestedResolution, format, data);
+  DECLARE_JSON_OPTIONAL_FIELDS(AttestedResolution, evidence, endorsements);
 
   // "error" field within "data" in AttestedResolution for
   // ATTESTED_FETCH_OE_SGX_ECDSA_V2
@@ -71,7 +83,7 @@ namespace scitt::did
   struct AttestedFetchResult
   {
     int64_t status;
-    std::string body;
+    std::vector<uint8_t> body;
     std::vector<std::string> certs;
 
     bool operator==(const AttestedFetchResult&) const = default;
@@ -98,40 +110,26 @@ namespace scitt::did
     AttestedResolutionError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
-  DidResolutionResult verify_attested_resolution(
-    const std::string& did,
-    const std::string& nonce,
-    ccf::CACertBundlePEMs::ReadOnlyHandle* ca_cert_bundles,
+  /**
+   * Verify the attestation found in a ATTESTED_FETCH_OE_SGX_ECDSA_V2 resolution
+   * report.
+   */
+  static void verify_openenclave_attestation(
     const AttestedResolution& resolution)
   {
-    // Check that the evidence format is supported.
-    // For now, only a single format is supported.
-    if (resolution.format != EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2)
+    if (
+      !resolution.evidence.has_value() || !resolution.endorsements.has_value())
     {
       throw AttestedResolutionError(
-        fmt::format("Unsupported evidence format: {}", resolution.format));
-    }
-
-    // Decode Base64-encoded evidence and endorsements.
-    std::vector<uint8_t> evidence;
-    std::vector<uint8_t> endorsements;
-    try
-    {
-      evidence = crypto::raw_from_b64(resolution.evidence);
-      endorsements = crypto::raw_from_b64(resolution.endorsements);
-    }
-    catch (const std::exception& e)
-    {
-      throw AttestedResolutionError(
-        "Evidence and/or endorsements are not valid Base64-encoded data.");
+        "Evidence or endorsements missing from attestation");
     }
 
     // Verify evidence and extract claims.
     oe::VerifyEvidenceResult evidence_result;
     try
     {
-      evidence_result =
-        oe::verify_evidence(oe::OE_UUID_SGX_ECDSA, evidence, endorsements);
+      evidence_result = oe::verify_evidence(
+        oe::OE_UUID_SGX_ECDSA, *resolution.evidence, *resolution.endorsements);
     }
     catch (const std::exception& e)
     {
@@ -149,21 +147,10 @@ namespace scitt::did
       throw AttestedResolutionError("MRENCLAVE does not match expected value");
     }
 
-    // Decode Base64-encoded data.
-    std::vector<uint8_t> data;
-    try
-    {
-      data = crypto::raw_from_b64(resolution.data);
-    }
-    catch (const std::exception& e)
-    {
-      throw AttestedResolutionError("Data is not valid Base64-encoded.");
-    }
-
     // Match sgx_report_data custom claim against hash of format and data.
     auto sgx_report_data = evidence_result.custom_claims.at("sgx_report_data");
     auto format_hash = crypto::Sha256Hash(to_string(resolution.format));
-    auto data_hash = crypto::Sha256Hash(data);
+    auto data_hash = crypto::Sha256Hash(resolution.data);
     auto computed_sgx_report_data = crypto::Sha256Hash(format_hash, data_hash);
     auto computed_sgx_report_data_vec = std::vector<uint8_t>(
       computed_sgx_report_data.h.begin(), computed_sgx_report_data.h.end());
@@ -172,18 +159,54 @@ namespace scitt::did
       throw AttestedResolutionError(
         "SGX report data does not match computed hash");
     }
+  }
+
+  static DidResolutionResult verify_attested_resolution(
+    const std::string& did,
+    const std::string& nonce,
+    ccf::CACertBundlePEMs::ReadOnlyHandle* ca_cert_bundles,
+    const AttestedResolution& resolution)
+  {
+    // Check that the evidence format is supported, and if necessary verify the
+    // attestation report.
+    switch (resolution.format)
+    {
+#ifdef VIRTUAL_ENCLAVE
+      case EvidenceFormat::ATTESTED_FETCH_VIRTUAL:
+        // The "virtual" format comes without any attestation and has no
+        // verifiable security guarantee. We only accept it on virtual
+        // builds, which are considered insecure anyway.
+        break;
+#else
+      case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2:
+        verify_openenclave_attestation(resolution);
+        break;
+#endif
+
+      default:
+        throw AttestedResolutionError(
+          fmt::format("Unsupported evidence format: {}", resolution.format));
+    }
 
     // Parse JSON-encoded data.
     AttestedFetchData fetch_data;
     try
     {
-      fetch_data = nlohmann::json::parse(data).get<AttestedFetchData>();
+      fetch_data =
+        nlohmann::json::parse(resolution.data).get<AttestedFetchData>();
     }
     catch (const std::exception& e)
     {
       throw AttestedResolutionError(
         "Data could not be parsed as JSON according to schema.");
     }
+
+    // Match resolution nonce against KV.
+    if (nonce != fetch_data.nonce)
+    {
+      throw AttestedResolutionError("nonce does not match expected value");
+    }
+
     // Check for an attested error.
     if (fetch_data.error.has_value())
     {
@@ -196,8 +219,9 @@ namespace scitt::did
     {
       throw AttestedResolutionError("No fetch data found.");
     }
+
     int64_t status = fetch_data.result->status;
-    if (status < 200 or status >= 300)
+    if (status < 200 || status >= 300)
     {
       std::string msg =
         fmt::format("DID Resolution failed with status code: {}", status);
@@ -223,28 +247,12 @@ namespace scitt::did
       throw AttestedResolutionError("DID does not match URL");
     }
 
-    // Match resolution nonce against KV.
-    if (nonce != fetch_data.nonce)
-    {
-      throw AttestedResolutionError("nonce does not match expected value");
-    }
-
-    // Decode Base64-encoded HTTP body in data.
-    std::vector<uint8_t> body;
-    try
-    {
-      body = crypto::raw_from_b64(fetch_data.result->body);
-    }
-    catch (const std::exception& e)
-    {
-      throw AttestedResolutionError("HTTP body is not valid Base64-encoded.");
-    }
-
     // Parse HTTP body as DID document.
     DidDocument did_doc;
     try
     {
-      did_doc = nlohmann::json::parse(body).get<did::DidDocument>();
+      did_doc =
+        nlohmann::json::parse(fetch_data.result->body).get<did::DidDocument>();
     }
     catch (const std::exception& e)
     {
@@ -262,13 +270,7 @@ namespace scitt::did
     // Load TLS Root CA certs from KV.
     // TODO: move bundle name to constants and make more specific.
     auto ca_certs = ca_cert_bundles->get("did_web_tls_roots");
-    if (!ca_certs.has_value())
-    {
-      // Internal error, not exposed to client.
-      throw std::runtime_error(
-        "Failed to load TLS Root CA certificates from KV");
-    }
-    auto trusted_vec = split_x509_cert_bundle(*ca_certs);
+    auto trusted_vec = split_x509_cert_bundle(ca_certs.value_or(""));
 
     // Verify TLS certificate chain against Root CAs.
     std::vector<crypto::Pem> chain_vec;
@@ -284,15 +286,24 @@ namespace scitt::did
 
     auto& target_pem = chain_vec[0];
     std::vector<const crypto::Pem*> chain_ptr;
+    chain_ptr.reserve(chain_vec.size() - 1);
     for (auto it = chain_vec.begin() + 1; it != chain_vec.end(); it++)
+    {
       chain_ptr.push_back(&*it);
+    }
+
     std::vector<const crypto::Pem*> trusted_ptr;
+    trusted_ptr.reserve(trusted_vec.size());
     for (auto& pem : trusted_vec)
+    {
       trusted_ptr.push_back(&pem);
+    }
 
     auto verifier = crypto::make_unique_verifier(target_pem);
     if (!verifier->verify_certificate(trusted_ptr, chain_ptr))
+    {
       throw AttestedResolutionError("Certificate chain is invalid");
+    }
 
     DidWebResolutionMetadata did_web_resolution_metadata;
     did_web_resolution_metadata.tls_certs = fetch_data.result->certs;

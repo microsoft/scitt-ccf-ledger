@@ -68,6 +68,12 @@ jobs:
     #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
 
     - if: matrix.language == 'cpp'
+      name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcurl4-openssl-dev
+
+    - if: matrix.language == 'cpp'
       name: Build C++
       run: |
         CMAKE_BUILD_TYPE=Debug PLATFORM=virtual BUILD_TESTS=OFF ./build.sh
