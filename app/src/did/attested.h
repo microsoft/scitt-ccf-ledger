@@ -29,7 +29,7 @@ namespace scitt::did
     ATTESTED_FETCH_VIRTUAL = 1,
   };
 
-  std::string to_string(EvidenceFormat format)
+  static std::string to_string(EvidenceFormat format)
   {
     switch (format)
     {
@@ -114,7 +114,7 @@ namespace scitt::did
    * Verify the attestation found in a ATTESTED_FETCH_OE_SGX_ECDSA_V2 resolution
    * report.
    */
-  void verify_openenclave_attestation(const AttestedResolution& resolution)
+  static void verify_openenclave_attestation(const AttestedResolution& resolution)
   {
     if (
       !resolution.evidence.has_value() || !resolution.endorsements.has_value())
@@ -160,7 +160,7 @@ namespace scitt::did
     }
   }
 
-  DidResolutionResult verify_attested_resolution(
+  static DidResolutionResult verify_attested_resolution(
     const std::string& did,
     const std::string& nonce,
     ccf::CACertBundlePEMs::ReadOnlyHandle* ca_cert_bundles,
@@ -285,15 +285,24 @@ namespace scitt::did
 
     auto& target_pem = chain_vec[0];
     std::vector<const crypto::Pem*> chain_ptr;
+    chain_ptr.reserve(chain_vec.size() - 1);
     for (auto it = chain_vec.begin() + 1; it != chain_vec.end(); it++)
+    {
       chain_ptr.push_back(&*it);
+    }
+
     std::vector<const crypto::Pem*> trusted_ptr;
+    trusted_ptr.reserve(trusted_vec.size());
     for (auto& pem : trusted_vec)
+    {
       trusted_ptr.push_back(&pem);
+    }
 
     auto verifier = crypto::make_unique_verifier(target_pem);
     if (!verifier->verify_certificate(trusted_ptr, chain_ptr))
+    {
       throw AttestedResolutionError("Certificate chain is invalid");
+    }
 
     DidWebResolutionMetadata did_web_resolution_metadata;
     did_web_resolution_metadata.tls_certs = fetch_data.result->certs;
