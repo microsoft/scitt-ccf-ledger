@@ -114,7 +114,8 @@ namespace scitt::did
    * Verify the attestation found in a ATTESTED_FETCH_OE_SGX_ECDSA_V2 resolution
    * report.
    */
-  static void verify_openenclave_attestation(const AttestedResolution& resolution)
+  static void verify_openenclave_attestation(
+    const AttestedResolution& resolution)
   {
     if (
       !resolution.evidence.has_value() || !resolution.endorsements.has_value())
