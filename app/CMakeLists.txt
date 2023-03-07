@@ -152,7 +152,7 @@ if (BUILD_TESTS)
   )
   add_san(unit_tests)
   target_compile_options(unit_tests PUBLIC ${COMPILE_LIBCXX})
-  target_link_libraries(unit_tests
+  target_link_libraries(unit_tests PRIVATE
     GTest::gmock
     rapidcheck
     rapidcheck_gtest
