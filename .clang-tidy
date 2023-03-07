@@ -39,4 +39,4 @@ Checks: >
   -readability-qualified-auto,
 
 WarningsAsErrors: '*'
-HeaderFilterRegex: 'app/.*'
+HeaderFilterRegex: '.*'

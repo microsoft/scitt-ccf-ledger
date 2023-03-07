@@ -9,7 +9,6 @@ PLATFORM=${PLATFORM:-sgx}
 CCF_UNSAFE=${CCF_UNSAFE:-OFF}
 ENABLE_PREFIX_TREE=${ENABLE_PREFIX_TREE:-OFF}
 BUILD_TESTS=${BUILD_TESTS:-ON}
-BUILD_DIR=${BUILD_DIR:-app}
 CC=${CC:-clang-10}
 CXX=${CXX:-clang++-10}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
@@ -45,8 +44,8 @@ else
 fi
 cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
-mkdir -p build/$BUILD_DIR
-pushd build/$BUILD_DIR
+mkdir -p build/app
+pushd build/app
 
 # Note: LVI mitigations are disabled as this is a development build.
 # See docker/ for a non-development build.
