@@ -64,11 +64,12 @@ namespace scitt::cose
   static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
     "io.cncf.notary.expiry";
 
-  static const std::set<std::variant<int64_t, std::string>> NOTARY_HEADER_PARAMS{
-    NOTARY_HEADER_PARAM_SIGNING_SCHEME,
-    NOTARY_HEADER_PARAM_SIGNING_TIME,
-    NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
-    NOTARY_HEADER_PARAM_EXPIRY};
+  static const std::set<std::variant<int64_t, std::string>>
+    NOTARY_HEADER_PARAMS{
+      NOTARY_HEADER_PARAM_SIGNING_SCHEME,
+      NOTARY_HEADER_PARAM_SIGNING_TIME,
+      NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
+      NOTARY_HEADER_PARAM_EXPIRY};
 
   struct COSEDecodeError : public std::runtime_error
   {

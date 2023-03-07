@@ -56,7 +56,8 @@ namespace scitt
     return encoder.finish();
   }
 
-  static std::vector<uint8_t> create_read_receipt_protected_header(ccf::SeqNo seqno)
+  static std::vector<uint8_t> create_read_receipt_protected_header(
+    ccf::SeqNo seqno)
   {
     cbor::encoder encoder;
     QCBOREncode_OpenMap(encoder);

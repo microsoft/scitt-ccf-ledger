@@ -92,7 +92,7 @@ namespace
    */
   struct Submit : public rc::state::Command<Model, tree_t>
   {
-    explicit Submit() : leaf(*rc::gen::arbitrary<tree_t::leaf_t>()) = default;
+    explicit Submit() : leaf(*rc::gen::arbitrary<tree_t::leaf_t>()) {}
 
     void run(const Model& model, tree_t& tree) const override
     {

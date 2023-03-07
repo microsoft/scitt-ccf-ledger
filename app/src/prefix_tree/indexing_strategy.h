@@ -23,7 +23,8 @@ namespace scitt
    * It is defined as sha256(cbor_encode([ issuer, feed ])), where cbor_encode
    * uses canonical encoding, and issue and feed are text strings.
    */
-  static pt::bitvector<32> hash_key(std::string_view issuer, std::string_view feed)
+  static pt::bitvector<32> hash_key(
+    std::string_view issuer, std::string_view feed)
   {
     cbor::hasher hasher;
     hasher.open_array(2);

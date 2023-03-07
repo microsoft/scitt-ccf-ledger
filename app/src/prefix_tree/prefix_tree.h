@@ -690,7 +690,7 @@ namespace scitt::pt
         stack.back().hash = HASH_NODE(prefix, stack.back().hash, last.hash);
       }
 
-      if (stack.size() > 0 && stack.back().length > length)
+      if (!stack.empty() && stack.back().length > length)
       {
         stack.back().length = length;
       }
