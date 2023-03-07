@@ -20,6 +20,7 @@ message(STATUS "ATTESTED_FETCH_MRENCLAVE_HEX=${ATTESTED_FETCH_MRENCLAVE_HEX}")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_PREFIX_TREE "Enable the prefix tree" OFF)
+option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -50,14 +51,23 @@ add_ccf_app(scitt
   INSTALL_LIBS ON
 )
 
+if (COMPILE_TARGET STREQUAL "sgx")
+  set(SCITT_TARGET scitt.enclave)
+elseif (COMPILE_TARGET STREQUAL "virtual")
+  set(SCITT_TARGET scitt.virtual)
+endif ()
+
 # The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
 # -isystem, which silences any warnings in them, which is undesirable for our
 # own code. We manually add them instead to workaround this and make sure -I
 # gets used.
-if (COMPILE_TARGET STREQUAL "sgx")
-  target_include_directories(scitt.enclave PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
-elseif (COMPILE_TARGET STREQUAL "virtual")
-  target_include_directories(scitt.virtual PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
+target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
+
+if (ENABLE_CLANG_TIDY)
+  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-10" "clang-tidy" REQUIRED)
+  set_target_properties(${SCITT_TARGET} PROPERTIES
+    C_CLANG_TIDY "${CLANG_TIDY_EXE}"
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
 endif ()
 
 if (COMPILE_TARGET STREQUAL "sgx")
@@ -142,8 +152,7 @@ if (BUILD_TESTS)
   )
   add_san(unit_tests)
   target_compile_options(unit_tests PUBLIC ${COMPILE_LIBCXX})
-  target_link_libraries(
-    unit_tests PRIVATE
+  target_link_libraries(unit_tests
     GTest::gmock
     rapidcheck
     rapidcheck_gtest
@@ -155,16 +164,20 @@ if (BUILD_TESTS)
     ccfcrypto.host
     http_parser.host
   )
-  target_include_directories(
-    unit_tests PRIVATE src unit-tests
-  )
+
+  target_include_directories(unit_tests PRIVATE src unit-tests)
   target_include_directories(
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
+    ${CCF_DIR}/include/ccf/_private # openssl_wrappers depends on ds/x509_time_fmt.h
+  )
 
-    # openssl_wrappers depends on ds/x509_time_fmt.h
-    ${CCF_DIR}/include/ccf/_private)
+  if (ENABLE_CLANG_TIDY)
+    set_target_properties(unit_tests PROPERTIES
+      C_CLANG_TIDY "${CLANG_TIDY_EXE}"
+      CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+  endif ()
 
   include(GoogleTest)
   gtest_discover_tests(unit_tests)

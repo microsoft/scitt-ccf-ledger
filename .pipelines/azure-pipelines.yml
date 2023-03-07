@@ -111,7 +111,7 @@ stages:
           Environment:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
-            CLANG_TIDY: clang-tidy-10
+            ENABLE_CLANG_TIDY: ON
           InstallPackages: [ clang-tidy-10 ]
 
       - job: format
