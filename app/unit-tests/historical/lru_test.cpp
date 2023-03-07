@@ -12,6 +12,9 @@
 #include <unordered_map>
 #include <vector>
 
+// Defining this in the std namespace is bad form, but it seems to be required
+// because RapidCheck uses ADL to find showValue.
+// NOLINTNEXTLINE(cert-dcl58-cpp)
 namespace std
 {
   template <typename T>

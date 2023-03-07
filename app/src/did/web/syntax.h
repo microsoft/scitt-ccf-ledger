@@ -14,7 +14,7 @@ namespace scitt::did::web
   const std::string DID_WEB_DOC_URL_SUFFIX = "/did.json";
   const std::string ENCODED_COLON = "%3A";
 
-  void check_did_is_did_web(const std::string& did)
+  static void check_did_is_did_web(const std::string& did)
   {
     if (!did.starts_with(DID_WEB_PREFIX))
     {
@@ -23,7 +23,7 @@ namespace scitt::did::web
     }
   }
 
-  std::string get_did_web_doc_url_from_did(const std::string& did)
+  static std::string get_did_web_doc_url_from_did(const std::string& did)
   {
     check_did_is_did_web(did);
 
@@ -59,7 +59,7 @@ namespace scitt::did::web
     }
   }
 
-  std::string get_did_from_did_web_doc_url(const std::string& url)
+  static std::string get_did_from_did_web_doc_url(const std::string& url)
   {
     // remove cache-busting query param
     auto i = url.find('?');

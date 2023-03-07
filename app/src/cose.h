@@ -35,7 +35,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
 
-  std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
+  static const std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
     COSE_HEADER_PARAM_CRIT,
     COSE_HEADER_PARAM_CTY,
@@ -48,7 +48,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
 
-  std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
+  static const std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
     COSE_HEADER_PARAM_ISSUER,
     COSE_HEADER_PARAM_FEED,
     COSE_HEADER_PARAM_SCITT_RECEIPTS,
@@ -64,11 +64,12 @@ namespace scitt::cose
   static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
     "io.cncf.notary.expiry";
 
-  std::set<std::variant<int64_t, std::string>> NOTARY_HEADER_PARAMS{
-    NOTARY_HEADER_PARAM_SIGNING_SCHEME,
-    NOTARY_HEADER_PARAM_SIGNING_TIME,
-    NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
-    NOTARY_HEADER_PARAM_EXPIRY};
+  static const std::set<std::variant<int64_t, std::string>>
+    NOTARY_HEADER_PARAMS{
+      NOTARY_HEADER_PARAM_SIGNING_SCHEME,
+      NOTARY_HEADER_PARAM_SIGNING_TIME,
+      NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
+      NOTARY_HEADER_PARAM_EXPIRY};
 
   struct COSEDecodeError : public std::runtime_error
   {
@@ -202,16 +203,12 @@ namespace scitt::cose
     // parameter in the context of a profile.
     bool is_known(
       const std::variant<int64_t, std::string>& label,
-      std::set<std::variant<int64_t, std::string>> profile_parameters) const
+      const std::set<std::variant<int64_t, std::string>>& profile_parameters)
+      const
     {
-      if (
-        BASIC_HEADER_PARAMS.contains(label) ||
+      return BASIC_HEADER_PARAMS.contains(label) ||
         EXTRA_HEADER_PARAMS.contains(label) ||
-        profile_parameters.contains(label))
-      {
-        return true;
-      }
-      return false;
+        profile_parameters.contains(label);
     }
   };
 
@@ -222,7 +219,7 @@ namespace scitt::cose
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
   };
 
-  std::vector<std::vector<uint8_t>> decode_x5chain(
+  static std::vector<std::vector<uint8_t>> decode_x5chain(
     QCBORDecodeContext& ctx, const QCBORItem& x5chain)
   {
     std::vector<std::vector<uint8_t>> parsed;
@@ -281,7 +278,7 @@ namespace scitt::cose
     return parsed;
   }
 
-  ProtectedHeader decode_protected_header(QCBORDecodeContext& ctx)
+  static ProtectedHeader decode_protected_header(QCBORDecodeContext& ctx)
   {
     ProtectedHeader parsed;
 
@@ -486,7 +483,7 @@ namespace scitt::cose
     return parsed;
   }
 
-  UnprotectedHeader decode_unprotected_header(QCBORDecodeContext& ctx)
+  static UnprotectedHeader decode_unprotected_header(QCBORDecodeContext& ctx)
   {
     UnprotectedHeader parsed;
     // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
@@ -531,7 +528,7 @@ namespace scitt::cose
     return parsed;
   }
 
-  std::tuple<ProtectedHeader, UnprotectedHeader> decode_headers(
+  static std::tuple<ProtectedHeader, UnprotectedHeader> decode_headers(
     const std::vector<uint8_t>& cose_sign1)
   {
     QCBORError qcbor_result;
@@ -578,7 +575,7 @@ namespace scitt::cose
    * Returns an array containing the protected headers, the payload and the
    * signature.
    */
-  inline std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
+  static std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
     std::span<const uint8_t> cose_sign1)
   {
     QCBORDecodeContext ctx;
@@ -620,7 +617,7 @@ namespace scitt::cose
    * Beyond the basic verification of key usage and the signature
    * itself, no particular validation of the message is done.
    */
-  void verify(
+  static void verify(
     const std::vector<uint8_t>& cose_sign1,
     const PublicKey& key,
     bool allow_unknown_crit = false)
@@ -701,7 +698,7 @@ namespace scitt::cose
    *     ]
    * ]
    */
-  inline crypto::Sha256Hash create_countersign_tbs_hash(
+  static crypto::Sha256Hash create_countersign_tbs_hash(
     std::span<const uint8_t> cose_sign1,
     std::span<const uint8_t> sign_protected)
   {
@@ -729,7 +726,7 @@ namespace scitt::cose
     return hash.finalise();
   }
 
-  std::vector<uint8_t> embed_receipt(
+  static std::vector<uint8_t> embed_receipt(
     const std::vector<uint8_t>& cose_sign1, const std::vector<uint8_t>& receipt)
   {
     // t_cose doesn't support modifying the unprotected header yet.

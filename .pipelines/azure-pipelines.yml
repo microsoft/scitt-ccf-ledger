@@ -50,6 +50,7 @@ stages:
           Environment:
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
+          InstallPackages: [ faketime ]
 
       - template: common.yml
         parameters:
@@ -59,6 +60,7 @@ stages:
           Environment:
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
+          InstallPackages: [ faketime ]
 
       - template: common.yml
         parameters:
@@ -100,6 +102,18 @@ stages:
           # faketime does not play well with ASAN so don't enable it here.
           FunctionalTestArguments: '--enable-prefix-tree'
 
+      - template: common.yml
+        parameters:
+          Name: clang_tidy
+          DisplayName: Clang tidy
+          Platform: virtual
+          RunTests: false
+          Environment:
+            CMAKE_BUILD_TYPE: Debug
+            ENABLE_PREFIX_TREE: ON
+            ENABLE_CLANG_TIDY: ON
+          InstallPackages: [ clang-tidy-10 ]
+
       - job: format
         displayName: Code Formatting
         container: virtual
@@ -111,20 +125,6 @@ stages:
 
           - script: ./scripts/ci-checks.sh
             displayName: "CI checks"
-            
-      - job: scanbuild
-        displayName: Static Analysis
-        container: virtual
-        steps:
-          - checkout: self
-            submodules: true
-            fetchTags: true
-            fetchDepth: 0
-            clean: true
-            lfs: false
-
-          - script: ./scripts/scan-build.sh
-            displayName: "Scan build"
   
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release

@@ -12,7 +12,7 @@
 using namespace scitt::pt;
 namespace
 {
-  static constexpr size_t SIZE = 4;
+  constexpr size_t SIZE = 4;
 
   // This is equivalent to `cmp == std::partial_ordering::unordered`.
   // Our version of libc++ doesn't implement that operator yet.

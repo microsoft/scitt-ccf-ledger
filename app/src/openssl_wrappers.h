@@ -30,7 +30,7 @@ namespace scitt
      */
 
     /// Returns the error string from an error code
-    inline std::string error_string(int ec)
+    inline std::string error_string(unsigned long ec)
     {
       // ERR_error_string doesn't really expect the code could actually be zero
       // and uses the `static char buf[256]` which is NOT cleaned nor checked
@@ -38,7 +38,7 @@ namespace scitt
       if (ec)
       {
         std::string err(256, '\0');
-        ERR_error_string_n((unsigned long)ec, err.data(), err.size());
+        ERR_error_string_n(ec, err.data(), err.size());
         // Remove any trailing NULs before returning
         err.resize(std::strlen(err.c_str()));
         return err;
@@ -108,7 +108,9 @@ namespace scitt
         p(ptr, dtor)
       {
         if (check_null)
+        {
           CHECKNULL(p.get());
+        }
       }
       /// Type cast to underlying pointer
       operator T*()
@@ -360,8 +362,7 @@ namespace scitt
     struct Unique_EVP_PKEY
       : public Unique_SSL_OBJECT<EVP_PKEY, EVP_PKEY_new, EVP_PKEY_free>
     {
-      using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
-
+      Unique_EVP_PKEY() = default;
       Unique_EVP_PKEY(EVP_PKEY* key) : Unique_SSL_OBJECT(key, EVP_PKEY_free) {}
     };
   }

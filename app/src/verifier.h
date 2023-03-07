@@ -195,16 +195,12 @@ namespace scitt::verifier
           SCITT_INFO("Unknown critical parameter: {}", crit_param);
           throw cose::COSEDecodeError("Unknown parameter found in crit");
         }
-        else
+        else if (!phdr.is_present(crit_param))
         {
-          if (!phdr.is_present(crit_param))
-          {
-            SCITT_INFO(
-              "Critical parameter {} missing from protected header",
-              crit_param);
-            throw cose::COSEDecodeError(
-              "Critial parameter missing from protected header");
-          }
+          SCITT_INFO(
+            "Critical parameter {} missing from protected header", crit_param);
+          throw cose::COSEDecodeError(
+            "Critial parameter missing from protected header");
         }
       }
 

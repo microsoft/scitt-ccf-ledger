@@ -54,7 +54,9 @@ namespace scitt
     ~final_action() noexcept
     {
       if (invoke)
+      {
         f();
+      }
     }
 
     final_action(final_action&& other) noexcept :

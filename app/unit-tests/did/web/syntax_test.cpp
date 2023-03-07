@@ -25,7 +25,7 @@ namespace
     {
       scitt::did::web::check_did_is_did_web(did_dns);
     }
-    catch (std::runtime_error e)
+    catch (const std::runtime_error& e)
     {
       std::string actual_msg = e.what();
       std::string expected_msg = "DID must start with did:web:";

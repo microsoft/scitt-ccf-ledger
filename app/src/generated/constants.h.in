@@ -15,7 +15,7 @@ namespace scitt
 
   const std::string SCITT_VERSION = "@SCITT_VERSION@";
   
-  const std::string ATTESTED_FETCH_MRENCLAVE_HEX = "@ATTESTED_FETCH_MRENCLAVE_HEX@";
+  const std::string ATTESTED_FETCH_MRENCLAVE_HEX = "@ATTESTED_FETCH_MRENCLAVE_HEX@"; // NOLINT(readability-redundant-string-init)
 
   // clang-format on
 }

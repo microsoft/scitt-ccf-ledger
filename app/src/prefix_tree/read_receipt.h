@@ -39,7 +39,7 @@
  */
 namespace scitt
 {
-  std::vector<uint8_t> create_prefix_tree_protected_header(
+  static std::vector<uint8_t> create_prefix_tree_protected_header(
     ::timespec time, ccf::SeqNo upper_bound, const std::string& service_id)
   {
     cbor::encoder encoder;
@@ -56,7 +56,8 @@ namespace scitt
     return encoder.finish();
   }
 
-  std::vector<uint8_t> create_read_receipt_protected_header(ccf::SeqNo seqno)
+  static std::vector<uint8_t> create_read_receipt_protected_header(
+    ccf::SeqNo seqno)
   {
     cbor::encoder encoder;
     QCBOREncode_OpenMap(encoder);
@@ -78,7 +79,7 @@ namespace scitt
    *
    * where root is the hash of the root of the tree.
    */
-  crypto::Sha256Hash create_prefix_tree_tbs_hash(
+  static crypto::Sha256Hash create_prefix_tree_tbs_hash(
     std::span<const uint8_t> protected_headers, const crypto::Sha256Hash& root)
   {
     cbor::hasher hasher;
@@ -89,7 +90,7 @@ namespace scitt
     return hasher.finalise();
   }
 
-  std::vector<uint8_t> create_read_receipt(
+  static std::vector<uint8_t> create_read_receipt(
     std::span<const uint8_t> tree_headers,
     std::span<const uint8_t> leaf_headers,
     const pt::path<>& proof,
@@ -126,7 +127,7 @@ namespace scitt
    *    receipt: ReceiptContents,
    * ]
    */
-  std::vector<uint8_t> create_tree_receipt(
+  static std::vector<uint8_t> create_tree_receipt(
     std::span<const uint8_t> protected_headers,
     const crypto::Sha256Hash& root,
     ccf::ReceiptPtr ccf_receipt)

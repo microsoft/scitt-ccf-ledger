@@ -33,7 +33,7 @@ namespace scitt
    * Create the protected header for the countersignature
    * receipt.
    */
-  std::vector<uint8_t> create_countersign_protected_header(
+  static std::vector<uint8_t> create_countersign_protected_header(
     ::timespec registration_time,
     std::optional<std::string_view> issuer,
     std::optional<std::span<const uint8_t>> kid,
@@ -79,7 +79,7 @@ namespace scitt
    * the nearest value. For example, given a certificate's key using the P521
    * curve, this function returns 66.
    */
-  size_t get_certificate_ecdsa_curve_size(std::span<const uint8_t> der)
+  static size_t get_certificate_ecdsa_curve_size(std::span<const uint8_t> der)
   {
     OpenSSL::Unique_X509 cert(OpenSSL::Unique_BIO(der), false, true);
     OpenSSL::Unique_PKEY pk(X509_get_pubkey(cert), EVP_PKEY_free);
@@ -99,7 +99,7 @@ namespace scitt
    * dependent of it. The encoded signature is written to the given output
    * buffer. The written size is returned.
    */
-  size_t convert_ecdsa_signature(
+  static size_t convert_ecdsa_signature(
     std::span<const uint8_t> signature, size_t curve_size, UsefulBuf out)
   {
     if (out.len < 2 * curve_size)
@@ -146,7 +146,7 @@ namespace scitt
    * ]
    * ```
    */
-  void encode_receipt_contents(
+  static void encode_receipt_contents(
     QCBOREncodeContext* ctx, const ccf::ReceiptPtr& receipt)
   {
     if (receipt->is_signature_transaction())
@@ -208,7 +208,7 @@ namespace scitt
    * ]
    * ```
    */
-  std::vector<uint8_t> serialize_receipt(
+  static std::vector<uint8_t> serialize_receipt(
     const EntryInfo& entry_info, const ccf::ReceiptPtr& ccf_receipt_ptr)
   {
     auto sign_protected = entry_info.sign_protected;

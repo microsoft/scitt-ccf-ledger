@@ -12,7 +12,7 @@
 using namespace scitt::pt;
 namespace
 {
-  static constexpr size_t INDEX_SIZE = 2;
+  constexpr size_t INDEX_SIZE = 2;
   typedef bitvector<INDEX_SIZE> index_t;
   typedef batched_prefix_tree<
     uint64_t,
@@ -81,6 +81,7 @@ namespace
       }
       else
       {
+        hash(false);
         return {flushed_upper_bound, hash(false)};
       }
     }
