@@ -15,12 +15,13 @@ project(scitt
 )
 
 set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
-set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
-message(STATUS "ATTESTED_FETCH_MRENCLAVE_HEX=${ATTESTED_FETCH_MRENCLAVE_HEX}")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_PREFIX_TREE "Enable the prefix tree" OFF)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
+
+set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
+set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path to the DID Web resolver script")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -29,9 +30,9 @@ if (CCF_UNSAFE)
     message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
   endif()
 
-  find_package(ccf_sgx_unsafe REQUIRED)
+  find_package(ccf_sgx_unsafe 3.0.9 REQUIRED)
 else()
-  find_package(ccf_${COMPILE_TARGET} REQUIRED)
+  find_package(ccf_${COMPILE_TARGET} 3.0.9 REQUIRED)
 endif()
 
 if (ENABLE_PREFIX_TREE)

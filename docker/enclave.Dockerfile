@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.7
+ARG CCF_VERSION=3.0.9
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
@@ -51,7 +51,6 @@ COPY --from=builder /usr/src/app/lib/libscitt.enclave.so.signed libscitt.enclave
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY --from=builder /usr/src/app/mrenclave.txt mrenclave.txt
 
-COPY app/fetch-did-web-doc.sh /tmp/scitt/fetch-did-web-doc.sh
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 
