@@ -6,6 +6,7 @@
 #include "odata_error.h"
 #include "signature_algorithms.h"
 
+#include <ccf/crypto/hash_provider.h>
 #include <ccf/ds/json.h>
 #include <ccf/kv/map.h>
 #include <ccf/kv/value.h>
@@ -82,13 +83,13 @@ namespace scitt
     std::optional<ccf::TxID> operation_id;
 
     std::optional<time_t> created_at;
-    std::optional<nlohmann::json> context;
+    std::optional<crypto::Sha256Hash> context_digest;
     std::optional<nlohmann::json> error;
   };
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(OperationLog);
   DECLARE_JSON_REQUIRED_FIELDS(OperationLog, status);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    OperationLog, operation_id, created_at, context, error);
+    OperationLog, operation_id, created_at, context_digest, error);
 
   /**
    * SCITT Service configuration. This is stored in the KV and updated
