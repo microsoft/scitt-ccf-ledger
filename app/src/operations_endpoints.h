@@ -13,7 +13,9 @@
 namespace scitt
 {
   using OperationCallback = std::function<void(
-    ccf::endpoints::EndpointContext&, const nlohmann::json&, nlohmann::json&&)>;
+    ccf::endpoints::EndpointContext& context,
+    nlohmann::json callback_context,
+    std::optional<nlohmann::json> result)>;
 
   /**
    * An indexing strategy which maintains a map from Operation ID to state.
@@ -166,8 +168,7 @@ namespace scitt
         // The transaction number is within our indexing range, yet doesn't
         // match any valid operation. The client must have sent us a transaction
         // ID for something completely different.
-        throw HTTPError(
-          HTTP_STATUS_NOT_FOUND, errors::NotFound, "Invalid operation ID");
+        throw NotFoundError(errors::NotFound, "Invalid operation ID");
       }
     }
 
@@ -441,9 +442,16 @@ namespace scitt
             txid.to_str()));
       }
 
+      auto input = params.get<PostOperationCallback::In>();
+      if (crypto::Sha256Hash(input.context) != operation->context_digest)
+      {
+        throw BadRequestError(errors::InvalidInput, "Invalid context");
+      }
+
+      auto context = nlohmann::json::parse(input.context);
       try
       {
-        callback(ctx, operation->context, std::move(params));
+        callback(ctx, std::move(context), std::move(input.result));
       }
       catch (const HTTPError& e)
       {
@@ -595,15 +603,16 @@ namespace scitt
     timespec current_time,
     ccfapp::AbstractNodeContext& node_context,
     ccf::endpoints::EndpointContext& endpoint_context,
-    nlohmann::json callback_context,
+    crypto::Sha256Hash context_digest,
     TriggerAsynchronousOperation trigger)
   {
     auto table =
       endpoint_context.tx.template rw<OperationsTable>(OPERATIONS_TABLE);
+
     table->put(OperationLog{
       .status = OperationStatus::Running,
       .created_at = current_time.tv_sec,
-      .context = std::move(callback_context),
+      .context_digest = context_digest,
     });
 
     // The AppData allows us to propagate data to the handler. We use it to keep
