@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [0.4.0]
 ### Added
 - Auth errors are now logged (#130).
-- Output from the did:web resolution subprocess is now logged.
+- Output from the did:web resolution subprocess is now logged (#136).
 - The service DID document is now also available at the well-known endpoint (#128).
 
 ### Changes
-- Update to CCF 3.0.8.
+- Update to CCF 3.0.9 (#136).
 
 ## [0.3.0]
 ### Added
