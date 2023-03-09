@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import argparse
@@ -243,10 +244,11 @@ def run(url, nonce, callback_url: str):
 
 
 if __name__ == "__main__":
+    # The logs we print get captured by CCF and included in its own logs.
+    # We omit a timestamp since CCF puts its own anyway.
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        format="%(levelname)s: %(message)s",
     )
 
     parser = argparse.ArgumentParser()

@@ -17,5 +17,7 @@ namespace scitt
   
   const std::string ATTESTED_FETCH_MRENCLAVE_HEX = "@ATTESTED_FETCH_MRENCLAVE_HEX@"; // NOLINT(readability-redundant-string-init)
 
+  const std::string DID_WEB_RESOLVER_SCRIPT = "@DID_WEB_RESOLVER_SCRIPT@";
+
   // clang-format on
 }

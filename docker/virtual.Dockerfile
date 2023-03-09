@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.7
+ARG CCF_VERSION=3.0.9
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
@@ -38,7 +38,6 @@ WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/lib/libscitt.virtual.so libscitt.virtual.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 
-COPY app/fetch-did-web-doc.sh /tmp/scitt/fetch-did-web-doc.sh
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 

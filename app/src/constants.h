@@ -17,8 +17,6 @@ namespace scitt
 
   const std::chrono::seconds DID_RESOLUTION_CACHE_EXPIRY{60 * 30};
 
-  const std::string DID_WEB_RESOLVER_SCRIPT = "/tmp/scitt/fetch-did-web-doc.sh";
-
   namespace errors
   {
     const std::string DIDMethodNotSupported = "DIDMethodNotSupported";

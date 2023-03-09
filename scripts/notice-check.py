@@ -14,13 +14,14 @@ NOTICE_LINES = [
 
 # Literal file prefix, derived from NOTICE_LINES.
 # This adds language-specific comment characters to the start of each line.
-# Also includes a variant with a bash shebang as the first line
+# Also includes variants with a shebang as the first line
 PREFIXES = [
     os.linesep.join([prefix + " " + line for line in NOTICE_LINES])
     for prefix in ["//", "#"]
 ]
-PREFIXES.append(
-    os.linesep.join(["#!/bin/bash"] + ["# " + line for line in NOTICE_LINES])
+PREFIXES.extend(
+    os.linesep.join([f"#!{interpreter}"] + ["# " + line for line in NOTICE_LINES])
+    for interpreter in ["/bin/bash", "/usr/bin/env python3"]
 )
 
 # Only files which match these patterns will be scanned.
