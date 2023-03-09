@@ -42,7 +42,6 @@ else
     exit 1
 fi
 
-cp "$root_dir"/app/fetch-did-web-doc.sh $install_dir
 cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
 # Note: LVI mitigations are disabled as this is a development build.
