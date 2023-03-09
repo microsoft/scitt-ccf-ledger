@@ -698,7 +698,7 @@ namespace scitt
 
       register_service_endpoints(context, *this);
       register_operations_endpoints(
-        context, *this, is_tx_committed, authn_policy, post_entry_continuation);
+        context, *this, authn_policy, post_entry_continuation);
 
 #ifdef ENABLE_PREFIX_TREE
       PrefixTreeFrontend::init_handlers(context, *this);
