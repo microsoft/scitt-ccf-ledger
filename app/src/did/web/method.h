@@ -116,6 +116,7 @@ namespace scitt::did::web
     static void trigger_asynchronous_resolution(
       ccfapp::AbstractNodeContext& context,
       const std::string& callback_url,
+      const std::vector<uint8_t>& callback_context,
       const std::string& did,
       const std::string& nonce)
     {
@@ -123,7 +124,7 @@ namespace scitt::did::web
 
       auto host_processes = context.get_subsystem<ccf::AbstractHostProcesses>();
       host_processes->trigger_host_process_launch(
-        {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback_url});
+        {DID_WEB_RESOLVER_SCRIPT, url, nonce, callback_url}, callback_context);
     }
 
     /**

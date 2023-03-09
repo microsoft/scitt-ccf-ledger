@@ -11,6 +11,7 @@ import logging
 import os
 import ssl
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -129,7 +130,7 @@ def get_queue_dir(url):
     return queue_dir
 
 
-def queue_request(url: str, nonce: str, callback_url: str):
+def queue_request(url: str, nonce: str, callback_url: str, callback_context: bytes):
     logging.info(
         f"Queuing request for {url} (nonce: {nonce}, callback: {callback_url})"
     )
@@ -139,6 +140,7 @@ def queue_request(url: str, nonce: str, callback_url: str):
     request_metadata = {
         "nonce": nonce,
         "callback_url": callback_url,
+        "callback_context": base64.b64encode(callback_context).decode("ascii"),
     }
     request_id = uuid.uuid4().hex
     request_path = os.path.join(queue_dir, f"{request_id}.json")
@@ -204,7 +206,10 @@ def process_requests(url):
             result = fetch_attested(url, request_metadata["nonce"])
 
             # Send back the result to the callback URL.
-            callback_data = {"result": json.loads(result)}
+            callback_data = {
+                "result": json.loads(result),
+                "context": request_metadata["callback_context"],
+            }
             body = json.dumps(callback_data).encode("utf-8")
             headers = {"Content-Type": "application/json"}
             request(request_metadata["callback_url"], body, headers)
@@ -231,14 +236,16 @@ def process_requests(url):
             with open(request_path) as f:
                 request_metadata = json.load(f)
 
-            callback_data = {}
+            callback_data = {
+                "context": request_metadata["callback_context"],
+            }
             body = json.dumps(callback_data).encode("utf-8")
             headers = {"Content-Type": "application/json"}
             request(request_metadata["callback_url"], body, headers)
 
 
-def run(url, nonce, callback_url: str):
-    is_new_queue = queue_request(url, nonce, callback_url)
+def run(url, nonce, callback_url: str, callback_context: bytes):
+    is_new_queue = queue_request(url, nonce, callback_url, callback_context)
     if is_new_queue:
         process_requests(url)
 
@@ -257,4 +264,5 @@ if __name__ == "__main__":
     parser.add_argument("callback_url")
     args = parser.parse_args()
 
-    run(args.url, args.nonce, args.callback_url)
+    callback_context = sys.stdin.buffer.read()
+    run(args.url, args.nonce, args.callback_url, callback_context)

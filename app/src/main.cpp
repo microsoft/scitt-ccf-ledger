@@ -269,6 +269,50 @@ namespace scitt
         "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
     }
 
+    /**
+     * Start an asynchronous claim registration, by triggering a DID resolution
+     * for the specified issuer. When the resolution completes, the claim will
+     * be registered on the ledger.
+     *
+     * This works by creating an asynchronous operation with a callback, and
+     * starting an external subprocess to do the actual resolution. When the
+     * subprocess completes, it invokes the callback URL with the result.
+     * Additionally, the subprocess carries a context bytestring which we use to
+     * carry over some data.
+     */
+    void start_asynchronous_registration(
+      EndpointContext& ctx,
+      timespec host_time,
+      const std::string& issuer,
+      const std::vector<uint8_t>& body)
+    {
+      auto nonce = ds::to_hex(ENTROPY->random(16));
+
+      DIDFetchContext callback_context{
+        .body = body,
+        .nonce = nonce,
+        .issuer = issuer,
+      };
+      std::string context_json = nlohmann::json(callback_context).dump();
+      std::vector<uint8_t> context_bytes(
+        context_json.begin(), context_json.end());
+      crypto::Sha256Hash context_digest(context_bytes);
+
+      auto trigger =
+        [this, issuer, nonce, context_bytes](const std::string& callback_url) {
+          SCITT_INFO(
+            "Triggering asynchronous DID fetch for {}, callback {}",
+            issuer,
+            callback_url);
+
+          did::web::DidWebResolver::trigger_asynchronous_resolution(
+            context, callback_url, context_bytes, issuer, nonce);
+        };
+
+      start_asynchronous_operation(
+        host_time, context, ctx, context_digest, trigger);
+    }
+
   public:
     AppEndpoints(ccfapp::AbstractNodeContext& context_) :
       ccf::UserEndpointRegistry(context_)
@@ -315,25 +359,7 @@ namespace scitt
         }
         catch (const did::web::AsyncResolutionNeeded& e)
         {
-          auto issuer = e.did;
-          auto nonce = ds::to_hex(ENTROPY->random(16));
-          start_asynchronous_operation(
-            host_time,
-            context,
-            ctx,
-            DIDFetchContext{
-              .body = body,
-              .nonce = nonce,
-              .issuer = issuer,
-            },
-            [this, issuer, nonce](const std::string& callback_url) {
-              SCITT_INFO(
-                "Triggering asynchronous DID fetch for {}, callback {}",
-                issuer,
-                callback_url);
-              did::web::DidWebResolver::trigger_asynchronous_resolution(
-                context, callback_url, issuer, nonce);
-            });
+          start_asynchronous_registration(ctx, host_time, e.did, body);
           return;
         }
 
@@ -341,39 +367,40 @@ namespace scitt
         record_synchronous_operation(host_time, ctx.tx);
       };
 
-      auto post_entry_continuation = [this](
-                                       EndpointContext& ctx,
-                                       const nlohmann::json& callback_context,
-                                       nlohmann::json&& params) {
-        auto post_entry_context = callback_context.get<DIDFetchContext>();
-        auto resolution =
-          params.get<PostOperationCallback<did::AttestedResolution>::In>();
+      auto post_entry_continuation =
+        [this](
+          EndpointContext& ctx,
+          nlohmann::json callback_context,
+          std::optional<nlohmann::json> callback_result) {
+          auto post_entry_context = callback_context.get<DIDFetchContext>();
 
-        ::timespec host_time;
-        auto result = get_untrusted_host_time_v1(host_time);
-        if (result != ccf::ApiResult::OK)
-        {
-          throw InternalError(
-            fmt::format("Failed to retrieve host time: {}", result));
-        }
+          ::timespec host_time;
+          auto result = get_untrusted_host_time_v1(host_time);
+          if (result != ccf::ApiResult::OK)
+          {
+            throw InternalError(
+              fmt::format("Failed to retrieve host time: {}", result));
+          }
 
-        if (resolution.result.has_value())
-        {
-          SCITT_INFO("Updating DID document for {}", post_entry_context.issuer);
-          did::web::DidWebResolver::update_did_document(
-            host_time,
-            ctx.tx,
-            resolution.result.value(),
-            post_entry_context.issuer,
-            post_entry_context.nonce);
-        }
+          if (callback_result.has_value())
+          {
+            auto resolution = callback_result->get<did::AttestedResolution>();
+            SCITT_INFO(
+              "Updating DID document for {}", post_entry_context.issuer);
+            did::web::DidWebResolver::update_did_document(
+              host_time,
+              ctx.tx,
+              resolution,
+              post_entry_context.issuer,
+              post_entry_context.nonce);
+          }
 
-        // We intentionally don't catch AsyncResolutionNeeded this time around.
-        // If resolution fails despite the updated DID document then the
-        // exception will lead to the operation failing, and the exception's
-        // message will be stored in the KV.
-        post_entry_common(ctx, host_time, post_entry_context.body);
-      };
+          // We intentionally don't catch AsyncResolutionNeeded this time
+          // around. If resolution fails despite the updated DID document then
+          // the exception will lead to the operation failing, and the
+          // exception's message will be stored in the KV.
+          post_entry_common(ctx, host_time, post_entry_context.body);
+        };
 
       make_endpoint_with_local_commit_handler(
         "/entries",

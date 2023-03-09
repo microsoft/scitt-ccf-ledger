@@ -126,20 +126,17 @@ namespace scitt
   DECLARE_JSON_TYPE(GetAllOperations::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
 
-  template <typename T>
   struct PostOperationCallback
   {
     struct In
     {
-      std::optional<T> result;
+      std::vector<uint8_t> context;
+      std::optional<nlohmann::json> result;
     };
   };
 
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(
-    PostOperationCallback<did::AttestedResolution>::In);
-  DECLARE_JSON_REQUIRED_FIELDS(
-    PostOperationCallback<did::AttestedResolution>::In);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    PostOperationCallback<did::AttestedResolution>::In, result);
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(PostOperationCallback::In);
+  DECLARE_JSON_REQUIRED_FIELDS(PostOperationCallback::In, context);
+  DECLARE_JSON_OPTIONAL_FIELDS(PostOperationCallback::In, result);
 
 } // namespace scitt
