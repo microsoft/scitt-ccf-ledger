@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+### Added
+- Auth errors are now logged (#130).
+- Output from the did:web resolution subprocess is now logged (#136).
+- The service DID document is now also available at the well-known endpoint (#128).
+
+### Changes
+- Update to CCF 3.0.9 (#136).
+
 ## [0.3.0]
 ### Added
 - Add [documentation](https://github.com/microsoft/scitt-ccf-ledger/blob/main/docs/configuration.md) on configuration (#103).
@@ -65,6 +74,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
+[0.4.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0...0.2.0
