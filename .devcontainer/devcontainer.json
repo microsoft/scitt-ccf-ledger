@@ -1,12 +1,18 @@
 {
-  "name": "Development Container for CCF C++ Apps",
+  "name": "Development Container for scitt-ccf-ledger",
   "dockerFile": "Dockerfile",
-  "extensions": [
-    "ms-vscode.cpptools"
-  ],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools"
+      ]
+    }
+  },
   "features": {
     "ghcr.io/devcontainers/features/docker-from-docker:1": {
       "version": "20.10.8"
     }
-  }
+  },
+  "onCreateCommand": "apt-get update && apt-get install -y libcurl4-openssl-dev"
 }
