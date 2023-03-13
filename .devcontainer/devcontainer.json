@@ -1,6 +1,12 @@
 {
   "name": "Development Container for scitt-ccf-ledger",
   "dockerFile": "Dockerfile",
+  "hostRequirements": {
+    "cpus": 4
+  },
+  "remoteEnv": {
+    "PLATFORM": "virtual"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
