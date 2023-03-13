@@ -1,7 +1,6 @@
 {
   "name": "Development Container for scitt-ccf-ledger",
   "dockerFile": "Dockerfile",
-
   "customizations": {
     "vscode": {
       "extensions": [
