@@ -18,6 +18,5 @@
     "ghcr.io/devcontainers/features/docker-from-docker:1": {
       "version": "20.10.8"
     }
-  },
-  "onCreateCommand": "apt-get update && apt-get install -y libcurl4-openssl-dev"
+  }
 }
