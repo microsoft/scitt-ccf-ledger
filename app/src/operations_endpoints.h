@@ -206,7 +206,7 @@ namespace scitt
         case ccf::TxStatus::Unknown:
         case ccf::TxStatus::Pending:
           // This can happen when the transaction hasn't been globally
-          // committed to the ledger yet. Not point looking up in the map yet,
+          // committed to the ledger yet. No point looking up in the map yet,
           // but we throw a transient error since eventually the transaction ID
           // could be valid.
           throw ServiceUnavailableError(
