@@ -25,7 +25,6 @@ from .async_utils import EventLoopThread, race_tasks
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
-
 class CCHost(EventLoopThread):
     binary: str
     enclave_file: Path
@@ -52,6 +51,7 @@ class CCHost(EventLoopThread):
     rpc_port: int
 
     restart_request: asyncio.Event
+    interrupt_request: asyncio.Event
 
     faketime_file: Optional[Path]
     faketime_lib: Optional[Path]
@@ -103,6 +103,7 @@ class CCHost(EventLoopThread):
         )
 
         self.restart_request = self._create_event()
+        self.interrupt_request = self._create_event()
 
         self.faketime_file = None
         self.clock_offset = 0
@@ -129,6 +130,9 @@ class CCHost(EventLoopThread):
     def restart(self) -> None:
         self._set_event(self.restart_request)
         self.wait_ready()
+
+    def interrupt(self) -> None:
+        self._set_event(self.interrupt_request)
 
     async def run(self) -> None:
         """
@@ -195,6 +199,7 @@ class CCHost(EventLoopThread):
                 *cmd,
                 cwd=self.workspace,
                 env=cchost_env,
+                start_new_session=True,
             )
         else:
             process = await asyncio.create_subprocess_exec(
@@ -217,7 +222,9 @@ class CCHost(EventLoopThread):
                 if not self.with_gdb:
                     tg.create_task(self._process_stdout(process.stdout))
                     tg.create_task(self._process_stderr(process.stderr))
+
                 tg.create_task(self._wait_ready())
+                tg.create_task(self._process_interrupts(process))
 
                 await self._wait_for_process(process)
 
@@ -302,6 +309,13 @@ class CCHost(EventLoopThread):
                 break
             LOG.warning("{}", line)
 
+    async def _process_interrupts(self, process: asyncio.subprocess.Process):
+        while True:
+            await self.interrupt_request.wait()
+            LOG.info("Sending SIGINT to process")
+            process.send_signal(signal.SIGINT)
+            self.interrupt_request.clear()
+
     async def _wait_ready(self):
         """
         Monitor the service and set the `ready` flag once it accepts connections.
@@ -334,7 +348,11 @@ class CCHost(EventLoopThread):
                 addresses = json.load(f)
                 hostname, port = addresses["rpc"].split(":")
 
-            await asyncio.open_connection("127.0.0.1", int(port), ssl=ssl_ctx)
+            _, writer = await asyncio.open_connection(
+                "127.0.0.1", int(port), ssl=ssl_ctx
+            )
+            writer.close()
+            await writer.wait_closed()
 
             return int(port)
         except OSError:
@@ -492,7 +510,18 @@ def main():
         enable_faketime=args.enable_faketime,
         with_gdb=args.with_gdb,
     ) as cchost:
-        cchost.join()
+        while True:
+            try:
+                cchost.join()
+            except KeyboardInterrupt:
+                # When using a debugger, we forward any CTRL-C to the process
+                # since that is typically how the user gets control of the
+                # debugger. Otherwise propagate the exception, which will
+                # unwind the stack and kill the process.
+                if args.with_gdb:
+                    cchost.interrupt()
+                else:
+                    raise
 
 
 if __name__ == "__main__":
