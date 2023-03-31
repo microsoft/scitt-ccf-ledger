@@ -1,0 +1,68 @@
+{
+  "id": "f4f72a88-bab1-11ed-afa1-0242ac120002",
+  "schemaVersion": "0.1",
+  "startTime": "2023-03-14T00:00:00.000Z",
+  "expiryTime": "2024-03-14T00:00:00.000Z",
+  "tdc" : "did:web:kapilvgit.github.com/biomedical.iisc.ac.in",
+  "tdps" : [
+    "did:web:kapilvgit.github.io/icmr.gov.in",
+    "did:web:kapilvgit.github.io/cowin.gov.in",
+    "did:web:kapilvgit.github.io/swr.kar.nic.in"
+  ],
+  "ccrp": "did:web:kapilvgit.github.io/ccrp.cloud.com",
+  "datasets": [
+    {
+      "id" : "19517ba8-bab8-11ed-afa1-0242ac120002",
+      "name": "icmr-infection",
+      "url" : "https://ccrcontainer.blob.core.windows.net/icmr/data.img",
+      "provider": "did:web:kapilvgit.github.io/icmr.gov.in"
+    },
+    {
+      "id" : "216d5cc6-bab8-11ed-afa1-0242ac120002",
+      "name": "cowin",
+      "url" : "https://ccrcontainer.blob.core.windows.net/cowin/data.img",
+      "provider": "did:web:kapilvgit.github.io/cowin.gov.in"
+    },
+    {
+      "id" : "2830a144-bab8-11ed-afa1-0242ac120002",
+      "name": "state-war-room-hospitalization",
+      "url" : "https://ccrcontainer.blob.core.windows.net/swr/data.img",
+      "provider": "did:web:kapilvgit.github.io/swr.kar.nic.in"
+    }
+  ],
+  "purpose": "TRAINING",
+  "constraints": [
+    {
+      "privacy": [
+        {
+          "dataset": "19517ba8-bab8-11ed-afa1-0242ac120002", 
+          "epsilon_threshold": "1.5",
+          "noise_multiplier": "2.0",
+          "delta": "0.01",
+          "epochs_per_report": "2"
+        },
+        {
+          "dataset": "216d5cc6-bab8-11ed-afa1-0242ac120002", 
+          "epsilon_threshold": "1.5",
+          "noise_multiplier": "2.0",
+          "delta": "0.01",
+          "epochs_per_report": "2"
+        },
+        {
+          "dataset": "2830a144-bab8-11ed-afa1-0242ac120002", 
+          "epsilon_threshold": "1.5",
+          "noise_multiplier": "2.0",
+          "delta": "0.01",
+          "epochs_per_report": "2"
+        }
+      ],
+      "compute": {
+        "ccr_security_policy": ""
+      }
+    }
+  ],
+  "terms": {
+    "payment" : {
+    }
+  }
+}
