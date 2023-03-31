@@ -1,21 +1,21 @@
 # scitt-ccf-ledger
 
-This repository contains the source code for scitt-ccf-ledger, an application
-that runs on top of [CCF](https://ccf.dev/) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
+This repository contains the source code for contract-ledger, an application
+that runs on top of [CCF](https://ccf.dev/) implementing standards developed within the [DEPA Training cycle](https://github.com/kapilvgit/depa-training/). Its purpose is to provide registry for contracts. contracts-ledger achieves this by allowing signed contracts to be submitted to a secure immutable ledger, and returning receipts which prove contracts have been stored and registration policies applied.
 
-This research project is at an early stage and is open sourced to facilitate academic collaborations. We are keen to engage in research collaborations on this project, please do reach out to discuss this by opening an issue.
+This project is at an early stage and is open sourced to facilitate academic collaborations. We are keen to engage in research collaborations on this project, please do reach out to discuss this by opening an issue.
 
 ## Getting Started
 
 The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
 
-Being a CCF application, scitt-ccf-ledger runs in SGX enclaves. However, for testing purposes, it also supports running on non-SGX hardware in what is called *virtual* mode.
+Being a CCF application, contract-ledger runs in SGX enclaves. However, for testing purposes, it also supports running on non-SGX hardware in what is called *virtual* mode.
 
 All instructions below assume Linux as the operating system.
 
 ### Using Docker
 
-Use the following commands to start a single-node CCF network with the scitt-ccf-ledger application setup for development purposes.
+Use the following commands to start a single-node CCF network with the contract-ledger application setup for development purposes.
 
 Note: `PLATFORM` should be set to `sgx` or `virtual` to select the type of build.
 
