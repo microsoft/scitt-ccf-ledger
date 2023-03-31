@@ -66,6 +66,7 @@ from pycose.keys.keyparam import (
 from pycose.keys.okp import OKPKey
 from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
+from pycose.messages import SignMessage
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
@@ -701,6 +702,42 @@ def sign_json_claimset(
         signer, json.dumps(claims).encode("ascii"), content_type=content_type, feed=feed
     )
 
+def sign_contract(
+    signer: Signer,
+    contract: bytes,
+    content_type: str,
+    feed: Optional[str] = None,
+    registration_info: RegistrationInfo = {},
+) -> bytes:
+    headers: dict = {}
+    headers[pycose.headers.Algorithm] = signer.algorithm
+    headers[pycose.headers.ContentType] = content_type
+
+    if signer.x5c is not None:
+        headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
+    if signer.kid is not None:
+        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
+    if signer.issuer is not None:
+        headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
+    if feed is not None:
+        headers[COSE_HEADER_PARAM_FEED] = feed
+    if registration_info:
+        headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
+
+    msg = SignMessage(phdr=headers, payload=contract)
+    msg.key = cose_private_key_from_pem(signer.private_key)
+    return msg.encode(tag=True)
+
+
+def sign_json_contract(
+    signer: Signer,
+    claims: Any,
+    content_type: str = "application/vnd.dummy+json",
+    feed: Optional[str] = None,
+) -> bytes:
+    return sign_contract(
+        signer, json.dumps(claims).encode("ascii"), content_type=content_type, feed=feed
+    )
 
 def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:
     """
