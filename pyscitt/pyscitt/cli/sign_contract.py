@@ -113,7 +113,7 @@ def sign_contract(
 def cli(fn):
     parser = fn(description="Sign a claimset")
     parser.add_argument(
-        "--claims", type=Path, required=True, help="Path to claims file"
+        "--contract", type=Path, required=True, help="Path to claims file"
     )
     parser.add_argument(
         "--key", type=Path, required=True, help="Path to PEM-encoded private key"
@@ -151,7 +151,7 @@ def cli(fn):
 
     parser.set_defaults(
         func=lambda args: sign_contract(
-            args.claims,
+            args.contract,
             args.key,
             args.out,
             args.did_doc,

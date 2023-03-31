@@ -11,7 +11,7 @@ echo "Signing contract..."
 CONTENT_TYPE="application/json"
 
 scitt sign-contract \
-    --claims ./contract.json \
+    --contract ./demo/contract/contract.json \
     --content-type "$CONTENT_TYPE" \
     --did-doc $TMP_DIR/did.json \
     --key $TMP_DIR/key.pem \

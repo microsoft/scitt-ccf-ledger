@@ -10,9 +10,9 @@ If you don't have a GitHub account or you don't want to use the GitHub Pages sit
 Acting as the contract service operator run:
 
 ```
-./demo/github/0-install-cli.sh
+./demo/contract/0-install-cli.sh
 source venv/bin/activate
-./demo/github/1-scitt-setup.sh
+./demo/contract/1-scitt-setup.sh
 ```
 
 Acting as the contract signer run:
@@ -21,14 +21,25 @@ Acting as the contract signer run:
 
 ```
 export GITHUB_USER=<username>  
-./demo/github/2-create-did.sh
+./demo/contract/2-create-did.sh
 curl https://${GITHUB_USER}.github.io/.well-known/did.json
-./demo/github/3-sign-contract.sh
-./demo/github/4-submit-contract.sh
-./demo/github/5-view-receipt.sh
+./demo/contract/3-sign-contract.sh
+./demo/contract/4-submit-contract.sh
+./demo/contract/5-view-receipt.sh
+./demo/contract/6-validate.sh
 ```
 
 Acting as another contract signer run:
+```
+export GITHUB_USER=<username>  
+./demo/contract/2-create-did.sh
+curl https://${GITHUB_USER}.github.io/.well-known/did.json
+./demo/contract/7-fetch-contract.sh
+./demo/contract/8-sign-contract.sh
+./demo/contract/9-submit-receipt.sh
+./demo/contract/10-view-receipt.sh
+./demo/contract/11-validate.sh
+```
 
 Acting as the contract consumer run:
 
