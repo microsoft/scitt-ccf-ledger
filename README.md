@@ -29,7 +29,7 @@ The node is now reachable at https://127.0.0.1:8000/.
 
 Note that `run-dev.sh` configures the network in a way that is not suitable for production, in particular it generates an ad-hoc governance member key pair and it disables API authentication.
 
-See the `demo/` folder on how to interact with the application.
+See the `demo/contract` folder on how to interact with the application.
 
 ### Development setup
 
