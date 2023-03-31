@@ -10,12 +10,6 @@ If you don't have a GitHub account or you don't want to use the GitHub Pages sit
 Acting as the contract service operator run:
 
 ```
-./build.sh
-./start.sh
-```
-
-In a new terminal run:
-```
 ./demo/github/0-install-cli.sh
 source venv/bin/activate
 ./demo/github/1-scitt-setup.sh
