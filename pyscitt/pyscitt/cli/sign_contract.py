@@ -93,17 +93,17 @@ def sign_contract(
     content_type: str,
     algorithm: Optional[str],
     kid: Optional[str],
-    feed: Optional[str],
-    registration_info_args: List[RegistrationInfoArgument],
+    participant_info: List[str],
 ):
+    print(f"Participants: {participant_info}")
+    
     signer = create_signer_from_arguments(
         key_path, did_doc_path, kid, issuer, algorithm
     )
     contract = contract_path.read_bytes()
-    registration_info = {arg.name: arg.value() for arg in registration_info_args}
 
     signed_contract = crypto.sign_contract(
-        signer, contract, content_type, feed, registration_info
+        signer, contract, content_type, participant_info
     )
 
     print(f"Writing {out_path}")
@@ -111,7 +111,7 @@ def sign_contract(
 
 
 def cli(fn):
-    parser = fn(description="Sign a claimset")
+    parser = fn(description="Sign a contract")
     parser.add_argument(
         "--contract", type=Path, required=True, help="Path to claims file"
     )
@@ -132,20 +132,18 @@ def cli(fn):
     parser.add_argument("--issuer", help="Issuer stored in envelope header")
     parser.add_argument("--alg", help="Signing algorithm to use.")
 
-    parser.add_argument("--content-type", required=True, help="Content type of claims")
+    parser.add_argument("--content-type", required=True, help="Content type of contract")
     parser.add_argument("--kid", help='Key ID ("kid" field) to use if multiple')
-    parser.add_argument("--feed", help='Optional "feed" stored in envelope header')
     parser.add_argument(
-        "--registration-info",
-        metavar="[TYPE:]NAME=CONTENT",
+        "--participant-info",
+        metavar="NAME",
         action="append",
-        type=RegistrationInfoArgument,
+        type=str,
         default=[],
         help="""
-        Optional registration information to be stored in the envelope header.
-        The flag may be specified multiple times, once per registration info entry.
+        Pariticpant information to be stored in the envelope header.
+        The flag may be specified multiple times, once per partipant entry.
         If content has the form `@file.txt`, the data will be read from the specified file instead.
-        The type must be one of `text`, `bytes` or `int`. If not specified, the type defaults to text.
         """,
     )
 
@@ -159,8 +157,7 @@ def cli(fn):
             args.content_type,
             args.alg,
             args.kid,
-            args.feed,
-            args.registration_info,
+            args.participant_info,
         )
     )
 

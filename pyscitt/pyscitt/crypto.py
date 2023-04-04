@@ -67,6 +67,7 @@ from pycose.keys.okp import OKPKey
 from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
 from pycose.messages import SignMessage
+from pycose.messages.signer import CoseSignature
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
@@ -86,6 +87,9 @@ COSE_HEADER_PARAM_SCITT_RECEIPTS = 394
 RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
 
+COSE_HEADER_PARAM_PARTICIPANT_INFO = 491
+COSE_HEADER_PARAM_PARTICIPANT = 493
+ParticipantInfo = List[str]
 
 def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
     priv = rsa.generate_private_key(
@@ -706,28 +710,26 @@ def sign_contract(
     signer: Signer,
     contract: bytes,
     content_type: str,
-    feed: Optional[str] = None,
-    registration_info: RegistrationInfo = {},
+    participant_info: ParticipantInfo = [],
 ) -> bytes:
     headers: dict = {}
-    headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
+    if participant_info is not None:
+        headers[COSE_HEADER_PARAM_PARTICIPANT_INFO] = participant_info
+
+    signature_headers: dict = {}
+    signature_headers[pycose.headers.Algorithm] = signer.algorithm
 
     if signer.x5c is not None:
-        headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
+        signature_headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
     if signer.kid is not None:
-        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
+        signature_headers[pycose.headers.KID] = signer.kid.encode("utf-8")
     if signer.issuer is not None:
-        headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
-    if feed is not None:
-        headers[COSE_HEADER_PARAM_FEED] = feed
-    if registration_info:
-        headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
+        signature_headers[COSE_HEADER_PARAM_PARTICIPANT] = signer.issuer
 
     msg = SignMessage(phdr=headers, payload=contract)
-    msg.key = cose_private_key_from_pem(signer.private_key)
+    msg.signers = [CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key))]
     return msg.encode(tag=True)
-
 
 def sign_json_contract(
     signer: Signer,

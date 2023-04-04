@@ -3,11 +3,10 @@
   "schemaVersion": "0.1",
   "startTime": "2023-03-14T00:00:00.000Z",
   "expiryTime": "2024-03-14T00:00:00.000Z",
-  "tdc" : "did:web:kapilvgit.github.com/biomedical.iisc.ac.in",
+  "tdc" : "did:web:kapilvgit.github.io",
   "tdps" : [
-    "did:web:kapilvgit.github.io/icmr.gov.in",
-    "did:web:kapilvgit.github.io/cowin.gov.in",
-    "did:web:kapilvgit.github.io/swr.kar.nic.in"
+    "did:web:kapilvgit.github.io",
+    "did:web:kapilv78.github.io"
   ],
   "ccrp": "did:web:kapilvgit.github.io/ccrp.cloud.com",
   "datasets": [
@@ -15,13 +14,13 @@
       "id" : "19517ba8-bab8-11ed-afa1-0242ac120002",
       "name": "icmr-infection",
       "url" : "https://ccrcontainer.blob.core.windows.net/icmr/data.img",
-      "provider": "did:web:kapilvgit.github.io/icmr.gov.in"
+      "provider": "did:web:kapilvgit.github.io"
     },
     {
       "id" : "216d5cc6-bab8-11ed-afa1-0242ac120002",
       "name": "cowin",
       "url" : "https://ccrcontainer.blob.core.windows.net/cowin/data.img",
-      "provider": "did:web:kapilvgit.github.io/cowin.gov.in"
+      "provider": "did:web:kapilv78.github.io"
     },
     {
       "id" : "2830a144-bab8-11ed-afa1-0242ac120002",

@@ -12,6 +12,7 @@ import ccf.receipt
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
 from pycose.messages import Sign1Message
+from pycose.messages import SignMessage
 from pycose.messages.cosebase import CoseBase
 
 from . import crypto
@@ -179,6 +180,11 @@ class Receipt:
     def verify(self, claim: Sign1Message, service_params: "ServiceParameters"):
         tbs = self.countersign_structure(claim)
         self.contents.verify(tbs, service_params)
+
+    def verify_contract(self, contract: SignMessage, service_params: "ServiceParameters"):
+        #tbs = self.countersign_structure(contract)
+        #self.contents.verify(tbs, service_params)
+        True
 
     def as_dict(self) -> dict:
         """

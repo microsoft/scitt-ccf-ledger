@@ -385,6 +385,11 @@ namespace scitt::verifier
 
           return ClaimProfile::X509;
         }
+        else if (phdr.participant_info.has_value())
+        {
+          // Contract profile
+          return ClaimProfile::Contract;
+        }
         else
         {
           SCITT_INFO("Unknown COSE profile");

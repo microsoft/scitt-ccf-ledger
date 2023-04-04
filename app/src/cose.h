@@ -71,6 +71,13 @@ namespace scitt::cose
       NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
       NOTARY_HEADER_PARAM_EXPIRY};
 
+  // Temporary assignments for contract service
+  static constexpr int64_t CONTRACT_HEADER_PARAM_PARTICIPANT_INFO = 491;
+
+  static const std::set<std::variant<int64_t, std::string>> CONTRACT_HEADER_PARAMS {
+    CONTRACT_HEADER_PARAM_PARTICIPANT_INFO
+  };
+
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
@@ -97,6 +104,9 @@ namespace scitt::cose
     std::optional<int64_t> notary_signing_time;
     std::optional<int64_t> notary_authentic_signing_time;
     std::optional<int64_t> notary_expiry;
+
+    // Contract object headers
+    std::optional<std::vector<std::string>> participant_info;
 
     bool is_present(const std::variant<int64_t, std::string>& label) const
     {
@@ -146,6 +156,12 @@ namespace scitt::cose
       if (
         label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_FEED) and
         feed.has_value())
+      {
+        return true;
+      }
+      if (
+        label == std::variant<int64_t, std::string>(CONTRACT_HEADER_PARAM_PARTICIPANT_INFO) and
+        participant_info.has_value())
       {
         return true;
       }
@@ -303,6 +319,7 @@ namespace scitt::cose
       NOTARY_SIGNING_TIME_INDEX,
       NOTARY_AUTHENTIC_SIGNING_TIME_INDEX,
       NOTARY_EXPIRY_INDEX,
+      CONTRACT_PARTICIPANT_INFO_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
@@ -358,6 +375,10 @@ namespace scitt::cose
       UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_EXPIRY);
     header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[CONTRACT_PARTICIPANT_INFO_INDEX].label.int64 = CONTRACT_HEADER_PARAM_PARTICIPANT_INFO;
+    header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uDataType = QCBOR_TYPE_ARRAY;
 
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
@@ -469,6 +490,41 @@ namespace scitt::cose
       parsed.notary_expiry =
         header_items[NOTARY_EXPIRY_INDEX].val.epochDate.nSeconds;
     }
+    // Contract headers
+    if (header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.participant_info = std::vector<std::string>();
+      QCBORItem participantItem = header_items[CONTRACT_PARTICIPANT_INFO_INDEX];
+      QCBORDecode_EnterArrayFromMapN(&ctx, CONTRACT_HEADER_PARAM_PARTICIPANT_INFO);
+      while (true)
+      {
+        auto result = QCBORDecode_GetNext(&ctx, &participantItem);
+        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        {
+          break;
+        }
+        if (result != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError("Item in participant info is not well-formed.");
+        }
+        if (participantItem.uDataType == QCBOR_TYPE_TEXT_STRING)
+        {
+          parsed.participant_info->push_back(
+            std::string(cbor::as_string(participantItem.val.string)));
+        }
+        else
+        {
+          throw COSEDecodeError(
+            "Next item in participant info was not of type text string");
+        }
+      }
+      QCBORDecode_ExitArray(&ctx);
+      if (parsed.participant_info->empty())
+      {
+        throw COSEDecodeError(
+          "Cannot have participant info array of length 0 in COSE protected header.");
+      }
+    }
 
     QCBORDecode_ExitMap(&ctx);
     QCBORDecode_ExitBstrWrapped(&ctx);
@@ -545,9 +601,9 @@ namespace scitt::cose
     }
 
     uint64_t tag = QCBORDecode_GetNthTagOfLast(&ctx, 0);
-    if (tag != CBOR_TAG_COSE_SIGN1)
+    if (tag != CBOR_TAG_COSE_SIGN1 && tag != CBOR_TAG_COSE_SIGN)
     {
-      throw COSEDecodeError("COSE_Sign1 is not tagged");
+      throw COSEDecodeError("COSE_Sign1 or COSE_Sign is not tagged");
     }
 
     auto phdr = decode_protected_header(ctx);

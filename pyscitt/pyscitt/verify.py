@@ -16,6 +16,7 @@ from cryptography.x509 import load_pem_x509_certificate
 from pycose.keys.ec2 import EC2Key
 from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
+from pycose.messages import SignMessage
 
 from . import crypto, did
 from .crypto import COSE_HEADER_PARAM_ISSUER, COSE_HEADER_PARAM_SCITT_RECEIPTS
@@ -103,6 +104,28 @@ def verify_receipt(
     service_params = service_trust_store.lookup(decoded_receipt.phdr)
     decoded_receipt.verify(msg, service_params)
 
+def verify_contract_receipt(
+    buf: bytes,
+    service_trust_store: TrustStore,
+    receipt: Union[Receipt, bytes, None] = None,
+) -> None:
+    msg = SignMessage.decode(buf)
+
+    if isinstance(receipt, Receipt):
+        decoded_receipt = receipt
+    else:
+        if receipt is None:
+            parsed_receipts = msg.uhdr[COSE_HEADER_PARAM_SCITT_RECEIPTS]
+            # For now, assume there is only one receipt
+            assert len(parsed_receipts) == 1
+            parsed_receipt = parsed_receipts[0]
+        else:
+            parsed_receipt = cbor2.loads(receipt)
+
+        decoded_receipt = Receipt.from_cose_obj(parsed_receipt)
+
+    service_params = service_trust_store.lookup(decoded_receipt.phdr)
+    decoded_receipt.verify_contract(msg, service_params)
 
 class StaticTrustStore(TrustStore):
     """

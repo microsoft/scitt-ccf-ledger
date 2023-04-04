@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..client import Client
-from ..verify import StaticTrustStore, verify_receipt
+from ..verify import StaticTrustStore, verify_contract_receipt
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -21,15 +21,15 @@ def submit_signed_contract(
         raise ValueError("unsupported file extension")
 
     with open(path, "rb") as f:
-        signed_claimset = f.read()
+        signed_contract = f.read()
 
     if skip_confirmation:
-        pending = client.submit_claim(signed_claimset, skip_confirmation=True)
+        pending = client.submit_claim(signed_contract, skip_confirmation=True)
         print(f"Submitted {path} as operation {pending.operation_tx}")
         print("Confirmation of submission was skipped! Claim may not be registered.")
         return
 
-    submission = client.submit_claim(signed_claimset)
+    submission = client.submit_claim(signed_contract)
     print(f"Submitted {path} as transaction {submission.tx}")
 
     if receipt_path:
@@ -39,8 +39,8 @@ def submit_signed_contract(
 
     if service_trust_store_path:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
-        verify_receipt(
-            signed_claimset,
+        verify_contract_receipt(
+            signed_contract,
             receipt=submission.receipt,
             service_trust_store=service_trust_store,
         )
@@ -48,10 +48,10 @@ def submit_signed_contract(
 
 def cli(fn):
     parser = fn(
-        description="Submit signed claimset to a SCITT CCF Ledger and retrieve receipt"
+        description="Submit signed contract to contract ledger and retrieve receipt"
     )
     add_client_arguments(parser, with_auth_token=True)
-    parser.add_argument("path", type=Path, help="Path to signed claimset file")
+    parser.add_argument("path", type=Path, help="Path to signed contract file")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--receipt", type=Path, help="Output path to receipt file")
     group.add_argument(

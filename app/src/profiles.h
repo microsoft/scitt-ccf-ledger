@@ -11,7 +11,8 @@ namespace scitt
   {
     IETF,
     X509,
-    Notary
+    Notary,
+    Contract
   };
 }
 
@@ -44,6 +45,11 @@ struct formatter<scitt::ClaimProfile>
       case (scitt::ClaimProfile::Notary):
       {
         s = "Notary";
+        break;
+      }
+      case (scitt::ClaimProfile::Contract):
+      {
+        s = "Contract";
         break;
       }
     }
