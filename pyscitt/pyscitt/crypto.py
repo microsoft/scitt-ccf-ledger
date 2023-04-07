@@ -411,6 +411,31 @@ def pretty_cose_sign1(buf: bytes) -> str:
         print(header)
         raise
 
+def parse_cose_sign(buf: bytes) -> Tuple[dict, bytes]:
+    msg = SignMessage.decode(buf)
+    header = cose_header_to_jws_header(msg.phdr)
+    payload = msg.payload
+    signers = msg.signers
+    return header, payload, signers
+
+def pretty_cose_sign(buf: bytes) -> str:
+    header, payload, signers = parse_cose_sign(buf)
+    try:
+        claims = json.loads(payload)
+    except json.JSONDecodeError:
+        claims = f"<{len(payload)} bytes>"
+    try:
+        return (
+            "COSE_Sign(\nheader="
+            + json.dumps(header, indent=2)
+            + "\npayload="
+            + json.dumps(claims, indent=2)
+            + "\n<signature>=" 
+            + repr(signers)
+        )
+    except TypeError:
+        print(header)
+        raise
 
 # temporary, from https://github.com/BrianSipos/pycose/blob/rsa_keys_algs/cose/keys/rsa.py
 # until https://github.com/TimothyClaeys/pycose/issues/44 is implemented
@@ -710,13 +735,10 @@ def sign_contract(
     signer: Signer,
     contract: bytes,
     content_type: str,
+    add_signature: bool,
+    feed: Optional[str] = None,
     participant_info: ParticipantInfo = [],
 ) -> bytes:
-    headers: dict = {}
-    headers[pycose.headers.ContentType] = content_type
-    if participant_info is not None:
-        headers[COSE_HEADER_PARAM_PARTICIPANT_INFO] = participant_info
-
     signature_headers: dict = {}
     signature_headers[pycose.headers.Algorithm] = signer.algorithm
 
@@ -726,6 +748,21 @@ def sign_contract(
         signature_headers[pycose.headers.KID] = signer.kid.encode("utf-8")
     if signer.issuer is not None:
         signature_headers[COSE_HEADER_PARAM_PARTICIPANT] = signer.issuer
+
+    if add_signature:
+        msg = SignMessage.decode(contract)
+        signers = msg.signers
+        signers.append(CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key)))
+        msg.signers = signers
+        print(pretty_cose_sign(msg.encode(tag=True)))
+        return msg.encode(tag=True)
+
+    headers: dict = {}
+    headers[pycose.headers.ContentType] = content_type
+    if participant_info is not None:
+        headers[COSE_HEADER_PARAM_PARTICIPANT_INFO] = participant_info
+    if feed is not None:
+        headers[COSE_HEADER_PARAM_FEED] = feed
 
     msg = SignMessage(phdr=headers, payload=contract)
     msg.signers = [CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key))]

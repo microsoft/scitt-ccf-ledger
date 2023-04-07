@@ -18,9 +18,10 @@ setup(
         "httpx",
         "cbor2",
         # TODO: remove this once pycose >= 1.0.2 is released
-        "pycose @ git+https://github.com/TimothyClaeys/pycose@94db358eda640966c0e0e9148110b6c66763f9e5#egg=pycose",
+        "pycose @ git+https://github.com/kapilvgit/pycose@87169e69d39a7623b01272644c01773d90e74731#egg=pycose",
         "pyjwt",
         "azure-keyvault",
         "azure-identity",
     ],
 )
+

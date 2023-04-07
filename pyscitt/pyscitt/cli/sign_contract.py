@@ -94,16 +94,16 @@ def sign_contract(
     algorithm: Optional[str],
     kid: Optional[str],
     participant_info: List[str],
+    feed: Optional[str],
+    add_signature: bool
 ):
-    print(f"Participants: {participant_info}")
-    
     signer = create_signer_from_arguments(
         key_path, did_doc_path, kid, issuer, algorithm
     )
     contract = contract_path.read_bytes()
 
     signed_contract = crypto.sign_contract(
-        signer, contract, content_type, participant_info
+        signer, contract, content_type, add_signature, feed, participant_info, 
     )
 
     print(f"Writing {out_path}")
@@ -113,7 +113,7 @@ def sign_contract(
 def cli(fn):
     parser = fn(description="Sign a contract")
     parser.add_argument(
-        "--contract", type=Path, required=True, help="Path to claims file"
+        "--contract", type=Path, required=True, help="Path to contract file"
     )
     parser.add_argument(
         "--key", type=Path, required=True, help="Path to PEM-encoded private key"
@@ -134,6 +134,7 @@ def cli(fn):
 
     parser.add_argument("--content-type", required=True, help="Content type of contract")
     parser.add_argument("--kid", help='Key ID ("kid" field) to use if multiple')
+    parser.add_argument("--feed", help='Optional "feed" stored in envelope header')
     parser.add_argument(
         "--participant-info",
         metavar="NAME",
@@ -147,6 +148,11 @@ def cli(fn):
         """,
     )
 
+    parser.add_argument(
+        "--add-signature", 
+        help="Add signature to existing contract",
+        action="store_true")
+
     parser.set_defaults(
         func=lambda args: sign_contract(
             args.contract,
@@ -158,6 +164,8 @@ def cli(fn):
             args.alg,
             args.kid,
             args.participant_info,
+            args.feed,
+            args.add_signature
         )
     )
 
