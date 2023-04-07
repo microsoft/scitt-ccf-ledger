@@ -15,7 +15,7 @@ source venv/bin/activate
 ./demo/contract/1-scitt-setup.sh
 ```
 
-Acting as the contract signer run:
+Acting as one of the participant run:
 
 > **Note:** Replace `<username>` with the GitHub username associated with the GitHub Pages site being used for this demo.
 
@@ -26,24 +26,14 @@ curl https://${GITHUB_USER}.github.io/.well-known/did.json
 ./demo/contract/3-sign-contract.sh
 ./demo/contract/4-submit-contract.sh
 ./demo/contract/5-view-receipt.sh
-./demo/contract/6-validate.sh
 ```
 
-Acting as another contract signer run:
+Acting as another participant run:
 ```
-export GITHUB_USER=<username>  
-./demo/contract/2-create-did.sh
-curl https://${GITHUB_USER}.github.io/.well-known/did.json
+export GITHUB_USER1=<username>  
 ./demo/contract/7-fetch-contract.sh
-./demo/contract/8-sign-contract.sh
-./demo/contract/9-submit-receipt.sh
-./demo/contract/10-view-receipt.sh
-./demo/contract/11-validate.sh
-```
-
-Acting as the contract consumer run:
-
-```
-jq . tmp/trust_store/scitt.json
-./demo/github/6-validate.sh
+./demo/contract/8-create-did.sh
+curl https://${GITHUB_USER1}.github.io/.well-known/did.json
+./demo/contract/9-sign-contract.sh
+./demo/contract/10-submit-contract.sh
 ```
