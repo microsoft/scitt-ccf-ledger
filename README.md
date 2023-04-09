@@ -1,4 +1,4 @@
-# scitt-ccf-ledger
+# contract-ledger
 
 This repository contains the source code for contract-ledger, an application
 that runs on top of [CCF](https://ccf.dev/) implementing standards developed within the [DEPA Training cycle](https://github.com/kapilvgit/depa-training/). Its purpose is to provide registry for contracts. contracts-ledger achieves this by allowing signed contracts to be submitted to a secure immutable ledger, and returning receipts which prove contracts have been stored and registration policies applied.
