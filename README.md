@@ -1,4 +1,4 @@
-# scitt-ccf-ledger
+# contract-ledger
 
 This repository contains the source code for contract-ledger, an application
 that runs on top of [CCF](https://ccf.dev/) implementing standards developed within the [DEPA Training cycle](https://github.com/kapilvgit/depa-training/). Its purpose is to provide registry for contracts. contracts-ledger achieves this by allowing signed contracts to be submitted to a secure immutable ledger, and returning receipts which prove contracts have been stored and registration policies applied.
@@ -7,7 +7,7 @@ This project is at an early stage and is open sourced to facilitate academic col
 
 ## Getting Started
 
-The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
+The instructions below guide you through building and deploying a local instance of contract-ledger for development and testing purposes.
 
 Being a CCF application, contract-ledger runs in SGX enclaves. However, for testing purposes, it also supports running on non-SGX hardware in what is called *virtual* mode.
 
@@ -33,11 +33,8 @@ See the `demo/contract` folder on how to interact with the application.
 
 ### Development setup
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger without Docker.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing contract-ledger without Docker.
 
 ## Contributing
 
 This project welcomes contributions and suggestions. Please see the [Contribution guidelines](CONTRIBUTING.md).
-
-### Trademarks 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow Microsoft’s Trademark & Brand Guidelines. Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party’s policies.
