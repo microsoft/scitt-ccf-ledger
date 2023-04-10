@@ -668,6 +668,77 @@ namespace scitt::cose
   }
 
   /**
+   * Extract the bstr fields from a COSE Sign.
+   *
+   * Returns an array containing the protected headers, the payload and the
+   * signatures.
+   */
+  static std::array<std::span<const uint8_t>, 3> extract_sign_fields(
+    std::span<const uint8_t> cose_sign)
+  {
+    QCBORDecodeContext ctx;
+    QCBORDecode_Init(
+      &ctx, cbor::from_bytes(cose_sign), QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORDecode_EnterArray(&ctx, nullptr);
+
+    UsefulBufC bstr_item;
+    // protected headers
+    QCBORDecode_GetByteString(&ctx, &bstr_item);
+    auto phdrs = cbor::as_span(bstr_item);
+
+    QCBORItem item;
+    // skip unprotected header
+    QCBORDecode_VGetNextConsume(&ctx, &item);
+
+    // payload
+    QCBORDecode_GetByteString(&ctx, &bstr_item);
+    auto payload = cbor::as_span(bstr_item);
+
+    // signatures
+    std::vector<uint8_t> signatures;
+    QCBORDecode_EnterArray(&ctx, nullptr);
+
+    while (true) 
+    {
+      QCBORDecode_EnterArray(&ctx, nullptr);
+      auto uErr = QCBORDecode_GetAndResetError(&ctx);
+      if(uErr != QCBOR_SUCCESS) {
+        break;
+      }
+
+      // signature protected headers
+      QCBORDecode_GetByteString(&ctx, &bstr_item);
+      auto signature_phdrs = cbor::as_span(bstr_item);
+      signatures.insert(
+        signatures.end(), 
+        signature_phdrs.begin(),
+        signature_phdrs.end());
+
+      // skip unproctected headers
+      QCBORDecode_VGetNextConsume(&ctx, &item);
+      
+      // signature
+      QCBORDecode_GetByteString(&ctx, &bstr_item);
+      auto signature = cbor::as_span(bstr_item);
+      signatures.insert(signatures.end(), signature.begin(), signature.end());
+
+      QCBORDecode_ExitArray(&ctx);
+    }
+
+    QCBORDecode_ExitArray(&ctx);
+
+    QCBORDecode_ExitArray(&ctx);
+    auto error = QCBORDecode_Finish(&ctx);
+    if (error)
+    {
+      throw std::runtime_error("Failed to decode COSE_Sign");
+    }
+
+    return {phdrs, payload, signatures};
+  }
+
+  /**
    * Verify the signature of a COSE Sign1 message using the given public key.
    *
    * Beyond the basic verification of key usage and the signature
@@ -838,6 +909,114 @@ namespace scitt::cose
 
     QCBOREncode_AddBytes(encoder, cbor::from_bytes(payload));
     QCBOREncode_AddBytes(encoder, cbor::from_bytes(signature));
+
+    QCBOREncode_CloseArray(encoder);
+
+    return encoder.finish();
+  }
+
+  /**
+   * Compute the digest of the TBS for a countersignature over a COSE Sign.
+   *
+   *  The following structure is hashed incrementally to avoid
+   *  serializing it in full. This avoids excessive memory usage
+   *  for larger payloads.
+   *
+   * Countersign_structure = [
+   *     context: "CounterSignatureV2",
+   *     body_protected: empty_or_serialized_map,
+   *     sign_protected: empty_or_serialized_map,
+   *     external_aad: bstr,
+   *     payload: bstr,
+   *     other_fields: [
+   *         signatures: bstr
+   *     ]
+   * ]
+   */
+  static crypto::Sha256Hash create_countersign_tbs_hash_cose_sign(
+    std::span<const uint8_t> cose_sign,
+    std::span<const uint8_t> sign_protected)
+  {
+    auto [body_protected, payload, signatures] =
+      extract_sign_fields(cose_sign);
+
+    // Hash the Countersign_structure incrementally.
+    cbor::hasher hash;
+    hash.open_array(6);
+    hash.add_text("CounterSignatureV2");
+
+    // body_protected: The protected header of the target message.
+    hash.add_bytes(body_protected);
+    // sign_protected: The protected header of the countersigner.
+    hash.add_bytes(sign_protected);
+    // external_aad: always empty.
+    hash.add_bytes({});
+    // payload: The payload of the target message.
+    hash.add_bytes(payload);
+
+    // other_fields: Array holding the signatures of the target message.
+    hash.open_array(1);
+    hash.add_bytes(signatures);
+
+    return hash.finalise();
+  }
+
+  static std::vector<uint8_t> embed_receipt_cose_sign(
+    const std::vector<uint8_t>& cose_sign, const std::vector<uint8_t>& receipt)
+  {
+    // t_cose doesn't support modifying the unprotected header yet.
+    // The following code is a low-level workaround.
+
+    // Extract fields from the COSE_Sign1 message.
+    auto [protected_header, payload, signatures] =
+      extract_sign_fields(cose_sign);
+
+    // Decode unprotected header.
+    // TODO: This is a temporary solution to carry over Notary's x5chain
+    // parameter. Ideally, the full unprotected header should be preserved
+    // but that is more tricky to do in QCBOR.
+    UnprotectedHeader uhdr = std::get<1>(cose::decode_headers(cose_sign));
+    auto x5chain = uhdr.x5chain;
+
+    // Serialize COSE_Sign with new unprotected header.
+    cbor::encoder encoder;
+
+    QCBOREncode_AddTag(encoder, CBOR_TAG_COSE_SIGN1);
+
+    QCBOREncode_OpenArray(encoder);
+
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(protected_header));
+
+    // unprotected header
+    QCBOREncode_OpenMap(encoder);
+    QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_SCITT_RECEIPTS);
+    QCBOREncode_AddEncoded(encoder, cbor::from_bytes(receipt));
+    QCBOREncode_CloseArray(encoder);
+    if (x5chain.has_value())
+    {
+      auto certs = x5chain.value();
+      if (certs.size() == 1)
+      {
+        // To obey the IETF COSE X509 draft;
+        // A single cert MUST be serialized as a single bstr.
+        QCBOREncode_AddBytesToMapN(
+          encoder, COSE_HEADER_PARAM_X5CHAIN, cbor::from_bytes(certs[0]));
+      }
+      else
+      {
+        // And multiple certs MUST be serialized as an array of bstrs.
+        QCBOREncode_OpenArrayInMapN(encoder, COSE_HEADER_PARAM_X5CHAIN);
+        for (auto& cert : certs)
+        {
+          QCBOREncode_AddBytes(encoder, cbor::from_bytes(cert));
+        }
+        QCBOREncode_CloseArray(encoder);
+      }
+    }
+    QCBOREncode_CloseMap(encoder);
+
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(payload));
+    QCBOREncode_AddBytes(encoder, cbor::from_bytes(signatures));
 
     QCBOREncode_CloseArray(encoder);
 

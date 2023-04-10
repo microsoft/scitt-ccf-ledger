@@ -255,6 +255,12 @@ namespace scitt
           cose::create_countersign_tbs_hash(body, sign_protected);
         ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
       }
+      else
+      {
+        auto claims_digest =
+          cose::create_countersign_tbs_hash_cose_sign(body, sign_protected);
+        ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
+      }
 
       // Store the original COSE_Sign1 message in the KV.
       auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
