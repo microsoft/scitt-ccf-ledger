@@ -16,6 +16,7 @@ def retrieve_signed_contracts(
     from_seqno: Optional[int],
     to_seqno: Optional[int],
     service_trust_store_path: Optional[Path],
+    embed_receipt: Optional[bool] = False,
 ):
     base_path.mkdir(parents=True, exist_ok=True)
 
@@ -25,13 +26,13 @@ def retrieve_signed_contracts(
         service_trust_store = None
 
     for tx in client.enumerate_claims(start=from_seqno, end=to_seqno):
-        claim = client.get_claim(tx, embed_receipt=True)
+        claim = client.get_claim(tx, embed_receipt=embed_receipt)
         path = base_path / f"{tx}.cose"
 
         with open(path, "wb") as f:
             f.write(claim)
 
-        if service_trust_store:
+        if service_trust_store and embed_receipt:
             verify_contract_receipt(claim, service_trust_store=service_trust_store)
 
         with open(path, "wb") as f:
@@ -56,10 +57,18 @@ def cli(fn):
         help="Folder containing JSON parameter files of SCITT services to trust",
     )
 
+    parser.add_argument(
+        "-e",
+        "--embed-receipt",
+        action="store_true",
+        help=argparse.SUPPRESS,
+        default=False,
+    )
+
     def cmd(args):
         client = create_client(args)
         retrieve_signed_contracts(
-            client, args.path, args.from_seqno, args.to_seqno, args.service_trust_store
+            client, args.path, args.from_seqno, args.to_seqno, args.service_trust_store, args.embed_receipt
         )
 
     parser.set_defaults(func=cmd)
