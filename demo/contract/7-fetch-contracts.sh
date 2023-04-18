@@ -9,8 +9,8 @@ SCITT_TRUST_STORE=tmp/trust_store
 
 TMP_DIR=tmp/$GITHUB_USER
 
-scitt retrieve contracts \
+scitt retrieve-contracts ./tmp/contracts \
     --url $SCITT_URL \
     --service-trust-store $SCITT_TRUST_STORE \
-    --from 20 \
+    --from $1 \
     --development

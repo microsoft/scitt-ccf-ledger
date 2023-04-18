@@ -12,10 +12,12 @@ from . import (
     retrieve_signed_claims,
     sign_claims,
     submit_signed_claims,
+    retrieve_signed_contracts,
     sign_contract,
     submit_signed_contract,
     upload_did_web_doc_to_github,
     validate_cose,
+    validate_contract,
     sign_contract
 )
 
@@ -27,9 +29,11 @@ COMMANDS = [
     ("sign-contract", sign_contract),
     ("submit-contract", submit_signed_contract),
     ("retrieve", retrieve_signed_claims),
+    ("retrieve-contracts", retrieve_signed_contracts),
     ("pretty-receipt", pretty_receipt),
     ("embed-receipt", embed_receipt_in_cose),
     ("validate", validate_cose),
+    ("validate-contract", validate_contract),
     ("governance", governance),
     ("prefix-tree", prefix_tree)
 ]

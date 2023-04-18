@@ -57,9 +57,10 @@ namespace scitt
      * The COSE protected header of the countersigner (this service).
      */
     std::vector<uint8_t> sign_protected;
+    int profile;
   };
   DECLARE_JSON_TYPE(EntryInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected);
+  DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected, profile);
 
   enum class OperationStatus
   {

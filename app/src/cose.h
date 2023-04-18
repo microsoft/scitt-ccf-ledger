@@ -673,9 +673,10 @@ namespace scitt::cose
    * Returns an array containing the protected headers, the payload and the
    * signatures.
    */
-  static std::array<std::span<const uint8_t>, 3> extract_sign_fields(
+  static std::vector<std::span<const uint8_t>> extract_sign_fields(
     std::span<const uint8_t> cose_sign)
   {
+    std::vector<std::span<const uint8_t>> sign_fields;
     QCBORDecodeContext ctx;
     QCBORDecode_Init(
       &ctx, cbor::from_bytes(cose_sign), QCBOR_DECODE_MODE_NORMAL);
@@ -686,6 +687,7 @@ namespace scitt::cose
     // protected headers
     QCBORDecode_GetByteString(&ctx, &bstr_item);
     auto phdrs = cbor::as_span(bstr_item);
+    sign_fields.push_back(phdrs);
 
     QCBORItem item;
     // skip unprotected header
@@ -694,9 +696,9 @@ namespace scitt::cose
     // payload
     QCBORDecode_GetByteString(&ctx, &bstr_item);
     auto payload = cbor::as_span(bstr_item);
+    sign_fields.push_back(payload);
 
     // signatures
-    std::vector<uint8_t> signatures;
     QCBORDecode_EnterArray(&ctx, nullptr);
 
     while (true) 
@@ -710,10 +712,7 @@ namespace scitt::cose
       // signature protected headers
       QCBORDecode_GetByteString(&ctx, &bstr_item);
       auto signature_phdrs = cbor::as_span(bstr_item);
-      signatures.insert(
-        signatures.end(), 
-        signature_phdrs.begin(),
-        signature_phdrs.end());
+      sign_fields.push_back(signature_phdrs);
 
       // skip unproctected headers
       QCBORDecode_VGetNextConsume(&ctx, &item);
@@ -721,7 +720,7 @@ namespace scitt::cose
       // signature
       QCBORDecode_GetByteString(&ctx, &bstr_item);
       auto signature = cbor::as_span(bstr_item);
-      signatures.insert(signatures.end(), signature.begin(), signature.end());
+      sign_fields.push_back(signature);
 
       QCBORDecode_ExitArray(&ctx);
     }
@@ -735,7 +734,7 @@ namespace scitt::cose
       throw std::runtime_error("Failed to decode COSE_Sign");
     }
 
-    return {phdrs, payload, signatures};
+    return sign_fields;
   }
 
   /**
@@ -937,8 +936,13 @@ namespace scitt::cose
     std::span<const uint8_t> cose_sign,
     std::span<const uint8_t> sign_protected)
   {
-    auto [body_protected, payload, signatures] =
-      extract_sign_fields(cose_sign);
+    auto sign_fields = extract_sign_fields(cose_sign);
+    auto body_protected = sign_fields[0];
+    auto payload = sign_fields[1];
+    std::vector<uint8_t> signatures;
+    for (size_t i = 2; i < sign_fields.size(); i++)
+      signatures.insert(
+        signatures.end(), sign_fields[i].begin(), sign_fields[i].end());
 
     // Hash the Countersign_structure incrementally.
     cbor::hasher hash;
@@ -968,8 +972,9 @@ namespace scitt::cose
     // The following code is a low-level workaround.
 
     // Extract fields from the COSE_Sign1 message.
-    auto [protected_header, payload, signatures] =
-      extract_sign_fields(cose_sign);
+    auto sign_fields = extract_sign_fields(cose_sign);
+    auto protected_header = sign_fields[0];
+    auto payload = sign_fields[1];
 
     // Decode unprotected header.
     // TODO: This is a temporary solution to carry over Notary's x5chain
@@ -981,7 +986,7 @@ namespace scitt::cose
     // Serialize COSE_Sign with new unprotected header.
     cbor::encoder encoder;
 
-    QCBOREncode_AddTag(encoder, CBOR_TAG_COSE_SIGN1);
+    QCBOREncode_AddTag(encoder, CBOR_TAG_COSE_SIGN);
 
     QCBOREncode_OpenArray(encoder);
 
@@ -1016,7 +1021,24 @@ namespace scitt::cose
     QCBOREncode_CloseMap(encoder);
 
     QCBOREncode_AddBytes(encoder, cbor::from_bytes(payload));
-    QCBOREncode_AddBytes(encoder, cbor::from_bytes(signatures));
+
+    // Signatures
+    QCBOREncode_OpenArray(encoder);
+    for (size_t i = 2; i < sign_fields.size(); i+=2)
+    {
+      QCBOREncode_OpenArray(encoder);
+      // protected headers
+      QCBOREncode_AddBytes(encoder, cbor::from_bytes(sign_fields[i]));
+
+      // Empty map with unprotected headers
+      QCBOREncode_OpenMap(encoder);
+      QCBOREncode_CloseMap(encoder);
+
+      // signature
+      QCBOREncode_AddBytes(encoder, cbor::from_bytes(sign_fields[i+1]));
+      QCBOREncode_CloseArray(encoder);
+    }
+    QCBOREncode_CloseArray(encoder);
 
     QCBOREncode_CloseArray(encoder);
 

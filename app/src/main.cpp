@@ -262,7 +262,7 @@ namespace scitt
         ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
       }
 
-      // Store the original COSE_Sign1 message in the KV.
+      // Store the original COSE_Sign1 or COSE_Sign message in the KV.
       auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
       entry_table->put(body);
 
@@ -272,6 +272,7 @@ namespace scitt
         ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
       entry_info_table->put(EntryInfo{
         .sign_protected = sign_protected,
+        .profile = (int) claim_profile
       });
 
       SCITT_INFO(
@@ -466,7 +467,14 @@ namespace scitt
           {
             throw InternalError(e.what());
           }
-          entry_out = cose::embed_receipt(entry.value(), receipt);
+          SCITT_INFO(
+              "Returning entry with profile {}", entry_info.profile);
+          if (static_cast<ClaimProfile>(entry_info.profile) == ClaimProfile::Contract){
+            entry_out = cose::embed_receipt_cose_sign(entry.value(), receipt);
+          }
+          else {
+            entry_out = cose::embed_receipt(entry.value(), receipt);
+          }
         }
         else
         {

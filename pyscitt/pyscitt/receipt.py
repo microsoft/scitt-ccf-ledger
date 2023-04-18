@@ -6,6 +6,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from functools import reduce
 
 import cbor2
 import ccf.receipt
@@ -177,14 +178,29 @@ class Receipt:
         ]
         return cbor2.dumps(countersign_structure)
 
+    def signers(self, contract: SignMessage) -> list:
+        return reduce(lambda a, b: a + b, [signer.phdr_encoded + signer.signature for signer in contract.signers])
+        
+    def countersign_structure_contract(self, contract: SignMessage) -> bytes:
+        context = "CounterSignatureV2"
+        print (contract)
+        countersign_structure = [
+            context,
+            contract.phdr_encoded,
+            self.phdr_encoded,
+            b"",  # no external AAD
+            contract.payload,
+            [self.signers(contract)],
+        ]
+        return cbor2.dumps(countersign_structure)
+
     def verify(self, claim: Sign1Message, service_params: "ServiceParameters"):
         tbs = self.countersign_structure(claim)
         self.contents.verify(tbs, service_params)
 
     def verify_contract(self, contract: SignMessage, service_params: "ServiceParameters"):
-        #tbs = self.countersign_structure(contract)
-        #self.contents.verify(tbs, service_params)
-        True
+        tbs = self.countersign_structure_contract(contract)
+        self.contents.verify(tbs, service_params)
 
     def as_dict(self) -> dict:
         """

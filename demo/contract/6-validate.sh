@@ -8,6 +8,6 @@ SCITT_TRUST_STORE=tmp/trust_store
 
 TMP_DIR=tmp/$GITHUB_USER
 
-scitt validate $TMP_DIR/contract.cose \
+scitt validate-contract $TMP_DIR/contract.cose \
     --receipt $TMP_DIR/contract.receipt.cbor \
     --service-trust-store $SCITT_TRUST_STORE
