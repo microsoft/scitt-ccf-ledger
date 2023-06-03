@@ -14,19 +14,49 @@
       "id" : "19517ba8-bab8-11ed-afa1-0242ac120002",
       "name": "icmr-infection",
       "url" : "https://ccrcontainer.blob.core.windows.net/icmr/data.img",
-      "provider": "did:web:kapilvgit.github.io"
+      "provider": "did:web:kapilvgit.github.io",
+      "key" : {
+        "type": "azure",
+        "properties": {
+          "kid": "ICMRFilesystemEncryptionKey",
+          "authority": {
+              "endpoint": "sharedneu.neu.attest.azure.net"
+          },
+          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+        }
+      }
     },
     {
       "id" : "216d5cc6-bab8-11ed-afa1-0242ac120002",
       "name": "cowin",
       "url" : "https://ccrcontainer.blob.core.windows.net/cowin/data.img",
-      "provider": "did:web:kapilv78.github.io"
+      "provider": "did:web:kapilv78.github.io",
+      "key" : {
+        "type": "azure",
+        "properties": {
+          "kid": "COWINFilesystemEncryptionKey",
+          "authority": {
+              "endpoint": "sharedneu.neu.attest.azure.net"
+          },
+          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+        }
+      }
     },
     {
       "id" : "2830a144-bab8-11ed-afa1-0242ac120002",
       "name": "state-war-room-hospitalization",
       "url" : "https://ccrcontainer.blob.core.windows.net/swr/data.img",
-      "provider": "did:web:kapilvgit.github.io/swr.kar.nic.in"
+      "provider": "did:web:kapilvgit.github.io/swr.kar.nic.in",
+      "key" : {
+        "type": "azure",
+        "properties": {
+          "kid": "IndexFilesystemEncryptionKey",
+          "authority": {
+              "endpoint": "sharedneu.neu.attest.azure.net"
+          },
+          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+        }
+      }
     }
   ],
   "purpose": "TRAINING",
@@ -54,14 +84,13 @@
           "delta": "0.01",
           "epochs_per_report": "2"
         }
-      ],
-      "compute": {
-        "ccr_security_policy": ""
-      }
+      ]
     }
   ],
   "terms": {
     "payment" : {
+    },
+    "revocation": {      
     }
   }
 }

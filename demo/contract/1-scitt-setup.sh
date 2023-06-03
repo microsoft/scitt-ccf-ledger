@@ -6,7 +6,7 @@ set -ex
 
 mkdir -p tmp
 
-SCITT_URL="https://127.0.0.1:8000"
+SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 
 curl -o tmp/cacert.pem "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
 
