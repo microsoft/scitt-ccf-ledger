@@ -8,8 +8,10 @@ import pytest
 
 from pyscitt import crypto, governance
 
+DEFAULT_ITERATIONS_NUM = 10
+CLIENT_WAIT_TIME = 0.01
 
-def measure_latency(fn, arg_fn=None, n=150):
+def measure_latency(fn, arg_fn=None, n=DEFAULT_ITERATIONS_NUM):
     if arg_fn is None:
 
         def arg_fn():
@@ -36,19 +38,16 @@ class TestPerf:
     def test_latency(self, client, did_web, trusted_ca):
         payload = {"foo": "bar"}
 
-        client = client.replace(wait_time=0.01, tcp_nodelay_patch=True)
+        client = client.replace(wait_time=CLIENT_WAIT_TIME)
 
         # Test did:web performance (uncached resolution).
-        uncached_repeat = 20
         latency_did_web_uncached_submit_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=True),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-            n=uncached_repeat,
         )
         latency_did_web_uncached_submit_and_receipt_s = measure_latency(
             lambda claim: client.submit_claim(claim, skip_confirmation=False),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-            n=uncached_repeat,
         )
 
         # Test did:web performance (cached resolution).
