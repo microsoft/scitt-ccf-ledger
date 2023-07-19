@@ -40,7 +40,7 @@ class TestLoad:
                     "--spawn-rate",
                     str(LOCUST_USERS_SPAWN_RATE),
                     "--run-time",
-                    str(LOCUST_RUNTIME) + "s",
+                    str(LOCUST_RUNTIME_SEC) + "s",
                     "--scitt-claims",
                     str(tmp_path),
                 ],
