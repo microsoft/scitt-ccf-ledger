@@ -5,12 +5,12 @@
 # the SCITT container is deployed in Kubernetes without any orchestration sidecars.
 
 WAIT_TIME_SEC=3
-TIMEOUT_SEC=300
+TIMEOUT_SEC=5
 
 echo "Starting app"
-config_arg=$1
+config_arg=${1:?first argument is the configuration argument to pass to cchost (e.g., "--config /path/to/config.json"))}
 
-cchost --check ${config_arg}
+cchost --check "${config_arg}"
 code=$?
 
 start_time=$(date +%s)
@@ -18,16 +18,17 @@ start_time=$(date +%s)
 while [[ $code -ne 0 ]]; do
     
     # Exit if timeout is reached
-    if [[ $(($(date +%s) - $start_time)) -ge $TIMEOUT_SEC ]]; then
+    current_time=$(date +%s)
+    if [[ $((current_time - start_time)) -ge $TIMEOUT_SEC ]]; then
         echo "Timeout reached. Exiting..."
         exit 1
     fi
     
     echo "Waiting for configuration file to be ready..."
     sleep $WAIT_TIME_SEC
-    cchost --check ${config_arg}
+    cchost --check "${config_arg}"
     code=$?
 done
 
 echo "Running cchost from $(pwd)"
-stdbuf -o L cchost ${config_arg}
+stdbuf -o L cchost "${config_arg}"
