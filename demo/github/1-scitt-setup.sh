@@ -12,7 +12,7 @@ curl -L -o tmp/cacert.pem "https://ccadb-public.secure.force.com/mozilla/Include
 scitt governance propose_ca_certs \
     --name did_web_tls_roots \
     --ca-certs tmp/cacert.pem \
-    --url $SCITT_URL \
+    --url "$SCITT_URL" \
     --member-key workspace/member0_privk.pem \
     --member-cert workspace/member0_cert.pem \
     --development
@@ -27,4 +27,4 @@ scitt governance propose_configuration \
 TRUST_STORE=tmp/trust_store
 mkdir -p $TRUST_STORE
 
-curl -k -f $SCITT_URL/parameters > $TRUST_STORE/scitt.json
+curl -k -f "$SCITT_URL"/parameters > $TRUST_STORE/scitt.json

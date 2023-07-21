@@ -11,6 +11,6 @@ TMP_DIR=tmp/github
 
 scitt submit $TMP_DIR/claims.cose \
     --receipt $TMP_DIR/claims.receipt.cbor \
-    --url $SCITT_URL \
+    --url "$SCITT_URL" \
     --service-trust-store $SCITT_TRUST_STORE \
     --development
