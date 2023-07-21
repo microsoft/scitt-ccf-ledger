@@ -90,7 +90,7 @@ docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
     -v "$VOLUME_NAME":/host \
-    "$DOCKER_TAG" "--config /host/dev-config.json"
+    "$DOCKER_TAG" --config /host/dev-config.json
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
