@@ -6,6 +6,7 @@ set -e
 
 PLATFORM=${PLATFORM:-sgx}
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
+DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$PLATFORM"}
 
 if [ "$PLATFORM" = "sgx" ]; then
     DOCKERFILE="enclave.Dockerfile"
@@ -20,8 +21,6 @@ git submodule sync
 git submodule update --init --recursive
 
 SCITT_VERSION_OVERRIDE=$(git describe --tags --match="*.*.*")
-
-DOCKER_TAG="scitt-ccf-ledger-$PLATFORM"
 
 DOCKER_BUILDKIT=1 docker build \
     -t "$DOCKER_TAG" \
