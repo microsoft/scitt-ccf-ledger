@@ -9,13 +9,22 @@ jobs:
     container:
       image: mcr.microsoft.com/ccf/app/dev:3.0.9-virtual
       env:
+        # Helps to distinguish between CI and local builds.
+        SCITT_CI: 1
+        # Additional CMake flags.
         PLATFORM: virtual
+        CMAKE_BUILD_TYPE: Debug
+        ENABLE_PREFIX_TREE: ON
+        ENABLE_CLANG_TIDY: ON
+        # These make CI print all the errors, rather than stopping early.
+        CXXFLAGS: -ferror-limit=0
+        NINJA_FLAGS: -k 0
     steps:
       - uses: actions/checkout@v3
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
-      - name: Install attested fetch dependency
-        run: apt-get update && apt-get install -y libcurl4-openssl-dev
+      - run: apt-get update && apt-get install -y libcurl4-openssl-dev faketime clang-tidy-10
+      - run: ./scripts/ci-checks.sh
       - run: ./build.sh
       - run: ./run_unit_tests.sh
