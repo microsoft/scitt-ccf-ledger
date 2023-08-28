@@ -1,0 +1,16 @@
+name: "Build/test (virtual)"
+on: [push]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: mcr.microsoft.com/ccf/app/dev:3.0.9-virtual
+      env:
+        PLATFORM: virtual
+    steps:
+      - uses: actions/checkout@v3
+      - run: ./build.sh
+      - run: ./run_unit_tests.sh
