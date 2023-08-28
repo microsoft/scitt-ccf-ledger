@@ -20,7 +20,10 @@ jobs:
         CXXFLAGS: -ferror-limit=0
         NINJA_FLAGS: -k 0
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository with tags
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
