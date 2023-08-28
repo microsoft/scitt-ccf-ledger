@@ -31,3 +31,4 @@ jobs:
       - run: ./scripts/ci-checks.sh
       - run: ./build.sh
       - run: ./run_unit_tests.sh
+      - run: ./run_functional_tests.sh --enable-prefix-tree --enable-faketime
