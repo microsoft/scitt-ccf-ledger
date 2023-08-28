@@ -15,5 +15,7 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
+      - name: Install attested fetch dependency
+        run: apt-get update && apt-get install -y libcurl4-openssl-dev
       - run: ./build.sh
       - run: ./run_unit_tests.sh
