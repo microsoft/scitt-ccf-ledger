@@ -12,5 +12,8 @@ jobs:
         PLATFORM: virtual
     steps:
       - uses: actions/checkout@v3
+      # Work-around for https://github.com/actions/runner/issues/2033
+      - name: Work around git safe.directory in container
+        run: chown -R $(id -u):$(id -g) $PWD
       - run: ./build.sh
       - run: ./run_unit_tests.sh
