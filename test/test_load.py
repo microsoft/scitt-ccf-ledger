@@ -15,6 +15,7 @@ LOCUST_PEAK_USERS = 500
 LOCUST_USERS_SPAWN_RATE = 10
 LOCUST_RUNTIME_SEC = 60
 
+
 @pytest.mark.perf
 @pytest.mark.disable_proxy
 class TestLoad:

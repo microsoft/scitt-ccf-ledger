@@ -10,13 +10,14 @@ from pyscitt.client import Client
 
 CLIENT_WAIT_TIME = 0.01
 
+
 @events.init_command_line_parser.add_listener
 def init_parser(parser):
     parser.add_argument("--scitt-claims", help="Path to claims directory")
     parser.add_argument(
-        "--skip-confirmation", 
+        "--skip-confirmation",
         help="Whether to skip claim submission confirmation or not",
-        action="store_true", 
+        action="store_true",
         default=False,
     )
 
@@ -56,4 +57,9 @@ class Submitter(ScittUser):
     @task
     def submit_claim(self):
         claim = self._claims[random.randrange(len(self._claims))]
-        self.trace("submit_claim", lambda: self.client.submit_claim(claim, skip_confirmation=self.skip_confirmation))
+        self.trace(
+            "submit_claim",
+            lambda: self.client.submit_claim(
+                claim, skip_confirmation=self.skip_confirmation
+            ),
+        )
