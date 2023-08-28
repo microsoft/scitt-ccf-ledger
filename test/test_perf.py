@@ -6,10 +6,11 @@ import time
 
 import pytest
 
-from pyscitt import crypto, governance
+from pyscitt import crypto
 
 DEFAULT_ITERATIONS_NUM = 10
 CLIENT_WAIT_TIME = 0.01
+
 
 def measure_latency(fn, arg_fn=None, n=DEFAULT_ITERATIONS_NUM):
     if arg_fn is None:

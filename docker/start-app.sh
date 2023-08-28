@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
 # This configuration is a temporary workaround until we migrate to CCF 4.0.3, which supports
 # a cchost "config-timeout" option to accomplish a similar result. This logic is required when

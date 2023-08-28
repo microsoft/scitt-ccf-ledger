@@ -1,5 +1,7 @@
 # scitt-ccf-ledger
 
+[![Build/test (virtual)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test-virtual.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test-virtual.yml)
+
 This repository contains the source code for scitt-ccf-ledger, an application
 that runs on top of [CCF](https://ccf.dev/) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
 
