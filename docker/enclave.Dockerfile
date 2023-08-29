@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.9
+ARG CCF_VERSION=3.0.13
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
@@ -7,7 +7,7 @@ ARG SCITT_VERSION_OVERRIDE
 COPY ./3rdparty/attested-fetch /tmp/attested-fetch/
 RUN mkdir /tmp/attested-fetch-build && \
     cd /tmp/attested-fetch-build && \
-    CC="/opt/oe_lvi/clang-10" CXX="/opt/oe_lvi/clang++-10" cmake -GNinja \
+    CC="clang-11" CXX="clang++-11" cmake -GNinja \
     -DCOMPILE_TARGET="sgx" \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app/attested-fetch \
@@ -22,7 +22,7 @@ RUN /opt/openenclave/bin/oesign dump -e libafetch.enclave.so.signed | sed -n "s/
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \
     cd /tmp/app-build && \
-    CC="/opt/oe_lvi/clang-10" CXX="/opt/oe_lvi/clang++-10" cmake -GNinja \
+    CC="clang-11" CXX="clang++-11" cmake -GNinja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
     -DCOMPILE_TARGET="sgx" \

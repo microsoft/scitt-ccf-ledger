@@ -30,9 +30,9 @@ if (CCF_UNSAFE)
     message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
   endif()
 
-  find_package(ccf_sgx_unsafe 3.0.9 REQUIRED)
+  find_package(ccf_sgx_unsafe 3.0.13 REQUIRED)
 else()
-  find_package(ccf_${COMPILE_TARGET} 3.0.9 REQUIRED)
+  find_package(ccf_${COMPILE_TARGET} 3.0.13 REQUIRED)
 endif()
 
 if (ENABLE_PREFIX_TREE)
@@ -66,7 +66,7 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-10" "clang-tidy" REQUIRED)
+  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-11" "clang-tidy" REQUIRED)
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
