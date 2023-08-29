@@ -113,7 +113,7 @@ stages:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
             ENABLE_CLANG_TIDY: ON
-          InstallPackages: [ libcurl4-openssl-dev, clang-tidy-10 ]
+          InstallPackages: [ libcurl4-openssl-dev, clang-tidy-15 ]
 
       - job: format
         displayName: Code Formatting

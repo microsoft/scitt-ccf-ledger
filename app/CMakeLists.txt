@@ -6,8 +6,8 @@ cmake_minimum_required(VERSION 3.16)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER "/opt/oe_lvi/clang++-10")
-  message("Set CMAKE_CXX_COMPILER to /opt/oe_lvi/clang++-10")
+  set(CMAKE_CXX_COMPILER clang++-11)
+  message("Set CMAKE_CXX_COMPILER to clang++-11")
 endif()
 
 project(scitt
@@ -66,11 +66,15 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-11" "clang-tidy" REQUIRED)
+  if(COMPILE_TARGET STREQUAL "sgx")
+    find_program (CLANG_TIDY_EXE NAMES "clang-tidy-11" "clang-tidy" REQUIRED)
+  else()
+    find_program (CLANG_TIDY_EXE NAMES "clang-tidy-15" "clang-tidy" REQUIRED)
+  endif()
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
-endif ()
+endif()
 
 if (COMPILE_TARGET STREQUAL "sgx")
   # Generate an ephemeral signing key

@@ -9,8 +9,6 @@ PLATFORM=${PLATFORM:-sgx}
 CCF_UNSAFE=${CCF_UNSAFE:-OFF}
 ENABLE_PREFIX_TREE=${ENABLE_PREFIX_TREE:-OFF}
 BUILD_TESTS=${BUILD_TESTS:-ON}
-CC=${CC:-clang-11}
-CXX=${CXX:-clang++-11}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
 NINJA_FLAGS=${NINJA_FLAGS:-}
 
@@ -23,6 +21,20 @@ install_dir=/tmp/scitt
 mkdir -p $install_dir
 
 mkdir -p build/attested-fetch
+
+if [ "$PLATFORM" = "sgx" ]; then
+    ATTESTED_FETCH_MRENCLAVE_HEX=$(/opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed | sed -n "s/mrenclave=//p")
+    CC=${CC:-clang-11}
+    CXX=${CXX:-clang++-11}
+elif [ "$PLATFORM" = "virtual" ]; then
+    ATTESTED_FETCH_MRENCLAVE_HEX=""
+    CC=${CC:-clang-15}
+    CXX=${CXX:-clang++-15}
+else
+    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
+    exit 1
+fi
+
 CC="$CC" CXX="$CXX" \
     cmake -GNinja -B build/attested-fetch \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
@@ -32,15 +44,6 @@ CC="$CC" CXX="$CXX" \
 
 ninja -C build/attested-fetch ${NINJA_FLAGS} --verbose
 ninja -C build/attested-fetch ${NINJA_FLAGS} install
-
-if [ "$PLATFORM" = "sgx" ]; then
-    ATTESTED_FETCH_MRENCLAVE_HEX=$(/opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed | sed -n "s/mrenclave=//p")
-elif [ "$PLATFORM" = "virtual" ]; then
-    ATTESTED_FETCH_MRENCLAVE_HEX=""
-else
-    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
-    exit 1
-fi
 
 cp "$root_dir"/app/fetch-did-web-doc.py $install_dir
 
