@@ -5,11 +5,15 @@
 # - readability-braces-around-statements
 # - readability-implicit-bool-conversion
 # - readability-qualified-auto
-#
+# - readability-function-cognitive-complexity
+# - bugprone-branch-clone,
+# - modernize-use-equals-default
+# - readability-named-parameter
 # The others are a bit more subjective and not really worth doing anything about.
 Checks: >
   -*,
   bugprone-*,
+  -bugprone-branch-clone,
   cert-*,
   -cert-err58-cpp,
   clang-analyzer-*,
@@ -27,6 +31,7 @@ Checks: >
   -modernize-use-nullptr,
   -modernize-use-trailing-return-type,
   -modernize-use-using,
+  -modernize-use-equals-default,
   performance-*,
   -performance-move-const-arg,
   -performance-unnecessary-value-param,
@@ -37,6 +42,8 @@ Checks: >
   -readability-implicit-bool-conversion,
   -readability-magic-numbers,
   -readability-qualified-auto,
+  -readability-function-cognitive-complexity,
+  -readability-named-parameter,
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
