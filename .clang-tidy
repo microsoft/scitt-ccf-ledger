@@ -1,5 +1,6 @@
 # Some of these we should fix:
 # - misc-non-private-member-variables-in-classes
+# - misc-no-recursion
 # - performance-move-const-arg
 # - performance-unnecessary-value-param
 # - readability-braces-around-statements
@@ -7,13 +8,18 @@
 # - readability-qualified-auto
 # - readability-function-cognitive-complexity
 # - bugprone-branch-clone,
+# - bugprone-exception-escape
+# - bugprone-narrowing-conversions,
 # - modernize-use-equals-default
 # - readability-named-parameter
+# - readability-use-anyofallof
 # The others are a bit more subjective and not really worth doing anything about.
 Checks: >
   -*,
   bugprone-*,
   -bugprone-branch-clone,
+  -bugprone-narrowing-conversions,
+  -bugprone-exception-escape,
   cert-*,
   -cert-err58-cpp,
   clang-analyzer-*,
@@ -21,6 +27,7 @@ Checks: >
   misc-*,
   -misc-non-private-member-variables-in-classes,
   -misc-unused-parameters,
+  -misc-no-recursion,
   modernize-*,
   -modernize-avoid-bind,
   -modernize-avoid-c-arrays,
@@ -44,6 +51,7 @@ Checks: >
   -readability-qualified-auto,
   -readability-function-cognitive-complexity,
   -readability-named-parameter,
+  -readability-use-anyofallof,
 
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
