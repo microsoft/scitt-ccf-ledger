@@ -15,6 +15,8 @@
 # - readability-use-anyofallof
 # - clang-analyzer-optin.cplusplus.VirtualCall
 # - bugprone-reserved-identifier
+# - cert-dcl37-c
+# - cert-dcl51-cpp
 # The others are a bit more subjective and not really worth doing anything about.
 Checks: >
   -*,
@@ -25,6 +27,8 @@ Checks: >
   -bugprone-reserved-identifier,
   cert-*,
   -cert-err58-cpp,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
   clang-analyzer-*,
   -clang-analyzer-optin.cplusplus.VirtualCall,
   concurrency-*,
