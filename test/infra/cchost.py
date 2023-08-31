@@ -242,7 +242,7 @@ class CCHost(EventLoopThread):
 
             if process.returncode != 0:
                 raise RuntimeError(
-                    f"cchost process terminated with a non-zero status: {process.returncode}\nError output: {process.stderr.read()}"
+                    f"cchost process terminated with a non-zero status: {process.returncode}"
                 )
 
         # The only way we can reach this point is if cchost terminates with a
@@ -315,9 +315,10 @@ class CCHost(EventLoopThread):
             await asyncio.open_connection("127.0.0.1", int(port), ssl=ssl_ctx)
 
             return int(port)
-        except OSError:
+        except OSError as ex:
             # Assume the service is not ready yet. Either we failed to read the
             # ports file, or we couldn't establish a connection to it.
+            LOG.exception(f"Exception while establishing a connection: {ex}")
             return None
 
     def _populate_workspace(self, start=True):
