@@ -6,8 +6,13 @@ cmake_minimum_required(VERSION 3.16)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER clang++-11)
-  message("Set CMAKE_CXX_COMPILER to clang++-11")
+  if (${COMPILE_TARGET} STREQUAL "sgx")
+    set(CMAKE_CXX_COMPILER clang++-11)
+    message("Set CMAKE_CXX_COMPILER to clang++-11")
+  else()
+    set(CMAKE_CXX_COMPILER clang++-15)
+    message("Set CMAKE_CXX_COMPILER to clang++-15")  
+  endif()
 endif()
 
 project(scitt
