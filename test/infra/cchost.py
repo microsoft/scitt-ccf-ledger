@@ -241,8 +241,9 @@ class CCHost(EventLoopThread):
                 pass
 
             if process.returncode != 0:
+                error_output = await process.stderr.read()
                 raise RuntimeError(
-                    f"cchost process terminated with a non-zero status: {process.returncode}"
+                    f"cchost process terminated with a non-zero status: {process.returncode}\nError output: {error_output.decode()}"
                 )
 
         # The only way we can reach this point is if cchost terminates with a
