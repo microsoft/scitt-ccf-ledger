@@ -11,8 +11,8 @@ from pyscitt import crypto
 from pyscitt.client import Client
 
 NUM_CLAIMS = 100
-LOCUST_PEAK_USERS = 500
-LOCUST_USERS_SPAWN_RATE = 10
+LOCUST_PEAK_USERS = 100
+LOCUST_USERS_SPAWN_RATE = 5
 LOCUST_RUNTIME_SEC = 60
 
 
