@@ -28,6 +28,9 @@ RUN mkdir /tmp/app-build && \
     /tmp/app && \
     ninja && ninja install
 
+WORKDIR /usr/src/app
+RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.virtual.so | sed -n "s/mrenclave=//p" > mrenclave.txt
+
 FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-virtual
 ARG CCF_VERSION
 
@@ -37,6 +40,7 @@ RUN apt-get update && apt-get install -y python3 \
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/lib/libscitt.virtual.so libscitt.virtual.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
+COPY --from=builder /usr/src/app/mrenclave.txt mrenclave.txt
 
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
