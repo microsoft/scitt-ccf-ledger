@@ -62,11 +62,7 @@ CC="$CC" CXX="$CXX" \
 ninja -C build/app ${NINJA_FLAGS} --verbose
 ninja -C build/app ${NINJA_FLAGS} install
 
-echo "Dumping enclave details:"
 if [ "$PLATFORM" = "sgx" ]; then
+    echo "Dumping enclave details:"
     /opt/openenclave/bin/oesign dump -e $install_dir/lib/libscitt.enclave.so.signed
-elif [ "$PLATFORM" = "virtual" ]; then
-    /opt/openenclave/bin/oesign dump -e $install_dir/lib/libscitt.virtual.so
-else
-    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
 fi
