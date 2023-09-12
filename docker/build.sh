@@ -29,7 +29,7 @@ DOCKER_BUILDKIT=1 docker build \
     .
 
 echo "MRENCLAVE:"
-docker run --rm -it --entrypoint /bin/cat "$DOCKER_TAG" /usr/src/app/mrenclave.txt
+docker run --rm --entrypoint /bin/cat "$DOCKER_TAG" /usr/src/app/mrenclave.txt
 
 if [ -n "$SAVE_IMAGE_PATH" ]; then
     docker save "$DOCKER_TAG" -o "$SAVE_IMAGE_PATH"
