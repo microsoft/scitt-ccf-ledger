@@ -28,6 +28,7 @@ RUN mkdir /tmp/app-build && \
     /tmp/app && \
     ninja && ninja install
 
+# Save MRENCLAVE
 WORKDIR /usr/src/app
 RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.virtual.so | sed -n "s/mrenclave=//p" > mrenclave.txt
 
