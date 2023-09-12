@@ -61,3 +61,8 @@ CC="$CC" CXX="$CXX" \
 
 ninja -C build/app ${NINJA_FLAGS} --verbose
 ninja -C build/app ${NINJA_FLAGS} install
+
+if [ "$PLATFORM" = "sgx" ]; then
+    echo "Dumping enclave details:"
+    /opt/openenclave/bin/oesign dump -e $install_dir/lib/libscitt.enclave.so.signed
+fi
