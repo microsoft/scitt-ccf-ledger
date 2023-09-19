@@ -14,6 +14,12 @@ Acting as the SCITT Operator run:
 ./start.sh
 ```
 
+Alternatively, set the SCITT_URL variable if you are targeting a remote instance:
+
+```
+export SCITT_URL=<address>
+```
+
 In a new terminal run:
 ```
 ./demo/github/0-install-cli.sh

@@ -7,6 +7,9 @@ set -e
 DOCKER=${DOCKER:-0}
 PLATFORM=${PLATFORM:-sgx}
 
+# Variable to set enable performance tests
+ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
+
 # If ELEVATE_PRIVILEGES is non-empty, the functional tests will be run with
 # the NET_BIND_SERVICE capability, allowing certain tests that bind
 # priviledged ports to run. Note that this isn't necessary in our CI
@@ -51,6 +54,12 @@ source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
+
+# Enable performance tests if the variable is set
+if [ -n "$ENABLE_PERF_TESTS" ]; then
+    TEST_ARGS="$TEST_ARGS --enable-perf"
+    echo "Performance tests enabled"
+fi
 
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
