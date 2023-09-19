@@ -9,7 +9,7 @@ trigger:
 parameters:
   - name: CCF_VERSION
     type: string
-    default: 3.0.9
+    default: 3.0.12
 
 resources:
   containers:
@@ -35,7 +35,7 @@ stages:
           Name: test_sgx_no_prefix_tree
           DisplayName: Test (SGX, no prefix tree)
           Platform: sgx
-          Pool: 1es-dcv3
+          Pool: 1es-dc-pool
           Environment:
             ENABLE_PREFIX_TREE: OFF
           FunctionalTestArguments: '--enable-perf'
@@ -46,7 +46,7 @@ stages:
           Name: test_sgx
           DisplayName: Test (SGX, with prefix tree)
           Platform: sgx
-          Pool: 1es-dcv3
+          Pool: 1es-dc-pool
           Environment:
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
@@ -67,7 +67,7 @@ stages:
           Name: test_sgx_docker
           DisplayName: Test (SGX on Docker, no prefix tree)
           Platform: sgx
-          Pool: 1es-dcv3
+          Pool: 1es-dc-pool
           Variant: Docker
           ImageFilename: scitt-ccf-ledger-sgx.tar
           Environment:

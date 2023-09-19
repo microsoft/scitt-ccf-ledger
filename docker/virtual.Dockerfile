@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.9
+ARG CCF_VERSION=3.0.12
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
@@ -41,6 +41,10 @@ COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 
+COPY ./docker/start-app.sh /usr/src/app/start-app.sh
+
+RUN ["chmod", "+x", "start-app.sh"]
+
 WORKDIR /host/node
 
-ENTRYPOINT ["cchost"]
+ENTRYPOINT [ "/usr/src/app/start-app.sh" ]
