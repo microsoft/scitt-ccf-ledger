@@ -74,9 +74,8 @@ namespace scitt::cose
   // Temporary assignments for contract service
   static constexpr int64_t CONTRACT_HEADER_PARAM_PARTICIPANT_INFO = 491;
 
-  static const std::set<std::variant<int64_t, std::string>> CONTRACT_HEADER_PARAMS {
-    CONTRACT_HEADER_PARAM_PARTICIPANT_INFO
-  };
+  static const std::set<std::variant<int64_t, std::string>>
+    CONTRACT_HEADER_PARAMS{CONTRACT_HEADER_PARAM_PARTICIPANT_INFO};
 
   struct COSEDecodeError : public std::runtime_error
   {
@@ -160,7 +159,9 @@ namespace scitt::cose
         return true;
       }
       if (
-        label == std::variant<int64_t, std::string>(CONTRACT_HEADER_PARAM_PARTICIPANT_INFO) and
+        label ==
+          std::variant<int64_t, std::string>(
+            CONTRACT_HEADER_PARAM_PARTICIPANT_INFO) and
         participant_info.has_value())
       {
         return true;
@@ -376,7 +377,8 @@ namespace scitt::cose
     header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
 
-    header_items[CONTRACT_PARTICIPANT_INFO_INDEX].label.int64 = CONTRACT_HEADER_PARAM_PARTICIPANT_INFO;
+    header_items[CONTRACT_PARTICIPANT_INFO_INDEX].label.int64 =
+      CONTRACT_HEADER_PARAM_PARTICIPANT_INFO;
     header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uDataType = QCBOR_TYPE_ARRAY;
 
@@ -491,11 +493,14 @@ namespace scitt::cose
         header_items[NOTARY_EXPIRY_INDEX].val.epochDate.nSeconds;
     }
     // Contract headers
-    if (header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uDataType != QCBOR_TYPE_NONE)
+    if (
+      header_items[CONTRACT_PARTICIPANT_INFO_INDEX].uDataType !=
+      QCBOR_TYPE_NONE)
     {
       parsed.participant_info = std::vector<std::string>();
       QCBORItem participantItem = header_items[CONTRACT_PARTICIPANT_INFO_INDEX];
-      QCBORDecode_EnterArrayFromMapN(&ctx, CONTRACT_HEADER_PARAM_PARTICIPANT_INFO);
+      QCBORDecode_EnterArrayFromMapN(
+        &ctx, CONTRACT_HEADER_PARAM_PARTICIPANT_INFO);
       while (true)
       {
         auto result = QCBORDecode_GetNext(&ctx, &participantItem);
@@ -522,7 +527,8 @@ namespace scitt::cose
       if (parsed.participant_info->empty())
       {
         throw COSEDecodeError(
-          "Cannot have participant info array of length 0 in COSE protected header.");
+          "Cannot have participant info array of length 0 in COSE protected "
+          "header.");
       }
     }
 
@@ -701,11 +707,12 @@ namespace scitt::cose
     // signatures
     QCBORDecode_EnterArray(&ctx, nullptr);
 
-    while (true) 
+    while (true)
     {
       QCBORDecode_EnterArray(&ctx, nullptr);
       auto uErr = QCBORDecode_GetAndResetError(&ctx);
-      if(uErr != QCBOR_SUCCESS) {
+      if (uErr != QCBOR_SUCCESS)
+      {
         break;
       }
 
@@ -716,7 +723,7 @@ namespace scitt::cose
 
       // skip unproctected headers
       QCBORDecode_VGetNextConsume(&ctx, &item);
-      
+
       // signature
       QCBORDecode_GetByteString(&ctx, &bstr_item);
       auto signature = cbor::as_span(bstr_item);
@@ -933,8 +940,7 @@ namespace scitt::cose
    * ]
    */
   static crypto::Sha256Hash create_countersign_tbs_hash_cose_sign(
-    std::span<const uint8_t> cose_sign,
-    std::span<const uint8_t> sign_protected)
+    std::span<const uint8_t> cose_sign, std::span<const uint8_t> sign_protected)
   {
     auto sign_fields = extract_sign_fields(cose_sign);
     auto body_protected = sign_fields[0];
@@ -1024,7 +1030,7 @@ namespace scitt::cose
 
     // Signatures
     QCBOREncode_OpenArray(encoder);
-    for (size_t i = 2; i < sign_fields.size(); i+=2)
+    for (size_t i = 2; i < sign_fields.size(); i += 2)
     {
       QCBOREncode_OpenArray(encoder);
       // protected headers
@@ -1035,7 +1041,7 @@ namespace scitt::cose
       QCBOREncode_CloseMap(encoder);
 
       // signature
-      QCBOREncode_AddBytes(encoder, cbor::from_bytes(sign_fields[i+1]));
+      QCBOREncode_AddBytes(encoder, cbor::from_bytes(sign_fields[i + 1]));
       QCBOREncode_CloseArray(encoder);
     }
     QCBOREncode_CloseArray(encoder);

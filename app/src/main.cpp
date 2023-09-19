@@ -249,7 +249,7 @@ namespace scitt
 
       // Compute the hash of the to-be-signed countersigning structure
       // and set it as CCF transaction claim for use in receipt validation.
-      if (claim_profile != ClaimProfile::Contract) 
+      if (claim_profile != ClaimProfile::Contract)
       {
         auto claims_digest =
           cose::create_countersign_tbs_hash(body, sign_protected);
@@ -271,9 +271,7 @@ namespace scitt
       auto entry_info_table =
         ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
       entry_info_table->put(EntryInfo{
-        .sign_protected = sign_protected,
-        .profile = (int) claim_profile
-      });
+        .sign_protected = sign_protected, .profile = (int)claim_profile});
 
       SCITT_INFO(
         "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
@@ -467,12 +465,15 @@ namespace scitt
           {
             throw InternalError(e.what());
           }
-          SCITT_INFO(
-              "Returning entry with profile {}", entry_info.profile);
-          if (static_cast<ClaimProfile>(entry_info.profile) == ClaimProfile::Contract){
+          SCITT_INFO("Returning entry with profile {}", entry_info.profile);
+          if (
+            static_cast<ClaimProfile>(entry_info.profile) ==
+            ClaimProfile::Contract)
+          {
             entry_out = cose::embed_receipt_cose_sign(entry.value(), receipt);
           }
-          else {
+          else
+          {
             entry_out = cose::embed_receipt(entry.value(), receipt);
           }
         }
