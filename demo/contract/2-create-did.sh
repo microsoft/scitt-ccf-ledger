@@ -4,10 +4,10 @@
 
 set -ex
 
-: ${GITHUB_USER:?"variable not set! Please run 'export GITHUB_USER=<YOUR USERNAME>'"}
+: ${TDP_USERNAME:?"variable not set! Please run 'export TDP_USERNAME=<YOUR USERNAME>'"}
 
-TMP_DIR=tmp/$GITHUB_USER
+TMP_DIR=tmp/$TDP_USERNAME
 rm -rf $TMP_DIR
 mkdir -p $TMP_DIR
-scitt create-did-web --url https://$GITHUB_USER.github.io --out-dir $TMP_DIR
+scitt create-did-web --url https://$TDP_USERNAME.github.io --out-dir $TMP_DIR
 scitt upload-did-web-github $TMP_DIR/did.json
