@@ -946,10 +946,11 @@ namespace scitt::cose
     auto body_protected = sign_fields[0];
     auto payload = sign_fields[1];
     std::vector<uint8_t> signatures;
-    for (size_t i = 2; i < sign_fields.size(); i++)
+    for (size_t i = 2; i < sign_fields.size(); i++) {
       signatures.insert(
         signatures.end(), sign_fields[i].begin(), sign_fields[i].end());
-
+    }
+    
     // Hash the Countersign_structure incrementally.
     cbor::hasher hash;
     hash.open_array(6);
