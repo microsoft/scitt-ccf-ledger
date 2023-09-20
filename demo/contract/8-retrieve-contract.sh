@@ -13,5 +13,5 @@ scitt retrieve-contracts ./tmp/contracts \
     --url $CONTRACT_URL \
     --service-trust-store $TRUST_STORE \
     --from $1 \
-    --to $1
+    --to $1 \
     --development
