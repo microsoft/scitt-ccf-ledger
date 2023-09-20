@@ -118,4 +118,4 @@ scitt governance local_development \
     --member-cert "$WORKSPACE"/member0_cert.pem
 
 echo "SCITT is running: ${CCF_URL}"
-# docker logs -f "$CONTAINER_NAME"
+docker logs -f "$CONTAINER_NAME"
