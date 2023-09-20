@@ -103,6 +103,7 @@ def verify_receipt(
     service_params = service_trust_store.lookup(decoded_receipt.phdr)
     decoded_receipt.verify(msg, service_params)
 
+
 def verify_contract_receipt(
     buf: bytes,
     service_trust_store: TrustStore,
@@ -125,6 +126,7 @@ def verify_contract_receipt(
 
     service_params = service_trust_store.lookup(decoded_receipt.phdr)
     decoded_receipt.verify_contract(msg, service_params)
+
 
 class StaticTrustStore(TrustStore):
     """

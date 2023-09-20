@@ -24,4 +24,3 @@ setup(
         "azure-identity",
     ],
 )
-

@@ -34,7 +34,7 @@ COMMANDS = [
     ("validate", validate_cose),
     ("validate-contract", validate_contract),
     ("governance", governance),
-    ("prefix-tree", prefix_tree)
+    ("prefix-tree", prefix_tree),
 ]
 
 

@@ -178,11 +178,14 @@ class Receipt:
         return cbor2.dumps(countersign_structure)
 
     def signers(self, contract: SignMessage) -> list:
-        return reduce(lambda a, b: a + b, [signer.phdr_encoded + signer.signature for signer in contract.signers])
-        
+        return reduce(
+            lambda a, b: a + b,
+            [signer.phdr_encoded + signer.signature for signer in contract.signers],
+        )
+
     def countersign_structure_contract(self, contract: SignMessage) -> bytes:
         context = "CounterSignatureV2"
-        print (contract)
+        print(contract)
         countersign_structure = [
             context,
             contract.phdr_encoded,
@@ -197,7 +200,9 @@ class Receipt:
         tbs = self.countersign_structure(claim)
         self.contents.verify(tbs, service_params)
 
-    def verify_contract(self, contract: SignMessage, service_params: "ServiceParameters"):
+    def verify_contract(
+        self, contract: SignMessage, service_params: "ServiceParameters"
+    ):
         tbs = self.countersign_structure_contract(contract)
         self.contents.verify(tbs, service_params)
 

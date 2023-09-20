@@ -68,7 +68,12 @@ def cli(fn):
     def cmd(args):
         client = create_client(args)
         retrieve_signed_contracts(
-            client, args.path, args.from_seqno, args.to_seqno, args.service_trust_store, args.embed_receipt
+            client,
+            args.path,
+            args.from_seqno,
+            args.to_seqno,
+            args.service_trust_store,
+            args.embed_receipt,
         )
 
     parser.set_defaults(func=cmd)
