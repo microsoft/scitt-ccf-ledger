@@ -37,6 +37,10 @@ See the `demo/` folder on how to interact with the application.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger without Docker.
 
+### Reproducing builds
+
+See [reproducibility.md](./docs/reproducibility.md) for instructions.
+
 ## Contributing
 
 This project welcomes contributions and suggestions. Please see the [Contribution guidelines](CONTRIBUTING.md).
