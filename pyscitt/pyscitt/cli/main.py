@@ -10,15 +10,14 @@ from . import (
     prefix_tree,
     pretty_receipt,
     retrieve_signed_claims,
-    sign_claims,
-    submit_signed_claims,
     retrieve_signed_contracts,
+    sign_claims,
     sign_contract,
+    submit_signed_claims,
     submit_signed_contract,
     upload_did_web_doc_to_github,
-    validate_cose,
     validate_contract,
-    sign_contract
+    validate_cose,
 )
 
 COMMANDS = [

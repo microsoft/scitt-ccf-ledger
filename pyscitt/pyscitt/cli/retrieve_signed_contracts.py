@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..client import Client
-from ..verify import StaticTrustStore, verify_receipt, verify_contract_receipt
+from ..verify import StaticTrustStore, verify_contract_receipt, verify_receipt
 from .client_arguments import add_client_arguments, create_client
 
 

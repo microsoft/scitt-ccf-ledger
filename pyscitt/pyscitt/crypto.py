@@ -65,8 +65,7 @@ from pycose.keys.keyparam import (
 )
 from pycose.keys.okp import OKPKey
 from pycose.keys.rsa import RSAKey
-from pycose.messages import Sign1Message
-from pycose.messages import SignMessage
+from pycose.messages import Sign1Message, SignMessage
 from pycose.messages.signer import CoseSignature
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
@@ -386,15 +385,17 @@ def cose_header_to_jws_header(cose_header: dict) -> dict:
     return jws_header
 
 
-def parse_cose_sign1(buf: bytes) -> Tuple[dict, bytes]:
+def parse_cose_sign1(buf: bytes) -> Tuple[dict, Optional[bytes]]:
     msg = Sign1Message.decode(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
     return header, payload
 
-
 def pretty_cose_sign1(buf: bytes) -> str:
     header, payload = parse_cose_sign1(buf)
+    if payload is None:
+        return ""
+
     try:
         claims = json.loads(payload)
     except json.JSONDecodeError:
@@ -411,19 +412,22 @@ def pretty_cose_sign1(buf: bytes) -> str:
         print(header)
         raise
 
-def parse_cose_sign(buf: bytes) -> Tuple[dict, bytes]:
+def parse_cose_sign(buf: bytes) -> Tuple[dict, Optional[bytes], List[Signer]]:
     msg = SignMessage.decode(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
     signers = msg.signers
-    return header, payload, signers
+    return header, payload, signers # type: ignore
 
 def pretty_cose_sign(buf: bytes) -> str:
     header, payload, signers = parse_cose_sign(buf)
+    if payload is None: 
+        return ""
+    
     try:
         claims = json.loads(payload)
     except json.JSONDecodeError:
-        claims = f"<{len(payload)} bytes>"
+            claims = f"<{len(payload)} bytes>"
     try:
         return (
             "COSE_Sign(\nheader="
@@ -752,8 +756,8 @@ def sign_contract(
     if add_signature:
         msg = SignMessage.decode(contract)
         signers = msg.signers
-        signers.append(CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key)))
-        msg.signers = signers
+        signers.append(CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key))) # type: ignore
+        msg.signers = signers # type: ignore
         print(pretty_cose_sign(msg.encode(tag=True)))
         return msg.encode(tag=True)
 
@@ -765,7 +769,7 @@ def sign_contract(
         headers[COSE_HEADER_PARAM_FEED] = feed
 
     msg = SignMessage(phdr=headers, payload=contract)
-    msg.signers = [CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key))]
+    msg.signers = [CoseSignature(phdr=signature_headers, key=cose_private_key_from_pem(signer.private_key))] # type: ignore
     return msg.encode(tag=True)
 
 def sign_json_contract(
@@ -775,7 +779,7 @@ def sign_json_contract(
     feed: Optional[str] = None,
 ) -> bytes:
     return sign_contract(
-        signer, json.dumps(claims).encode("ascii"), content_type=content_type, feed=feed
+        signer, json.dumps(claims).encode("ascii"), content_type=content_type, add_signature=False, feed=feed
     )
 
 def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:

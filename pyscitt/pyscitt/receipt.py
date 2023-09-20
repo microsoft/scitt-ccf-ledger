@@ -5,15 +5,14 @@ import base64
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
 from functools import reduce
+from typing import TYPE_CHECKING, Any
 
 import cbor2
 import ccf.receipt
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
-from pycose.messages import Sign1Message
-from pycose.messages import SignMessage
+from pycose.messages import Sign1Message, SignMessage
 from pycose.messages.cosebase import CoseBase
 
 from . import crypto
