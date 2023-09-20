@@ -4,7 +4,7 @@
 
 set -ex
 
-TMP_DIR1=tmp/$GITHUB_USER1
+TMP_DIR1=tmp/$TDC_USERNAME
 
 echo "Signing contract..."
 

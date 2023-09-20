@@ -4,4 +4,4 @@
 
 set -ex
 
-scitt pretty-receipt tmp/$GITHUB_USER/contract.receipt.cbor
+scitt pretty-receipt tmp/$TDP_USERNAME/contract.receipt.cbor

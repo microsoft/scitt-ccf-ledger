@@ -3,26 +3,22 @@
   "schemaVersion": "0.1",
   "startTime": "2023-03-14T00:00:00.000Z",
   "expiryTime": "2024-03-14T00:00:00.000Z",
-  "tdc" : "did:web:kapilvgit.github.io",
+  "tdc" : "did:web:tdc.github.io",
   "tdps" : [
-    "did:web:kapilvgit.github.io",
-    "did:web:kapilv78.github.io"
+    "did:web:tdp.github.io"
   ],
-  "ccrp": "did:web:kapilvgit.github.io/ccrp.cloud.com",
+  "ccrp": "did:web:ccrp.github.io",
   "datasets": [
     {
       "id" : "19517ba8-bab8-11ed-afa1-0242ac120002",
-      "name": "icmr-infection",
+      "name": "icmr",
       "url" : "https://ccrcontainer.blob.core.windows.net/icmr/data.img",
-      "provider": "did:web:kapilvgit.github.io",
+      "provider": "did:web:tdp.github.io",
       "key" : {
         "type": "azure",
         "properties": {
           "kid": "ICMRFilesystemEncryptionKey",
-          "authority": {
-              "endpoint": "sharedneu.neu.attest.azure.net"
-          },
-          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+          "endpoint": "tdp-key-vault.managedhsm.azure.net"
         }
       }
     },
@@ -30,31 +26,25 @@
       "id" : "216d5cc6-bab8-11ed-afa1-0242ac120002",
       "name": "cowin",
       "url" : "https://ccrcontainer.blob.core.windows.net/cowin/data.img",
-      "provider": "did:web:kapilv78.github.io",
+      "provider": "did:web:tdp.github.io",
       "key" : {
         "type": "azure",
         "properties": {
           "kid": "COWINFilesystemEncryptionKey",
-          "authority": {
-              "endpoint": "sharedneu.neu.attest.azure.net"
-          },
-          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+          "endpoint": "tdp-key-vault.managedhsm.azure.net"
         }
       }
     },
     {
       "id" : "2830a144-bab8-11ed-afa1-0242ac120002",
-      "name": "state-war-room-hospitalization",
+      "name": "index",
       "url" : "https://ccrcontainer.blob.core.windows.net/swr/data.img",
-      "provider": "did:web:kapilvgit.github.io/swr.kar.nic.in",
+      "provider": "did:web:tdp.github.io",
       "key" : {
         "type": "azure",
         "properties": {
           "kid": "IndexFilesystemEncryptionKey",
-          "authority": {
-              "endpoint": "sharedneu.neu.attest.azure.net"
-          },
-          "endpoint": "kapilv-depa-mhsm.managedhsm.azure.net"
+          "endpoint": "tdp-key-vault.managedhsm.azure.net"
         }
       }
     }

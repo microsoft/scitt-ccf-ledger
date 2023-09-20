@@ -4,13 +4,13 @@
 
 set -ex
 
-SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
-SCITT_TRUST_STORE=tmp/trust_store
+CONTRACT_URL=${CONTRACT_URL:-"https://127.0.0.1:8000"}
+TRUST_STORE=tmp/trust_store
 
-TMP_DIR=tmp/$GITHUB_USER
+TMP_DIR=tmp/$TDP_USERNAME
 
 scitt submit-contract $TMP_DIR/contract.cose \
     --receipt $TMP_DIR/contract.receipt.cbor \
-    --url $SCITT_URL \
-    --service-trust-store $SCITT_TRUST_STORE \
+    --url $CONTRACT_URL \
+    --service-trust-store $TRUST_STORE \
     --development

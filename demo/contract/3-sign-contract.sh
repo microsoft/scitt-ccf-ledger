@@ -4,14 +4,14 @@
 
 set -ex
 
-TMP_DIR=tmp/$GITHUB_USER
+TMP_DIR=tmp/$TDP_USERNAME
 
 echo "Signing contract..."
 
 CONTENT_TYPE="application/json"
 
 scitt sign-contract \
-    --contract ./demo/contract/contract.json \
+    --contract ./tmp/contracts/contract.json \
     --content-type "$CONTENT_TYPE" \
     --did-doc $TMP_DIR/did.json \
     --key $TMP_DIR/key.pem \
