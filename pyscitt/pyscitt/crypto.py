@@ -415,12 +415,12 @@ def pretty_cose_sign1(buf: bytes) -> str:
         raise
 
 
-def parse_cose_sign(buf: bytes) -> Tuple[dict, Optional[bytes], List[Signer]]:
+def parse_cose_sign(buf: bytes) -> Tuple[dict, Optional[bytes], List[Any]]:
     msg = SignMessage.decode(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
     signers = msg.signers
-    return header, payload, signers  # type: ignore
+    return header, payload, signers
 
 
 def pretty_cose_sign(buf: bytes) -> str:
