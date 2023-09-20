@@ -11,18 +11,18 @@ You need a couple pieces of information to begin:
     {
         "endorsements": "AQAAAAIAAADZL...UMTI6NTU6MTFaAA==",
         "format": "OE_SGX_v1",
-        "mrenclave": "b717f0d475e45aa0294f8229ca646316a17dcd7e4ba7f644b353a5d135a6665f",
+        "mrenclave": "fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966",
         "node_id": "247f1df23e22256cc5bc5e8822183117bc5967da41a257d307f9b1153a4f1853",
         "raw": "AwACAAAAAAAIAA...ViynsClboLw="
     }
     ```
-- Git commit id that built this version. This is something that has no specifc mapping at the moment. You would need to check the build logs of the SGX Docker image to understand which commit produced the candidate value.
+- Git commit id that built this version. This is something that has no specifc mapping at the moment. You would need to check the build logs of the SGX Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
 
 To reproduce the same MRENCLAVE value which would be deployed to CCF 
 do a docker build locally but inside of the development version of CCF image:
 
-- Clone the repository and check out the tag or commit id that built the binary which had specific MRENCLAVE
-- Identify the expected CCF version by inspecting `./docker/enclave.Dockerfile`
+- Clone the repository and check out the tag or commit id that built the binary which had specific MRENCLAVE.
+- Identify the expected CCF version by inspecting `./docker/enclave.Dockerfile`.
 - Run a build inside of the CCF docker image:
 
     ```
