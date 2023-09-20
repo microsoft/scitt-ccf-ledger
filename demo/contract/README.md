@@ -30,7 +30,7 @@ source venv/bin/activate
 
 Acting as the TDP, run the following commands to create the TDP's DID, and then sign and register a fresh contract:
 
-> **Note:** The `create-did` script creates and uploads the TDPs DID to the TDPs GitHub site. You may be asked to authenticate to GitHub in that process using a password or [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) for the TDP GitHub account. Creating DID is a one-time process; the same DID can be used for signing multiple contracts. 
+> **Note:** The `create-did` script creates and uploads the TDPs DID to the TDPs GitHub site. You may be asked to authenticate to GitHub in that process using [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) for the TDP GitHub account. Please create a PAT that has permissions to read and write to the TDP's GitHub pages repository. Creating DID is a one-time process; the same DID can be used for signing multiple contracts. 
 
 ```
 ./demo/contract/2-create-did.sh
@@ -55,8 +55,8 @@ Now acting as a TDC, run the following commands to create the TDC's DID, and the
 ./demo/contract/7-create-did.sh
 ./demo/contract/8-retrieve-contracts.sh <sequence_number>
 curl https://${TDC_USERNAME}.github.io/.well-known/did.json
-./demo/contract/9-sign-contract.sh
+./demo/contract/9-sign-contract.sh <sequence_number>
 ./demo/contract/10-register-contract.sh
 ```
 
-If all goes well, the signed contract is registered, and the TDC can proceed the next stage of setting up CCR to train their models. 
+If all goes well, the signed contract is registered. 
