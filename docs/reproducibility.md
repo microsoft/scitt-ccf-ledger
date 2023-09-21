@@ -22,7 +22,7 @@ To reproduce the same MRENCLAVE value which would be deployed to CCF
 do a docker build locally but inside of the development version of CCF image:
 
 - Clone the repository and check out the tag or commit id that built the binary which had specific MRENCLAVE.
-- Identify the expected CCF version by inspecting `./docker/enclave.Dockerfile`.
+- Identify the expected CCF version by inspecting the [Dockerfile](docker/enclave.Dockerfile).
 - Run a build inside of the CCF docker image:
 
     ```
