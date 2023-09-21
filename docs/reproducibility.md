@@ -5,7 +5,7 @@ goal is to reproduce the same MRENCLAVE value.
 
 You need a couple pieces of information to begin:
 
-- The source MRENCLAVE value, get it from `https://ledgerurl/node/quotes/self`, e.g.:
+- The source MRENCLAVE value, get it from `https://<LEDGER-URL>/node/quotes/self` (replace <LEDGER-URL> with the URL of your ledger), e.g.:
 
     ```json
     {
