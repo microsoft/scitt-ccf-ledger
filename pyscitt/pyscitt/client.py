@@ -53,7 +53,7 @@ class MemberAuthenticationMethod(ABC):
         """
 
     @abstractmethod
-    def cose_sign(self, data: bytes, cose_headers: dict) -> bytes:
+    def cose_sign(self, data: bytes, cose_headers: Optional[Dict] = None) -> bytes:
         """Generates a COSE payload for the specified request with the specified headers.
 
         https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
@@ -61,7 +61,7 @@ class MemberAuthenticationMethod(ABC):
         :param data: The intended body for the HTTP request.
         :type data: bytes
         :param cose_headers: The headers to include in the COSE payload.
-        :type cose_headers: dict
+        :type cose_headers: Optional[Dict]
 
         :return: The full payload, with signature, to be sent to CCF.
         :rtype: bytes
