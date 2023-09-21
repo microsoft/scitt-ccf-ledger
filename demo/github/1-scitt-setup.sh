@@ -20,6 +20,7 @@ scitt governance propose_ca_certs \
 echo '{ "authentication": { "allow_unauthenticated": true } }' > tmp/configuration.json
 scitt governance propose_configuration \
     --configuration tmp/configuration.json \
+    --url "$SCITT_URL" \
     --member-key workspace/member0_privk.pem \
     --member-cert workspace/member0_cert.pem \
     --development
