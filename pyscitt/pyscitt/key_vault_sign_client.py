@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+from typing import Dict, Optional
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
@@ -60,7 +61,7 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         crypto_client = CryptographyClient(key, credential=self.credential)
         return crypto_client
 
-    def cose_sign(self, data: bytes, cose_headers: dict) -> bytes:
+    def cose_sign(self, data: bytes, cose_headers: Optional[Dict] = None) -> bytes:
         """Generates a COSE payload for the specified request with the specified headers.
 
         https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
@@ -68,28 +69,30 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         :param data: The intended body for the HTTP request.
         :type data: bytes
         :param cose_headers: The headers to include in the COSE payload.
-        :type cose_headers: dict
+        :type cose_headers: Optional[Dict]
 
         :return: The full payload, with signature, to be sent to CCF.
         :rtype: bytes
         """
 
+        assert self.cert, "No identity public certificate available for this identity"
+
+        # Prepare the COSE payload
         tbs = create_cose_sign1_prepare(
             payload=data,
             cert_pem=self.cert,
             additional_protected_header=cose_headers,
         )
 
+        # Sign the unsigned COSE payload using Key Vault
         digest_to_sign = base64.b64decode(tbs["value"].encode())
-
         algorithm = SignatureAlgorithm(tbs["alg"])
-
         crypto_client = self._get_crypto_client()
-
         sign_result = crypto_client.sign(
             algorithm=SignatureAlgorithm(algorithm), digest=digest_to_sign
         )
 
+        # Finish to prepare the COSE payload
         return create_cose_sign1_finish(
             payload=data,
             cert_pem=self.cert,
@@ -109,6 +112,8 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         :return: The full payload, with signature, to be sent to CCF.
         :rtype: bytes
         """
+
+        assert self.cert, "No identity public certificate available for this identity"
 
         crypto_client = self._get_crypto_client()
         cert = load_pem_x509_certificate(self.cert.encode("ascii"))

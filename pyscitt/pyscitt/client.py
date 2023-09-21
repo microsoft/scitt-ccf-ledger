@@ -213,7 +213,7 @@ class BaseClient:
             A bearer token for all requests made by this instance.
 
         member_auth:
-            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login identity, used to sign requests with HTTP Signing.
+            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login identity, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
         wait_time:
@@ -240,6 +240,9 @@ class BaseClient:
         if auth_token:
             headers["Authorization"] = "Bearer " + auth_token
 
+        # We only create a custom HTTPX authentication instance for HTTP signing
+        # because COSE signing cannot be handled that way and requires re-writing
+        # the response payload.
         if member_auth and member_signing_type == SigningType.HTTP:
             self.member_http_sig = HttpSig(member_auth)
         else:
@@ -308,9 +311,12 @@ class BaseClient:
                 cose_headers = cose_protected_headers(url, method)
 
                 def _get_data():
-                    """Get the data to sign from the request"""
+                    """Get the data to sign from the request keywords"""
 
-                    # The data is in `content` or `json` kwargs
+                    # The data is either in `content` or `json` kwarg.
+                    # We assume that other keywords used to pass the
+                    # content for HTTPX requests are not used
+                    # (e.g., such as the deprecated `data`).
                     content = kwargs.get("content")
                     if content:
                         content = get_content_data(content)
@@ -319,11 +325,16 @@ class BaseClient:
                     if json_data:
                         json_data = get_content_data(json_data)
 
+                    # If both are specified, raise an error
                     if content and json_data:
                         raise ValueError("Cannot use both `content` and `json`")
 
+                    # Return the data to sign
+                    # If both are not specified, return an empty bytes string
+                    # (e.g., for GET requests)
                     return content or json_data or b""
 
+                # Sign the data
                 payload = self.member_auth.cose_sign(_get_data(), cose_headers)
 
                 # Set the request data and the content-type header
