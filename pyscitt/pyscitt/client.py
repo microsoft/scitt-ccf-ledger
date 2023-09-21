@@ -4,6 +4,7 @@
 import base64
 import hashlib
 import json
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -111,6 +112,27 @@ class ServiceError(Exception):
 SelfClient = TypeVar("SelfClient", bound="BaseClient")
 
 
+# When running functional tests, we may send identical proposals that,
+# if signed within the same second, they may hit the ProposalReplay
+# protection error from CCF.
+# We use a custom clock that can be manually advanced, same as
+# implemented by CCF, to avoid sleeping for 1 second between
+# identical proposals.
+# Source: https://github.com/microsoft/CCF/blob/d6efe6664045968dc4f191b9ae672e686f05279b/tests/infra/clients.py#L40
+class OffSettableSecondsSinceEpoch:
+    offset = 0
+
+    def count(self):
+        return self.offset + int(datetime.now().timestamp())
+
+    def advance(self, amount=1):
+        LOG.info(f"Advancing clock by {amount} seconds")
+        self.offset += amount
+
+
+CLOCK = OffSettableSecondsSinceEpoch()
+
+
 def cose_protected_headers(request_path: str, method: str):
     """
     Generate the COSE protected headers for CCF governance given a request path and HTTP method.
@@ -128,7 +150,7 @@ def cose_protected_headers(request_path: str, method: str):
 
     # Set the created_at header to the current time
     cose_headers = {
-        "ccf.gov.msg.created_at": int(datetime.now(tz=timezone.utc).timestamp())
+        "ccf.gov.msg.created_at": CLOCK.count(),
     }
 
     # Set headers based on the request path and method
@@ -190,6 +212,7 @@ class BaseClient:
     url: str
     auth_token: Optional[str]
     member_auth: Optional[MemberAuthenticationMethod]
+    member_signing_type: SigningType
     wait_time: Optional[float]
     development: bool
 
@@ -307,6 +330,10 @@ class BaseClient:
 
             # Sign with COSE
             if self.member_signing_type == SigningType.COSE and self.member_auth:
+                # Advance the clock to avoid ProposalReplay protection errors
+                if self.development:
+                    CLOCK.advance()
+
                 # Get the COSE headers
                 cose_headers = cose_protected_headers(url, method)
 
