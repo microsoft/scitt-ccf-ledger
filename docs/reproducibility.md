@@ -26,13 +26,14 @@ do a docker build locally but inside of the development version of CCF image:
 - Run a build inside of the CCF docker image:
 
     ```
+    CCF_VERSION="3.0.12"
     docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
         --env PLATFORM=sgx \
         --env CXXFLAGS="-ferror-limit=0" \
         --env NINJA_FLAGS="-k 0" \
-        mcr.microsoft.com/ccf/app/dev:3.0.12-sgx git config --global --add safe.directory "*" && ./docker/build.sh
+        mcr.microsoft.com/ccf/app/dev:"$CCF_VERSION"-sgx git config --global --add safe.directory "*" && ./docker/build.sh
     ```
 - The build will print the value of MRENCLAVE in the log, similar to:
 
