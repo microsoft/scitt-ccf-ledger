@@ -4,11 +4,10 @@
 import base64
 import hashlib
 import json
-import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from http import HTTPStatus
 from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
