@@ -3,6 +3,7 @@
 
 import json
 import shlex
+import time
 from pathlib import Path
 
 import pytest
@@ -457,6 +458,13 @@ class TestUpdateScittConstitution:
                 )
             else:
                 path.write_text(script)
+
+            # This fixture may send proposals identical in content using the SCITT CLI.
+            # If it runs too soon before or after, it risks signing proposals within the
+            # same second and hitting the ProposalReplay protection error from CCF.
+            # Therefore, we sleep for a second here to avoid the issue.
+            # See also https://github.com/microsoft/CCF/pull/4887
+            time.sleep(1)
 
             run(
                 "governance",
