@@ -19,7 +19,7 @@ steps:
         -DCMAKE_INSTALL_PREFIX=/opt/ccf_${{ parameters.Platform }} \
         -DCOMPILE_TARGET=${{ parameters.Platform }} \
         -DBUILD_TESTS=ON \
-        -DBUILD_UNIT_TESTS=OFF \
+        -DBUILD_UNIT_TESTS=ON \
         ${{ parameters.CMakeArgs }}
     workingDirectory: $(Pipeline.Workspace)/CCF
     displayName: Configure CCF
