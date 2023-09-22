@@ -6,8 +6,8 @@ cmake_minimum_required(VERSION 3.16)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER "/opt/oe_lvi/clang++-10")
-  message("Set CMAKE_CXX_COMPILER to /opt/oe_lvi/clang++-10")
+  set(CMAKE_CXX_COMPILER "clang++-11")
+  message("Set CMAKE_CXX_COMPILER to clang++-11")
 endif()
 
 project(scitt
@@ -30,9 +30,9 @@ if (CCF_UNSAFE)
     message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
   endif()
 
-  find_package(ccf_sgx_unsafe 3.0.12 REQUIRED)
+  find_package(ccf_sgx_unsafe 4.0.7 REQUIRED)
 else()
-  find_package(ccf_${COMPILE_TARGET} 3.0.12 REQUIRED)
+  find_package(ccf_${COMPILE_TARGET} 4.0.7 REQUIRED)
 endif()
 
 if (ENABLE_PREFIX_TREE)
