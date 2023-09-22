@@ -24,6 +24,8 @@ from .async_utils import EventLoopThread, race_tasks
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
+CCHOST_PID_FILE_NAME = "cchost.pid"
+
 
 class CCHost(EventLoopThread):
     binary: str
@@ -108,7 +110,7 @@ class CCHost(EventLoopThread):
             faketime_lib = Path(
                 os.getenv(
                     "LIBFAKETIME",
-                    "/usr/lib/x86_64-linux-gnu/faketime/libfaketimeMT.so.1",
+                    "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
                 )
             )
 
@@ -121,6 +123,12 @@ class CCHost(EventLoopThread):
                 LOG.warning("Could not find faketime library")
 
     def restart(self) -> None:
+        # Delete PID file to let cchost restart
+        # https://github.com/microsoft/CCF/pull/5361
+        cchost_pid_file_path = self.workspace.joinpath(CCHOST_PID_FILE_NAME)
+        if os.path.exists(cchost_pid_file_path):
+            os.remove(cchost_pid_file_path)
+
         self._set_event(self.restart_request)
         self.wait_ready()
 
