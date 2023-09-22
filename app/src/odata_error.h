@@ -9,7 +9,7 @@ namespace scitt
 {
   // CCF already defines an equivalent definition, but unfortunately it lacks a
   // operator==, which makes it impossible to use in an optional field.
-  struct ODataError
+  struct ODataError // NOLINT(bugprone-exception-escape)
   {
     std::string code;
     std::string message;

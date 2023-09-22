@@ -10,7 +10,7 @@ namespace scitt
 {
   using TriggerAsynchronousOperation =
     std::function<void(std::string callback_url)>;
-  struct AsynchronousOperation
+  struct AsynchronousOperation // NOLINT(bugprone-exception-escape)
   {
     TriggerAsynchronousOperation trigger;
     std::string bind_address;
