@@ -15,11 +15,12 @@ steps:
     displayName: Checkout CCF ${{ parameters.Version }}
 
   - script: |
+      apt-get update && apt-get install -y libstdc++-10-dev
       cmake -GNinja -B build \
         -DCMAKE_INSTALL_PREFIX=/opt/ccf_${{ parameters.Platform }} \
         -DCOMPILE_TARGET=${{ parameters.Platform }} \
-        -DBUILD_TESTS=ON \
-        -DBUILD_UNIT_TESTS=ON \
+        -DBUILD_TESTS=OFF \
+        -DBUILD_UNIT_TESTS=OFF \
         ${{ parameters.CMakeArgs }}
     workingDirectory: $(Pipeline.Workspace)/CCF
     displayName: Configure CCF
