@@ -3,11 +3,14 @@
 
 import base64
 import hashlib
+import json
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
 from http import HTTPStatus
-from typing import Iterable, Literal, Optional, TypeVar, Union, overload
+from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
 import httpx
@@ -22,12 +25,47 @@ from .verify import ServiceParameters
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
 
+class SigningType(Enum):
+    """Types of signatures supported by CCF.
+
+    https://microsoft.github.io/CCF/main/governance/hsm_keys.html#signing-governance-requests
+    """
+
+    COSE = "COSE"
+    HTTP = "HTTP"
+
+
 class MemberAuthenticationMethod(ABC):
     cert: str
 
     @abstractmethod
-    def sign(self, data: bytes) -> bytes:
-        pass
+    def http_sign(self, data: bytes) -> bytes:
+        """
+        Generates a HTTP signing payload for the specified request with the specified headers.
+
+        https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
+
+        :param data: The intended body for the HTTP request.
+        :type data: bytes
+
+        :return: The full payload, with signature, to be sent to CCF.
+        :rtype: bytes
+        """
+
+    @abstractmethod
+    def cose_sign(self, data: bytes, cose_headers: Optional[Dict] = None) -> bytes:
+        """Generates a COSE payload for the specified request with the specified headers.
+
+        https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
+
+        :param data: The intended body for the HTTP request.
+        :type data: bytes
+        :param cose_headers: The headers to include in the COSE payload.
+        :type cose_headers: Optional[Dict]
+
+        :return: The full payload, with signature, to be sent to CCF.
+        :rtype: bytes
+        """
 
 
 # copied from CCF/tests/infra/clients.py
@@ -52,7 +90,7 @@ class HttpSig(httpx.Auth):
             ]
         ).encode("utf-8")
 
-        signature = self.member_auth_client.sign(string_to_sign)
+        signature = self.member_auth_client.http_sign(string_to_sign)
         b64signature = base64.b64encode(signature).decode("ascii")
         request.headers[
             "authorization"
@@ -73,6 +111,94 @@ class ServiceError(Exception):
 SelfClient = TypeVar("SelfClient", bound="BaseClient")
 
 
+# When running functional tests, we may send identical proposals that,
+# if signed within the same second, they may hit the ProposalReplay
+# protection error from CCF.
+# We use a custom clock that can be manually advanced, same as
+# implemented by CCF, to avoid sleeping for 1 second between
+# identical proposals.
+# Source: https://github.com/microsoft/CCF/blob/d6efe6664045968dc4f191b9ae672e686f05279b/tests/infra/clients.py#L40
+class OffSettableSecondsSinceEpoch:
+    offset = 0
+
+    def count(self):
+        return self.offset + int(datetime.now().timestamp())
+
+    def advance(self, amount=1):
+        LOG.info(f"Advancing clock by {amount} seconds")
+        self.offset += amount
+
+
+CLOCK = OffSettableSecondsSinceEpoch()
+
+
+def cose_protected_headers(request_path: str, method: str):
+    """
+    Generate the COSE protected headers for CCF governance given a request path and HTTP method.
+
+    :param request_path: The path of the request.
+    :type request_path: str
+    :param method: The method of the request.
+    :type method: str
+
+    :return: The COSE protected headers.
+    :rtype: dict
+    """
+
+    cose_headers: Dict[str, Any] = {}
+
+    # Set the created_at header to the current time
+    cose_headers = {
+        "ccf.gov.msg.created_at": CLOCK.count(),
+    }
+
+    # Set headers based on the request path and method
+    if request_path.endswith("gov/ack/update_state_digest"):
+        cose_headers["ccf.gov.msg.type"] = "state_digest"
+    elif request_path.endswith("gov/ack"):
+        cose_headers["ccf.gov.msg.type"] = "ack"
+    elif request_path.endswith("gov/proposals"):
+        cose_headers["ccf.gov.msg.type"] = "proposal"
+    elif request_path.endswith("/ballots"):
+        pid = request_path.split("/")[-2]
+        cose_headers["ccf.gov.msg.type"] = "ballot"
+        cose_headers["ccf.gov.msg.proposal_id"] = pid
+    elif request_path.endswith("/withdraw"):
+        pid = request_path.split("/")[-2]
+        cose_headers["ccf.gov.msg.type"] = "withdrawal"
+        cose_headers["ccf.gov.msg.proposal_id"] = pid
+    elif request_path.endswith("gov/recovery_share"):
+        if method == "GET":
+            cose_headers["ccf.gov.msg.type"] = "encrypted_recovery_share"
+        if method == "POST":
+            cose_headers["ccf.gov.msg.type"] = "recovery_share"
+
+    return cose_headers
+
+
+def get_content_data(body: Optional[Union[dict, str, bytes]]) -> bytes:
+    """
+    Get the request body from the body parameter
+
+    :param body: The body of the request. Can be a string, bytes, or dict.
+    :type body: Optional[Union[dict, str, bytes]]
+
+    :return: The request body
+    :rtype: bytes
+    """
+
+    if isinstance(body, str):
+        request_body = body.encode()
+    elif isinstance(body, dict):
+        request_body = json.dumps(body).encode()
+    elif isinstance(body, bytes):
+        request_body = body
+    else:
+        raise ValueError(f"Invalid body type: {type(body)}")
+
+    return request_body
+
+
 class BaseClient:
     """
     Wrapper around an HTTP client, with facilities to interact with a CCF-based
@@ -85,6 +211,7 @@ class BaseClient:
     url: str
     auth_token: Optional[str]
     member_auth: Optional[MemberAuthenticationMethod]
+    member_signing_type: SigningType
     wait_time: Optional[float]
     development: bool
 
@@ -97,6 +224,7 @@ class BaseClient:
         *,
         auth_token: Optional[str] = None,
         member_auth: Optional[MemberAuthenticationMethod] = None,
+        member_signing_type: SigningType = SigningType.COSE,
         wait_time: Optional[float] = None,
         development: bool = False,
     ):
@@ -107,11 +235,14 @@ class BaseClient:
             A bearer token for all requests made by this instance.
 
         member_auth:
-            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login idenity, used to sign requests.
+            MemberAuthenticationMethod include A pair of certificate and private key in PEM format or AKV login identity, used to sign requests.
             Each request that needs signing must also be given the `sign_request=True` parameter.
 
         wait_time:
             The time to wait between retries. If None, the default wait time is used.
+
+        member_signing_type:
+            The type of signing to use for member authentication. Currently, only COSE and HTTP signing are supported.
 
         development:
             If true, the TLS certificate of the server will not be verified.
@@ -123,6 +254,7 @@ class BaseClient:
         self.url = url
         self.auth_token = auth_token
         self.member_auth = member_auth
+        self.member_signing_type = member_signing_type
         self.wait_time = wait_time
         self.development = development
 
@@ -130,7 +262,10 @@ class BaseClient:
         if auth_token:
             headers["Authorization"] = "Bearer " + auth_token
 
-        if member_auth:
+        # We only create a custom HTTPX authentication instance for HTTP signing
+        # because COSE signing cannot be handled that way and requires re-writing
+        # the response payload.
+        if member_auth and member_signing_type == SigningType.HTTP:
             self.member_http_sig = HttpSig(member_auth)
         else:
             self.member_http_sig = None
@@ -150,6 +285,7 @@ class BaseClient:
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
+            "member_signing_type": self.member_signing_type,
             "wait_time": self.wait_time,
             "development": self.development,
         }
@@ -187,16 +323,60 @@ class BaseClient:
         Other keyword-arguments are passed to httpx.
         """
         if sign_request:
-            if not self.member_http_sig:
-                raise ValueError("Cannot sign request: no member key configured")
-            elif "auth" in kwargs:
+            # Check that the request is not already signed
+            if "auth" in kwargs:
                 raise ValueError("Cannot use `auth` with `sign_request`")
-            else:
+
+            # Sign with COSE
+            if self.member_signing_type == SigningType.COSE and self.member_auth:
+                # Advance the clock to avoid ProposalReplay protection errors
+                if self.development:
+                    CLOCK.advance()
+
+                # Get the COSE headers
+                cose_headers = cose_protected_headers(url, method)
+
+                def _get_data():
+                    """Get the data to sign from the request keywords"""
+
+                    # The data is either in `content` or `json` kwarg.
+                    # We assume that other keywords used to pass the
+                    # content for HTTPX requests are not used
+                    # (e.g., such as the deprecated `data`).
+                    content = kwargs.get("content")
+                    if content:
+                        content = get_content_data(content)
+
+                    json_data = kwargs.get("json")
+                    if json_data:
+                        json_data = get_content_data(json_data)
+
+                    # If both are specified, raise an error
+                    if content and json_data:
+                        raise ValueError("Cannot use both `content` and `json`")
+
+                    # Return the data to sign
+                    # If both are not specified, return an empty bytes string
+                    # (e.g., for GET requests)
+                    return content or json_data or b""
+
+                # Sign the data
+                payload = self.member_auth.cose_sign(_get_data(), cose_headers)
+
+                # Set the request data and the content-type header
+                kwargs["content"] = payload
+                kwargs.setdefault("headers", {})["content-type"] = "application/cose"
+
+            # Sign with HTTP signing
+            elif self.member_signing_type == SigningType.HTTP and self.member_http_sig:
                 kwargs["auth"] = self.member_http_sig
 
-            if method == "GET":
-                # Content-length is necessary for signing, even on GET requests.
-                kwargs.setdefault("headers", {}).setdefault("Content-Length", "0")
+                if method == "GET":
+                    # Content-length is necessary for signing, even on GET requests.
+                    kwargs.setdefault("headers", {}).setdefault("Content-Length", "0")
+
+            else:
+                raise ValueError(f"Cannot sign request with {self.member_signing_type}")
 
         default_wait_time = 2
         timeout = 30
@@ -241,6 +421,7 @@ class BaseClient:
 
         if not response.is_success:
             error = response.json()["error"]
+            LOG.error(f"Request failed: {error}")
             raise ServiceError(response.headers, error["code"], error["message"])
 
         if wait_for_confirmation:

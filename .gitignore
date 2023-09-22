@@ -8,3 +8,8 @@ workspace/
 *.egg-info/
 .vscode/settings.json
 perf.json
+**/*.pem
+**/*.pid
+.mypy_cache/
+**/*.cose
+**/*.cbor
