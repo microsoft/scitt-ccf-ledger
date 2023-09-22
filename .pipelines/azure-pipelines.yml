@@ -101,7 +101,7 @@ stages:
 
           # faketime does not play well with ASAN so don't enable it here.
           FunctionalTestArguments: '--enable-prefix-tree'
-          InstallPackages: [ libcurl4-openssl-dev, libstdc++-11-dev ]
+          InstallPackages: [ libcurl4-openssl-dev, libstdc++-10-dev ]
 
       - template: common.yml
         parameters:
