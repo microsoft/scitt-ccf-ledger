@@ -18,16 +18,16 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
 
 1. Set up machine: 
     - If using SGX, it is recommended that you provision a virtual machine:
-      - On Azure, provision a DC-series VM, for example, [DCsv2](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv2-series)
+      - On Azure, provision a DC-series VM, for example, [DCsv3](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv3-series)
       - Enable running SGX enclaves: `sudo usermod -a -G sgx_prv $(whoami)`
     - If using virtual mode, running Ubuntu 20.04 on any platform (WSL, VM, etc.) is enough
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-3.0.12.tar.gz
-    tar xvzf ccf-3.0.12.tar.gz
-    cd CCF-ccf-3.0.12/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=3.0.12 -e platform=<sgx|virtual>
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-4.0.7.tar.gz
+    tar xvzf ccf-4.0.7.tar.gz
+    cd CCF-ccf-4.0.7/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=4.0.7 -e platform=<sgx|virtual>
     ```
 
 ## Building
