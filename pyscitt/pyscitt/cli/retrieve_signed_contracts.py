@@ -8,7 +8,7 @@ from typing import Optional
 from ..client import Client
 from ..verify import StaticTrustStore, verify_contract_receipt, verify_receipt
 from .client_arguments import add_client_arguments, create_client
-
+from ..crypto import parse_cose_sign
 
 def retrieve_signed_contracts(
     client: Client,
@@ -28,9 +28,7 @@ def retrieve_signed_contracts(
     for tx in client.enumerate_claims(start=from_seqno, end=to_seqno):
         claim = client.get_claim(tx, embed_receipt=embed_receipt)
         path = base_path / f"{tx}.cose"
-
-        with open(path, "wb") as f:
-            f.write(claim)
+        json_path = base_path /f"{tx}.json"
 
         if service_trust_store and embed_receipt:
             verify_contract_receipt(claim, service_trust_store=service_trust_store)
@@ -38,6 +36,9 @@ def retrieve_signed_contracts(
         with open(path, "wb") as f:
             f.write(claim)
 
+        _, payload, _ = parse_cose_sign(claim)
+        with open(json_path, "wb") as f:
+            f.write(payload)
 
 def cli(fn):
     parser = fn(
