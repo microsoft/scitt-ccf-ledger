@@ -34,8 +34,7 @@ jobs:
       run: | 
         cd pyscitt 
         python3 -m build
-    - name: Store the distribution packages
-      uses: actions/upload-artifact@v3
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        name: python-package-distributions
-        path: pyscitt/dist/
+        packages-dir: pyscitt/dist
