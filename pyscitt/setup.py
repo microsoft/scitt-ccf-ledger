@@ -7,6 +7,8 @@ setup(
     name="pyscitt",
     version="0.0.1",
     description="Tools to sign claims and interact with a SCITT CCF Ledger",
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     packages=find_packages(),
     entry_points={
         "console_scripts": ["scitt=pyscitt.cli.main:main"],
