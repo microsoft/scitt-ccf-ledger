@@ -4,7 +4,7 @@
 import random
 from pathlib import Path
 
-from locust import User, events, task
+from locust import FastHttpUser, events, task
 
 from pyscitt.client import Client
 
@@ -22,7 +22,7 @@ def init_parser(parser):
     )
 
 
-class ScittUser(User):
+class ScittUser(FastHttpUser):
     abstract = True
 
     def __init__(self, *args, **kwargs):

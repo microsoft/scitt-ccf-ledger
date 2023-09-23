@@ -35,6 +35,10 @@ See the `demo/contract` folder on how to interact with the application.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing contract-ledger without Docker.
 
+### Reproducing builds
+
+See [reproducibility.md](./docs/reproducibility.md) for instructions.
+
 ## Contributing
 
 This project welcomes contributions and suggestions. Please see the [Contribution guidelines](CONTRIBUTING.md).

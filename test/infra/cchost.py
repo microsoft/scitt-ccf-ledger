@@ -104,7 +104,7 @@ class CCHost(EventLoopThread):
         self.clock_offset = 0
         if enable_faketime:
             # Unfortunately there isn't really a portable way of finding this path.
-            # Hardcode what works on the CI images we use, and allow it to be overriden.
+            # Hardcode what works on the CI images we use, and allow it to be overridden.
             faketime_lib = Path(
                 os.getenv(
                     "LIBFAKETIME",

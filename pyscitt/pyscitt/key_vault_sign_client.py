@@ -3,11 +3,13 @@
 
 import base64
 import hashlib
+from typing import Dict, Optional
 
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.certificates import CertificateClient, KeyVaultCertificate
 from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, SignatureAlgorithm
+from ccf.cose import create_cose_sign1_finish, create_cose_sign1_prepare
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
 from cryptography.x509 import load_pem_x509_certificate
 
@@ -50,13 +52,70 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         cert_pem = f"-----BEGIN CERTIFICATE-----\n{decoded}\n-----END CERTIFICATE-----"
         return cert_pem
 
-    def sign(self, data: bytes):
+    def _get_crypto_client(self):
         key_client = KeyClient(vault_url=self._vault_url, credential=self.credential)
         key = key_client.get_key(
             name=self._identity_certificate_name,
             version=self._identity_certificate_version,
         )
         crypto_client = CryptographyClient(key, credential=self.credential)
+        return crypto_client
+
+    def cose_sign(self, data: bytes, cose_headers: Optional[Dict] = None) -> bytes:
+        """Generates a COSE payload for the specified request with the specified headers.
+
+        https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
+
+        :param data: The intended body for the HTTP request.
+        :type data: bytes
+        :param cose_headers: The headers to include in the COSE payload.
+        :type cose_headers: Optional[Dict]
+
+        :return: The full payload, with signature, to be sent to CCF.
+        :rtype: bytes
+        """
+
+        assert self.cert, "No identity public certificate available for this identity"
+
+        # Prepare the COSE payload
+        tbs = create_cose_sign1_prepare(
+            payload=data,
+            cert_pem=self.cert,
+            additional_protected_header=cose_headers,
+        )
+
+        # Sign the unsigned COSE payload using Key Vault
+        digest_to_sign = base64.b64decode(tbs["value"].encode())
+        algorithm = SignatureAlgorithm(tbs["alg"])
+        crypto_client = self._get_crypto_client()
+        sign_result = crypto_client.sign(
+            algorithm=SignatureAlgorithm(algorithm), digest=digest_to_sign
+        )
+
+        # Finish to prepare the COSE payload
+        return create_cose_sign1_finish(
+            payload=data,
+            cert_pem=self.cert,
+            signature=base64.urlsafe_b64encode(sign_result.signature).decode(),
+            additional_protected_header=cose_headers,
+        )
+
+    def http_sign(self, data: bytes):
+        """
+        Generates a HTTP signing payload for the specified request with the specified headers.
+
+        https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
+
+        :param data: The intended body for the HTTP request.
+        :type data: bytes
+
+        :return: The full payload, with signature, to be sent to CCF.
+        :rtype: bytes
+        """
+
+        assert self.cert, "No identity public certificate available for this identity"
+
+        crypto_client = self._get_crypto_client()
         cert = load_pem_x509_certificate(self.cert.encode("ascii"))
         pub_key = cert.public_key()
         assert isinstance(pub_key, (EllipticCurvePublicKey))
