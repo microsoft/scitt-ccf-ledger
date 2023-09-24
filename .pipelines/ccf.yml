@@ -15,8 +15,13 @@ steps:
     displayName: Checkout CCF ${{ parameters.Version }}
 
   - script: |
-      apt-get update && apt-get install -y libstdc++-10-dev
-      cmake -GNinja -B build \
+      cd getting_started/setup_vm
+      ./run.sh ccf-dev.yml -e ccf_ver=${{ parameters.Version }} -e platform=${{ parameters.Platform }} -e clang_version=15
+    workingDirectory: $(Pipeline.Workspace)/CCF
+    displayName: Setup CCF development environment
+
+  - script: |
+      CC=`which clang-15` CXX=`which clang++-15` cmake -GNinja -B build \
         -DCMAKE_INSTALL_PREFIX=/opt/ccf_${{ parameters.Platform }} \
         -DCOMPILE_TARGET=${{ parameters.Platform }} \
         -DBUILD_TESTS=OFF \
