@@ -5,9 +5,15 @@ This demo shows participants in the DEPA training framework using a [did:web](ht
 ## Prerequisites
 This demo requires a running contract service, and two GitHub accounts and two GitHub Pages user/organization sites, one for the TDP and one for the TDC. To create a GitHub page site, follow the [GitHub Pages user/organization documentation](https://pages.github.com/). You will be asked to create a new repository with the URL `<username>.github.io`. If you don't have two GitHub accounts or you don't want to use the GitHub Pages site associated with your account, you can create a new user on [GitHub](https://github.com/signup).
 
+The demo also requires ```jq```. On Ubuntu, run. 
+
+```
+sudo apt-get install jq
+```
+
 ## Instructions
 
-The demo folder contains a [sample contract](contract.json). We will start by modifying the contract to reflect the identities of the two participants. 
+The demo folder contains a [sample contract](contract.json). We will start by modifying the contract to reflect the identities of the two participants. Run the followirng commands from the root directory. 
 
 > **Note:** Replace `<tdp_username>` with the GitHub username of the TDP and `<tdc_username>` being used for this demo, and `<contract_service_url>` with the HTTP endpoint of the contract service setup by the SRO. The script will default to using `http://127.0.0.1:8000` for the contract service. 
 
@@ -15,7 +21,7 @@ The demo folder contains a [sample contract](contract.json). We will start by mo
 export TDP_USERNAME=<tdp_username>
 export TDC_USERNAME=<tdc_username>
 export CONTRACT_URL=<contract_service_url>
-./demo/update_contract.sh
+./demo/contract/update_contract.sh
 ```
 
 You can find the new contract in under `tmp/contracts`. 
