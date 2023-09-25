@@ -5,20 +5,31 @@ This demo shows participants in the DEPA training framework using a [did:web](ht
 ## Prerequisites
 This demo requires a running contract service, and two GitHub accounts and two GitHub Pages user/organization sites, one for the TDP and one for the TDC. To create a GitHub page site, follow the [GitHub Pages user/organization documentation](https://pages.github.com/). You will be asked to create a new repository with the URL `<username>.github.io`. If you don't have two GitHub accounts or you don't want to use the GitHub Pages site associated with your account, you can create a new user on [GitHub](https://github.com/signup).
 
+If you plan to use the contract with a CCR, you will need the location of the key vault that contains the TDP's encryption keys. 
+
 ## Instructions
 
-The demo folder contains a [sample contract](contract.json). We will start by modifying the contract to reflect the identities of the two participants. 
+The demo folder contains a [sample contract](contract.json). Modify the contract as per your requirements, including
+- DIDs of the participants
+- names of the datasets
+- key identifiers and location of the data encryption keys
+- other attributes such as privacy budget
 
-> **Note:** Replace `<tdp_username>` with the GitHub username of the TDP and `<tdc_username>` being used for this demo, and `<contract_service_url>` with the HTTP endpoint of the contract service setup by the SRO. The script will default to using `http://127.0.0.1:8000` for the contract service. 
+Place the resulting contract in `tmp/contracts`. 
+
+For simplicity, we provide a sample utility which modifies the DIDs of the TDP and TDP and the location of key vault containing the encryption keys. 
+
+> **Note:** Replace `<tdp_username>` with the GitHub username of the TDP, `<tdp_keyvault_url>` is the URL of the Azure Key Vault contains (or will contain) the TDP's encryption keys, `<tdc_username>` being used for this demo, `<contract_service_url>` with the HTTP endpoint of the contract service setup by the SRO. The script will default to using `http://127.0.0.1:8000` for the contract service. 
 
 ```
 export TDP_USERNAME=<tdp_username>
+export TDP_KEYVAULT=<tdp_keyvault_url>
 export TDC_USERNAME=<tdc_username>
 export CONTRACT_URL=<contract_service_url>
 ./demo/update_contract.sh
 ```
 
-You can find the new contract in under `tmp/contracts`. 
+This script will place the new contract in under `tmp/contracts`. 
 
 Next, run the following command to setup and activate your environment.
 

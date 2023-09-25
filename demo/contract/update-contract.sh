@@ -7,6 +7,11 @@ if [[ -z "${TDP_USERNAME}" ]]; then
   exit 1
 fi
 
+if [[ -z "${TDP_KEYVAULT}" ]]; then
+  echo "No TDP key vault specified"
+  exit 1
+fi
+
 if [[ -z "${TDC_USERNAME}" ]]; then
   echo "No TDC username specified"
   exit 1
@@ -20,4 +25,7 @@ TMP=`echo $TMP | jq '.tdps[0] = env.TDP_DID'`
 TMP=`echo $TMP | jq '.datasets[0].provider = env.TDP_DID'`
 TMP=`echo $TMP | jq '.datasets[1].provider = env.TDP_DID'`
 TMP=`echo $TMP | jq '.datasets[2].provider = env.TDP_DID'`
+TMP=`echo $TMP | jq '.datasets[0].key.properties.endpoint = env.TDP_KEYVAULT'`
+TMP=`echo $TMP | jq '.datasets[1].key.properties.endpoint = env.TDP_KEYVAULT'`
+TMP=`echo $TMP | jq '.datasets[2].key.properties.endpoint = env.TDP_KEYVAULT'`
 echo $TMP > ./tmp/contracts/contract.json
