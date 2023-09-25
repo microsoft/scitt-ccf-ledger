@@ -45,7 +45,7 @@ namespace scitt::did
     std::optional<DidWebOptions> did_web_options;
   };
 
-  struct DidResolutionResult
+  struct DidResolutionResult // NOLINT(bugprone-exception-escape)
   {
     DidDocument did_doc;
     DidResolutionMetadata resolution_metadata;

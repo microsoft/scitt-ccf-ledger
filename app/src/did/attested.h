@@ -72,7 +72,7 @@ namespace scitt::did
 
   // "error" field within "data" in AttestedResolution for
   // ATTESTED_FETCH_OE_SGX_ECDSA_V2
-  struct AttestedFetchError
+  struct AttestedFetchError // NOLINT(bugprone-exception-escape)
   {
     std::string message;
 
@@ -89,7 +89,7 @@ namespace scitt::did
     bool operator==(const AttestedFetchResult&) const = default;
   };
   // "data" field of AttestedResolution for ATTESTED_FETCH_OE_SGX_ECDSA_V2
-  struct AttestedFetchData
+  struct AttestedFetchData // NOLINT(bugprone-exception-escape)
   {
     std::string url;
     std::string nonce;

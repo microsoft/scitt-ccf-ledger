@@ -13,8 +13,8 @@ setup(
     },
     python_requires=">=3.8",
     install_requires=[
-        "ccf==3.0.12",
-        "cryptography==39.*",  # needs to match ccf
+        "ccf==4.0.7",
+        "cryptography==40.*",  # needs to match ccf
         "httpx",
         "cbor2",
         # TODO: remove this once pycose >= 1.0.2 is released

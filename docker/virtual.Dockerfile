@@ -1,4 +1,4 @@
-ARG CCF_VERSION=3.0.12
+ARG CCF_VERSION=4.0.7
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y libcurl4-openssl-dev
 COPY ./3rdparty/attested-fetch /tmp/attested-fetch/
 RUN mkdir /tmp/attested-fetch-build && \
     cd /tmp/attested-fetch-build && \
-    CC=clang-10 CXX=clang++-10 cmake -GNinja \
+    CC=clang-15 CXX=clang++-15 cmake -GNinja \
     -DCOMPILE_TARGET="virtual" \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app/attested-fetch \
@@ -19,7 +19,7 @@ RUN mkdir /tmp/attested-fetch-build && \
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \
     cd /tmp/app-build && \
-    CC=clang-10 CXX=clang++-10 cmake -GNinja \
+    CC=clang-15 CXX=clang++-15 cmake -GNinja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
     -DCOMPILE_TARGET="virtual" \
@@ -41,10 +41,6 @@ COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 
-COPY ./docker/start-app.sh /usr/src/app/start-app.sh
-
-RUN ["chmod", "+x", "start-app.sh"]
-
 WORKDIR /host/node
 
-ENTRYPOINT [ "/usr/src/app/start-app.sh" ]
+ENTRYPOINT [ "cchost" ]

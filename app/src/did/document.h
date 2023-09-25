@@ -15,7 +15,7 @@ namespace scitt::did
   static constexpr std::string_view VERIFICATION_METHOD_TYPE_JWK =
     "JsonWebKey2020";
 
-  struct Jwk
+  struct Jwk // NOLINT(bugprone-exception-escape)
   {
     std::string kty;
     std::optional<std::string> alg;
@@ -32,7 +32,7 @@ namespace scitt::did
   DECLARE_JSON_REQUIRED_FIELDS(Jwk, kty);
   DECLARE_JSON_OPTIONAL_FIELDS(Jwk, alg, n, e, crv, x, y, x5c);
 
-  struct DidVerificationMethod
+  struct DidVerificationMethod // NOLINT(bugprone-exception-escape)
   {
     std::string id;
     std::string type;
@@ -46,7 +46,7 @@ namespace scitt::did
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     DidVerificationMethod, public_key_jwk, "publicKeyJwk");
 
-  struct DidDocument
+  struct DidDocument // NOLINT(bugprone-exception-escape)
   {
     std::string id;
     std::optional<std::vector<DidVerificationMethod>> verification_method;
