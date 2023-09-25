@@ -41,10 +41,6 @@ COPY --from=builder /usr/src/app/share/VERSION VERSION
 COPY app/fetch-did-web-doc.py /tmp/scitt/fetch-did-web-doc.py
 COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 
-COPY ./docker/start-app.sh /usr/src/app/start-app.sh
-
-RUN ["chmod", "+x", "start-app.sh"]
-
 WORKDIR /host/node
 
-ENTRYPOINT [ "/usr/src/app/start-app.sh" ]
+ENTRYPOINT [ "cchost" ]
