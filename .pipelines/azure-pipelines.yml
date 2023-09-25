@@ -97,11 +97,12 @@ stages:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_PREFIX_TREE: ON
             # Fast unwinder only gives us partial stack traces in LeakSanitzer
+            # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
             ASAN_OPTIONS: fast_unwind_on_malloc=0:alloc_dealloc_mismatch=0
 
           # faketime does not play well with ASAN so don't enable it here.
           FunctionalTestArguments: '--enable-prefix-tree'
-          InstallPackages: [ libcurl4-openssl-dev, libstdc++-10-dev ]
+          InstallPackages: [ libcurl4-openssl-dev ]
 
       - template: common.yml
         parameters:
