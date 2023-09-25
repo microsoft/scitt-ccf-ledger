@@ -40,4 +40,4 @@ Checks: >
 
 WarningsAsErrors: '*'
 # Include current directory files and exclude ccf imported code
-HeaderFilterRegex: '^(?!.*\/opt\/ccf_virtual\/include\/).*'
+HeaderFilterRegex: '^(?!.*(\/opt_ccf.*\/include\/)).*'
