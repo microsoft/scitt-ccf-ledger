@@ -7,9 +7,7 @@ This demo requires a running contract service, and two GitHub accounts and two G
 
 If you plan to use the contract with a CCR, you will need the location of the key vault that contains the TDP's encryption keys. 
 
-## Instructions
-
-### Contract Creation
+## Contract Creation
 
 The demo folder contains a [sample contract](contract.json). Modify the contract as per your requirements, including
 - DIDs of the participants
@@ -33,7 +31,7 @@ export CONTRACT_URL=<contract_service_url>
 
 This script will place the new contract in under `tmp/contracts`. 
 
-### Setup environment
+## Setup environment
 
 Next, run the following command to setup and activate your environment.
 
@@ -43,7 +41,7 @@ source venv/bin/activate
 ./demo/contract/1-contract-setup.sh
 ```
 
-### Sign and register contract as TDP
+## Sign and register contract as TDP
 
 Acting as the TDP, run the following commands to create the TDP's DID, and then sign and register a fresh contract:
 
@@ -62,7 +60,7 @@ When a contract is submitted to the contract service, it is assigned a sequence 
 Submitted tmp/<tdp_username>/contract.cose as transaction 2.XX
 ```
 
-### Sign and register contract as TDC
+## Sign and register contract as TDC
 
 Now acting as a TDC, run the following commands to create the TDC's DID, and then retrieve, sign and submit the contract previously registered by the TDP using the TDC's DID:
 
