@@ -24,7 +24,6 @@ variables:
   # This is used in functional tests to make certain tests mandatory
   # in CI, but optional during local development. 
   SCITT_CI: 1
-
   ACR_REGISTRY: scittoss.azurecr.io
 
 stages:
@@ -35,7 +34,7 @@ stages:
           Name: test_sgx_no_prefix_tree
           DisplayName: Test (SGX, no prefix tree)
           Platform: sgx
-          Pool: 1es-dc-pool
+          Pool: scitt-dc-pool
           Environment:
             ENABLE_PREFIX_TREE: OFF
           FunctionalTestArguments: '--enable-perf'
@@ -46,7 +45,7 @@ stages:
           Name: test_sgx
           DisplayName: Test (SGX, with prefix tree)
           Platform: sgx
-          Pool: 1es-dc-pool
+          Pool: scitt-dc-pool
           Environment:
             ENABLE_PREFIX_TREE: ON
           FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
@@ -67,7 +66,7 @@ stages:
           Name: test_sgx_docker
           DisplayName: Test (SGX on Docker, no prefix tree)
           Platform: sgx
-          Pool: 1es-dc-pool
+          Pool: scitt-dc-pool
           Variant: Docker
           ImageFilename: scitt-ccf-ledger-sgx.tar
           Environment:
@@ -148,15 +147,15 @@ stages:
           
           - script: |
               docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-sgx.tar
-              docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+              docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger:$(git_tag)-sgx
             displayName: Load Docker image
 
           - task: Docker@2
             displayName: Login to ACR
             inputs:
               command: login
-              containerRegistry: SCITT Ledger OSS Registry
+              containerRegistry: scittoss-acr-conn
 
           - script: |
-              docker push $(ACR_REGISTRY)/public/scitt-ccf-ledger/app/run:$(git_tag)-sgx
+              docker push $(ACR_REGISTRY)/public/scitt-ccf-ledger:$(git_tag)-sgx
             displayName: Publish to ACR
