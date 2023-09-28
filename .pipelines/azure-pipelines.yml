@@ -135,7 +135,7 @@ stages:
 
         steps:
           - task: DownloadPipelineArtifact@2
-            displayName: Download Docker image artifact
+            displayName: Download SGX Docker image artifact
             inputs:
               buildType: current
               artifactName: docker-image-test_sgx_docker
@@ -146,8 +146,8 @@ stages:
             displayName: Get image tag from git tag
           
           - script: |
-              docker load --input $(Pipeline.Workspace)/scitt-ccf-ledger-sgx.tar
-              docker tag scitt-ccf-ledger-sgx $(ACR_REGISTRY)/public/scitt-ccf-ledger:$(git_tag)-sgx
+              docker load --input $(Pipeline.Workspace)/scitt-sgx.tar
+              docker tag scitt-sgx $(ACR_REGISTRY)/scitt-sgx:$(git_tag)
             displayName: Load Docker image
 
           - task: Docker@2
@@ -157,5 +157,5 @@ stages:
               containerRegistry: scittoss-acr-conn
 
           - script: |
-              docker push $(ACR_REGISTRY)/public/scitt-ccf-ledger:$(git_tag)-sgx
+              docker push $(ACR_REGISTRY)/scitt-sgx:$(git_tag)
             displayName: Publish to ACR
