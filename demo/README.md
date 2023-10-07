@@ -1,3 +1,3 @@
 # Demos
 
-This folder contains scripts and instructions for SCITT demos. 
+This folder contains scripts and instructions for contract service demos. 
