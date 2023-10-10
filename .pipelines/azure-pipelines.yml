@@ -155,7 +155,7 @@ stages:
             displayName: Login to ACR
             inputs:
               command: login
-              containerRegistry: scittoss-acr-conn-release
+              containerRegistry: scittoss-acr-conn
 
           - script: |
               docker push $(ACR_REGISTRY)/scitt-sgx:$(git_tag)
@@ -188,7 +188,7 @@ stages:
             displayName: Login to ACR
             inputs:
               command: login
-              containerRegistry: scittoss-acr-conn
+              containerRegistry: scittoss-acr-conn-release
 
           - script: |
               docker push $(ACR_REGISTRY_RELEASE)/scitt-sgx:$(git_tag)
