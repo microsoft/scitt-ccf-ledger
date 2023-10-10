@@ -15,8 +15,8 @@ CCF_HOST=${CCF_HOST:-"localhost"}
 CCF_PORT=${CCF_PORT:-8000}
 CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
 
-DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$PLATFORM"}
-CONTAINER_NAME=${CONTAINER_NAME:-"scitt-ccf-ledger-dev-$(date +%s)"}
+DOCKER_TAG=${DOCKER_TAG:-"scitt-$PLATFORM"}
+CONTAINER_NAME=${CONTAINER_NAME:-"scitt-dev-$(date +%s)"}
 
 WORKSPACE=${WORKSPACE:-"workspace/"}
 
