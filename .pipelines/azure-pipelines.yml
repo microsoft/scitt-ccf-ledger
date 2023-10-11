@@ -129,67 +129,34 @@ stages:
             displayName: "CI checks"
 
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/heads/main/') }}:
-    - stage: main_release
+    - stage: main
       jobs:
       - job: docker_push_main
         displayName: Publish to ACR (main)
-
         steps:
-          - task: DownloadPipelineArtifact@2
-            displayName: Download SGX Docker image artifact
-            inputs:
-              buildType: current
-              artifactName: docker-image-test_sgx_docker
-              path: $(Pipeline.Workspace)
-
-          - script: |
-              echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/heads/main/}"
-            displayName: Get image tag from git tag
-          
-          - script: |
-              docker load --input $(Pipeline.Workspace)/scitt-sgx.tar
-              docker tag scitt-sgx $(ACR_REGISTRY_STAGING)/scitt-sgx:$(git_tag)
-            displayName: Load Docker image
-
-          - task: Docker@2
-            displayName: Login to ACR
-            inputs:
-              command: login
+          - template: docker-push.yml
+            parameters:
+              gitTag: "${BUILD_SOURCEBRANCH#refs/heads/main/}"
+              acrRegistry: $(ACR_REGISTRY_STAGING)
               containerRegistry: scitt-acr-conn-staging
-
-          - script: |
-              docker push $(ACR_REGISTRY_STAGING)/scitt-sgx:$(git_tag)
-            displayName: Publish to ACR
 
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     - stage: release
       jobs:
-      - job: docker_push
-        displayName: Publish to ACR (Release)
-
+      - job: docker_push_main
+        displayName: Publish to staging ACR (Release)
         steps:
-          - task: DownloadPipelineArtifact@2
-            displayName: Download SGX Docker image artifact
-            inputs:
-              buildType: current
-              artifactName: docker-image-test_sgx_docker
-              path: $(Pipeline.Workspace)
+          - template: docker-push.yml
+            parameters:
+              gitTag: "${BUILD_SOURCEBRANCH#refs/tags/}"
+              acrRegistry: $(ACR_REGISTRY_STAGING)
+              containerRegistry: scitt-acr-conn-staging
 
-          - script: |
-              echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/tags/}"
-            displayName: Get image tag from git tag
-          
-          - script: |
-              docker load --input $(Pipeline.Workspace)/scitt-sgx.tar
-              docker tag scitt-sgx $(ACR_REGISTRY_RELEASE)/scitt-sgx:$(git_tag)
-            displayName: Load Docker image
-
-          - task: Docker@2
-            displayName: Login to ACR
-            inputs:
-              command: login
+      - job: docker_push_release
+        displayName: Publish to prod ACR (Release)
+        steps:
+          - template: docker-push.yml
+            parameters:
+              gitTag: "${BUILD_SOURCEBRANCH#refs/tags/}"
+              acrRegistry: $(ACR_REGISTRY_RELEASE)
               containerRegistry: scitt-acr-conn-release
-
-          - script: |
-              docker push $(ACR_REGISTRY_RELEASE)/scitt-sgx:$(git_tag)
-            displayName: Publish to ACR
