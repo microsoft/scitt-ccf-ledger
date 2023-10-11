@@ -32,11 +32,11 @@ After building a docker image, you can push it to a container registry. For exam
 ACR="<acr-name>" # Define your ACR name here
 
 # Build docker image for SGX
-PLATFORM="sgx" DOCKER_TAG="$ACR.azurecr.io/scitt-ccf-ledger-sgx:latest" ./docker/build.sh
+PLATFORM="sgx" DOCKER_TAG="$ACR.azurecr.io/scitt-sgx:latest" ./docker/build.sh
 
 # Login to ACR
 az acr login --name $ACR 
 
 # Push docker image to ACR
-docker push $ACR.azurecr.io/scitt-ccf-ledger-sgx:latest
+docker push $ACR.azurecr.io/scitt-sgx:latest
 ```

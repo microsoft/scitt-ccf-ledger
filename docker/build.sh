@@ -6,7 +6,7 @@ set -e
 
 PLATFORM=${PLATFORM:-sgx}
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
-DOCKER_TAG=${DOCKER_TAG:-"scitt-ccf-ledger-$PLATFORM"}
+DOCKER_TAG=${DOCKER_TAG:-"scitt-$PLATFORM"}
 
 if [ "$PLATFORM" = "sgx" ]; then
     DOCKERFILE="enclave.Dockerfile"
