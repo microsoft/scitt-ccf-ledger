@@ -24,7 +24,7 @@ variables:
   # This is used in functional tests to make certain tests mandatory
   # in CI, but optional during local development. 
   SCITT_CI: 1
-  ACR_REGISTRY: scittoss.azurecr.io
+  ACR_REGISTRY_STAGING: confidentialledgeracrstaging.azurecr.io
   ACR_REGISTRY_RELEASE: confidentialledgeracrprod.azurecr.io
 
 stages:
@@ -143,22 +143,22 @@ stages:
               path: $(Pipeline.Workspace)
 
           - script: |
-              echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/tags/}"
+              echo "##vso[task.setvariable variable=git_tag]${BUILD_SOURCEBRANCH#refs/heads/main/}"
             displayName: Get image tag from git tag
           
           - script: |
               docker load --input $(Pipeline.Workspace)/scitt-sgx.tar
-              docker tag scitt-sgx $(ACR_REGISTRY)/scitt-sgx:$(git_tag)
+              docker tag scitt-sgx $(ACR_REGISTRY_STAGING)/scitt-sgx:$(git_tag)
             displayName: Load Docker image
 
           - task: Docker@2
             displayName: Login to ACR
             inputs:
               command: login
-              containerRegistry: scittoss-acr-conn
+              containerRegistry: scitt-acr-conn-staging
 
           - script: |
-              docker push $(ACR_REGISTRY)/scitt-sgx:$(git_tag)
+              docker push $(ACR_REGISTRY_STAGING)/scitt-sgx:$(git_tag)
             displayName: Publish to ACR
 
   - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
@@ -188,7 +188,7 @@ stages:
             displayName: Login to ACR
             inputs:
               command: login
-              containerRegistry: scittoss-acr-conn-release
+              containerRegistry: scitt-acr-conn-release
 
           - script: |
               docker push $(ACR_REGISTRY_RELEASE)/scitt-sgx:$(git_tag)
