@@ -13,7 +13,7 @@ setup(
     },
     python_requires=">=3.8",
     install_requires=[
-        "ccf==4.0.10", # We temporarily bump this to 4.0.10 instead of 4.0.7 (current CCF version) so that we can upgrade cryptography to a 41.* version, which fixes several security vulnerabilities.
+        "ccf==4.0.10",  # We temporarily bump this to 4.0.10 instead of 4.0.7 (current CCF version) so that we can upgrade cryptography to a 41.* version, which fixes several security vulnerabilities.
         "cryptography==41.*",  # needs to match ccf
         "httpx",
         "cbor2",
