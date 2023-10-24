@@ -16,7 +16,7 @@ setup(
         "ccf==4.0.10",  # We temporarily bump this to 4.0.10 instead of 4.0.7 (current CCF version) so that we can upgrade cryptography to a 41.* version, which fixes several security vulnerabilities.
         "cryptography==41.*",  # needs to match ccf
         "httpx",
-        "cbor2",
+        "cbor2==5.4.*",
         # TODO: remove this once pycose >= 1.0.2 is released
         "pycose @ git+https://github.com/TimothyClaeys/pycose@94db358eda640966c0e0e9148110b6c66763f9e5#egg=pycose",
         "pyjwt",

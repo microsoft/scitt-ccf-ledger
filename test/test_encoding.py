@@ -9,8 +9,8 @@ import pycose
 import pytest
 from pycose.messages import Sign1Message
 
-from pyscitt import crypto, governance
-from pyscitt.client import Client, ServiceError
+from pyscitt import crypto
+from pyscitt.client import Client
 from pyscitt.crypto import cert_pem_to_der
 from pyscitt.verify import verify_receipt
 
