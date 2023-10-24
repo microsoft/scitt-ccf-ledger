@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
-from ..verify import StaticTrustStore, DIDResolverTrustStore, verify_receipt
+from ..verify import DIDResolverTrustStore, StaticTrustStore, TrustStore, verify_receipt
 
 
 def validate_cose_with_receipt(
@@ -19,6 +19,7 @@ def validate_cose_with_receipt(
     else:
         receipt = receipt_path.read_bytes()
 
+    service_trust_store: TrustStore
     if service_trust_store_path is None:
         service_trust_store = DIDResolverTrustStore()
     else:
