@@ -162,7 +162,7 @@ class Receipt:
 
     @classmethod
     def decode(cls, data: bytes) -> "Receipt":
-        return cls.from_cose_obj(cbor2.loads(data))
+        return cls.from_cose_obj(cbor2.loads(data))  # type: ignore[arg-type]
 
     def countersign_structure(self, claim: Sign1Message) -> bytes:
         context = "CounterSignatureV2"

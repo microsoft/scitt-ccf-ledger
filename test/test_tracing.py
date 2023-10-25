@@ -3,8 +3,6 @@
 
 import re
 
-import pytest
-
 from pyscitt.client import Client
 
 from .infra.assertions import service_error

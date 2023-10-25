@@ -558,7 +558,7 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
     outer = cbor2.loads(buf)
     if hasattr(outer, "tag"):
         assert outer.tag == 18  # COSE_Sign1
-        val = outer.value
+        val = outer.value  # type: ignore[attr-defined]
     else:
         val = outer
     [_, uhdr, _, _] = val

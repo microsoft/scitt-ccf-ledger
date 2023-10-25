@@ -104,7 +104,7 @@ class ReadReceipt:
 
     @classmethod
     def decode(cls, data: bytes):
-        return cls.from_cose_obj(cbor2.loads(data))
+        return cls.from_cose_obj(cbor2.loads(data))  # type: ignore[arg-type]
 
     def verify(
         self, claim: Union[Sign1Message, bytes], service_params: ServiceParameters
@@ -171,10 +171,10 @@ class TreeReceipt:
     @classmethod
     def decode(cls, data: bytes) -> "TreeReceipt":
         cose_obj = cbor2.loads(data)
-        headers_encoded = cose_obj.pop(0)
+        headers_encoded = cose_obj.pop(0)  # type: ignore[attr-defined]
         headers = CoseBase._parse_header(cbor2.loads(headers_encoded), True)
-        root = cose_obj.pop(0)
-        receipt_contents = ReceiptContents.from_cose_obj(headers, cose_obj.pop(0))
+        root = cose_obj.pop(0)  # type: ignore[attr-defined]
+        receipt_contents = ReceiptContents.from_cose_obj(headers, cose_obj.pop(0))  # type: ignore[attr-defined]
         return TreeReceipt(headers_encoded, headers, root, receipt_contents)
 
     @property
