@@ -20,7 +20,7 @@ def validate_cose_with_receipt(
         receipt = receipt_path.read_bytes()
 
     service_trust_store: TrustStore
-    if service_trust_store_path is None:
+    if not service_trust_store_path:
         service_trust_store = DIDResolverTrustStore()
     else:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
