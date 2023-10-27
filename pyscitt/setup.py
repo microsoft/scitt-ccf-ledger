@@ -9,7 +9,7 @@ setup(
     description="Tools to sign claims and interact with a SCITT CCF Ledger",
     packages=find_packages(),
     entry_points={
-        "console_scripts": ["scitt=pyscitt.cli.main:main"],
+        "console_scripts": ["pyscitt=pyscitt.cli.main:main"],
     },
     python_requires=">=3.8",
     install_requires=[
