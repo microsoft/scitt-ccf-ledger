@@ -105,7 +105,8 @@ namespace scitt
     if (duration_ms < 0)
     {
       SCITT_INFO(
-        "Computed request duration is negative: {} ms. Ignoring.", duration_ms);
+        "Computed request duration is negative: {} ms. Ignoring.",
+        std::to_string(duration_ms));
     }
 
     if (txid.has_value())
