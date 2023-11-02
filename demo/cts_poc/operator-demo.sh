@@ -55,7 +55,7 @@ echo -e "\Opening the network"
 
 # Get current service certificate
 SERVICE_CERT_PATH="service_cert.pem"
-curl -k "$SCITT_URL"/node/network | jq -r .service_certificate > "$SERVICE_CERT_PATH"
+curl -k "$SCITT_URL"/node/network | jq -r .service_certificate | head -n -1 > "$SERVICE_CERT_PATH"
 
 # Send the proposal to open the network 
 scitt governance propose_open_service \
