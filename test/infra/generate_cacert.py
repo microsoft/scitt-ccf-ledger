@@ -10,7 +10,14 @@ from loguru import logger
 from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
-def generate_ca_cert_and_key(output_dir: str, alg: str, key_type: str, ec_curve: str, key_filename: str = "cacert_privk.pem", cacert_filename = "cacert.pem"):
+def generate_ca_cert_and_key(
+    output_dir: str,
+    alg: str,
+    key_type: str,
+    ec_curve: str,
+    key_filename: str = "cacert_privk.pem",
+    cacert_filename="cacert.pem",
+):
     # Create a new X5ChainCertificateAuthority instance
     untrusted_ca = X5ChainCertificateAuthority(kty=key_type)
 

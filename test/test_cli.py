@@ -234,9 +234,7 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
 
     trust_store_path = tmp_path / "store"
     trust_store_path.mkdir()
-    (trust_store_path / "service.json").write_text(
-        json.dumps(service_params)
-    )
+    (trust_store_path / "service.json").write_text(json.dumps(service_params))
     run(
         "validate",
         tmp_path / "claims.embedded.cose",

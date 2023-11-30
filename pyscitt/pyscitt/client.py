@@ -248,9 +248,9 @@ class BaseClient:
 
         development:
             If true, the TLS certificate of the server will not be verified.
-        
+
         cacert:
-            If set and development is False, will be used in TLS verification instead of the default bundle. 
+            If set and development is False, will be used in TLS verification instead of the default bundle.
         """
 
         # Even though these are passed to the httpx.Client and not used
@@ -276,7 +276,9 @@ class BaseClient:
         else:
             self.member_http_sig = None
 
-        tls_verification: Union[str, bool] = cacert if cacert is not None else not development
+        tls_verification: Union[str, bool] = (
+            cacert if cacert is not None else not development
+        )
 
         self.session = httpx.Client(
             base_url=url, headers=headers, verify=tls_verification
