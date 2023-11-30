@@ -213,10 +213,8 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
         tmp_path / "tlscacert.pem",
         tmp_path / "claims.cose",
         "--url",
-        # TLS cert does not have 127.0.0.1 set in SAN but 0.0.0.0 and the verification fails
-        # it does not happen in practice against a live running instance as SAN will contain
-        # the public ip and the dns entries
-        client.url.replace("127.0.0.1", "0.0.0.0"),
+        # TLS cert SAN entries come from config node_certificate.subject_alt_names
+        client.url,
         "--receipt",
         tmp_path / "receipt.cbor",
     )
