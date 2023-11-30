@@ -276,7 +276,7 @@ class BaseClient:
         else:
             self.member_http_sig = None
 
-        tls_verification = cacert if cacert is not None else not development
+        tls_verification: Union[str, bool] = cacert if cacert is not None else not development
 
         self.session = httpx.Client(
             base_url=url, headers=headers, verify=tls_verification

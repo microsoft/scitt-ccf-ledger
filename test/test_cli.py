@@ -168,7 +168,7 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
 
     # Setup signing keys imitating how third party might do it
     generate_ca_cert_and_key(
-        tmp_path,
+        f"{tmp_path}",
         "ES256",
         "ec",
         "P-256",
