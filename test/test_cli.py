@@ -19,6 +19,7 @@ from pyscitt.governance import ProposalNotAccepted
 
 from .infra.assertions import service_error
 from .infra.did_web_server import DIDWebServer
+from .infra.generate_cacert import generate_ca_cert_and_key
 
 
 @pytest.fixture
@@ -143,12 +144,105 @@ def test_smoke_test(run, client, tmp_path: Path):
             trust_store_path,
         )
 
-        run(
-            "validate",
-            tmp_path / "claims.embedded.cose",
-            "--service-trust-store",
-            trust_store_path,
-        )
+
+def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
+    # Add basic service config
+    (tmp_path / "config.json").write_text(
+        json.dumps({"authentication": {"allow_unauthenticated": True}})
+    )
+    run(
+        "governance",
+        "propose_configuration",
+        "--configuration",
+        tmp_path / "config.json",
+        with_service_url=True,
+        with_member_auth=True,
+    )
+
+    # Get the CA cert from the service params
+    # Once in production this value can come from other trusted places
+    service_params = client.get_parameters().as_dict()
+    (tmp_path / "tlscacert.pem").write_text(
+        f"-----BEGIN CERTIFICATE-----\n{service_params.get('serviceCertificate')}\n-----END CERTIFICATE-----\n"
+    )
+
+    # Setup signing keys imitating how third party might do it
+    generate_ca_cert_and_key(
+        tmp_path,
+        "ES256",
+        "ec",
+        "P-256",
+        key_filename="signerkey.pem",
+        cacert_filename="signerca.pem",
+    )
+
+    # Configure SCITT policy to accept the message if it was signed
+    # by the given key
+    run(
+        "governance",
+        "propose_ca_certs",
+        "--name",
+        "x509_roots",
+        "--ca-certs",
+        tmp_path / "signerca.pem",
+        with_service_url=True,
+        with_member_auth=True,
+    )
+
+    # Prepare an x509 cose file to submit to the service
+    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    run(
+        "sign",
+        "--key",
+        tmp_path / "signerkey.pem",
+        "--claims",
+        tmp_path / "claims.json",
+        "--content-type",
+        "application/json",
+        "--x5c",
+        tmp_path / "signerca.pem",
+        "--out",
+        tmp_path / "claims.cose",
+    )
+
+    # Submit cose and make sure TLS verification is enabled
+    # this should exit without error
+    run(
+        "submit",
+        "--cacert",
+        tmp_path / "tlscacert.pem",
+        tmp_path / "claims.cose",
+        "--url",
+        # TLS cert does not have 127.0.0.1 set in SAN but 0.0.0.0 and the verification fails
+        # it does not happen in practice against a live running instance as SAN will contain
+        # the public ip and the dns entries
+        client.url.replace("127.0.0.1", "0.0.0.0"),
+        "--receipt",
+        tmp_path / "receipt.cbor",
+    )
+
+    run("pretty-receipt", tmp_path / "receipt.cbor")
+
+    run(
+        "embed-receipt",
+        tmp_path / "claims.cose",
+        "--receipt",
+        tmp_path / "receipt.cbor",
+        "--out",
+        tmp_path / "claims.embedded.cose",
+    )
+
+    trust_store_path = tmp_path / "store"
+    trust_store_path.mkdir()
+    (trust_store_path / "service.json").write_text(
+        json.dumps(service_params)
+    )
+    run(
+        "validate",
+        tmp_path / "claims.embedded.cose",
+        "--service-trust-store",
+        trust_store_path,
+    )
 
 
 def test_local_development(run, service_url, tmp_path: Path):

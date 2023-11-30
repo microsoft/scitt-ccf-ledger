@@ -214,6 +214,7 @@ class BaseClient:
     member_signing_type: SigningType
     wait_time: Optional[float]
     development: bool
+    cacert: Optional[str]
 
     session: httpx.Client
     member_http_sig: Optional[HttpSig]
@@ -227,6 +228,7 @@ class BaseClient:
         member_signing_type: SigningType = SigningType.COSE,
         wait_time: Optional[float] = None,
         development: bool = False,
+        cacert: Optional[str] = None,
     ):
         """
         Create a new BaseClient instance.
@@ -246,6 +248,9 @@ class BaseClient:
 
         development:
             If true, the TLS certificate of the server will not be verified.
+        
+        cacert:
+            If set and development is False, will be used in TLS verification instead of the default bundle. 
         """
 
         # Even though these are passed to the httpx.Client and not used
@@ -257,6 +262,7 @@ class BaseClient:
         self.member_signing_type = member_signing_type
         self.wait_time = wait_time
         self.development = development
+        self.cacert = cacert
 
         headers = {}
         if auth_token:
@@ -270,8 +276,10 @@ class BaseClient:
         else:
             self.member_http_sig = None
 
+        tls_verification = cacert if cacert is not None else not development
+
         self.session = httpx.Client(
-            base_url=url, headers=headers, verify=not development
+            base_url=url, headers=headers, verify=tls_verification
         )
 
     def replace(self: SelfClient, **kwargs) -> SelfClient:
@@ -288,6 +296,7 @@ class BaseClient:
             "member_signing_type": self.member_signing_type,
             "wait_time": self.wait_time,
             "development": self.development,
+            "cacert": self.cacert,
         }
         values.update(kwargs)
         return self.__class__(**values)

@@ -39,6 +39,12 @@ See the `demo/` folder on how to interact with the application.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger without Docker.
 
+### Using the CLI
+
+To help with the configuration of an application or to be able to interact with its API you could leverage the available CLI.
+
+See [pyscitt](pyscitt/README.md)
+
 ### Reproducing builds
 
 See [reproducibility.md](./docs/reproducibility.md) for instructions.
