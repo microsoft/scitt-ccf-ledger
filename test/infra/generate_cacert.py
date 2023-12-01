@@ -10,7 +10,14 @@ from loguru import logger
 from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
-def generate_ca_cert_and_key(output_dir: str, alg: str, key_type: str, ec_curve: str):
+def generate_ca_cert_and_key(
+    output_dir: str,
+    alg: str,
+    key_type: str,
+    ec_curve: str,
+    key_filename: str = "cacert_privk.pem",
+    cacert_filename="cacert.pem",
+):
     # Create a new X5ChainCertificateAuthority instance
     untrusted_ca = X5ChainCertificateAuthority(kty=key_type)
 
@@ -18,7 +25,7 @@ def generate_ca_cert_and_key(output_dir: str, alg: str, key_type: str, ec_curve:
     identity = untrusted_ca.create_identity(alg=alg, kty=key_type, ec_curve=ec_curve)
 
     # Write the private key to a file
-    output_key_file = f"{output_dir}/cacert_privk.pem"
+    output_key_file = f"{output_dir}/{key_filename}"
     logger.info(f"Writing private key to {output_key_file}")
     with open(output_key_file, "w") as f:
         f.write(identity.private_key)
@@ -33,7 +40,7 @@ def generate_ca_cert_and_key(output_dir: str, alg: str, key_type: str, ec_curve:
         pemcert = x509.load_pem_x509_certificate(cert.encode())
         cert_bundle += pemcert.public_bytes(serialization.Encoding.PEM)
 
-    output_cacert_file = f"{output_dir}/cacert.pem"
+    output_cacert_file = f"{output_dir}/{cacert_filename}"
     logger.info(f"Writing cacert to {output_cacert_file}")
     with open(output_cacert_file, "wb") as f:
         f.write(cert_bundle)

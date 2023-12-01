@@ -355,6 +355,14 @@ class CCHost(EventLoopThread):
                     "bind_address": f"0.0.0.0:{self.listen_node_port}"
                 },
             },
+            "node_certificate": {
+                "subject_alt_names": [
+                    "iPAddress:0.0.0.0",
+                    "iPAddress:127.0.0.1",
+                    "dNSName:ccf.dummy.com",
+                    "dNSName:localhost",
+                ]
+            },
             "logging": {"format": "Json", "host_level": "Info"},
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),

@@ -10,9 +10,31 @@ This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
 
+### Run in Codespaces
+
 For *virtual* mode development only, instead of following the steps below, you can also use GitHub Codespaces and then continue with the "Building" section: 
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=562968818&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestEurope)
+
+### Run in a Docker image
+
+Similar to Codespaces you could just build and test the application within the running docker image:
+
+```sh
+docker build -t mytestimg -f .devcontainer/Dockerfile .
+
+# export your user details to use when running an
+export UID=$(id -u)
+export GID=$(id -g)
+docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash --user $UID:$GID mytestimg
+
+# workaround to make git happy in a docker image
+/opt/app# git config --global --add safe.directory "*"
+
+## ready to build and test now, see below commands
+```
+
+### Run on a machine
 
 Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
 
@@ -69,10 +91,12 @@ The unit tests can be run with:
 ./run_unit_tests.sh
 ```
 
-The functional tests can be run with:
+All functional tests can be run with:
 
 ```sh
 ./run_functional_tests.sh
 ```
+
+Specific functional test can also be run by passing additional `pytest` arguments, e.g. `./run_functional_tests.sh -k test_use_cacert_submit_verify_x509_signature`
 
 Note: the functional tests will launch their own CCF network on a randomly assigned port. You do not need to start an instance beforehand.

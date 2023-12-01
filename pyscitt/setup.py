@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="pyscitt",
-    version="0.0.1",
+    version="0.1.0",
     description="Tools to sign claims and interact with a SCITT CCF Ledger",
     packages=find_packages(),
     entry_points={
