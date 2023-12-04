@@ -14,7 +14,7 @@ set -e
 
 SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 
-echo -e "\nInstalling pyscitt CLI"
+echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
     python3.8 -m venv "venv"
 fi
@@ -55,7 +55,7 @@ echo -e "\Opening the network"
 
 # Get current service certificate
 SERVICE_CERT_PATH="service_cert.pem"
-curl -k "$SCITT_URL"/node/network | jq -r .service_certificate > "$SERVICE_CERT_PATH"
+curl -k "$SCITT_URL"/node/network | jq -r .service_certificate | head -n -1 > "$SERVICE_CERT_PATH"
 
 # Send the proposal to open the network 
 scitt governance propose_open_service \

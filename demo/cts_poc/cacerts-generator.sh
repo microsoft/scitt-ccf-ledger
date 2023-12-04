@@ -21,6 +21,6 @@ pip install --disable-pip-version-check -q -r test/requirements.txt
 
 # Create CA certificate and private key
 echo -e "\nCreating CA certificate PEM files"
-python test/infra/generate_cacert.py --output-dir "$CACERT_OUTPUT_DIR" 
+exec python3.8 -m test.infra.generate_cacert --output-dir "$CACERT_OUTPUT_DIR"
 
 echo -e "\nScript completed successfully"
