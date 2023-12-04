@@ -4,10 +4,16 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 
 ## Prerequisites
 
-- A Certificate Authority (CA) certificate and private key are required to configure the SCITT instance. The CA certificate and private key must be provided by the SCITT Operator. For getting a sample pair for testing purposes, you can use [this Python script](../../test/infra/generate_cacert.py) after installing the required [test dependencies](../../test/requirements.txt). For example:
+- A Certificate Authority (CA) certificate and private key are required to configure the SCITT instance. The CA certificate and private key must be provided by the SCITT Operator. For getting a sample pair for testing purposes, you can use the script [cacerts-generator.sh](./cacerts-generator.sh).
 
-    ```python
-    python test/infra/generate_cacert.py --output-dir "demo-poc/x509_roots" 
+    For running the script, you are required to provide the following environment variables:
+
+    - `CACERT_OUTPUT_DIR`: Path to the output directory where the CA certificate and private key files will be stored
+
+    Example command:
+
+    ```bash
+    CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/cts_poc/cacerts-generator.sh
     ```
 
 - Access to the CCF member certificate and private key is required to submit proposals to the CCF network. The provided member must be registered into the target CCF network. For a local SCITT instance (e.g., after running the [start.sh](../../start.sh) script), the member certificate and private key are generated automatically and stored in the `workspace` folder (`member0_cert.pem` and `member0_privk.pem`). For a remote SCITT instance, the member certificate and private key must be provided by the SCITT Operator. 

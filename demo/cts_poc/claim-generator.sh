@@ -10,9 +10,14 @@ set -e
 : "${CACERT_PATH:?"variable not set. Please define the path to the CA certificate PEM file"}"
 : "${PRIVATE_KEY_PATH:?"variable not set. Please define the path to the private key PEM file"}"
 : "${CLAIM_CONTENT_PATH:?"variable not set. Please define the path to the json/txt file to use as content for the claim"}"
-: "${COSE_CLAIMS_OUTPUT_PATH:?"variable not set. Please define the content type to use (e.g., \"application/json\")"}"
+: "${COSE_CLAIMS_OUTPUT_PATH:?"variable not set. Please define the path where the COSE claim will be saved to"}"
 
 CLAIM_CONTENT_TYPE=${CLAIM_CONTENT_TYPE:-"application/json"}
+
+echo -e "\nSetting up environment"
+if [ ! -f "venv/bin/activate" ]; then
+    python3.8 -m venv "venv"
+fi
 
 # Activate environment and install pyscitt local library
 source venv/bin/activate

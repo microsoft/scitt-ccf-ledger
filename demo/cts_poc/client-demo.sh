@@ -15,7 +15,7 @@ SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 # Create output folder
 mkdir -p "$OUTPUT_FOLDER"
 
-echo -e "\nInstalling pyscitt CLI"
+echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
     python3.8 -m venv "venv"
 fi
@@ -40,6 +40,13 @@ RECEIPT_PATH="$RECEIPT_FOLDER"/claims.receipt.cbor
 scitt submit "$COSE_CLAIMS_PATH" \
     --receipt "$RECEIPT_PATH" \
     --url "$SCITT_URL" \
+    --development
+
+# Get entries with embedded receipts
+echo -e "\nGetting all entries with embedded receipts"
+scitt retrieve "$RECEIPT_FOLDER" \
+    --url "$SCITT_URL" \
+    --service-trust-store "$SERVICE_PARAMS_FOLDER" \
     --development
 
 # View receipt

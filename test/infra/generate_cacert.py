@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import argparse
+import os
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -18,6 +19,9 @@ def generate_ca_cert_and_key(
     key_filename: str = "cacert_privk.pem",
     cacert_filename="cacert.pem",
 ):
+    # Create the output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
     # Create a new X5ChainCertificateAuthority instance
     untrusted_ca = X5ChainCertificateAuthority(kty=key_type)
 
