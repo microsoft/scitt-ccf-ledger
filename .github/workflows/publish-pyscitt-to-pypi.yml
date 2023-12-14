@@ -19,18 +19,21 @@ jobs:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - name: Setup python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.8'
 
-      - run: |
+      - name: Build package
+        run: |
           python3 -m pip install build
           cd pyscitt
           python3 -m build
       
-      - name: Publish package distributions to PyPI
+      - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: pyscitt/dist
