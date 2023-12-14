@@ -12,7 +12,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
 
     environment:
-      name: testpypi
+      name: pypi
       url: https://pypi.org/p/pyscitt
 
     permissions:
