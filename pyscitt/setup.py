@@ -1,12 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from os import path
+
 from setuptools import find_packages, setup
 
+PACKAGE_NAME = "pyscitt"
+PACKAGE_VERSION = "0.1.0"
+
+path_here = path.abspath(path.dirname(__file__))
+
+with open(path.join(path_here, "README.md"), encoding="utf-8") as f:
+    long_description = f.read()
+
 setup(
-    name="pyscitt",
-    version="0.1.0",
+    name=PACKAGE_NAME,
+    version=PACKAGE_VERSION,
     description="Tools to sign claims and interact with a SCITT CCF Ledger",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     packages=find_packages(),
     entry_points={
         "console_scripts": ["scitt=pyscitt.cli.main:main"],
@@ -23,4 +35,13 @@ setup(
         "azure-keyvault",
         "azure-identity",
     ],
+    license="Apache License 2.0",
+    author="SCITT CCF Team",
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+    ],
+    url="https://github.com/microsoft/scitt-ccf-ledger/tree/main/pyscitt",
 )
