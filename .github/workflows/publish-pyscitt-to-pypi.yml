@@ -9,26 +9,29 @@ jobs:
     name: "Publish pyscitt package to PyPi"
     runs-on: ubuntu-latest
 
+    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+
+    environment:
+      name: testpypi
+      url: https://pypi.org/p/pyscitt
+
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Get release number from git tag (release) or latest (branch)
-        run: |
-          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        id: tref
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
 
-      - name: Fetch PyPi Package from release
-        run: |
+      - run: |
+          python3 -m pip install build
           cd pyscitt
-          RELEASE_WHEEL_URL=$(curl -s  https://api.github.com/repos/microsoft/scitt-ccf-ledger/releases/tags/${{steps.tref.outputs.version}} | jq -r '.assets[] | select(.name|test("pyscitt-.*.whl")) | .browser_download_url')
-          echo ${RELEASE_WHEEL_URL}
-          wget ${RELEASE_WHEEL_URL}
-
-      - name: Publish PyPi Package to https://pypi.org/project/pyscitt/
-        run: |
-          set -ex
-          cd pyscitt
-          python3 -m venv env
-          source ./env/bin/activate
-          pip install twine
-          twine upload -u __token__ -p ${{ secrets.PYPI_TOKEN }} *.whl
+          python3 -m build
+      
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pyscitt/dist
+          skip-existing: true
