@@ -385,6 +385,7 @@ def parse_cose_sign1(buf: bytes) -> Tuple[dict, bytes]:
     msg = Sign1Message.decode(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
+    assert payload, "Payload is null"
     return header, payload
 
 
