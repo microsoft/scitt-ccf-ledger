@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  build_pyscitt:
+    name: "Build pyscitt"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Build pyscitt
+        run: |
+          python3 -m pip install build
+          cd pyscitt
+          python3 -m build
+
+      - name: Upload dist folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: pyscitt/dist
+
+  create_github_release:
+    name: "Create GitHub Release"
+    runs-on: ubuntu-latest
+    needs: build_pyscitt
+
+    permissions:
+      contents: write # IMPORTANT: this permission is mandatory for creating a GitHub Release
+    
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download pyscitt dist folder
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: pyscitt/dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            pyscitt/dist/*.whl
+            pyscitt/dist/*.tar.gz
+            LICENSE.txt
+
+  publish_pyscitt_to_pypi:
+    name: "Publish pyscitt to PyPI"
+    runs-on: ubuntu-latest
+    needs: build_pyscitt
+
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing to PyPi
+    
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyscitt
+      
+    steps:
+      - name: Download pyscitt dist folder
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: pyscitt/dist
+
+      - name: Publish pyscitt to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pyscitt/dist
+          skip-existing: true
