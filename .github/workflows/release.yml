@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  build_and_publish:
+    name: "Build pyscitt, publish GitHub Release, and publish pyscitt to PyPi"
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write # IMPORTANT: this permission is mandatory for creating a GitHub Release
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing to PyPi
+    
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyscitt
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Build pyscitt
+        run: |
+          python3 -m pip install build
+          cd pyscitt
+          python3 -m build
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            pyscitt/dist/*.whl
+            pyscitt/dist/*.tar.gz
+            LICENSE.txt
+      
+      - name: Publish pyscitt to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pyscitt/dist
+          skip-existing: true
