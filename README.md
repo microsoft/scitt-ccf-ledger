@@ -2,7 +2,7 @@
 
 [![Build/test (virtual)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test-virtual.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test-virtual.yml)
 
-[![Build/test (all platforms)](https://github-private.visualstudio.com/microsoft/_apis/build/status%2Fmicrosoft.scitt-ccf-ledger?branchName=main)](https://github-private.visualstudio.com/microsoft/_build/latest?definitionId=540&branchName=main)
+[![Build/test (all platforms)](https://msazure.visualstudio.com/One/_apis/build/status%2FCustom%2FSCITT%2Fmicrosoft.scitt-ccf-ledger?branchName=main)](https://msazure.visualstudio.com/One/_build/latest?definitionId=332749&branchName=main)
 
 This repository contains the source code for scitt-ccf-ledger, an application
 that runs on top of [CCF](https://ccf.dev/) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
@@ -43,13 +43,17 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and 
 
 To help with the configuration of an application or to be able to interact with its API you could leverage the available CLI.
 
-The CLI is written in Python and is currently distributed through the GitHub releases as a `wheel` file. To use it:
+The `pyscitt` CLI is written in Python and is available on PyPi [here](https://pypi.org/project/pyscitt/). To install it, you can use the following command:
 
-- Download a release: `curl -LO https://github.com/microsoft/scitt-ccf-ledger/releases/download/0.5.0/pyscitt-0.0.1-py3-none-any.whl`
-- Install it: `pip install pyscitt-0.0.1-py3-none-any.whl`
-- Try it: `scitt --help`
+```sh
+pip install pyscitt
+```
 
-An alternative way is to clone the repository and just run [`./pyscitt.sh`](../pyscitt.sh), e.g. `./pyscitt.sh --help`
+The CLI is also distributed through the GitHub releases as a `wheel` file. Optionally, it can be used from within the repository using the [`./pyscitt.sh`](../pyscitt.sh) script. For example: 
+
+```sh
+./pyscitt.sh --help
+```
 
 The CLI is extensively used in the following functional tests and demo scripts:
 
