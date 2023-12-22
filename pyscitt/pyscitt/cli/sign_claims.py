@@ -2,11 +2,18 @@
 # Licensed under the MIT License.
 
 import argparse
+import base64
 import json
 import re
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
+
+import pycose.headers
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.certificates import CertificateClient
+
+from pyscitt.key_vault_sign_client import KeyVaultSignClient
 
 from .. import crypto, did
 
@@ -71,7 +78,7 @@ def create_signer_from_arguments(
 ) -> crypto.Signer:
     key = crypto.load_private_key(key_path)
 
-    if did_doc_path is not None:
+    if did_doc_path:
         if issuer or algorithm:
             raise ValueError(
                 "The --issuer and --alg flags may not be used together with a DID document."
@@ -110,16 +117,41 @@ def sign_claims(
     feed: Optional[str],
     registration_info_args: List[RegistrationInfoArgument],
     x5c_path: Optional[str],
+    akv_configuration_path: Optional[Path],
 ):
-    signer = create_signer_from_arguments(
-        key_path, did_doc_path, kid, issuer, algorithm, x5c_path
-    )
-    claims = claims_path.read_bytes()
-    registration_info = {arg.name: arg.value() for arg in registration_info_args}
+    if akv_configuration_path:
+        akv_sign_configuration_dict = json.loads(akv_configuration_path.read_text())
 
-    signed_claims = crypto.sign_claimset(
-        signer, claims, content_type, feed, registration_info
-    )
+        vault_name = akv_sign_configuration_dict["keyVaultName"]
+        vault_url = f"https://{vault_name}.vault.azure.net"
+        identity_certificate_name = akv_sign_configuration_dict["certificateName"]
+        identity_certificate_version = akv_sign_configuration_dict["certificateVersion"]
+        cert_client = CertificateClient(
+            vault_url=vault_url, credential=DefaultAzureCredential()
+        )
+        cert = cert_client.get_certificate_version(
+            certificate_name=identity_certificate_name,
+            version=identity_certificate_version,
+        )
+
+        kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
+        signed_claims = kv_client.cose_sign(
+            claims_path.read_bytes(),
+            {
+                pycose.headers.ContentType: content_type,
+                pycose.headers.X5chain: [cert.cer],
+            },
+        )
+    else:
+        signer = create_signer_from_arguments(
+            key_path, did_doc_path, kid, issuer, algorithm, x5c_path
+        )
+        claims = claims_path.read_bytes()
+        registration_info = {arg.name: arg.value() for arg in registration_info_args}
+
+        signed_claims = crypto.sign_claimset(
+            signer, claims, content_type, feed, registration_info
+        )
 
     print(f"Writing {out_path}")
     out_path.write_bytes(signed_claims)
@@ -131,13 +163,20 @@ def cli(fn):
         "--claims", type=Path, required=True, help="Path to claims file"
     )
     parser.add_argument(
-        "--key", type=Path, required=True, help="Path to PEM-encoded private key"
+        "--key", type=Path, required=False, help="Path to PEM-encoded private key"
     )
     parser.add_argument(
         "--out",
         type=Path,
         required=True,
         help="Output path for signed claimset (must end in .cose)",
+    )
+
+    # Signing with a Key Vault certificate
+    parser.add_argument(
+        "--akv-configuration-path",
+        type=Path,
+        help="Path to an Azure key vault configuration file",
     )
 
     # Signing with an existing DID document
@@ -178,6 +217,7 @@ def cli(fn):
             args.feed,
             args.registration_info,
             args.x5c,
+            args.akv_configuration_path,
         )
     )
 
