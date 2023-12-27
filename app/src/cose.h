@@ -82,7 +82,7 @@ namespace scitt::cose
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
-  struct ProtectedHeader
+  struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
     // All headers are optional here but optionality will later be validated
     // according to the COSE profile of the claim.

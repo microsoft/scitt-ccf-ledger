@@ -390,6 +390,7 @@ def parse_cose_sign1(buf: bytes) -> Tuple[dict, Optional[bytes]]:
     msg = Sign1Message.decode(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
+    assert payload, "Payload is null"
     return header, payload
 
 
@@ -597,7 +598,7 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
     outer = cbor2.loads(buf)
     if hasattr(outer, "tag"):
         assert outer.tag == 18  # COSE_Sign1
-        val = outer.value
+        val = outer.value  # type: ignore[attr-defined]
     else:
         val = outer
     [_, uhdr, _, _] = val

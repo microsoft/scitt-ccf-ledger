@@ -130,7 +130,13 @@ function checkJwks(value, field) {
 }
 
 function checkX509CertBundle(value, field) {
-  if (!ccf.isValidX509CertBundle(value)) {
+  let check_func = ccf.crypto.isValidX509CertBundle;
+  // Remove after upgrade to 4.x
+  if (check_func === undefined) {
+    check_func = ccf.isValidX509CertBundle;
+  }
+
+  if (!check_func(value)) {
     throw new Error(
       `${field} must be a valid X509 certificate (bundle) in PEM format`
     );

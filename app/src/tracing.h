@@ -102,6 +102,12 @@ namespace scitt
 
     auto duration_ms = diff_timespec_ms(app_data.start_time, end);
 
+    if (duration_ms < 0)
+    {
+      SCITT_INFO(
+        "Computed request duration is negative: {} ms. Ignoring.", duration_ms);
+    }
+
     if (txid.has_value())
     {
       SCITT_INFO(
@@ -111,7 +117,7 @@ namespace scitt
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
         txid->to_str(),
-        duration_ms);
+        std::to_string(duration_ms));
     }
     else
     {
@@ -121,7 +127,7 @@ namespace scitt
         method,
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
-        duration_ms);
+        std::to_string(duration_ms));
     }
   }
 

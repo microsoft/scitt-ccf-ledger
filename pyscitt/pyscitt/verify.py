@@ -200,6 +200,7 @@ class DIDDocumentTrustStore(TrustStore):
 
         method = did.find_assertion_method(self.document, kid)
         jwk = method["publicKeyJwk"]
+        # TODO parse jwk without using x5c as well
         if len(jwk.get("x5c", [])) < 1:
             raise ValueError("Missing x5c parameter in service JWK")
         certificate = base64.b64decode(jwk["x5c"][0])

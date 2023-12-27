@@ -4,7 +4,7 @@
 #include <ccf/ds/logger.h>
 #include <gmock/gmock.h>
 
-int main(int argc, char** argv)
+int main(int argc, char** argv) // NOLINT(bugprone-exception-escape)
 {
   testing::InitGoogleMock(&argc, argv);
 

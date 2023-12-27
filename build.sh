@@ -9,10 +9,19 @@ PLATFORM=${PLATFORM:-sgx}
 CCF_UNSAFE=${CCF_UNSAFE:-OFF}
 ENABLE_PREFIX_TREE=${ENABLE_PREFIX_TREE:-OFF}
 BUILD_TESTS=${BUILD_TESTS:-ON}
-CC=${CC:-clang-10}
-CXX=${CXX:-clang++-10}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
 NINJA_FLAGS=${NINJA_FLAGS:-}
+
+if [ "$PLATFORM" = "sgx" ]; then
+    CC=${CC:-clang-11}
+    CXX=${CXX:-clang++-11}
+elif [ "$PLATFORM" = "virtual" ]; then
+    CC=${CC:-clang-15}
+    CXX=${CXX:-clang++-15}
+else
+    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
+    exit 1
+fi
 
 git submodule sync
 git submodule update --init --recursive

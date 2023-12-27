@@ -40,6 +40,11 @@ def add_client_arguments(
     """
 
     parser.add_argument("--url", help="CCF service URL", default=CCF_URL_DEFAULT)
+    parser.add_argument(
+        "--cacert",
+        help="Path to certificate file (must be in PEM format) to verify the CCF service",
+        default=None,
+    )
     if development_only:
         # We always add a hidden --development flag that defaults to True.
         # This helps provide a uniform interface for scripts and tests.
@@ -89,6 +94,7 @@ def create_client(args: argparse.Namespace):
     """
     kwargs = {
         "url": args.url,
+        "cacert": args.cacert,
         "development": args.development,
     }
 

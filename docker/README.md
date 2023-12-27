@@ -26,17 +26,9 @@ Please refer to the corresponding scripts for the full list of available variabl
 
 ## Build and push docker images to a container registry
 
-After building a docker image, you can push it to a container registry. For example, to build and push a docker image to an Azure Container Registry (ACR) for the SCITT application running in SGX, you can run the following set of commands:
+After building a docker image, you can push it to a container registry (e.g., Azure Container Registry). You can use the `push_image.sh` script to automatically build and push the image to ACR:
 
 ```bash
-ACR="<acr-name>" # Define your ACR name here
-
 # Build docker image for SGX
-PLATFORM="sgx" DOCKER_TAG="$ACR.azurecr.io/scitt-ccf-ledger-sgx:latest" ./docker/build.sh
-
-# Login to ACR
-az acr login --name $ACR 
-
-# Push docker image to ACR
-docker push $ACR.azurecr.io/scitt-ccf-ledger-sgx:latest
+./docker/push_image.sh
 ```

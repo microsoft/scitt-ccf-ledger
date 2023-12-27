@@ -15,6 +15,14 @@
       }
     }
   },
+  "node_certificate": {
+    "subject_alt_names": [
+      "iPAddress:0.0.0.0",
+      "iPAddress:127.0.0.1",
+      "dNSName:ccf.dummy.com",
+      "dNSName:localhost"
+    ]
+  },
   "command": {
     "type": "Start",
     "service_certificate_file": "/host/service_cert.pem",

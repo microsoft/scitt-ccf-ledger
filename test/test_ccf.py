@@ -3,7 +3,6 @@
 
 import os
 
-import pycose.headers
 import pytest
 
 from pyscitt import crypto, governance

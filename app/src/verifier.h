@@ -630,26 +630,6 @@ namespace scitt::verifier
         throw VerificationError("Chain root must be self-signed");
       }
 
-      // OpenSSL versions 1.1.1g and older, including the one included in
-      // Ubuntu Focal and used by our virtual builds, have a bug that prevent
-      // self-signed end-entity certificates from being recognised, even if
-      // they are part of the trust store. This is fixed in OpenSSL 1.1.1h.
-      //
-      // As of Feb 2023, OpenEnclave uses version 1.1.1q. Our SGX builds could
-      // therefore support this usecase.
-      //
-      // However, in order to ensure consistent behaviour across our builds, we
-      // outright reject these self-signed end-entity certs. We may revisit
-      // this in the future, when our virtual builds switch to a more recent
-      // release.
-      //
-      // See https://github.com/microsoft/scitt-ccf-ledger/pull/104 for context
-      // and https://github.com/openssl/openssl/pull/12357 for the OpenSSL fix.
-      if (X509_get_extension_flags(leaf) & EXFLAG_SS)
-      {
-        throw VerificationError("Signing certificate is self-signed");
-      }
-
       if (X509_get_extension_flags(leaf) & EXFLAG_CA)
       {
         throw VerificationError("Signing certificate is CA");

@@ -9,8 +9,8 @@ import pycose
 import pytest
 from pycose.messages import Sign1Message
 
-from pyscitt import crypto, governance
-from pyscitt.client import Client, ServiceError
+from pyscitt import crypto
+from pyscitt.client import Client
 from pyscitt.crypto import cert_pem_to_der
 from pyscitt.verify import verify_receipt
 
@@ -18,7 +18,7 @@ from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
-class NonCanonicalEncoder(cbor2.encoder.CBOREncoder):
+class NonCanonicalEncoder(cbor2.encoder.CBOREncoder):  # type: ignore[name-defined]
     """
     A variant of cbor2's encoder that introduces deliberate non-canonical
     encodings.
@@ -154,8 +154,8 @@ class TestNonCanonicalEncoding:
         tx = client.submit_claim(claim).tx
         embedded = client.get_claim(tx, embed_receipt=True)
 
-        original_pieces = cbor2.loads(claim).value
-        updated_pieces = cbor2.loads(embedded).value
+        original_pieces = cbor2.loads(claim).value  # type: ignore[attr-defined]
+        updated_pieces = cbor2.loads(embedded).value  # type: ignore[attr-defined]
 
         # Any part of the message that is cryptographically bound needs to be preserved.
         # These are respectively, the protected header, the payload and the signature.

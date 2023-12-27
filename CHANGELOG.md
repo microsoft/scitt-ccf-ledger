@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+### Added
+- Adds tag based workflow to build and release CLI (#161)
+- Add support for COSE signing in python clients and tests (#154)
+- Add utility scripts for demos and testing (#158)
+- Doc with steps to reproduce mrenclave (#153)
+- Adds new GitHub action to run unit tests (#146)
+- Add documentation to build and push docker images (#145)
+
+### Changes
+- Upgrade to CCF 4.0.7 (#156)
+- Defaults to did resolver if service params not passed when validating (#160)
+- Print MRENCLAVE after the docker build (#151)
+- Updated Azure Pipelines pool (#150)
+- Wait for cchost config to be available (#144)
+- Refactor perf tests (#143)
+- Switch the operations callback to use an indexing strategy. (#140)
+- Enhance devcontainer config (#139)
+- Don't store operation contexts in the KV. (#137)
+
+### Fixed
+- Fix security vulnerabilities related to cryptography package (#159)
+- Fix SCITT demo script (#142)
+- Fix load test (#138)
+
 ## [0.4.0]
 ### Added
 - Auth errors are now logged (#130).

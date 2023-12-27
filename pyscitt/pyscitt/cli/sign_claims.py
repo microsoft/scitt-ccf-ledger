@@ -67,6 +67,7 @@ def create_signer_from_arguments(
     kid: Optional[str],
     issuer: Optional[str],
     algorithm: Optional[str],
+    x5c_path: Optional[str],
 ) -> crypto.Signer:
     key = crypto.load_private_key(key_path)
 
@@ -79,7 +80,20 @@ def create_signer_from_arguments(
         with open(did_doc_path) as f:
             did_doc = json.load(f)
         return did.get_signer(key, did_doc, kid)
+    elif x5c_path:
+        # Load x509 root certificates
+        with open(x5c_path, "rb") as f:
+            cacert_data = f.read()
 
+        certs = []
+        while cacert_data:
+            pemcert, _, cacert_data = cacert_data.partition(
+                b"-----END CERTIFICATE-----\n"
+            )
+            pemcert += b"-----END CERTIFICATE-----\n"
+            certs.append(pemcert.decode())
+
+        return crypto.Signer(key, algorithm=algorithm, x5c=certs)
     else:
         return crypto.Signer(key, issuer, kid, algorithm)
 
@@ -95,9 +109,10 @@ def sign_claims(
     kid: Optional[str],
     feed: Optional[str],
     registration_info_args: List[RegistrationInfoArgument],
+    x5c_path: Optional[str],
 ):
     signer = create_signer_from_arguments(
-        key_path, did_doc_path, kid, issuer, algorithm
+        key_path, did_doc_path, kid, issuer, algorithm, x5c_path
     )
     claims = claims_path.read_bytes()
     registration_info = {arg.name: arg.value() for arg in registration_info_args}
@@ -131,6 +146,7 @@ def cli(fn):
     # Ad-hoc signing, without any on-disk document
     parser.add_argument("--issuer", help="Issuer stored in envelope header")
     parser.add_argument("--alg", help="Signing algorithm to use.")
+    parser.add_argument("--x5c", help="Path to PEM-encoded certificate authority")
 
     parser.add_argument("--content-type", required=True, help="Content type of claims")
     parser.add_argument("--kid", help='Key ID ("kid" field) to use if multiple')
@@ -161,6 +177,7 @@ def cli(fn):
             args.kid,
             args.feed,
             args.registration_info,
+            args.x5c,
         )
     )
 

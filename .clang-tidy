@@ -39,4 +39,5 @@ Checks: >
   -readability-qualified-auto,
 
 WarningsAsErrors: '*'
-HeaderFilterRegex: '.*'
+# Include current directory files and exclude ccf imported code
+HeaderFilterRegex: '^(?!.*(\/opt_ccf.*\/include\/)).*'
