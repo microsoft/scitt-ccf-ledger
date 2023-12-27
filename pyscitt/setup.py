@@ -29,7 +29,7 @@ setup(
         "cryptography==41.*",  # needs to match ccf
         "httpx",
         "cbor2==5.4.*",
-        "pycose==1.1.0",
+        "pycose @ git+https://github.com/kapilvgit/pycose@2019421d730517b85d9cceb9594052376872f9ff#egg=pycose",
         "pyjwt",
         "azure-keyvault",
         "azure-identity",
