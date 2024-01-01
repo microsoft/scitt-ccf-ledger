@@ -22,10 +22,6 @@ export TDC_DID="did:web:$TDC_USERNAME.github.io"
 
 TMP=$(jq '.tdc = env.TDC_DID' demo/contract/contract.json)
 TMP=`echo $TMP | jq '.tdps[0] = env.TDP_DID'`
-TMP=`echo $TMP | jq '.datasets[0].provider = env.TDP_DID'`
-TMP=`echo $TMP | jq '.datasets[1].provider = env.TDP_DID'`
-TMP=`echo $TMP | jq '.datasets[2].provider = env.TDP_DID'`
-TMP=`echo $TMP | jq '.datasets[0].key.properties.endpoint = env.TDP_KEYVAULT'`
-TMP=`echo $TMP | jq '.datasets[1].key.properties.endpoint = env.TDP_KEYVAULT'`
-TMP=`echo $TMP | jq '.datasets[2].key.properties.endpoint = env.TDP_KEYVAULT'`
+TMP=`echo $TMP | jq '.datasets[].provider = env.TDP_DID'`
+TMP=`echo $TMP | jq '.datasets[].key.properties.endpoint = env.TDP_KEYVAULT'`
 echo $TMP > ./tmp/contracts/contract.json
