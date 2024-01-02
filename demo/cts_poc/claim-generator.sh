@@ -2,7 +2,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-### Simple script to generate a signed claim to submit to the SCITT ledger, either using a DID document or a x509 CA certificate.
+### Simple, generic script to generate a signed claim to submit to the SCITT ledger using various methods.
 
 set -e
 

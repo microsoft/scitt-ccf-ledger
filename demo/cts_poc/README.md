@@ -79,7 +79,7 @@ All the commands must be run from the root of the repository.
     - One of the following, mutually-exclusive variables: 
         - `CACERT_PATH`: To sign with a local x509 certificate. This should be the path to a valid CA certificate PEM file.
         - `DID_DOC_PATH`: To sign with a DID. This should be the path to a valid DID document.
-        - `AKV_CONFIGURATION_PATH`: To sign with a certificate and key in Azure Key Vault. This should be a path to a valid JSON file with the following format:
+        - `AKV_CONFIG_PATH`: To sign with a certificate and key in Azure Key Vault. This should be a path to a valid JSON file with the following format:
 
             ```json
             {
