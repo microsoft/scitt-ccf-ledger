@@ -7,11 +7,12 @@
 set -e
 
 # Variables
-: "${PRIVATE_KEY_PATH:?"variable not set. Please define the path to the private key PEM file"}"
 : "${CLAIM_CONTENT_PATH:?"variable not set. Please define the path to the json/txt file to use as content for the claim"}"
 : "${COSE_CLAIMS_OUTPUT_PATH:?"variable not set. Please define the path where the COSE claim will be saved to"}"
 
 CLAIM_CONTENT_TYPE=${CLAIM_CONTENT_TYPE:-"application/json"}
+
+PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH:-""}
 
 # Either provide a DID document, a local x509 certificate, or an AKV configuration file for signing
 DID_DOC_PATH=${DID_DOC_PATH:-""}
@@ -22,6 +23,14 @@ AKV_CONFIG_PATH=${AKV_CONFIG_PATH:-""}
 if [ -z "$CACERT_PATH" ] && [ -z "$DID_DOC_PATH" ] && [ -z "$AKV_CONFIG_PATH" ]; then
     echo "Either CACERT_PATH or DID_DOC_PATH or AKV_CONFIG_PATH must be provided"
     exit 1
+fi
+
+# Check that PRIVATE_KEY_PATH is set when using DID document or local CA certificate
+if [ -n "$DID_DOC_PATH" ] || [ -n "$CACERT_PATH" ]; then
+    if [ -z "$PRIVATE_KEY_PATH" ]; then
+        echo "PRIVATE_KEY_PATH must be provided when using DID_DOC_PATH or CACERT_PATH"
+        exit 1
+    fi
 fi
 
 echo -e "\nSetting up environment"

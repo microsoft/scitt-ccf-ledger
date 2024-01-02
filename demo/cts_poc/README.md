@@ -89,7 +89,9 @@ All the commands must be run from the root of the repository.
             }
             ```
 
-            The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing. 
+            The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing.
+
+            Please make sure that a valid x509 certificate chain (in PEM format) is available in Azure Key Vault.
 
     - `PRIVATE_KEY_PATH`: Path to the Private key PEM file. This is not required if signing with Azure Key Vault.
 
