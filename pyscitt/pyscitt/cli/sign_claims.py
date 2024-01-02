@@ -174,9 +174,9 @@ def cli(fn):
 
     # Signing with a Key Vault certificate
     parser.add_argument(
-        "--akv-configuration-path",
+        "--akv-configuration",
         type=Path,
-        help="Path to an Azure key vault configuration file",
+        help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
     )
 
     # Signing with an existing DID document
@@ -217,7 +217,7 @@ def cli(fn):
             args.feed,
             args.registration_info,
             args.x5c,
-            args.akv_configuration_path,
+            args.akv_configuration,
         )
     )
 

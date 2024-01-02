@@ -73,10 +73,10 @@ az acr login --name "$ACR_NAME"
 REGISTRY="$ACR_NAME".azurecr.io
 
 # Concatenate the image repository to either the image tag or digest
-if [ -n "$IMAGE_TAG" ]; then
-    TBS_IMAGE="$IMAGE_REPOSITORY:$IMAGE_TAG"
-else
+if [ -n "$IMAGE_DIGEST" ]; then
     TBS_IMAGE="$IMAGE_REPOSITORY@$IMAGE_DIGEST"
+else
+    TBS_IMAGE="$IMAGE_REPOSITORY:$IMAGE_TAG"
 fi
 
 IMAGE=$REGISTRY/$TBS_IMAGE
