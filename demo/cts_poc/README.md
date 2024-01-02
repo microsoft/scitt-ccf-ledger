@@ -76,10 +76,22 @@ All the commands must be run from the root of the repository.
 
     For running the script, you can provide the following environment variables:
 
-    - `CACERT_PATH`: Path to the CA certificate PEM file.
-        - Alternatively, if you prefer to specify a DID document to generate the signed claim, you can pass it through the `DID_DOC` variable.
+    - One of the following, mutually-exclusive variables: 
+        - `CACERT_PATH`: To sign with a local x509 certificate. This should be the path to a valid CA certificate PEM file.
+        - `DID_DOC_PATH`: To sign with a DID. This should be the path to a valid DID document.
+        - `AKV_CONFIGURATION_PATH`: To sign with a certificate and key in Azure Key Vault. This should be a path to a valid JSON file with the following format:
 
-    - `PRIVATE_KEY_PATH`: Path to the CA private key PEM file.
+            ```json
+            {
+                "keyVaultName": "<name>",
+                "certificateName": "<key_name>",
+                "certificateVersion": "<key_version>"
+            }
+            ```
+
+            The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing. 
+
+    - `PRIVATE_KEY_PATH`: Path to the Private key PEM file. This is not required if signing with Azure Key Vault.
 
     - `CLAIM_CONTENT_PATH`: Path to the JSON/text file containing the claim content. For example:
 

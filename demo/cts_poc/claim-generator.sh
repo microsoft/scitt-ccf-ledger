@@ -13,13 +13,14 @@ set -e
 
 CLAIM_CONTENT_TYPE=${CLAIM_CONTENT_TYPE:-"application/json"}
 
-# Either provide the DID document or the CA certificate to use for signing
+# Either provide a DID document, a local x509 certificate, or an AKV configuration file for signing
+DID_DOC_PATH=${DID_DOC_PATH:-""}
 CACERT_PATH=${CACERT_PATH:-""}
-DID_DOC=${DID_DOC:-""}
+AKV_CONFIG_PATH=${AKV_CONFIG_PATH:-""}
 
-# Validate that either the DID document or the CA certificate is provided
-if [ -z "$CACERT_PATH" ] && [ -z "$DID_DOC" ]; then
-    echo "Either CACERT_PATH or DID_DOC must be provided"
+# Validate that either a DID document or the CA certificate or the AKV config is provided
+if [ -z "$CACERT_PATH" ] && [ -z "$DID_DOC_PATH" ] && [ -z "$AKV_CONFIG_PATH" ]; then
+    echo "Either CACERT_PATH or DID_DOC_PATH or AKV_CONFIG_PATH must be provided"
     exit 1
 fi
 
@@ -34,12 +35,33 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 
 # Create and sign claim with the provided content
 echo -e "\nCreating and signing claim"
-scitt sign \
-    --claims "$CLAIM_CONTENT_PATH" \
-    --content-type "$CLAIM_CONTENT_TYPE" \
-    --key "$PRIVATE_KEY_PATH" \
-    --x5c "$CACERT_PATH" \
-    --did-doc "$DID_DOC" \
-    --out "$COSE_CLAIMS_OUTPUT_PATH"
+
+if [ -n "$DID_DOC_PATH" ]; then
+    echo "Using DID document for signing"
+    scitt sign \
+        --claims "$CLAIM_CONTENT_PATH" \
+        --content-type "$CLAIM_CONTENT_TYPE" \
+        --key "$PRIVATE_KEY_PATH" \
+        --did-doc "$DID_DOC_PATH" \
+        --out "$COSE_CLAIMS_OUTPUT_PATH"
+elif [ -n "$CACERT_PATH" ]; then
+    echo "Using local CA certificate for signing"
+    scitt sign \
+        --claims "$CLAIM_CONTENT_PATH" \
+        --content-type "$CLAIM_CONTENT_TYPE" \
+        --key "$PRIVATE_KEY_PATH" \
+        --x5c "$CACERT_PATH" \
+        --out "$COSE_CLAIMS_OUTPUT_PATH"
+elif [ -n "$AKV_CONFIG_PATH" ]; then
+    echo "Using AKV configuration for signing"
+    scitt sign \
+        --claims "$CLAIM_CONTENT_PATH" \
+        --content-type "$CLAIM_CONTENT_TYPE" \
+        --akv-configuration "$AKV_CONFIG_PATH" \
+        --out "$COSE_CLAIMS_OUTPUT_PATH"
+else 
+    echo "Either CACERT_PATH or DID_DOC_PATH or AKV_CONFIG_PATH must be provided"
+    exit 1
+fi
 
 echo -e "\nScript completed successfully"
