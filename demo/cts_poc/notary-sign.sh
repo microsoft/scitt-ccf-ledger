@@ -21,6 +21,12 @@ set -e
 IMAGE_TAG=${IMAGE_TAG:-""}
 IMAGE_DIGEST=${IMAGE_DIGEST:-""}
 
+# Optional variables for Notation signing
+# Specify true or false whether the certificate in AKV is a self-signed one or not
+IS_SELF_SIGNED_CERT=${IS_SELF_SIGNED_CERT:-""}
+# Specify the path to the CA certificates PEM file if the certificate in AKV does not contain the full certificate chain
+CA_CERTS_PEM_FILE_PATH=${CA_CERTS_PEM_FILE_PATH:-""}
+
 # Check if the image tag or digest is provided
 if [ -z "$IMAGE_TAG" ] && [ -z "$IMAGE_DIGEST" ]; then
     echo "Either IMAGE_TAG or IMAGE_DIGEST must be provided"
@@ -81,8 +87,16 @@ fi
 
 IMAGE=$REGISTRY/$TBS_IMAGE
 
+# Construct additional notation sign arguments based on environment variable values
+NOTATION_AKV_PLUGIN_ARGS=""
+if [ "$IS_SELF_SIGNED_CERT" = "true" ]; then
+    NOTATION_AKV_PLUGIN_ARGS="--plugin-config self_signed=true"
+elif [ -n "$CA_CERTS_PEM_FILE_PATH" ]; then
+    NOTATION_AKV_PLUGIN_ARGS="--plugin-config ca_certs=$CA_CERTS_PEM_FILE_PATH"
+fi
+
 # Sign the image with Notation
-notation sign --signature-format cose --id "$KEY_ID" --plugin azure-kv --plugin-config self_signed=true "$IMAGE"
+notation sign --signature-format cose --id "$KEY_ID" --plugin azure-kv $NOTATION_AKV_PLUGIN_ARGS "$IMAGE"
 
 echo -e "\nDownload the image signature from ACR"
 
