@@ -37,36 +37,24 @@ echo -e "\nInstall ORAS CLI"
 
 # Install ORAS CLI
 ORAS_VERSION="1.1.0"
-curl -LO "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
-mkdir -p oras-install/
-tar -zxf oras_${ORAS_VERSION}_*.tar.gz -C oras-install/
-mv oras-install/oras /usr/local/bin/
-rm -rf oras_${ORAS_VERSION}_*.tar.gz oras-install/
+oras_tempdir=$(mktemp -d)
+curl -sL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" | tar xz -C "$oras_tempdir"
+mv "$oras_tempdir"/oras /usr/local/bin/
 
 echo -e "\nInstall Notation CLI"
 
 # Download, extract, and install notation
 NOTATION_VERSION="1.0.1"
-curl -Lo notation.tar.gz https://github.com/notaryproject/notation/releases/download/v${NOTATION_VERSION}/notation_${NOTATION_VERSION}_linux_amd64.tar.gz
-mkdir -p ~/temp_notation_dir
-tar xzf notation.tar.gz -C ~/temp_notation_dir
-
-# Copy the Notation binary to the desired bin directory in your $PATH, for example
-mv ~/temp_notation_dir/notation /usr/local/bin
-rm -rf notation.tar.gz ~/temp_notation_dir
+notation_tempdir=$(mktemp -d)
+curl -sL https://github.com/notaryproject/notation/releases/download/v${NOTATION_VERSION}/notation_${NOTATION_VERSION}_linux_amd64.tar.gz | tar xz -C "$notation_tempdir"
+mv "$notation_tempdir"/notation /usr/local/bin
 
 echo -e "\nInstall Notation Azure Key Vault plugin"
 
 # Create a directory for the plugin
-mkdir -p ~/.config/notation/plugins/azure-kv
-
-# Download the plugin
-curl -Lo notation-azure-kv.tar.gz \
-    https://github.com/Azure/notation-azure-kv/releases/download/v${NOTATION_VERSION}/notation-azure-kv_${NOTATION_VERSION}_linux_amd64.tar.gz 
-
-# Extract to the plugin directory
-tar xzf notation-azure-kv.tar.gz -C ~/.config/notation/plugins/azure-kv
-rm -rf notation-azure-kv.tar.gz
+akv_plugin_dir=~/.config/notation/plugins/azure-kv
+mkdir -p "$akv_plugin_dir"
+curl -sL https://github.com/Azure/notation-azure-kv/releases/download/v${NOTATION_VERSION}/notation-azure-kv_${NOTATION_VERSION}_linux_amd64.tar.gz | tar xz -C "$akv_plugin_dir"
 
 echo -e "\nSign container image with Notation"
 
