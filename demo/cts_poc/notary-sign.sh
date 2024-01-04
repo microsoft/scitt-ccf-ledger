@@ -22,9 +22,9 @@ IMAGE_TAG=${IMAGE_TAG:-""}
 IMAGE_DIGEST=${IMAGE_DIGEST:-""}
 
 # Optional variables for Notation signing
-# Specify true or false whether the certificate in AKV is a self-signed one or not
+# Optionally set to true if the certificate in AKV is self-signed
 IS_SELF_SIGNED_CERT=${IS_SELF_SIGNED_CERT:-""}
-# Specify the path to the CA certificates PEM file if the certificate in AKV does not contain the full certificate chain
+# Optionally specify the path to the CA certificates PEM file if the certificate in AKV does not contain the full certificate chain
 CA_CERTS_PEM_FILE_PATH=${CA_CERTS_PEM_FILE_PATH:-""}
 
 # Check if the image tag or digest is provided

@@ -137,6 +137,11 @@ def sign_claims(
         # We need to use SecretClient to get the full certificate chain from Key Vault,
         # as we need to add it to the COSE payload in the x5c header.
         # The CertificateClient only fetches the leaf certificate.
+        # There is no official documentation suggesting that, but different sources point
+        # to the same conclusion:
+        # - https://learn.microsoft.com/en-us/answers/questions/441132/retrieving-certificate-with-complete-chain-from-az
+        # - https://stackoverflow.com/questions/74486473/c-retrieving-certificate-with-full-chain-from-azure-keyvault
+        # - https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/keyvault/azure-keyvault-certificates/samples/parse_certificate.py
         secret_client = SecretClient(
             vault_url=vault_url, credential=DefaultAzureCredential()
         )
