@@ -70,7 +70,11 @@ class RegistrationInfoArgument:
             return data
 
 
-def _split_x509_root_certs(cacert_data: bytes) -> List[str]:
+def _parse_x5c_file(x5c_path: str) -> List[str]:
+    # Load x509 root certificates
+    with open(x5c_path, "rb") as f:
+        cacert_data = f.read()
+
     certs = []
     while cacert_data:
         pemcert, _, cacert_data = cacert_data.partition(b"-----END CERTIFICATE-----\n")
@@ -99,13 +103,9 @@ def create_signer_from_arguments(
             did_doc = json.load(f)
         return did.get_signer(key, did_doc, kid)
     elif x5c_path:
-        # Load x509 root certificates
-        with open(x5c_path, "rb") as f:
-            cacert_data = f.read()
+        ca_certs = _parse_x5c_file(x5c_path)
 
-        certs = _split_x509_root_certs(cacert_data)
-
-        return crypto.Signer(key, algorithm=algorithm, x5c=certs)
+        return crypto.Signer(key, algorithm=algorithm, x5c=ca_certs)
     else:
         return crypto.Signer(key, issuer, kid, algorithm)
 
@@ -126,70 +126,23 @@ def sign_claims(
 ):
     # If a Key Vault configuration is provided, we sign with AKV
     if akv_configuration_path:
+        if not x5c_path:
+            raise ValueError(
+                "The --x5c flag must be provided when signing with Azure Key Vault."
+            )
+
         # Parse the AKV configuration file
         akv_sign_configuration_dict = json.loads(akv_configuration_path.read_text())
 
-        vault_name = akv_sign_configuration_dict["keyVaultName"]
-        vault_url = f"https://{vault_name}.vault.azure.net"
-        identity_certificate_name = akv_sign_configuration_dict["certificateName"]
-        identity_certificate_version = akv_sign_configuration_dict["certificateVersion"]
-
-        # We need to use SecretClient to get the full certificate chain from Key Vault,
-        # as we need to add it to the COSE payload in the x5c header.
-        # The CertificateClient only fetches the leaf certificate.
-        # There is no official documentation suggesting that, but different sources point
-        # to the same conclusion:
-        # - https://learn.microsoft.com/en-us/answers/questions/441132/retrieving-certificate-with-complete-chain-from-az
-        # - https://stackoverflow.com/questions/74486473/c-retrieving-certificate-with-full-chain-from-azure-keyvault
-        # - https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/keyvault/azure-keyvault-certificates/samples/parse_certificate.py
-        secret_client = SecretClient(
-            vault_url=vault_url, credential=DefaultAzureCredential()
-        )
-
-        certificate_secret = secret_client.get_secret(
-            name=identity_certificate_name,
-            version=identity_certificate_version,
-        )
-
-        # We need to check that the certificate is a PEM certificate
-        if certificate_secret.properties.content_type != "application/x-pem-file":
-            raise ValueError(
-                "Certificate content type is not supported. Please use PEM certificates instead."
-            )
-
-        assert (
-            isinstance(certificate_secret.value, str) and certificate_secret.value
-        ), "Invalid identity public certificate available for this identity"
-
-        def _remove_substring(s: str, start_delim: str, end_delim: str) -> str:
-            """Utility method to remove a substring from a string
-            given the start and end delimiters"""
-
-            start = s.find(start_delim)
-            end = s.find(end_delim)
-            if start != -1 and end != -1:
-                return s[:start] + s[end + len(end_delim) :]
-            else:
-                return s
-
-        # Remove the private key part from the certificate secret
-        public_certs_string = _remove_substring(
-            certificate_secret.value,
-            "-----BEGIN PRIVATE KEY-----\n",
-            "-----END PRIVATE KEY-----\n",
-        )
-
-        # Split the certificate chain into a list of string certificates
-        parsed_certs = _split_x509_root_certs(public_certs_string.encode())
+        # Parse the x5c file containing the x509 CA certificates
+        ca_certs = _parse_x5c_file(x5c_path)
 
         kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
         signed_claims = kv_client.cose_sign(
             claims_path.read_bytes(),
             {
                 pycose.headers.ContentType: content_type,
-                pycose.headers.X5chain: [
-                    crypto.cert_pem_to_der(x5) for x5 in parsed_certs
-                ],
+                pycose.headers.X5chain: [crypto.cert_pem_to_der(x5) for x5 in ca_certs],
             },
         )
     else:
