@@ -25,6 +25,7 @@ IMAGE_DIGEST=${IMAGE_DIGEST:-""}
 # Optionally set to true if the certificate in AKV is self-signed
 IS_SELF_SIGNED_CERT=${IS_SELF_SIGNED_CERT:-""}
 # Optionally specify the path to the CA certificates PEM file if the certificate in AKV does not contain the full certificate chain
+# or if you don't have AKV get_secrets permission (required by the AKV Notation plugin to fetch the full certificate chain) 
 CA_CERTS_PEM_FILE_PATH=${CA_CERTS_PEM_FILE_PATH:-""}
 
 # Check if the image tag or digest is provided

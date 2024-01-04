@@ -9,29 +9,16 @@ set -e
 # Variables
 : "${CLAIM_CONTENT_PATH:?"variable not set. Please define the path to the json/txt file to use as content for the claim"}"
 : "${COSE_CLAIMS_OUTPUT_PATH:?"variable not set. Please define the path where the COSE claim will be saved to"}"
+: "${SIGNING_METHOD:?"variable not set. Please define the signing method to use. Options are: did, cacert, akv"}"
 
+# Optional variable to set the content type of the claim
 CLAIM_CONTENT_TYPE=${CLAIM_CONTENT_TYPE:-"application/json"}
 
+# Optional variables to provide a DID document, a x509 PEM certificate, a private key, and an AKV configuration file for signing
 PRIVATE_KEY_PATH=${PRIVATE_KEY_PATH:-""}
-
-# Either provide a DID document, a local x509 certificate, or an AKV configuration file for signing
 DID_DOC_PATH=${DID_DOC_PATH:-""}
 CACERT_PATH=${CACERT_PATH:-""}
 AKV_CONFIG_PATH=${AKV_CONFIG_PATH:-""}
-
-# Validate that either a DID document or the CA certificate or the AKV config is provided
-if [ -z "$CACERT_PATH" ] && [ -z "$DID_DOC_PATH" ] && [ -z "$AKV_CONFIG_PATH" ]; then
-    echo "Either CACERT_PATH or DID_DOC_PATH or AKV_CONFIG_PATH must be provided"
-    exit 1
-fi
-
-# Check that PRIVATE_KEY_PATH is set when using DID document or local CA certificate
-if [ -n "$DID_DOC_PATH" ] || [ -n "$CACERT_PATH" ]; then
-    if [ -z "$PRIVATE_KEY_PATH" ]; then
-        echo "PRIVATE_KEY_PATH must be provided when using DID_DOC_PATH or CACERT_PATH"
-        exit 1
-    fi
-fi
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
@@ -45,7 +32,7 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 # Create and sign claim with the provided content
 echo -e "\nCreating and signing claim"
 
-if [ -n "$DID_DOC_PATH" ]; then
+if [ "$SIGNING_METHOD" = "did" ]; then
     echo "Using DID document for signing"
     scitt sign \
         --claims "$CLAIM_CONTENT_PATH" \
@@ -53,7 +40,7 @@ if [ -n "$DID_DOC_PATH" ]; then
         --key "$PRIVATE_KEY_PATH" \
         --did-doc "$DID_DOC_PATH" \
         --out "$COSE_CLAIMS_OUTPUT_PATH"
-elif [ -n "$CACERT_PATH" ]; then
+elif [ "$SIGNING_METHOD" = "cacert" ]; then
     echo "Using local CA certificate for signing"
     scitt sign \
         --claims "$CLAIM_CONTENT_PATH" \
@@ -61,15 +48,16 @@ elif [ -n "$CACERT_PATH" ]; then
         --key "$PRIVATE_KEY_PATH" \
         --x5c "$CACERT_PATH" \
         --out "$COSE_CLAIMS_OUTPUT_PATH"
-elif [ -n "$AKV_CONFIG_PATH" ]; then
+elif [ "$SIGNING_METHOD" = "akv" ]; then
     echo "Using AKV configuration for signing"
     scitt sign \
         --claims "$CLAIM_CONTENT_PATH" \
         --content-type "$CLAIM_CONTENT_TYPE" \
         --akv-configuration "$AKV_CONFIG_PATH" \
+        --x5c "$CACERT_PATH" \
         --out "$COSE_CLAIMS_OUTPUT_PATH"
 else 
-    echo "Either CACERT_PATH or DID_DOC_PATH or AKV_CONFIG_PATH must be provided"
+    echo "No valid signing method provided. Supported options are: did, cacert, akv"
     exit 1
 fi
 

@@ -76,24 +76,25 @@ All the commands must be run from the root of the repository.
 
     For running the script, you can provide the following environment variables:
 
-    - One of the following, mutually-exclusive variables: 
-        - `CACERT_PATH`: To sign with a local x509 certificate. This should be the path to a valid CA certificate PEM file.
-        - `DID_DOC_PATH`: To sign with a DID. This should be the path to a valid DID document.
-        - `AKV_CONFIG_PATH`: To sign with a certificate and key in Azure Key Vault. This should be a path to a valid JSON file with the following format:
+    - `SIGNING_METHOD`: The signing method to use for signing the claim. The supported values are `did` (to sign with a DID document and private key) `cacert` (to sign with a local x509 CA certificate and private key) and `akv` (to sign with a certificate in AKV).
+    
+    - `CACERT_PATH`: Path to a valid x509 CA certificate PEM file.
+    
+    - `DID_DOC_PATH`: Path to a valid DID document. 
+    
+    - `AKV_CONFIG_PATH`: Path to a valid JSON file with the following format:
 
-            ```json
-            {
-                "keyVaultName": "<name>",
-                "certificateName": "<key_name>",
-                "certificateVersion": "<key_version>"
-            }
-            ```
+        ```json
+        {
+            "keyVaultName": "<name>",
+            "certificateName": "<key_name>",
+            "certificateVersion": "<key_version>"
+        }
+        ```
 
-            The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing.
+        The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing.
 
-            Please make sure that a valid x509 certificate chain (in PEM format) is available in Azure Key Vault.
-
-    - `PRIVATE_KEY_PATH`: Path to the Private key PEM file. This is not required if signing with Azure Key Vault.
+    - `PRIVATE_KEY_PATH`: Path to the private key PEM file.
 
     - `CLAIM_CONTENT_PATH`: Path to the JSON/text file containing the claim content. For example:
 
@@ -110,7 +111,7 @@ All the commands must be run from the root of the repository.
     Example command:
 
     ```bash
-    CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/claims/claims.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/claims/claims.cose" ./demo/cts_poc/claim-generator.sh
+    SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/claims/claims.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/claims/claims.cose" ./demo/cts_poc/claim-generator.sh
     ```
 
 2. Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`client-demo.sh`](client-demo.sh) script.
