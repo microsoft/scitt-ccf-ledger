@@ -1,4 +1,4 @@
-ARG CCF_VERSION=4.0.7
+ARG CCF_VERSION=4.0.12
 FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-virtual as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
