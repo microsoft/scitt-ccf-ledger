@@ -79,7 +79,7 @@ def add_client_arguments(
         parser.add_argument(
             "--akv-configuration",
             type=Path,
-            help="Path to CCF member Azure key vault configuration file",
+            help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
         )
 
     if with_auth_token:
