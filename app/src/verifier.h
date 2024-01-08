@@ -14,6 +14,12 @@
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+#  include <openssl/core_names.h>
+#  include <openssl/encoder.h>
+#  include <openssl/param_build.h>
+#endif
+
 namespace scitt::verifier
 {
   struct VerificationError : public std::runtime_error
@@ -538,6 +544,7 @@ namespace scitt::verifier
           throw VerificationError("JWK e could not be parsed");
         }
 
+#if !(defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3)
         OpenSSL::Unique_RSA rsa;
         if (!RSA_set0_key(rsa, n_bn, e_bn, nullptr))
         {
@@ -548,6 +555,15 @@ namespace scitt::verifier
         (void)e_bn.release();
 
         return PublicKey(rsa, cose_alg);
+#else
+        std::pair<std::vector<uint8_t>, std::vector<uint8_t>> r(
+          BN_num_bytes(n_bn), BN_num_bytes(e_bn));
+
+        CHECKPOSITIVE(BN_bn2nativepad(n_bn, r.first.data(), r.first.size()));
+        CHECKPOSITIVE(BN_bn2nativepad(e_bn, r.second.data(), r.second.size()));
+
+        return PublicKey(r.first, r.second, cose_alg);
+#endif
       }
 
       if (jwk.kty == "OKP" && jwk.crv == "Ed25519" && jwk.x.has_value())
@@ -590,6 +606,8 @@ namespace scitt::verifier
         {
           throw VerificationError("JWK EC Key has no valid supported curve");
         }
+
+#if !(defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3)
         auto ec_key = OpenSSL::Unique_EC_KEY(nid);
         if (!EC_KEY_set_public_key_affine_coordinates(ec_key, x_bn, y_bn))
         {
@@ -597,6 +615,24 @@ namespace scitt::verifier
         }
 
         return PublicKey(ec_key, cose_alg);
+#else
+        Unique_BN_CTX bn_ctx;
+        Unique_EC_GROUP group(nid);
+        Unique_EC_POINT p(group);
+        CHECK1(EC_POINT_set_affine_coordinates(group, p, x_bn, y_bn, bn_ctx));
+        size_t buf_size = EC_POINT_point2oct(
+          group, p, POINT_CONVERSION_UNCOMPRESSED, nullptr, 0, bn_ctx);
+        std::vector<uint8_t> buf(buf_size);
+        CHECKPOSITIVE(EC_POINT_point2oct(
+          group,
+          p,
+          POINT_CONVERSION_UNCOMPRESSED,
+          buf.data(),
+          buf.size(),
+          bn_ctx));
+
+        return PublicKey(buf, nid, cose_alg);
+#endif
       }
 
       throw VerificationError("JWK has no valid supported key");
