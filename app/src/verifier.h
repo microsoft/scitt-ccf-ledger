@@ -559,8 +559,10 @@ namespace scitt::verifier
         std::pair<std::vector<uint8_t>, std::vector<uint8_t>> r(
           BN_num_bytes(n_bn), BN_num_bytes(e_bn));
 
-        CHECKPOSITIVE(BN_bn2nativepad(n_bn, r.first.data(), r.first.size()));
-        CHECKPOSITIVE(BN_bn2nativepad(e_bn, r.second.data(), r.second.size()));
+        OpenSSL::CHECKPOSITIVE(
+          BN_bn2nativepad(n_bn, r.first.data(), r.first.size()));
+        OpenSSL::CHECKPOSITIVE(
+          BN_bn2nativepad(e_bn, r.second.data(), r.second.size()));
 
         return PublicKey(r.first, r.second, cose_alg);
 #endif
@@ -616,14 +618,15 @@ namespace scitt::verifier
 
         return PublicKey(ec_key, cose_alg);
 #else
-        Unique_BN_CTX bn_ctx;
-        Unique_EC_GROUP group(nid);
-        Unique_EC_POINT p(group);
-        CHECK1(EC_POINT_set_affine_coordinates(group, p, x_bn, y_bn, bn_ctx));
+        OpenSSL::Unique_BN_CTX bn_ctx;
+        OpenSSL::Unique_EC_GROUP group(nid);
+        OpenSSL::Unique_EC_POINT p(group);
+        OpenSSL::CHECK1(
+          EC_POINT_set_affine_coordinates(group, p, x_bn, y_bn, bn_ctx));
         size_t buf_size = EC_POINT_point2oct(
           group, p, POINT_CONVERSION_UNCOMPRESSED, nullptr, 0, bn_ctx);
         std::vector<uint8_t> buf(buf_size);
-        CHECKPOSITIVE(EC_POINT_point2oct(
+        OpenSSL::CHECKPOSITIVE(EC_POINT_point2oct(
           group,
           p,
           POINT_CONVERSION_UNCOMPRESSED,

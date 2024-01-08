@@ -10,6 +10,7 @@
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
 #  include <openssl/core_names.h>
 #  include <openssl/encoder.h>
+#  include <openssl/evp.h>
 #endif
 
 namespace scitt
@@ -60,16 +61,14 @@ namespace scitt
         OSSL_PKEY_PARAM_RSA_E, e_raw.data(), e_raw.size());
       params[2] = OSSL_PARAM_construct_end();
 
-      Unique_EVP_PKEY_CTX pctx("RSA");
-      CHECK1(EVP_PKEY_fromdata_init(pctx));
-      CHECK1(EVP_PKEY_fromdata(pctx, &key, EVP_PKEY_PUBLIC_KEY, params));
+      OpenSSL::Unique_EVP_PKEY_CTX pctx("RSA");
+      OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
+      OpenSSL::CHECK1(
+        EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
     }
 
     PublicKey(
-      std::vector<uint8_t>& buf,
-      int& nid,
-      std::vector<uint8_t>& e_raw,
-      std::optional<int64_t> cose_alg) :
+      std::vector<uint8_t>& buf, int nid, std::optional<int64_t> cose_alg) :
       cose_alg(cose_alg)
     {
       OSSL_PARAM params[3];
@@ -79,9 +78,10 @@ namespace scitt
         OSSL_PKEY_PARAM_PUB_KEY, buf.data(), buf.size());
       params[2] = OSSL_PARAM_construct_end();
 
-      Unique_EVP_PKEY_CTX pctx("EC");
-      CHECK1(EVP_PKEY_fromdata_init(pctx));
-      CHECK1(EVP_PKEY_fromdata(pctx, &key, EVP_PKEY_PUBLIC_KEY, params));
+      OpenSSL::Unique_EVP_PKEY_CTX pctx("EC");
+      OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
+      OpenSSL::CHECK1(
+        EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
     }
 #endif
 
