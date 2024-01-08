@@ -51,7 +51,7 @@ scitt governance propose_configuration \
     --member-cert "$MEMBER_CERT_PATH" \
     --development
 
-echo -e "\Opening the network"
+echo -e "\nOpening the network"
 
 # Get current service certificate
 SERVICE_CERT_PATH="service_cert.pem"

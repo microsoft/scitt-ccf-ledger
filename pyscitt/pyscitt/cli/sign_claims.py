@@ -2,11 +2,20 @@
 # Licensed under the MIT License.
 
 import argparse
+import base64
 import json
 import re
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
+
+import pycose.headers
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
+from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.x509 import load_pem_x509_certificate
+
+from pyscitt.key_vault_sign_client import KeyVaultSignClient
 
 from .. import crypto, did
 
@@ -61,6 +70,19 @@ class RegistrationInfoArgument:
             return data
 
 
+def _parse_x5c_file(x5c_path: str) -> List[str]:
+    # Load x509 root certificates
+    with open(x5c_path, "rb") as f:
+        cacert_data = f.read()
+
+    certs = []
+    while cacert_data:
+        pemcert, _, cacert_data = cacert_data.partition(b"-----END CERTIFICATE-----\n")
+        pemcert += b"-----END CERTIFICATE-----\n"
+        certs.append(pemcert.decode())
+    return certs
+
+
 def create_signer_from_arguments(
     key_path: Path,
     did_doc_path: Optional[Path],
@@ -71,7 +93,7 @@ def create_signer_from_arguments(
 ) -> crypto.Signer:
     key = crypto.load_private_key(key_path)
 
-    if did_doc_path is not None:
+    if did_doc_path:
         if issuer or algorithm:
             raise ValueError(
                 "The --issuer and --alg flags may not be used together with a DID document."
@@ -81,19 +103,9 @@ def create_signer_from_arguments(
             did_doc = json.load(f)
         return did.get_signer(key, did_doc, kid)
     elif x5c_path:
-        # Load x509 root certificates
-        with open(x5c_path, "rb") as f:
-            cacert_data = f.read()
+        ca_certs = _parse_x5c_file(x5c_path)
 
-        certs = []
-        while cacert_data:
-            pemcert, _, cacert_data = cacert_data.partition(
-                b"-----END CERTIFICATE-----\n"
-            )
-            pemcert += b"-----END CERTIFICATE-----\n"
-            certs.append(pemcert.decode())
-
-        return crypto.Signer(key, algorithm=algorithm, x5c=certs)
+        return crypto.Signer(key, algorithm=algorithm, x5c=ca_certs)
     else:
         return crypto.Signer(key, issuer, kid, algorithm)
 
@@ -110,16 +122,39 @@ def sign_claims(
     feed: Optional[str],
     registration_info_args: List[RegistrationInfoArgument],
     x5c_path: Optional[str],
+    akv_configuration_path: Optional[Path],
 ):
-    signer = create_signer_from_arguments(
-        key_path, did_doc_path, kid, issuer, algorithm, x5c_path
-    )
-    claims = claims_path.read_bytes()
-    registration_info = {arg.name: arg.value() for arg in registration_info_args}
+    # If a Key Vault configuration is provided, we sign with AKV
+    if akv_configuration_path:
+        if not x5c_path:
+            raise ValueError(
+                "The --x5c flag must be provided when signing with Azure Key Vault."
+            )
 
-    signed_claims = crypto.sign_claimset(
-        signer, claims, content_type, feed, registration_info
-    )
+        # Parse the AKV configuration file
+        akv_sign_configuration_dict = json.loads(akv_configuration_path.read_text())
+
+        # Parse the x5c file containing the x509 CA certificates
+        ca_certs = _parse_x5c_file(x5c_path)
+
+        kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
+        signed_claims = kv_client.cose_sign(
+            claims_path.read_bytes(),
+            {
+                pycose.headers.ContentType: content_type,
+                pycose.headers.X5chain: [crypto.cert_pem_to_der(x5) for x5 in ca_certs],
+            },
+        )
+    else:
+        signer = create_signer_from_arguments(
+            key_path, did_doc_path, kid, issuer, algorithm, x5c_path
+        )
+        claims = claims_path.read_bytes()
+        registration_info = {arg.name: arg.value() for arg in registration_info_args}
+
+        signed_claims = crypto.sign_claimset(
+            signer, claims, content_type, feed, registration_info
+        )
 
     print(f"Writing {out_path}")
     out_path.write_bytes(signed_claims)
@@ -131,13 +166,20 @@ def cli(fn):
         "--claims", type=Path, required=True, help="Path to claims file"
     )
     parser.add_argument(
-        "--key", type=Path, required=True, help="Path to PEM-encoded private key"
+        "--key", type=Path, required=False, help="Path to PEM-encoded private key"
     )
     parser.add_argument(
         "--out",
         type=Path,
         required=True,
         help="Output path for signed claimset (must end in .cose)",
+    )
+
+    # Signing with a Key Vault certificate
+    parser.add_argument(
+        "--akv-configuration",
+        type=Path,
+        help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
     )
 
     # Signing with an existing DID document
@@ -178,6 +220,7 @@ def cli(fn):
             args.feed,
             args.registration_info,
             args.x5c,
+            args.akv_configuration,
         )
     )
 

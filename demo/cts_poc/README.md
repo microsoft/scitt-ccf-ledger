@@ -6,7 +6,7 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 
 - A Certificate Authority (CA) certificate and private key are required to configure the SCITT instance. The CA certificate and private key must be provided by the SCITT Operator. For getting a sample pair for testing purposes, you can use the script [cacerts-generator.sh](./cacerts-generator.sh).
 
-    For running the script, you are required to provide the following environment variables:
+    For running the script, you can provide the following environment variables:
 
     - `CACERT_OUTPUT_DIR`: Path to the output directory where the CA certificate and private key files will be stored
 
@@ -42,7 +42,7 @@ All the commands must be run from the root of the repository.
 
 2. Run the [`operator-demo.sh`](operator-demo.sh) script to activate the CCF member, configure the SCITT instance, and open the CCF network (all operations are idempotent and can be run on an already-configured instance, if needed).
 
-    For running the script, you are required to provide the following environment variables:
+    For running the script, you can provide the following environment variables:
 
     - `MEMBER_CERT_PATH`: Path to the member certificate PEM file.
 
@@ -70,13 +70,31 @@ All the commands must be run from the root of the repository.
 
 ### CTS client
 
-1. [You can skip this step, if you already have a valid COSE claim to submit] Generate a valid COSE claim to submit to the SCITT ledger by running the [`claim-generator.sh`](claim-generator.sh) script.
+1. You can skip this step, if you already have a valid COSE claim to submit. Generate a valid COSE claim to submit to the SCITT ledger by running the [`claim-generator.sh`](claim-generator.sh) script.
 
-    For running the script, you are required to provide the following environment variables:
+    > **Note**: if you want to generate a signed claim for a container image, you can use the [notary-sign.sh](notary-sign.sh) script. Please refer to the [Notary signing](#notary-signing) section for more details.
 
-    - `CACERT_PATH`: Path to the CA certificate PEM file.
+    For running the script, you can provide the following environment variables:
 
-    - `PRIVATE_KEY_PATH`: Path to the CA private key PEM file.
+    - `SIGNING_METHOD`: The signing method to use for signing the claim. The supported values are `did` (to sign with a DID document and private key) `cacert` (to sign with a local x509 CA certificate and private key) and `akv` (to sign with a certificate in AKV).
+    
+    - `CACERT_PATH`: Path to a valid x509 CA certificate PEM file.
+    
+    - `DID_DOC_PATH`: Path to a valid DID document. 
+    
+    - `AKV_CONFIG_PATH`: Path to a valid JSON file with the following format:
+
+        ```json
+        {
+            "keyVaultName": "<name>",
+            "certificateName": "<key_name>",
+            "certificateVersion": "<key_version>"
+        }
+        ```
+
+        The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing.
+
+    - `PRIVATE_KEY_PATH`: Path to the private key PEM file.
 
     - `CLAIM_CONTENT_PATH`: Path to the JSON/text file containing the claim content. For example:
 
@@ -93,14 +111,14 @@ All the commands must be run from the root of the repository.
     Example command:
 
     ```bash
-    CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/claims/claims.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/claims/claims.cose" ./demo/cts_poc/claim-generator.sh
+    SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/claims/claims.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/claims/claims.cose" ./demo/cts_poc/claim-generator.sh
     ```
 
 2. Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`client-demo.sh`](client-demo.sh) script.
 
     The script will submit the COSE claim to the SCITT ledger and will wait for a receipt to be generated. Once the receipt is generated, the script will print the CBOR receipt in a readable format, and verify the receipt validity.
 
-    For running the script, you are required to provide the following environment variables:
+    For running the script, you can provide the following environment variables:
 
     - `COSE_CLAIMS_PATH`: Path to the COSE file containing the signed claim.
 
@@ -111,3 +129,20 @@ All the commands must be run from the root of the repository.
     ```bash
     COSE_CLAIMS_PATH="demo-poc/claims/claims.cose" OUTPUT_FOLDER="test-folder" ./demo/cts_poc/client-demo.sh
     ```
+
+### Notary signing
+
+If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [notary-sign.sh](notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
+
+The process to sign a container image with Notation and Azure Key Vault using a self-signed certificate is documented [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push). Please note that a pre-requisite for this script is to have a Key Vault instance with a self-signed certificate compatible with the [Notary Project certificate requirements](https://github.com/notaryproject/specifications/blob/main/specs/signature-specification.md#certificate-requirements). You can find more information on how to create a compatible self-signed certificate in AKV [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push#create-a-self-signed-certificate-in-akv-azure-cli). 
+
+For running the script, you can provide the following environment variables:
+
+- `AKV_NAME`: Name of the Azure Key Vault instance where the certificate is stored.
+- `CERTIFICATE_NAME`: Name of the certificate stored in the Azure Key Vault instance.
+- `CERTIFICATE_VERSION`: Version of the certificate stored in the Azure Key Vault instance.
+- `ACR_NAME`: Name of the Azure Container Registry instance where the image is stored.
+- `IMAGE_REPOSITORY`: ACR repository of the image to sign.
+- `IMAGE_TAG`: Tag of the image to sign.
+- `IMAGE_DIGEST`: Digest of the image to sign.
+- `SIGNATURE_OUTPUT_PATH`: Path to the output file where the COSE file containing the image signature will be stored.
