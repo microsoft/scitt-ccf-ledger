@@ -26,28 +26,7 @@ namespace scitt
       cose_alg(cose_alg)
     {}
 
-#if !(defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3)
-
-    PublicKey(
-      const OpenSSL::Unique_RSA& rsa_key, std::optional<int64_t> cose_alg) :
-      cose_alg(cose_alg)
-    {
-      if (!EVP_PKEY_set1_RSA(key, rsa_key))
-      {
-        throw std::runtime_error("RSA key could not be set");
-      }
-    }
-
-    PublicKey(
-      const OpenSSL::Unique_EC_KEY& ec_key, std::optional<int64_t> cose_alg) :
-      cose_alg(cose_alg)
-    {
-      if (!EVP_PKEY_set1_EC_KEY(key, ec_key))
-      {
-        throw std::runtime_error("EC key could not be set");
-      }
-    }
-#else
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
     PublicKey(
       std::vector<uint8_t>& n_raw,
       std::vector<uint8_t>& e_raw,
@@ -82,6 +61,26 @@ namespace scitt
       OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
       OpenSSL::CHECK1(
         EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
+    }
+#else
+    PublicKey(
+      const OpenSSL::Unique_RSA& rsa_key, std::optional<int64_t> cose_alg) :
+      cose_alg(cose_alg)
+    {
+      if (!EVP_PKEY_set1_RSA(key, rsa_key))
+      {
+        throw std::runtime_error("RSA key could not be set");
+      }
+    }
+
+    PublicKey(
+      const OpenSSL::Unique_EC_KEY& ec_key, std::optional<int64_t> cose_alg) :
+      cose_alg(cose_alg)
+    {
+      if (!EVP_PKEY_set1_EC_KEY(key, ec_key))
+      {
+        throw std::runtime_error("EC key could not be set");
+      }
     }
 #endif
 
