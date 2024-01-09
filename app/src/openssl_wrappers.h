@@ -9,17 +9,23 @@
 #include <fmt/format.h>
 #include <memory>
 #include <openssl/asn1.h>
+#include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/engine.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
 // Note: This file was extended from:
 // https://github.com/microsoft/CCF/blob/main/src/crypto/openssl/openssl_wrappers.h
+
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+#  include <openssl/evp.h>
+#endif
 
 namespace scitt
 {
@@ -49,7 +55,7 @@ namespace scitt
       }
     }
 
-    /// Throws if rc is 1 and has error
+    /// Throws if rc is not 1 and has error
     inline void CHECK1(int rc)
     {
       unsigned long ec = ERR_get_error();
@@ -77,6 +83,26 @@ namespace scitt
       if (ptr == NULL)
       {
         throw std::runtime_error("OpenSSL error: missing object");
+      }
+    }
+
+    // Throws if values are not equal
+    inline void CHECKEQUAL(int expect, int actual)
+    {
+      if (expect != actual)
+      {
+        unsigned long ec = ERR_get_error();
+        throw std::runtime_error(
+          fmt::format("OpenSSL error: {}", error_string(ec)));
+      }
+    }
+
+    // Throws if value is not positive
+    inline void CHECKPOSITIVE(int val)
+    {
+      if (val <= 0)
+      {
+        throw std::runtime_error("OpenSSL error: expected positive value");
       }
     }
 
@@ -177,6 +203,12 @@ namespace scitt
         Unique_SSL_OBJECT(
           PEM_read_bio_PUBKEY(mem, NULL, NULL, NULL), EVP_PKEY_free)
       {}
+
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+      Unique_PKEY(EVP_PKEY* pkey) :
+        Unique_SSL_OBJECT(EVP_PKEY_dup(pkey), EVP_PKEY_free)
+      {}
+#endif
     };
 
     struct Unique_EVP_PKEY_CTX
@@ -189,6 +221,14 @@ namespace scitt
         Unique_SSL_OBJECT(
           EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL), EVP_PKEY_CTX_free)
       {}
+
+#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
+      Unique_EVP_PKEY_CTX(const std::string& name) :
+        Unique_SSL_OBJECT(
+          EVP_PKEY_CTX_new_from_name(NULL, name.c_str(), NULL),
+          EVP_PKEY_CTX_free)
+      {}
+#endif
     };
 
     struct Unique_X509_REQ
@@ -287,6 +327,8 @@ namespace scitt
     struct Unique_BIGNUM : public Unique_SSL_OBJECT<BIGNUM, BN_new, BN_free>
     {
       using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
+
+      Unique_BIGNUM(const BIGNUM* n) : Unique_BIGNUM(BN_dup(n), BN_free) {}
     };
 
     struct Unique_X509_TIME
@@ -330,25 +372,33 @@ namespace scitt
         Unique_SSL_OBJECT(
           EC_POINT_new(group), EC_POINT_free, /*check_null=*/true)
       {}
+      Unique_EC_POINT(EC_POINT* point) :
+        Unique_SSL_OBJECT(point, EC_POINT_free, /*check_null=*/true)
+      {}
     };
 
+#if !(defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3)
     struct Unique_EC_KEY : public Unique_SSL_OBJECT<EC_KEY, nullptr, nullptr>
     {
       Unique_EC_KEY(int nid) :
         Unique_SSL_OBJECT(
           EC_KEY_new_by_curve_name(nid), EC_KEY_free, /*check_null=*/true)
       {}
+      Unique_EC_KEY(EC_KEY* key) :
+        Unique_SSL_OBJECT(key, EC_KEY_free, /*check_null=*/true)
+      {}
     };
+
+    struct Unique_RSA : public Unique_SSL_OBJECT<RSA, RSA_new, RSA_free>
+    {
+      using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
+    };
+#endif
 
     struct Unique_EVP_ENCODE_CTX : public Unique_SSL_OBJECT<
                                      EVP_ENCODE_CTX,
                                      EVP_ENCODE_CTX_new,
                                      EVP_ENCODE_CTX_free>
-    {
-      using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
-    };
-
-    struct Unique_RSA : public Unique_SSL_OBJECT<RSA, RSA_new, RSA_free>
     {
       using Unique_SSL_OBJECT::Unique_SSL_OBJECT;
     };
