@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+
+### Added
+- Add sample scripts for signing SCITT claims with certificates in Azure Key Vault (#172)
+
+### Changes
+- Update CCF to 4.0.12 and add support for OpenSSL 3.x (#173)
+- Update CCF constitution to be compatible with the new ccf.crypto package (#171)
+- Update README with new pyscitt package (#170)
+
+## [0.5.3]
+
+### Added
+- Add GitHub action to publish pyscitt CLI to PyPi (#169)
+
+## [0.5.2]
+
+### Changes
+- Refactor and modify CTS demo scripts (#167)
+- Allow self-signed end-entity certs (#168)
+
+## [0.5.1]
+### Added
+- Add CA cert support to CLI for TLS verification (#166)
+
+### Fixed
+- Temporarily disable flaky ASAN build job (#165)
+
 ## [0.5.0]
 ### Added
 - Adds tag based workflow to build and release CLI (#161)
