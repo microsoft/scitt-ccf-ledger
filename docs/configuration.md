@@ -21,8 +21,23 @@ Example configuration proposal:
       "name": "set_scitt_configuration",
       "args": {
         "configuration": {
-          "authentication": <auth-snippet-omitted-for-brevity>,
-          "service_identifier": "did:web:example.com:scitt"
+          "service_identifier": "did:web:scittservicedomain.com",
+          "policy": {
+            "accepted_did_issuers": [
+              "did:web:firstallowedsubmitter.com",
+              "did:web:secondallowedsubmitter.com"
+            ]
+          },
+          "authentication": {
+            "allow_unauthenticated": False,
+            "jwt": {
+              "required_claims": {
+                "aud": "scitt",
+                "iss": "https://authserver.com/",
+                "http://unique.claim/department_id": "654987"
+              }
+            }
+          }
         }
       }
     }
@@ -82,6 +97,21 @@ Example `set_scitt_configuration` snippet:
 "accepted_algorithms": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EDDSA"]
 ```
 
+## Accepted DID issuers
+List of accepted signers of a given COSE_Sign1 payload if DID is used in that case.
+
+**Note:** TLS roots (`did_web_tls_roots`) need to be set up as well for the service to be able to resolve DIDs from the accepted issuers, see "Trust stores" below.
+
+Example `set_scitt_configuration` snippet:
+```
+"policy": {
+  "accepted_did_issuers": [
+    "did:web:firstallowedsubmitter.com",
+    "did:web:secondallowedsubmitter.com"
+  ]
+}
+```
+
 ## Trust stores
 SCITT has two trust stores that can be configured: `x509_roots` and `did_web_tls_roots`.
 
@@ -105,6 +135,8 @@ Example governance proposal:
 
 ### DID Web TLS Roots
 CA certificates which are used as trusted roots during DID web resolution (as part of claim verification) to validate the connection to the server hosting a DID web document.
+
+**Note:** this applies to the trusted issuers configured through `policy.accepted_did_issuers`
 
 Example governance proposal:
 ```
