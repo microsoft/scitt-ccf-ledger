@@ -3,6 +3,8 @@
 
 #include "cbor.h"
 
+#include "cbor_test_utils.h"
+
 #include <gtest/gtest.h>
 #include <rapidcheck.h>
 #include <rapidcheck/gtest.h>
@@ -13,6 +15,7 @@ namespace
 {
   RC_GTEST_PROP(CborHasher, hash_text, ())
   {
+    crypto::openssl_sha256_init();
     auto text = *rc::gen::arbitrary<std::string>();
 
     cbor::hasher hasher;
@@ -24,10 +27,12 @@ namespace
     auto h2 = crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
+    crypto::openssl_sha256_shutdown();
   }
 
   RC_GTEST_PROP(Cbor, hash_bytes, ())
   {
+    crypto::openssl_sha256_init();
     auto bytes = *rc::gen::arbitrary<std::vector<uint8_t>>();
 
     cbor::hasher hasher;
@@ -39,10 +44,12 @@ namespace
     auto h2 = crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
+    crypto::openssl_sha256_shutdown();
   }
 
   RC_GTEST_PROP(Cbor, hash_array, ())
   {
+    crypto::openssl_sha256_init();
     auto fields = *rc::gen::arbitrary<std::vector<std::vector<uint8_t>>>();
 
     cbor::hasher hasher;
@@ -63,5 +70,6 @@ namespace
     auto h2 = crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
+    crypto::openssl_sha256_shutdown();
   }
 }
