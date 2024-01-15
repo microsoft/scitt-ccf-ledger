@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import json
+import os
 import time
 
 import cbor2
@@ -44,6 +45,15 @@ def test_submit_claim_x5c(
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     receipt = client.submit_claim(claims).receipt
+    # check if the header struct contains mrenclave header
+    assert "enclave_measurement" in receipt.phdr
+    PLATFORM = os.environ.get("PLATFORM")
+    if PLATFORM == "virtual":
+        assert receipt.phdr["enclave_measurement"] == ""
+    elif PLATFORM == "sgx":
+        assert len(receipt.phdr["enclave_measurement"]) > 0
+    else:
+        raise Exception("Unknown PLATFORM, should be sgx or virtual")
     verify_receipt(claims, trust_store, receipt)
 
 
