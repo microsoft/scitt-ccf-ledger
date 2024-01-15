@@ -5,8 +5,8 @@
 
 #include <algorithm>
 #include <ccf/ds/quote_info.h>
-#include <ccf/pal/measurement.h>
 #include <ccf/node/quote.h>
+#include <ccf/pal/measurement.h>
 #include <openenclave/attestation/custom_claims.h>
 #include <openenclave/attestation/sgx/evidence.h>
 #include <openenclave/attestation/verifier.h>
@@ -125,11 +125,11 @@ namespace scitt::oe
       return measurement.value().hex_str();
     }
 
-    #if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
+#if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
     // Enclave should always have a valid measurement
     throw std::logic_error("Failed to extract code id from quote");
-    #else
+#else
     return "";
-    #endif
+#endif
   }
 }
