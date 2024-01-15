@@ -100,6 +100,8 @@ def verify_receipt(
 
         decoded_receipt = Receipt.from_cose_obj(parsed_receipt)
 
+    # check if the header struct contains mrenclave header
+    assert decoded_receipt.phdr.has_key("enclave_measurement")
     service_params = service_trust_store.lookup(decoded_receipt.phdr)
     decoded_receipt.verify(msg, service_params)
 

@@ -21,6 +21,7 @@ namespace scitt
   static constexpr const char* COSE_HEADER_PARAM_REGISTRATION_TIME =
     "registration_time";
 
+  static constexpr const char* COSE_HEADER_PARAM_MEASUREMENT = "enclave_measurement";
   // TODO: At some point, this will probably be replaced by an iss + kid
   static constexpr const char* COSE_HEADER_PARAM_SERVICE_ID = "service_id";
 
@@ -63,6 +64,11 @@ namespace scitt
     // favour of the iss/kid headers above.
     QCBOREncode_AddTextToMap(
       encoder, COSE_HEADER_PARAM_SERVICE_ID, cbor::from_string(service_id));
+
+    // Adds measurement to the receipt to be able to determine the source
+    // code version of the enclave that generated the receipt.
+    QCBOREncode_AddTextToMap(
+      encoder, COSE_HEADER_PARAM_MEASUREMENT, cbor::from_string(oe::get_mrenclave()));
 
     QCBOREncode_AddUInt64ToMap(
       encoder, COSE_HEADER_PARAM_REGISTRATION_TIME, registration_time.tv_sec);
