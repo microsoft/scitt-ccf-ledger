@@ -47,13 +47,20 @@ def test_submit_claim_x5c(
     receipt = client.submit_claim(claims).receipt
     # check if the header struct contains mrenclave header
     assert "enclave_measurement" in receipt.phdr
-    PLATFORM = os.environ.get("PLATFORM")
-    if PLATFORM == "virtual":
-        assert receipt.phdr["enclave_measurement"] == ""
-    elif PLATFORM == "sgx":
-        assert len(receipt.phdr["enclave_measurement"]) > 0
+    env_platform = os.environ.get("PLATFORM")
+    actual_measurement = receipt.phdr["enclave_measurement"]
+    expected_virtual_measurement = (
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    if env_platform == "virtual":
+        assert actual_measurement == expected_virtual_measurement
+    elif env_platform == "sgx":
+        assert (
+            len(actual_measurement) == 64
+            and actual_measurement != expected_virtual_measurement
+        )
     else:
-        raise Exception("Unknown PLATFORM, should be sgx or virtual")
+        raise Exception("Unknown PLATFORM, should be sgx or virtual: " + env_platform)
     verify_receipt(claims, trust_store, receipt)
 
 
