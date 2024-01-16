@@ -219,6 +219,25 @@ namespace scitt
         throw BadRequestError(errors::InvalidInput, e.what());
       }
 
+      // Retrieve current enclave measurement of this node
+      // See ccf logic in `/quotes/self`
+      std::string measurement;
+      auto nodes = ctx.tx.ro(network.nodes);
+      auto node_info = nodes->get(context.get_node_id());
+      if (node_info.has_value() && node_info->code_digest.has_value())
+      {
+        measurement = node_info->code_digest.value();
+      }
+      else
+      {
+        #if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
+        // Node should always get a valid cached measurement on startup
+        throw InternalError("Unexpected state - node has no code id");
+        #else
+        measurement = "";
+        #endif
+      }
+
       // TODO: Apply further acceptance policies.
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
@@ -239,12 +258,12 @@ namespace scitt
           reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
 
         sign_protected = create_countersign_protected_header(
-          host_time, *cfg.service_identifier, kid_bytes, service_cert_digest);
+          host_time, *cfg.service_identifier, kid_bytes, service_cert_digest, measurement);
       }
       else
       {
         sign_protected = create_countersign_protected_header(
-          host_time, std::nullopt, std::nullopt, service_cert_digest);
+          host_time, std::nullopt, std::nullopt, service_cert_digest, measurement);
       }
 
       // Compute the hash of the to-be-signed countersigning structure

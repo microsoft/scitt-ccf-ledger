@@ -115,21 +115,4 @@ namespace scitt::oe
 
     return result;
   }
-
-  static std::string get_mrenclave()
-  {
-    ccf::QuoteInfo quote_info;
-    auto measurement = ccf::AttestationProvider::get_measurement(quote_info);
-    if (measurement.has_value())
-    {
-      return measurement.value().hex_str();
-    }
-
-#if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
-    // Enclave should always have a valid measurement
-    throw std::logic_error("Failed to extract code id from quote");
-#else
-    return "";
-#endif
-  }
 }

@@ -39,7 +39,8 @@ namespace scitt
     ::timespec registration_time,
     std::optional<std::string_view> issuer,
     std::optional<std::span<const uint8_t>> kid,
-    std::string_view service_id)
+    std::string_view service_id,
+    std::string_view measurement)
   {
     cbor::encoder encoder;
 
@@ -69,9 +70,7 @@ namespace scitt
     // Adds measurement to the receipt to be able to determine the source
     // code version of the enclave that generated the receipt.
     QCBOREncode_AddTextToMap(
-      encoder,
-      COSE_HEADER_PARAM_MEASUREMENT,
-      cbor::from_string(oe::get_mrenclave()));
+      encoder, COSE_HEADER_PARAM_MEASUREMENT, cbor::from_string(measurement));
 
     QCBOREncode_AddUInt64ToMap(
       encoder, COSE_HEADER_PARAM_REGISTRATION_TIME, registration_time.tv_sec);
