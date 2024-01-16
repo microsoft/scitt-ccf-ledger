@@ -230,12 +230,12 @@ namespace scitt
       }
       else
       {
-        #if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
+#if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
         // Node should always get a valid cached measurement on startup
         throw InternalError("Unexpected state - node has no code id");
-        #else
+#else
         measurement = "";
-        #endif
+#endif
       }
 
       // TODO: Apply further acceptance policies.
@@ -258,12 +258,20 @@ namespace scitt
           reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
 
         sign_protected = create_countersign_protected_header(
-          host_time, *cfg.service_identifier, kid_bytes, service_cert_digest, measurement);
+          host_time,
+          *cfg.service_identifier,
+          kid_bytes,
+          service_cert_digest,
+          measurement);
       }
       else
       {
         sign_protected = create_countersign_protected_header(
-          host_time, std::nullopt, std::nullopt, service_cert_digest, measurement);
+          host_time,
+          std::nullopt,
+          std::nullopt,
+          service_cert_digest,
+          measurement);
       }
 
       // Compute the hash of the to-be-signed countersigning structure
