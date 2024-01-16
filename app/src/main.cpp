@@ -222,7 +222,7 @@ namespace scitt
       // Retrieve current enclave measurement of this node
       // See ccf logic in `/quotes/self`
       std::string measurement;
-      auto nodes = ctx.tx.ro(network.nodes);
+      auto nodes = ctx.tx.ro<ccf::Nodes>(ccf::Tables::NODES);
       auto node_info = nodes->get(context.get_node_id());
       if (node_info.has_value() && node_info->code_digest.has_value())
       {
