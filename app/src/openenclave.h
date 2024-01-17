@@ -4,9 +4,6 @@
 #pragma once
 
 #include <algorithm>
-#include <ccf/ds/quote_info.h>
-#include <ccf/node/quote.h>
-#include <ccf/pal/measurement.h>
 #include <openenclave/attestation/custom_claims.h>
 #include <openenclave/attestation/sgx/evidence.h>
 #include <openenclave/attestation/verifier.h>
