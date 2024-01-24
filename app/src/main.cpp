@@ -81,6 +81,7 @@ namespace scitt
   static std::optional<T> get_query_value(
     const http::ParsedQuery& pq, std::string_view name)
   {
+    SCITT_DEBUG("Get parameter value from parsed query");
     auto it = pq.find(name);
     if (it == pq.end())
     {
@@ -139,6 +140,7 @@ namespace scitt
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
     {
+      SCITT_DEBUG("Get transaction status");
       ccf::ApiResult result;
 
       ccf::View view_of_seqno;
@@ -149,9 +151,12 @@ namespace scitt
         result = get_status_for_txid_v1(view_of_seqno, seqno, status);
         if (result == ccf::ApiResult::OK)
         {
+          SCITT_DEBUG("Transaction status: {}", ccf::tx_status_to_str(status));
           return status;
         }
       }
+
+      SCITT_FAIL("Transaction status could not be retrieved");
 
       return std::nullopt;
     }
@@ -200,6 +205,7 @@ namespace scitt
       ::timespec host_time,
       const std::vector<uint8_t>& body)
     {
+      SCITT_DEBUG("Get SCITT configuration from KV store");
       auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
                    ->get()
                    .value_or(Configuration{});
@@ -207,15 +213,18 @@ namespace scitt
       ClaimProfile claim_profile;
       try
       {
+        SCITT_DEBUG("Verify submitted claim");
         claim_profile = verifier->verify_claim(
           body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
       }
       catch (const did::DIDMethodNotSupportedError& e)
       {
+        SCITT_DEBUG("Unsupported DID method: {}", e.what());
         throw BadRequestError(errors::DIDMethodNotSupported, e.what());
       }
       catch (const verifier::VerificationError& e)
       {
+        SCITT_DEBUG("Claim verification failed: {}", e.what());
         throw BadRequestError(errors::InvalidInput, e.what());
       }
 
@@ -228,6 +237,7 @@ namespace scitt
       auto service_cert_digest = crypto::Sha256Hash(service_cert_der).hex_str();
 
       // Take the service's DID from the configuration, if present.
+      SCITT_DEBUG("Create protected header with countersignature");
       std::vector<uint8_t> sign_protected;
       if (cfg.service_identifier.has_value())
       {
@@ -249,16 +259,19 @@ namespace scitt
 
       // Compute the hash of the to-be-signed countersigning structure
       // and set it as CCF transaction claim for use in receipt validation.
+      SCITT_DEBUG("Add countersignature as CCF application claim for the tx");
       auto claims_digest =
         cose::create_countersign_tbs_hash(body, sign_protected);
       ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
 
       // Store the original COSE_Sign1 message in the KV.
+      SCITT_DEBUG("Store submitted claim in KV store");
       auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
       entry_table->put(body);
 
       // Store the protected headers in a separate table, so the
       // receipt can be reconstructed.
+      SCITT_DEBUG("Store claim protected headers in KV store");
       auto entry_info_table =
         ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
       entry_info_table->put(EntryInfo{
@@ -322,12 +335,15 @@ namespace scitt
         std::make_shared<ConfigurableJwtAuthnPolicy>(),
       };
 
+      SCITT_DEBUG("Get historical state from CCF");
       auto& state_cache = context.get_historical_state();
 
+      SCITT_DEBUG("Install custom indexing strategy");
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
         ENTRY_TABLE, context, 10000, 20);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
+      SCITT_DEBUG("Register DID:web resolver");
       auto resolver = std::make_unique<did::UniversalResolver>();
       resolver->register_resolver(std::make_unique<did::web::DidWebResolver>());
 
@@ -335,6 +351,7 @@ namespace scitt
 
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
+        SCITT_DEBUG("Entry body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
         {
           throw BadRequestError(
@@ -426,6 +443,7 @@ namespace scitt
         bool embed_receipt =
           get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
 
+        SCITT_DEBUG("Get transaction historical state");
         auto historical_tx = historical_state->store->create_read_only_tx();
 
         auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
@@ -442,21 +460,25 @@ namespace scitt
         std::vector<uint8_t> entry_out;
         if (embed_receipt)
         {
+          SCITT_DEBUG("Get saved SCITT entry");
           auto entry_info_table =
             historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
           auto entry_info = entry_info_table->get().value();
 
+          SCITT_DEBUG("Get CCF receipt");
           auto ccf_receipt_ptr =
             ccf::describe_receipt_v2(*historical_state->receipt);
           std::vector<uint8_t> receipt;
           try
           {
+            SCITT_DEBUG("Build SCITT receipt");
             receipt = serialize_receipt(entry_info, ccf_receipt_ptr);
           }
           catch (const ReceiptProcessingError& e)
           {
             throw InternalError(e.what());
           }
+          SCITT_DEBUG("Embed SCITT receipt into the entry response");
           entry_out = cose::embed_receipt(entry.value(), receipt);
         }
         else
@@ -480,6 +502,7 @@ namespace scitt
       auto get_entry_receipt = [this](
                                  EndpointContext& ctx,
                                  ccf::historical::StatePtr historical_state) {
+        SCITT_DEBUG("Get transaction historical state");
         auto historical_tx = historical_state->store->create_read_only_tx();
 
         auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
@@ -493,15 +516,18 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
+        SCITT_DEBUG("Get saved SCITT entry");
         auto entry_info_table =
           historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
         auto entry_info = entry_info_table->get().value();
 
+        SCITT_DEBUG("Get CCF receipt");
         auto ccf_receipt_ptr =
           ccf::describe_receipt_v2(*historical_state->receipt);
         std::vector<uint8_t> receipt;
         try
         {
+          SCITT_DEBUG("Build SCITT receipt");
           receipt = serialize_receipt(entry_info, ccf_receipt_ptr);
         }
         catch (const ReceiptProcessingError& e)
@@ -528,6 +554,7 @@ namespace scitt
           const auto parsed_query =
             http::parse_query(ctx.rpc_ctx->get_request_query());
 
+          SCITT_DEBUG("Parse input params and determine entries range");
           ccf::SeqNo from_seqno =
             get_query_value<uint64_t>(parsed_query, "from").value_or(1);
           std::optional<ccf::SeqNo> to_seqno_opt =
@@ -602,6 +629,7 @@ namespace scitt
               "Index of requested range not available yet, retry later");
           }
 
+          SCITT_DEBUG("Get entries for the target range");
           std::vector<std::string> tx_ids;
           for (auto seqno : interesting_seqnos.value())
           {
@@ -624,6 +652,7 @@ namespace scitt
           // next page and tell the caller how to retrieve it
           if (range_end != to_seqno)
           {
+            SCITT_DEBUG("Add next link to retrieve the rest of entries");
             const auto next_page_start = range_end + 1;
             const auto next_range_end =
               std::min(to_seqno, next_page_start + max_seqno_per_page);
