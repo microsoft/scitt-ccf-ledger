@@ -28,8 +28,7 @@ class SubmittedProposal:
         return self.state == "Accepted"
 
 
-class ProposalNotAccepted(Exception):
-    ...
+class ProposalNotAccepted(Exception): ...
 
 
 class GovernanceClient:

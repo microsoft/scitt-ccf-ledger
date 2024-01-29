@@ -92,9 +92,9 @@ class HttpSig(httpx.Auth):
 
         signature = self.member_auth_client.http_sign(string_to_sign)
         b64signature = base64.b64encode(signature).decode("ascii")
-        request.headers[
-            "authorization"
-        ] = f'Signature keyId="{self.key_id}",algorithm="hs2019",headers="(request-target) digest content-length",signature="{b64signature}"'
+        request.headers["authorization"] = (
+            f'Signature keyId="{self.key_id}",algorithm="hs2019",headers="(request-target) digest content-length",signature="{b64signature}"'
+        )
         yield request
 
 
@@ -526,14 +526,12 @@ class Client(BaseClient):
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[False] = False
-    ) -> Submission:
-        ...
+    ) -> Submission: ...
 
     @overload
     def submit_claim(
         self, claim: bytes, *, skip_confirmation: Literal[True]
-    ) -> PendingSubmission:
-        ...
+    ) -> PendingSubmission: ...
 
     def submit_claim(
         self, claim: bytes, *, skip_confirmation=False
@@ -584,14 +582,12 @@ class Client(BaseClient):
         *,
         operation: bool = False,
         decode: Literal[True] = True,
-    ) -> Receipt:
-        ...
+    ) -> Receipt: ...
 
     @overload
     def get_receipt(
         self, tx: str, *, operation: bool = False, decode: Literal[False]
-    ) -> bytes:
-        ...
+    ) -> bytes: ...
 
     def get_receipt(
         self, tx: str, *, operation: bool = False, decode: bool = True
