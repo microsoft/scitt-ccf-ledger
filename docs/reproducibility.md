@@ -26,7 +26,7 @@ do a docker build locally but inside of the development version of CCF image:
 - Run a build inside of the CCF docker image:
 
     ```
-    CCF_VERSION="4.0.12"
+    CCF_VERSION="4.0.14"
     docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
