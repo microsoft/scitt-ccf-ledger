@@ -234,7 +234,8 @@ namespace scitt
         // Node should always get a valid cached measurement on startup
         throw InternalError("Unexpected state - node has no code id");
 #else
-        measurement = "0000000000000000000000000000000000000000000000000000000000000000";
+        measurement =
+          "0000000000000000000000000000000000000000000000000000000000000000";
 #endif
       }
 
