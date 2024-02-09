@@ -57,9 +57,9 @@ The CLI is also distributed through the GitHub releases as a `wheel` file. Optio
 
 The CLI is extensively used in the following functional tests and demo scripts:
 
-- [Transparency service demo](../demo/cts_poc/README.md)
-- [GitHub hosted DID demo](../demo/github/README.md)
-- [CLI tests](../test/test_cli.py)
+- [Transparency service demo](./demo/cts_poc/README.md)
+- [GitHub hosted DID demo](./demo/github/README.md)
+- [CLI tests](./test/test_cli.py)
 
 See [pyscitt](pyscitt/README.md) for more details.
 
