@@ -4,19 +4,20 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 
 ## Prerequisites
 
-- A Certificate Authority (CA) certificate and private key are required to configure the SCITT instance. The CA certificate and private key must be provided by the SCITT Operator. For getting a sample pair for testing purposes, you can use the script [cacerts-generator.sh](./cacerts-generator.sh).
-
-    For running the script, you can provide the following environment variables:
-
-    - `CACERT_OUTPUT_DIR`: Path to the output directory where the CA certificate and private key files will be stored
-
-    Example command:
+- A Certificate Authority (CA) certificate is required from the issuer who will be signing and then submitting the COSE_Sign1 signature envelopes. The CA will need to be added to the configuration for CTS to be able to accept the incoming signature envelopes. You can set it up locally via the provided script:
 
     ```bash
-    CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/cts_poc/cacerts-generator.sh
+    mkdir -p demo-poc/x509_roots
+    CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/cts_poc/0-cacerts-generator.sh
     ```
 
-- Access to the CCF member certificate and private key is required to submit proposals to the CCF network. The provided member must be registered into the target CCF network. For a local SCITT instance (e.g., after running the [start.sh](../../start.sh) script), the member certificate and private key are generated automatically and stored in the `workspace` folder (`member0_cert.pem` and `member0_privk.pem`). For a remote SCITT instance, the member certificate and private key must be provided by the SCITT Operator. 
+- The admin (operator) will need to be recognized by the CTS instance. The member certificate and private key are generated automatically and stored in the `workspace` folder (`member0_cert.pem` and `member0_privk.pem`) after starting the local instance.
+
+- You should have configuration file ready (see [documentation](../../docs/configuration.md#scitt-configuration)), e.g.:
+
+    ```bash
+    echo '{ "authentication": { "allow_unauthenticated": true } }' > demo-poc/configuration.json
+    ```
 
 ## Instructions
 
@@ -24,10 +25,10 @@ All the commands must be run from the root of the repository.
 
 ### CTS Operator
 
-1. Start a new CCF network with a single member. For a local instance, run the following commands (set the `PLATFORM` variable first):
+1. Start the instance with a single admin (member):
 
     ```bash
-    export PLATFORM=<virtual|sgx>
+    export PLATFORM=virtual
     ./build.sh
     ./start.sh
     ```
@@ -40,99 +41,61 @@ All the commands must be run from the root of the repository.
 
     If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`http://localhost:8000`).
 
-2. Run the [`operator-demo.sh`](operator-demo.sh) script to activate the CCF member, configure the SCITT instance, and open the CCF network (all operations are idempotent and can be run on an already-configured instance, if needed).
-
-    For running the script, you can provide the following environment variables:
-
-    - `MEMBER_CERT_PATH`: Path to the member certificate PEM file.
-
-    - `MEMBER_KEY_PATH`: Path to the member private key PEM file.
-
-    - `CACERT_PATH`: Path to the CA certificate PEM file.
-
-    - `SCITT_CONFIG_PATH`: Path to the SCITT configuration JSON file. The JSON file needs to contain only the content of the `set_scitt_configuration` action. For example:
-
-        ```json
-        {
-           "authentication": {
-               "allow_unauthenticated": true
-           }
-        }
-        ```
-
-        Please refer to [this document](../../docs/configuration.md#scitt-configuration) for more details on the configuration options.
-
-    Example command:
+2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here the generated CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault.
 
     ```bash
-    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" CACERT_PATH="demo-poc/x509_roots/cacert.pem" SCITT_CONFIG_PATH="demo-poc/configs/scitt_config.json" ./demo/cts_poc/operator-demo.sh
+    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" CACERT_PATH="demo-poc/x509_roots/cacert.pem" SCITT_CONFIG_PATH="demo-poc/configuration.json" ./demo/cts_poc/1-operator-demo.sh
     ```
 
 ### CTS client
 
-1. You can skip this step, if you already have a valid COSE claim to submit. Generate a valid COSE claim to submit to the SCITT ledger by running the [`claim-generator.sh`](claim-generator.sh) script.
+#### Prepare the COSE_Sign1 claim file
 
-    > **Note**: if you want to generate a signed claim for a container image, you can use the [notary-sign.sh](notary-sign.sh) script. Please refer to the [Notary signing](#notary-signing) section for more details.
+You need to have a file to sign. There is a limit on the size of the payload (1MB) so it needs to be reasonably small.
 
-    For running the script, you can provide the following environment variables:
+```bash
+echo '{"content":"some demo text"}' > demo-poc/payload.json
+```
 
-    - `SIGNING_METHOD`: The signing method to use for signing the claim. The supported values are `did` (to sign with a DID document and private key) `cacert` (to sign with a local x509 CA certificate and private key) and `akv` (to sign with a certificate in AKV).
+##### Option 1. Use your private key
+
+If you created your own certificate and key combination as mentioned in the prerequisites then the following command will create a signature:
+
+```bash
+SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
+```
+
+##### Option 2. Use Azure Key Vault key
+
+You will need the details about your keys and your identity needs to have access to use the keys for signing.
+
+- The CA if there is one or the self signed cert needs to be configured in the instance
+- Download the certificates to include in the x5c header:
     
-    - `CACERT_PATH`: Path to a valid x509 CA certificate PEM file.
-    
-    - `DID_DOC_PATH`: Path to a valid DID document. 
-    
-    - `AKV_CONFIG_PATH`: Path to a valid JSON file with the following format:
-
-        ```json
-        {
-            "keyVaultName": "<name>",
-            "certificateName": "<key_name>",
-            "certificateVersion": "<key_version>"
-        }
-        ```
-
-        The configuration file must contain the name of the Azure Key Vault instance, the name of the certificate to use for signing, and the version of the certificate to use for signing.
-
-    - `PRIVATE_KEY_PATH`: Path to the private key PEM file.
-
-    - `CLAIM_CONTENT_PATH`: Path to the JSON/text file containing the claim content. For example:
-
-        ```json
-        {
-            "foo": "bar"
-        }
-        ```
-
-    - `COSE_CLAIMS_OUTPUT_PATH`: Path to the output file where the COSE file containing the signed claim will be stored.
-
-    - `CLAIM_CONTENT_TYPE`: Optionally, you can provide the content type of the claim content. If not provided, the content type will be set to `application/json` by default.
-    
-    Example command:
+    ```bash
+    az keyvault certificate download --vault-name $VAULT_NAME -n $CERT_NAME -f demo-poc/x509_roots/cacert.pem -e PEM
+    ```
+- If the certificate has an issuer CA then download it and append it to the same file:
 
     ```bash
-    SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/claims/claims.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/claims/claims.cose" ./demo/cts_poc/claim-generator.sh
+    openssl x509 -noout -text -in demo-poc/x509_roots/cabundle.pem -inform PEM | grep URI
+                CA Issuers - URI:http://www.issuer.com/pkiops/certs/2024.crt
+    curl -s "http://www.issuer.com/pkiops/certs/2024.crt" | openssl x509 >> demo-poc/x509_roots/cacert.pem
     ```
-
-2. Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`client-demo.sh`](client-demo.sh) script.
-
-    The script will submit the COSE claim to the SCITT ledger and will wait for a receipt to be generated. Once the receipt is generated, the script will print the CBOR receipt in a readable format, and verify the receipt validity.
-
-    For running the script, you can provide the following environment variables:
-
-    - `COSE_CLAIMS_PATH`: Path to the COSE file containing the signed claim.
-
-    - `OUTPUT_FOLDER`: Path to the folder where script artifacts (e.g., the receipt file) will be stored.
-
-    Example command:
+- Prepare Key Vault config file for the script to use:
 
     ```bash
-    COSE_CLAIMS_PATH="demo-poc/claims/claims.cose" OUTPUT_FOLDER="test-folder" ./demo/cts_poc/client-demo.sh
+    echo '{"keyVaultName": "$VAULT_NAME", "certificateName": "$CERT_NAME", "certificateVersion": "$CERT_VER"}' > demo-poc/akv.json
+    ```
+- Run the script
+
+    ```bash
+    SIGNING_METHOD="akv" CACERT_PATH="demo-poc/x509_roots/cacert.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" AKV_CONFIG_PATH="demo-poc/akv.json" ./demo/cts_poc/2a-claim-generator.sh
     ```
 
-### Notary signing
+##### Option 3. Use Notary
 
-If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [notary-sign.sh](notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
+If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [2b-notary-sign.sh](2b-notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
 
 The process to sign a container image with Notation and Azure Key Vault using a self-signed certificate is documented [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push). Please note that a pre-requisite for this script is to have a Key Vault instance with a self-signed certificate compatible with the [Notary Project certificate requirements](https://github.com/notaryproject/specifications/blob/main/specs/signature-specification.md#certificate-requirements). You can find more information on how to create a compatible self-signed certificate in AKV [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push#create-a-self-signed-certificate-in-akv-azure-cli). 
 
@@ -146,3 +109,14 @@ For running the script, you can provide the following environment variables:
 - `IMAGE_TAG`: Tag of the image to sign.
 - `IMAGE_DIGEST`: Digest of the image to sign.
 - `SIGNATURE_OUTPUT_PATH`: Path to the output file where the COSE file containing the image signature will be stored.
+
+#### Submit the COSE_Sign1 claim file
+
+Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`3-client-demo.sh`](3-client-demo.sh) script.
+
+The script will submit the COSE claim to the SCITT ledger and will wait for a receipt to be generated. Once the receipt is generated, the script will print the CBOR receipt in a readable format, and verify the receipt validity.
+
+```bash
+COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/client-demo.sh
+```
+
