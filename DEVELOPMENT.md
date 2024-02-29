@@ -1,6 +1,6 @@
 # Development guidelines 
 
-The following explains how to build, run, and test scitt-ccf-ledger outside of Docker.
+The following explains how to build, run, and test scitt-ccf-ledger.
 
 ## Development environment
 
@@ -10,31 +10,28 @@ This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
 
-### Run in Codespaces
+### Using Codespaces
 
 For *virtual* mode development only, instead of following the steps below, you can also use GitHub Codespaces and then continue with the "Building" section: 
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=562968818&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestEurope)
 
-### Run in a Docker image
+### Using a Docker image
 
-Similar to Codespaces you could just build and test the application within the running docker image:
+Similar to Codespaces you could build and test the application within the running docker image:
 
 ```sh
 docker build -t mytestimg -f .devcontainer/Dockerfile .
 
-# export your user details to use when running an
-export UID=$(id -u)
-export GID=$(id -g)
-docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash --user $UID:$GID mytestimg
+docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg
 
-# workaround to make git happy in a docker image
+# workaround to make git happy in a running docker image
 /opt/app# git config --global --add safe.directory "*"
 
 ## ready to build and test now, see below commands
 ```
 
-### Run on a machine
+### Using a host machine
 
 Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
 
@@ -60,26 +57,41 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
     cd scitt-ccf-ledger
     ```
 
-2. Build scitt-ccf-ledger by running:
+2. Select the development environment (see above)
+
+3. Build scitt-ccf-ledger by running:
     ```sh
     PLATFORM=<sgx|virtual> ./build.sh
     ```
 
 ## Running
 
-1. Start a single-node CCF network running the scitt-ccf-ledger application:
+### In your environment
+
+1. Build first (see above)
+
+2. Start a single-node CCF network running the scitt-ccf-ledger application:
     ```sh
     PLATFORM=<sgx|virtual> ./start.sh
     ```
 
-2. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local
+3. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local
    development purposes, the following command will setup the service appropriately.
+   
    ```sh
    ./pyscitt.sh governance local_development --url https://127.0.0.1:8000
    ```
 
    Note this command should not be used for a production instance, as it will leave the service
    open to all.
+
+### Development Docker image
+
+For more details refer to [docker/README.md](./docker/README.md).
+
+1. Build the image first `PLATFORM="virtual" ./docker/build.sh`
+
+2. Run the image and setup the development instance `PLATFORM="virtual" ./docker/run-dev.sh`
 
 ## Testing
 
