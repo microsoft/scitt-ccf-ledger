@@ -29,7 +29,8 @@ echo -e "\nGetting service parameters"
 SERVICE_PARAMS_FOLDER="$OUTPUT_FOLDER"/service_params
 mkdir -p "$SERVICE_PARAMS_FOLDER"
 
-curl -k -f "$SCITT_URL"/parameters > "$SERVICE_PARAMS_FOLDER"/scitt.json
+# Get historic parameters to populate the trust store with all the previous service identities
+curl -k -f "$SCITT_URL"/parameters/historic > "$SERVICE_PARAMS_FOLDER"/scitt.json
 
 echo -e "\nSubmitting claim to the ledger and getting receipt for the committed transaction"
 RECEIPT_FOLDER="$OUTPUT_FOLDER"/receipts
@@ -49,14 +50,24 @@ scitt retrieve "$RECEIPT_FOLDER" \
     --service-trust-store "$SERVICE_PARAMS_FOLDER" \
     --development
 
-# View receipt
+# View CBOR receipt
 echo -e "\nViewing decoded receipt content"
 scitt pretty-receipt "$RECEIPT_PATH"
 
-# Verify receipt
+# Verify CBOR receipt
 echo -e "\nVerifying receipt"
 scitt validate "$COSE_CLAIMS_PATH" \
     --receipt "$RECEIPT_PATH" \
     --service-trust-store "$SERVICE_PARAMS_FOLDER"
+
+# Get a list of all the COSE claims inside the RECEIPT_FOLDER directory
+COSE_FILES=$(find "$RECEIPT_FOLDER" -type f -name "*.cose")
+
+# Verify entry with embedded receipt for each retrieved COSE claim
+for COSE_ENTRY in $COSE_FILES; do
+    echo -e "\nVerifying entry with embedded receipt for $COSE_ENTRY"
+    scitt validate "$COSE_ENTRY" \
+        --service-trust-store "$SERVICE_PARAMS_FOLDER"
+done
 
 echo -e "\nScript completed successfully"
