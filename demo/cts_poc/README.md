@@ -4,7 +4,7 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 
 ## Prerequisites
 
-- A Certificate Authority (CA) certificate is required from the issuer who will be signing and then submitting the COSE_Sign1 signature envelopes. The CA will need to be added to the configuration for CTS to be able to accept the incoming signature envelopes. You can set it up locally via the provided script:
+- A Certificate Authority (CA) certificate is required from the issuer who will be signing and then submitting the COSE_Sign1 signature envelopes. The CA will need to be added to the configuration for CTS to be able to accept the incoming signature envelopes. You can set up custom [X509 roots](../../docs/configuration.md#x509-roots) locally via the provided script:
 
     ```bash
     mkdir -p demo-poc/x509_roots
@@ -41,10 +41,10 @@ All the commands must be run from the root of the repository.
 
     If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`http://localhost:8000`).
 
-2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here the generated CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault.
+2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here a pre-generated x509 CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault or use predefined [DID:WEB TLS roots](../../docs/configuration.md#did-web-tls-roots) (use the `DID_WEB_ROOT_PATH` environment variable).
 
     ```bash
-    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" CACERT_PATH="demo-poc/x509_roots/cacert.pem" SCITT_CONFIG_PATH="demo-poc/configuration.json" ./demo/cts_poc/1-operator-demo.sh
+    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" X509_ROOT_PATH="demo-poc/x509_roots/cacert.pem" SCITT_CONFIG_PATH="demo-poc/configuration.json" ./demo/cts_poc/1-operator-demo.sh
     ```
 
 ### CTS client
@@ -106,7 +106,7 @@ For running the script, you can provide the following environment variables:
 - `CERTIFICATE_VERSION`: Version of the certificate stored in the Azure Key Vault instance.
 - `ACR_NAME`: Name of the Azure Container Registry instance where the image is stored.
 - `IMAGE_REPOSITORY`: ACR repository of the image to sign.
-- `IMAGE_TAG`: Tag of the image to sign.
+- `IMAGE_TAG`: Tag of the image to sign (if the digest is not provided).
 - `IMAGE_DIGEST`: Digest of the image to sign.
 - `SIGNATURE_OUTPUT_PATH`: Path to the output file where the COSE file containing the image signature will be stored.
 
@@ -117,6 +117,6 @@ Submit the COSE claim to the SCITT ledger and verify a receipt for the committed
 The script will submit the COSE claim to the SCITT ledger and will wait for a receipt to be generated. Once the receipt is generated, the script will print the CBOR receipt in a readable format, and verify the receipt validity.
 
 ```bash
-COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/client-demo.sh
+COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/3-client-demo.sh
 ```
 
