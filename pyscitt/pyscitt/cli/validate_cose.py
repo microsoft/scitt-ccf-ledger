@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+from ..did import Resolver
 from ..verify import DIDResolverTrustStore, StaticTrustStore, TrustStore, verify_receipt
 
 
@@ -11,6 +12,7 @@ def validate_cose_with_receipt(
     cose_path: Path,
     receipt_path: Optional[Path],
     service_trust_store_path: Optional[Path],
+    verify_did_connection: bool = False,
 ):
     cose = cose_path.read_bytes()
 
@@ -21,7 +23,9 @@ def validate_cose_with_receipt(
 
     service_trust_store: TrustStore
     if not service_trust_store_path:
-        service_trust_store = DIDResolverTrustStore()
+        service_trust_store = DIDResolverTrustStore(
+            resolver=Resolver(verify=verify_did_connection)
+        )
     else:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
 
@@ -43,9 +47,20 @@ def cli(fn):
         help="""Optional folder containing JSON parameter files of SCITT services to trust,
         otherwise use DID resolver and expect DID in receipt""",
     )
+    parser.add_argument(
+        "--verify-did-connection",
+        action="store_true",
+        default=False,
+        help="For DID resolution, whether to verify the connection to the DID server. Default is False.",
+    )
 
     def cmd(args):
-        validate_cose_with_receipt(args.cose, args.receipt, args.service_trust_store)
+        validate_cose_with_receipt(
+            args.cose,
+            args.receipt,
+            args.service_trust_store,
+            args.verify_did_connection,
+        )
 
     parser.set_defaults(func=cmd)
 
