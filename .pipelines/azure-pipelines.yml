@@ -9,7 +9,7 @@ trigger:
 parameters:
   - name: CCF_VERSION
     type: string
-    default: 4.0.14
+    default: 4.0.15
 
 resources:
   containers:
