@@ -73,7 +73,7 @@ If you have a DID document and the corresponding private key, you can use those 
 SIGNING_METHOD="did" DID_DOC_PATH="demo-poc/did_roots/did.json" PRIVATE_KEY_PATH="demo-poc/did_roots/key.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
 ```
 
-##### Option 3. Use Azure Key Vault key
+##### Option 3. Use Azure Key Vault certificate and key
 
 You will need the details about your keys and your identity needs to have access to use the keys for signing.
 
@@ -101,7 +101,7 @@ You will need the details about your keys and your identity needs to have access
     SIGNING_METHOD="akv" CACERT_PATH="demo-poc/x509_roots/cacert.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" AKV_CONFIG_PATH="demo-poc/akv.json" ./demo/cts_poc/2a-claim-generator.sh
     ```
 
-##### Option 4. Use Notary
+##### Option 4. Use Notary and Azure Key Vault (for ACR container image signatures only)
 
 If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [2b-notary-sign.sh](2b-notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
 
