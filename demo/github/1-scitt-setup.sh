@@ -28,4 +28,6 @@ scitt governance propose_configuration \
 TRUST_STORE=tmp/trust_store
 mkdir -p $TRUST_STORE
 
-curl -k -f "$SCITT_URL"/parameters > $TRUST_STORE/scitt.json
+# Get historic parameters to populate the trust store with all the previous service identities
+# This is useful to verify entries that have been committed with a previous service identity (e.g., prior to a CCF disaster recovery)
+curl -k -f "$SCITT_URL"/parameters/historic > $TRUST_STORE/scitt.json

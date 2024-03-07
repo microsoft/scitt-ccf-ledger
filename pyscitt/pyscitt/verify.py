@@ -125,16 +125,26 @@ class StaticTrustStore(TrustStore):
             with open(path) as f:
                 data = json.load(f)
 
-            service_id = data.get("serviceId")
-            if not isinstance(service_id, str) or not service_id:
-                raise ValueError("serviceId must be a non-empty string")
+            def _parse_service_param(param: dict):
+                service_id = param.get("serviceId")
+                if not isinstance(service_id, str) or not service_id:
+                    raise ValueError("serviceId must be a non-empty string")
 
-            if service_id in store:
-                raise ValueError(
-                    f"Duplicate service ID while reading trust store: {service_id}"
-                )
+                if service_id in store:
+                    raise ValueError(
+                        f"Duplicate service ID while reading trust store: {service_id}"
+                    )
 
-            store[service_id] = ServiceParameters.from_dict(data)
+                store[service_id] = ServiceParameters.from_dict(param)
+
+            # If the JSON file contains a list of parameters, parse each one (as returned by /parameters/historic)
+            params = data.get("parameters")
+            if params and isinstance(params, list):
+                for param in params:
+                    _parse_service_param(param)
+            # Otherwise, assume the JSON file contains a single set of parameters (as returned by /parameters)
+            else:
+                _parse_service_param(data)
 
         return StaticTrustStore(store)
 
