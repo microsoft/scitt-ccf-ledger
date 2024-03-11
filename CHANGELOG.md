@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.7.0]
+
+### Added
+- Adds mrenclave measurement to the receipt protected header (#176)
+
+### Changes
+- Update pyscitt CLI and demo scripts for claims verification scenarios (#183)
+- Update to CCF 4.0.15 (#184)
+- Simplifies CTS demo scripts, adds AKV example (#182)
+- Fix demo links (#180)
+
 ## [0.6.1]
 
 ### Changes
