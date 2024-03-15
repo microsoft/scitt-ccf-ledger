@@ -39,7 +39,7 @@ All the commands must be run from the root of the repository.
     export SCITT_URL=<address>
     ```
 
-    If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`http://localhost:8000`).
+    If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`https://localhost:8000`).
 
 2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here a pre-generated x509 CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault. Furthermore, if you have [DID WEB TLS roots](../../docs/configuration.md#did-web-tls-roots) you would like to configure, you can specify the path to the certificate file with the `DID_WEB_ROOT_PATH` environment variable.
 
