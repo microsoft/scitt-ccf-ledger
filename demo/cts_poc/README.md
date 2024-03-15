@@ -1,6 +1,6 @@
 # CTS PoC Demo
 
-This demo provides a simple and generic Proof of Concept for a Code Transparency Service (CTS) using the SCITT CCF ledger. The scripts provided in this folder allow configuring a new SCITT CCF instance, generating and submitting claims in COSE format, getting a SCITT receipt for a submitted claim, and verifying the receipt validity. 
+This demo provides a simple and generic Proof of Concept for a Code Transparency Service (CTS) using the SCITT CCF ledger. The scripts provided in this folder allow configuring a new SCITT CCF instance, generating and submitting claims in COSE format, getting a SCITT receipt for a submitted claim, and verifying the receipt validity.
 
 ## Prerequisites
 
@@ -67,6 +67,8 @@ SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY
 
 ##### Option 2. Use DID document and private key
 
+**Note**: This step assumes that user already has DID configured. For more details you can also check github DID demo [here](../github/README.md)
+
 If you have a DID document and the corresponding private key, you can use those for creating the signature with a similar command:
 
 ```bash
@@ -79,10 +81,11 @@ You will need the details about your keys and your identity needs to have access
 
 - The CA if there is one or the self signed cert needs to be configured in the instance
 - Download the certificates to include in the x5c header:
-    
+
     ```bash
     az keyvault certificate download --vault-name $VAULT_NAME -n $CERT_NAME -f demo-poc/x509_roots/cacert.pem -e PEM
     ```
+
 - If the certificate has an issuer CA then download it and append it to the same file:
 
     ```bash
@@ -90,11 +93,13 @@ You will need the details about your keys and your identity needs to have access
                 CA Issuers - URI:http://www.issuer.com/pkiops/certs/2024.crt
     curl -s "http://www.issuer.com/pkiops/certs/2024.crt" | openssl x509 >> demo-poc/x509_roots/cacert.pem
     ```
+
 - Prepare Key Vault config file for the script to use:
 
     ```bash
     echo '{"keyVaultName": "$VAULT_NAME", "certificateName": "$CERT_NAME", "certificateVersion": "$CERT_VER"}' > demo-poc/akv.json
     ```
+
 - Run the script
 
     ```bash
@@ -105,7 +110,7 @@ You will need the details about your keys and your identity needs to have access
 
 If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [2b-notary-sign.sh](2b-notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
 
-The process to sign a container image with Notation and Azure Key Vault using a self-signed certificate is documented [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push). Please note that a pre-requisite for this script is to have a Key Vault instance with a self-signed certificate compatible with the [Notary Project certificate requirements](https://github.com/notaryproject/specifications/blob/main/specs/signature-specification.md#certificate-requirements). You can find more information on how to create a compatible self-signed certificate in AKV [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push#create-a-self-signed-certificate-in-akv-azure-cli). 
+The process to sign a container image with Notation and Azure Key Vault using a self-signed certificate is documented [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push). Please note that a pre-requisite for this script is to have a Key Vault instance with a self-signed certificate compatible with the [Notary Project certificate requirements](https://github.com/notaryproject/specifications/blob/main/specs/signature-specification.md#certificate-requirements). You can find more information on how to create a compatible self-signed certificate in AKV [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push#create-a-self-signed-certificate-in-akv-azure-cli).
 
 For running the script, you can provide the following environment variables:
 
@@ -128,3 +133,15 @@ The script will submit the COSE claim to the SCITT ledger and will wait for a re
 COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/3-client-demo.sh
 ```
 
+#### Known Issues and Workaround for Local Virtual SGX Build
+
+- If you encounter an "unknown service identity" error during the claim submission process, it may be due to attempting to sign and submit using both DID and X509 simultaneously.
+    > ValueError: Unknown service identity '6234efjkfhbsd1random000hash0jkbfdsbfdsjbfg'
+
+    _Workaround:_ To avoid this, ensure you use either X509 or DID exclusively throughout the entire demo.
+- Proposal failing with 403
+    > enclave:../src/node/rpc/member_frontend.h:103 - POST /gov/proposals returning error 403: Member m[1e6aee66336c09bf4random8b55398nodeb3d2e08478c092491459a6063] is not active.
+
+    This means the scitt instance is not configured properly.
+    _Workaround:_ To configure on local, run following command and re-try:
+    > ./pyscitt.sh governance local_development --url $SCITT_URL
