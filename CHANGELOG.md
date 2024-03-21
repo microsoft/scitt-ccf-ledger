@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changes
 - Update to CCF 4.0.16 (#188)
+- Update readme with issues encountered and workaround (#186)
 
 ## [0.7.0]
 
