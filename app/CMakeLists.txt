@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 cmake_minimum_required(VERSION 3.16)
+include(FetchContent)
 
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
@@ -106,7 +107,6 @@ if (BUILD_TESTS)
 
   # Avoid Gtest files ending up in the scitt install directory
   set(INSTALL_GTEST OFF)
-  include(FetchContent)
   FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
@@ -184,3 +184,20 @@ if (BUILD_TESTS)
   include(GoogleTest)
   gtest_discover_tests(unit_tests)
 endif()
+
+# Rego
+
+FetchContent_Declare(
+  regocpp
+  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
+  GIT_TAG        main
+)
+       
+FetchContent_MakeAvailable(regocpp)
+
+## To be improved
+target_include_directories(${SCITT_TARGET} PRIVATE
+ /tmp/scitt 
+ /tmp/scitt/include 
+ /tmp/scitt/include/lib 
+ ${CMAKE_BINARY_DIR}/_deps/snmalloc-src/src/snmalloc/ds_core)

@@ -53,6 +53,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <rego/rego.hh>
 
 namespace scitt
 {

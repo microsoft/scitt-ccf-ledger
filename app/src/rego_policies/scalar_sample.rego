@@ -1,0 +1,3 @@
+package scalars
+
+greeting := "Hello"
