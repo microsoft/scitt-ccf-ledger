@@ -195,6 +195,11 @@ FetchContent_Declare(
        
 FetchContent_MakeAvailable(regocpp)
 
+# set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
+set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+target_link_libraries(${SCITT_TARGET} PRIVATE regocpp::rego)
+
 ## To be improved
 target_include_directories(${SCITT_TARGET} PRIVATE
  /tmp/scitt 
