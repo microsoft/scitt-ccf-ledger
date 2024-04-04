@@ -15,6 +15,20 @@ project(scitt
   LANGUAGES C CXX
 )
 
+# Rego
+
+FetchContent_Declare(
+  regocpp
+  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
+  GIT_TAG        main
+)
+       
+FetchContent_MakeAvailable(regocpp)
+
+#set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
+set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+
 set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
@@ -185,24 +199,5 @@ if (BUILD_TESTS)
   gtest_discover_tests(unit_tests)
 endif()
 
-# Rego
-
-FetchContent_Declare(
-  regocpp
-  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
-  GIT_TAG        main
-)
-       
-FetchContent_MakeAvailable(regocpp)
-
-# set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
-set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
-
+# link rego libraries
 target_link_libraries(${SCITT_TARGET} PRIVATE regocpp::rego)
-
-## To be improved
-target_include_directories(${SCITT_TARGET} PRIVATE
- /tmp/scitt 
- /tmp/scitt/include 
- /tmp/scitt/include/lib 
- ${CMAKE_BINARY_DIR}/_deps/snmalloc-src/src/snmalloc/ds_core)
