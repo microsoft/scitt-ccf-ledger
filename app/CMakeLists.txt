@@ -15,20 +15,6 @@ project(scitt
   LANGUAGES C CXX
 )
 
-# Rego
-
-FetchContent_Declare(
-  regocpp
-  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
-  GIT_TAG        main
-)
-       
-FetchContent_MakeAvailable(regocpp)
-
-#set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
-set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
-
-
 set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
@@ -39,6 +25,19 @@ set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)
 set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path to the DID Web resolver script")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Import Rego libraries
+
+FetchContent_Declare(
+  regocpp
+  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
+  GIT_TAG        main
+)
+       
+set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
+
+FetchContent_MakeAvailable(regocpp)
+set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 if (CCF_UNSAFE)
   if (NOT ${COMPILE_TARGET} STREQUAL "sgx")
@@ -73,6 +72,9 @@ if (COMPILE_TARGET STREQUAL "sgx")
 elseif (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
 endif ()
+
+# link REGO libraries
+target_link_libraries(${SCITT_TARGET} PUBLIC regocpp::rego)
 
 # The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
 # -isystem, which silences any warnings in them, which is undesirable for our
@@ -198,6 +200,3 @@ if (BUILD_TESTS)
   include(GoogleTest)
   gtest_discover_tests(unit_tests)
 endif()
-
-# link rego libraries
-target_link_libraries(${SCITT_TARGET} PRIVATE regocpp::rego)
