@@ -11,6 +11,7 @@
 #include <ccf/endpoint.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
+#include <rego/rego.hh>
 
 namespace scitt
 {
@@ -141,6 +142,12 @@ namespace scitt
     {
       GetVersion::Out out;
       out.scitt_version = SCITT_VERSION;
+
+      rego::Interpreter rego;
+      /* auto rego_interpreter = rego::Interpreter();
+      rego_interpreter.add_data_json_file("./rego_policies/scalar_sample.rego");
+
+      out.scitt_version = rego_interpreter.query("data.scalars.greeting");*/
       return out;
     };
 
