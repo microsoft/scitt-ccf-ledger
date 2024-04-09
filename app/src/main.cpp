@@ -45,6 +45,7 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <openssl/evp.h>
+#include <rego/rego.hh>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -53,7 +54,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <rego/rego.hh>
 
 namespace scitt
 {
