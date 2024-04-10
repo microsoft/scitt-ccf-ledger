@@ -48,18 +48,23 @@ set(CMAKE_GENERATED_COMMENT
 )
 configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
+if (COMPILE_TARGET STREQUAL "sgx")
+  set(SCITT_TARGET scitt.enclave)
+elseif (COMPILE_TARGET STREQUAL "virtual")
+  set(SCITT_TARGET scitt.virtual)
+endif ()
+
 # Import Rego libraries
 
-FetchContent_Declare(
-  regocpp
-  GIT_REPOSITORY https://github.com/microsoft/rego-cpp.git
-  GIT_TAG        main
-)
-
-set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
 set(REGOCPP_USE_CXX17 ON)
 
-FetchContent_MakeAvailable(regocpp)
+set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
+set(REGO_SRCS_DIR "${CMAKE_SOURCE_DIR}/../3rdparty/rego-cpp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+
+add_subdirectory(${REGO_SRCS_DIR}/ tmp/scitt/include)
+target_compile_options(rego PUBLIC -stdlib=libc++ -std=gnu++2a)
+target_compile_options(trieste INTERFACE -stdlib=libc++ -std=gnu++2a)
 
 set_property(TARGET rego PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET snmallocshim-static PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -70,12 +75,6 @@ add_ccf_app(scitt
   INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private
   INSTALL_LIBS ON
 )
-
-if (COMPILE_TARGET STREQUAL "sgx")
-  set(SCITT_TARGET scitt.enclave)
-elseif (COMPILE_TARGET STREQUAL "virtual")
-  set(SCITT_TARGET scitt.virtual)
-endif ()
 
 # link REGO libraries
 target_link_libraries(${SCITT_TARGET} PUBLIC regocpp::rego)

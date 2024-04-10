@@ -45,7 +45,6 @@
 #include <map>
 #include <nlohmann/json.hpp>
 #include <openssl/evp.h>
-#include <rego/rego.hh>
 #include <span>
 #include <sstream>
 #include <stdexcept>

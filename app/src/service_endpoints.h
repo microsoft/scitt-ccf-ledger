@@ -11,7 +11,7 @@
 #include <ccf/endpoint.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
-#include <rego/rego.hh>
+#include <rego/rego.hh>   
 
 namespace scitt
 {
@@ -137,18 +137,22 @@ namespace scitt
         .value_or(Configuration{});
     };
 
-    static GetVersion::Out get_version(
+    static std::string get_version(
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       GetVersion::Out out;
-      out.scitt_version = SCITT_VERSION;
+      out.scitt_version = SCITT_VERSION; 
 
-      rego::Interpreter rego;
-      /* auto rego_interpreter = rego::Interpreter();
-      rego_interpreter.add_data_json_file("./rego_policies/scalar_sample.rego");
+      std::filesystem::path path = std::filesystem::current_path().parent_path();
 
-      out.scitt_version = rego_interpreter.query("data.scalars.greeting");*/
-      return out;
+      std::filesystem::path regopath = path / "app/src/rego_policies/scalar_sample.rego";
+
+      auto rego_interpreter = rego::Interpreter();
+      rego_interpreter.add_module_file(regopath);
+
+      out.scitt_version = rego_interpreter.query("data.scalars.greeting");
+
+      return out.scitt_version;
     };
 
     static did::DidDocument get_did_document(
