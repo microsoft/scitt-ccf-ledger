@@ -1,3 +1,6 @@
 [submodule "3rdparty/attested-fetch"]
 	path = 3rdparty/attested-fetch
 	url = https://github.com/microsoft/attested-fetch.git
+[submodule "3rdparty/rego-cpp"]
+	path = 3rdparty/rego-cpp
+	url = https://github.com/microsoft/rego-cpp.git
