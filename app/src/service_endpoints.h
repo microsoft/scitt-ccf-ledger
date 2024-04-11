@@ -11,7 +11,7 @@
 #include <ccf/endpoint.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
-#include <rego/rego.hh>   
+#include <rego/rego.hh>
 
 namespace scitt
 {
@@ -141,11 +141,13 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       GetVersion::Out out;
-      out.scitt_version = SCITT_VERSION; 
+      out.scitt_version = SCITT_VERSION;
 
-      std::filesystem::path path = std::filesystem::current_path().parent_path();
+      std::filesystem::path path =
+        std::filesystem::current_path().parent_path();
 
-      std::filesystem::path regopath = path / "app/src/rego_policies/scalar_sample.rego";
+      std::filesystem::path regopath =
+        path / "app/src/rego_policies/scalar_sample.rego";
 
       auto rego_interpreter = rego::Interpreter();
       rego_interpreter.add_module_file(regopath);
