@@ -56,11 +56,9 @@ endif ()
 
 # Import Rego libraries
 
-set(REGOCPP_USE_CXX17 ON)
-
 set(SNMALLOC_ENABLE_DYNAMIC_LOADING ON)
 set(REGO_SRCS_DIR "${CMAKE_SOURCE_DIR}/../3rdparty/rego-cpp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=gnu++2a")
 
 add_subdirectory(${REGO_SRCS_DIR}/ tmp/scitt/include)
 target_compile_options(rego PUBLIC -stdlib=libc++ -std=gnu++2a)
