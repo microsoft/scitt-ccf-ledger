@@ -147,12 +147,23 @@ namespace scitt
         std::filesystem::current_path().parent_path();
 
       std::filesystem::path regopath =
-        path / "app/src/rego_policies/scalar_sample.rego";
+        path / "app/src/rego_policies/sample_rule.rego";
 
       auto rego_interpreter = rego::Interpreter();
       rego_interpreter.add_module_file(regopath);
 
-      out.scitt_version = rego_interpreter.query("data.scalars.greeting");
+      nlohmann::json rego_input = R"(
+      {
+          "scitt" : "test"
+      }
+      )"_json;
+
+
+      rego_interpreter.set_input_json(rego_input.dump());
+
+      out.scitt_version = rego_interpreter.query("allowed");
+
+      //out.scitt_version = rego_interpreter.query("input.scitt");
 
       return out.scitt_version;
     };
