@@ -506,6 +506,17 @@ const actions = new Map([
     ),
   ],
   [
+    "set_payload_schema",
+    new Action(
+      function (args) {
+        checkType(args.schema, "string", "schema");
+      },
+      function (args) {
+        ccf.kv["public:ccf.gov.scitt.schema"].set(getSingletonKvKey(), ccf.strToBuf(args));
+      }
+    ),
+  ],
+  [
     "remove_user",
     new Action(
       function (args) {

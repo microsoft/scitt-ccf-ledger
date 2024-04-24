@@ -168,6 +168,16 @@ def set_ca_bundle_proposal(name: str, bundle: str) -> dict:
     }
 
 
+def set_payload_schema_proposal():
+    return {
+        "actions": [
+            {
+                "name": "set_payload_schema",
+                "args": {"schema": "test"},
+            }
+        ]
+    }
+
 def transition_service_to_open_proposal(
     next_service_identity: str, previous_service_identity: Optional[str] = None
 ) -> dict:

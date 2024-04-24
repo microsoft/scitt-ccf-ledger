@@ -206,4 +206,8 @@ namespace scitt
     "public:ccf.gov.scitt.configuration";
   using ConfigurationTable = kv::JsonSerialisedValue<Configuration>;
 
+  static constexpr auto SCHEMA_CONFIGURATION_TABLE =
+    "public:ccf.gov.scitt.schema";
+  using SchemaConfigurationTable = kv::RawCopySerialisedValue<std::string>;
+
 } // namespace scitt

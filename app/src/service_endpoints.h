@@ -141,6 +141,13 @@ namespace scitt
     {
       GetVersion::Out out;
       out.scitt_version = SCITT_VERSION;
+
+      auto cfg = ctx.tx.template ro<SchemaConfigurationTable>(SCHEMA_CONFIGURATION_TABLE)
+              ->get();
+              // .value_or(std::string{});
+
+      out.scitt_version = cfg.value();
+
       return out;
     };
 

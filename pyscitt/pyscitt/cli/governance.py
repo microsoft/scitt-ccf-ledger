@@ -228,6 +228,9 @@ def setup_local_development(
         path = trust_store_dir.joinpath(service_id + ".json")
         path.write_text(json.dumps(parameters))
 
+    print("Setting payload schema proposal")
+    proposal = governance.set_payload_schema_proposal()
+    client.governance.propose(proposal)
 
 def cli(fn):
     parser = fn(description="Execute governance actions")
