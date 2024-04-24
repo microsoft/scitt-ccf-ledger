@@ -512,7 +512,7 @@ const actions = new Map([
         checkType(args.schema, "string", "schema");
       },
       function (args) {
-        ccf.kv["public:ccf.gov.scitt.schema"].set(getSingletonKvKey(), ccf.strToBuf(args));
+        ccf.kv["public:ccf.gov.scitt.schema"].set(getSingletonKvKey(), ccf.jsonCompatibleToBuf(args));
       }
     ),
   ],

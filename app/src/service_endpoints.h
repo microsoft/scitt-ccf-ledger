@@ -141,14 +141,18 @@ namespace scitt
     {
       GetVersion::Out out;
       out.scitt_version = SCITT_VERSION;
+      
+      return out;
+    };
 
+    static std::string get_schemas(
+      ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
+    {
       auto cfg = ctx.tx.template ro<SchemaConfigurationTable>(SCHEMA_CONFIGURATION_TABLE)
               ->get();
               // .value_or(std::string{});
 
-      out.scitt_version = cfg.value();
-
-      return out;
+      return cfg.value();
     };
 
     static did::DidDocument get_did_document(
@@ -275,6 +279,17 @@ namespace scitt
         ccf::json_adapter(std::bind(
           endpoints::get_did_document, service_certificate_index, _1, _2)),
         {ccf::empty_auth_policy})
+      .install();
+
+    // Get the submitted payload Schemas
+    registry
+      .make_endpoint(
+        "/schemas",
+        HTTP_GET,
+        ccf::json_adapter(endpoints::get_schemas),
+        no_authn_policy)
+      .set_auto_schema<void, std::string>()
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
   }
 }
