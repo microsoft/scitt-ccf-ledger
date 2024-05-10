@@ -18,7 +18,6 @@ variables:
   # SGX container setup through "LinuxContainerImage2" does not work in the custom pool of SGX VMs and the default ones do not support SGX
   LinuxContainerImage: 'mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-virtual' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
-  IsOfficialBuild: false
   # CodeQL settings to target the remote repository instead of this wrapper one
   Codeql.Language: 'cpp,python,javascript'
   Codeql.ADO.Build.Repository.Provider: override # reference another repository
@@ -37,7 +36,7 @@ resources:
       ref: $(Build.SourceBranch)
 
 extends:
-  template: v2/OneBranch.Official.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
   parameters:
     cloudvault: # https://aka.ms/obpipelines/cloudvault
       enabled: false
@@ -69,8 +68,6 @@ extends:
             system: 'Patch'
             major: '1'
             minor: '0'
-            ${{ if or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')) }}:
-              tag: official
             name: scitt-ccf-ledger
     
     - stage: test_virtual_vm_build
