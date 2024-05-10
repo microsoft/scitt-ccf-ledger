@@ -1,0 +1,81 @@
+{
+    "tool": "Credential Scanner",
+    "suppressions": [
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/docs/MANUAL.md",
+            "_justification": "Third party documentation"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/lib/urldata.h",
+            "_justification": "Default publicly known value"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/stunnel.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/EdelCurlRoot-ca.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-firstSAN-sv.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-firstSAN-sv.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-lastSAN-sv.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-lastSAN-sv.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-sv.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost-sv.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost.nn-sv.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost.nn-sv.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost0h-sv.key",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/certs/Server-localhost0h-sv.pem",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/libtest/lib1507.c",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/libtest/lib1560.c",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/libtest/lib1560.c",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/libtest/lib1560.c",
+            "_justification": "Third party test folder"
+        },
+        {
+            "file": "3rdparty/attested-fetch/3rdparty/openenclave-curl/curl/tests/python_dependencies/impacket/smb.py",
+            "_justification": "Third party test folder"
+        }
+    ]
+}

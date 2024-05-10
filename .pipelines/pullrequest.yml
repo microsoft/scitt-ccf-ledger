@@ -1,0 +1,257 @@
+trigger: none
+
+parameters: # parameters are shown up in ADO UI in a build queue time
+- name: debug
+  displayName: Enable debug output
+  type: boolean
+  default: false
+- name: CCF_VERSION
+  displayName: Target CCF version to build for
+  type: string
+  default: 4.0.16
+
+variables:
+  SCITT_CI: 1 # used in scitt builds and tests
+  DEBIAN_FRONTEND: noninteractive # do not expect the user to provide answers to some commands
+  SETUPTOOLS_USE_DISTUTILS: stdlib # python recommended fix for ubuntu 22.04
+  # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
+  # SGX container setup through "LinuxContainerImage2" does not work in the custom pool of SGX VMs and the default ones do not support SGX
+  LinuxContainerImage: 'mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-virtual' # implicit default but otherwise could be set like => target: 'linux_build_container'
+  CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
+  # CodeQL settings to target the remote repository instead of this wrapper one
+  Codeql.Language: 'cpp,python,javascript'
+  Codeql.ADO.Build.Repository.Provider: override # reference another repository
+  Codeql.ADO.Build.Repository.Uri: https://github.com/microsoft/scitt-ccf-ledger # reference another repository
+
+resources:
+  repositories: 
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+    - repository: SCITT
+      type: github
+      endpoint: microsoft
+      name: microsoft/scitt-ccf-ledger
+      ref: $(Build.SourceBranch)
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
+  parameters:
+    cloudvault: # https://aka.ms/obpipelines/cloudvault
+      enabled: false
+    globalSdl: # https://aka.ms/obpipelines/sdl
+      perStage:
+        sdl_sources:
+          checkout_all_repos: true
+      tsa:
+       enabled: false
+      credscan:
+        suppressionsFile: $(Build.SourcesDirectory)/.config/CredScanSuppressions.json
+      policheck:
+        break: true
+      codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
+        compiled: 
+          enabled: true
+    stages:
+    - stage: setup
+      jobs:
+      - job: setup
+        pool:
+          type: linux
+        variables:    
+          ob_outputDirectory: '$(Build.SourcesDirectory)/out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
+        steps:
+        - task: onebranch.pipeline.version@1 # generates automatic version. For other versioning options check https://aka.ms/obpipelines/versioning
+          displayName: Setup BuildNumber
+          inputs:
+            system: 'Patch'
+            major: '1'
+            minor: '0'
+            name: scitt-ccf-ledger
+    
+    - stage: test_virtual_vm_build
+      jobs:
+      
+      - job: format
+        displayName: Code Formatting
+        pool:
+          type: linux
+        variables:    
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+        steps:
+        - checkout: SCITT
+          path: s/
+          submodules: recursive
+          lfs: false
+        - script: $(Build.SourcesDirectory)/scripts/ci-checks.sh
+          displayName: "CI checks"
+
+      - template: .pipelines/local_virtual_build.yml@self # https://learn.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops&pivots=templates-includes#use-other-repositories
+        parameters:
+          Name: clang_tidy
+          DisplayName: Clang tidy
+          RunTests: false
+          Environment:
+            CMAKE_BUILD_TYPE: Debug
+            ENABLE_PREFIX_TREE: ON
+            ENABLE_CLANG_TIDY: ON
+          InstallPackages: [ libcurl4-openssl-dev, clang-tidy-10 ]
+
+      - template: .pipelines/local_virtual_build.yml@self
+        parameters:
+          Name: test_virtual
+          DisplayName: Build and test (Virtual, with prefix tree)
+          Environment:
+            ENABLE_PREFIX_TREE: ON
+          FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
+          InstallPackages: [ libcurl4-openssl-dev, faketime ]
+
+    - stage: test_virtual_docker_build
+      jobs:
+      - job: test_virtual_docker
+        pool: 
+          type: linux
+          isCustom: true
+          name: scitt-dc-pool
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          PLATFORM: virtual
+          CXXFLAGS: -ferror-limit=0
+          NINJA_FLAGS: -k 0
+          ENABLE_PREFIX_TREE: ON
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            fetchTags: true
+            fetchDepth: 0
+            lfs: false
+          - script: ./docker/build.sh
+            displayName: Build virtual with Docker
+          - template: .pipelines/python.yml@self
+          - script: ./run_functional_tests.sh
+            displayName: Run Functional Tests
+            env:
+              PLATFORM: virtual
+              DOCKER: 1
+              ELEVATE_PRIVILEGES: true
+
+    - stage: test_sgx_vm_container_build
+      jobs:
+      
+      ## About SGX support on OneBranch
+      # Local sgx build is not possible without changing the vm image in the pool
+      # from ubuntu 22 to ubuntu 20 because dcap was not released to v22 and is not
+      # installable. This was because openenclave is scheduled for deprecation. 
+      # Ubuntu 20 image with sgx support does not exist in the marketplace for us to switch to.
+      # Alternatively, it was being executed through the container in azure pipelines but
+      # when using custom pool image the usual container build support is not there so it 
+      # need to be run manually through docker.
+
+      - job: test_sgx_no_prefixtree_with_perf
+        pool: 
+          type: linux
+          isCustom: true
+          name: scitt-dc-pool
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            lfs: false
+          - script: |
+              docker run --rm \
+                --device /dev/sgx_enclave:/dev/sgx_enclave \
+                --device /dev/sgx_provision:/dev/sgx_provision \
+                --volume /dev/sgx:/dev/sgx \
+                --volume /var/run/docker.sock:/var/run/docker.sock \
+                --volume $(pwd):/opt/app \
+                --workdir /opt/app \
+                --env PLATFORM="sgx" \
+                --env CMAKE_BUILD_TYPE="Release" \
+                --env CCF_UNSAFE="OFF" \
+                --env ENABLE_PREFIX_TREE="OFF" \
+                --env BUILD_TESTS="OFF" \
+                --env ENABLE_CLANG_TIDY="OFF" \
+                --env NINJA_FLAGS="-k 0" \
+                --env CXXFLAGS="-ferror-limit=0" \
+                --env ENABLE_PERF_TESTS="true" \
+                mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx /bin/bash -c '\
+                  git config --global --add safe.directory "*"; \
+                  sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
+                  sudo usermod -a -G sgx_prv $(whoami); \
+                  ./build.sh && \
+                  ./run_functional_tests.sh; \
+                  '
+            displayName: Build test sgx through a dev container
+      
+      - job: test_sgx_with_prefixtree_no_perf
+        pool: 
+          type: linux
+          isCustom: true
+          name: scitt-dc-pool
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            lfs: false
+          - script: |
+              docker run --rm \
+                --device /dev/sgx_enclave:/dev/sgx_enclave \
+                --device /dev/sgx_provision:/dev/sgx_provision \
+                --volume /dev/sgx:/dev/sgx \
+                --volume /var/run/docker.sock:/var/run/docker.sock \
+                --volume $(pwd):/opt/app \
+                --workdir /opt/app \
+                --env PLATFORM="sgx" \
+                --env CMAKE_BUILD_TYPE="Release" \
+                --env CCF_UNSAFE="OFF" \
+                --env ENABLE_PREFIX_TREE="ON" \
+                --env BUILD_TESTS="OFF" \
+                --env ENABLE_CLANG_TIDY="OFF" \
+                --env NINJA_FLAGS="-k 0" \
+                --env CXXFLAGS="-ferror-limit=0" \
+                mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx /bin/bash -c '\
+                  sudo apt-get update && sudo apt-get install -y faketime; \
+                  git config --global --add safe.directory "*"; \
+                  sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
+                  sudo usermod -a -G sgx_prv $(whoami); \
+                  ./build.sh && \
+                  ./run_functional_tests.sh --enable-prefix-tree --enable-faketime; \
+                  '
+            displayName: Build test sgx through a dev container
+
+    - stage: test_sgx_docker_build
+      jobs:
+      - job: test_sgx_docker_build
+        pool: 
+          type: linux
+          isCustom: true
+          name: scitt-dc-pool
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          PLATFORM: sgx
+          CXXFLAGS: -ferror-limit=0
+          NINJA_FLAGS: -k 0
+          ENABLE_PREFIX_TREE: ON
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            fetchTags: true
+            fetchDepth: 0
+            lfs: false
+          - script: ./docker/build.sh
+            displayName: Build sgx with Docker
+          - template: .pipelines/python.yml@self
+          - script: ./run_functional_tests.sh
+            displayName: Run Functional Tests
+            env:
+              PLATFORM: sgx
+              DOCKER: 1
+              ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
+
