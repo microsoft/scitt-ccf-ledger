@@ -1,45 +1,62 @@
 # Reproducibility
 
-The assumption here is that the original build was done using a Docker build. The
-goal is to reproduce the same MRENCLAVE value. 
+The ledger application is running in an Intel SGX enclave and has a measurement (`MRENCLAVE` value) associated with it which does not change. The goal is to reproduce the same measured value from the source code to ensure the code can be trusted, transparent and auditable.
 
-You need a couple pieces of information to begin:
+The assumption here is that the original build was done using a Docker.
 
-- The source MRENCLAVE value, get it from `https://<LEDGER-URL>/node/quotes/self` (replace <LEDGER-URL> with the URL of your ledger), e.g.:
+## Prerequisites
 
-    ```json
-    {
-        "endorsements": "AQAAAAIAAADZL...UMTI6NTU6MTFaAA==",
-        "format": "OE_SGX_v1",
-        "mrenclave": "fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966",
-        "node_id": "247f1df23e22256cc5bc5e8822183117bc5967da41a257d307f9b1153a4f1853",
-        "raw": "AwACAAAAAAAIAA...ViynsClboLw="
-    }
+You need a couple pieces of information to begin with:
+
+- The ledger certificate. It might be distributed in a variety of ways by the ledger operator, please follow their guidance. Otherwise it is accessible at `https://<LEDGER-URL>/app/parameters`.
+
+- The measurement of a running application code, get it from `https://<LEDGER-URL>/node/quotes/self` (replace <LEDGER-URL> with the URL of your ledger), e.g.:
+
+    ```sh
+    $ curl -s --cacert cacert.pem https://<LEDGER-URL>/node/quotes/self | jq .mrenclave
+    "96c40e2532ba329849e7fede3f3d888a0423a1dc0f3d0511b138617cc3aa9e94"
     ```
-- Git commit id that built this version. This is something that has no specifc mapping at the moment. You would need to check the build logs of the SGX Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
+- Source code version which was used to build the application, usually found in `https://<LEDGER-URL>/app/version`. If `app/version` is ambiguous then check the build logs of the SGX Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
 
-To reproduce the same MRENCLAVE value which would be deployed to CCF 
-do a docker build locally but inside of the development version of CCF image:
+    ```sh
+    $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".scitt_version"
+    "0.7.2"
+    ```
 
-- Clone the repository and check out the tag or commit id that built the binary which had specific MRENCLAVE.
-- Identify the expected CCF version by inspecting the [Dockerfile](docker/enclave.Dockerfile).
-- Run a build inside of the CCF docker image:
+## Reproduce measurement
+
+To reproduce the same measurement do a docker build locally using the expected build image from [`microsoft/CCF`](https://github.com/microsoft/ccf):
+
+- Clone the repository and check out the tag or commit id that built the binary:
 
     ```
-    CCF_VERSION="4.0.17"
-    docker run -it --rm \
+    $ git clone ...
+    ...
+    $ git checkout 0.7.2
+    ```
+
+- Identify the expected CCF build image version by inspecting the [Dockerfile](docker/enclave.Dockerfile) used for building the binary:
+
+    ```
+    $ cat docker/enclave.Dockerfile | grep CCF_VERSION=
+    ARG CCF_VERSION=4.0.17
+    ```
+
+- Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
+
+    ```sh
+    $ export CCF_VERSION="4.0.17"
+    $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
         --env PLATFORM=sgx \
-        --env CXXFLAGS="-ferror-limit=0" \
-        --env NINJA_FLAGS="-k 0" \
         mcr.microsoft.com/ccf/app/dev:"$CCF_VERSION"-sgx git config --global --add safe.directory "*" && ./docker/build.sh
     ```
-- The build will print the value of MRENCLAVE in the log, similar to:
+- The build will print the value of `MRENCLAVE` in the output, similar to:
 
-    ```
-    <...>
+    ```sh
     mrenclave.txt
-    fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966
+    96c40e2532ba329849e7fede3f3d888a0423a1dc0f3d0511b138617cc3aa9e94
     ```
 
+- As you can see in the example, the value printed in the build output matched the one from a running application.
