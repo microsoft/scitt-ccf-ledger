@@ -30,9 +30,9 @@ if (CCF_UNSAFE)
     message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
   endif()
 
-  find_package(ccf_sgx_unsafe 4.0.17 REQUIRED)
+  find_package(ccf_sgx_unsafe 5.0.0 REQUIRED)
 else()
-  find_package(ccf_${COMPILE_TARGET} 4.0.17 REQUIRED)
+  find_package(ccf_${COMPILE_TARGET} 5.0.0 REQUIRED)
 endif()
 
 if (ENABLE_PREFIX_TREE)

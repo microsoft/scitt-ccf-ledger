@@ -141,7 +141,7 @@ namespace scitt::did
     auto mrenclave = evidence_result.claims.at("unique_id");
 
     std::vector<uint8_t> expected_mrenclave =
-      ds::from_hex(ATTESTED_FETCH_MRENCLAVE_HEX);
+      ccf::ds::from_hex(ATTESTED_FETCH_MRENCLAVE_HEX);
     if (mrenclave != expected_mrenclave)
     {
       throw AttestedResolutionError("MRENCLAVE does not match expected value");
@@ -149,9 +149,10 @@ namespace scitt::did
 
     // Match sgx_report_data custom claim against hash of format and data.
     auto sgx_report_data = evidence_result.custom_claims.at("sgx_report_data");
-    auto format_hash = crypto::Sha256Hash(to_string(resolution.format));
-    auto data_hash = crypto::Sha256Hash(resolution.data);
-    auto computed_sgx_report_data = crypto::Sha256Hash(format_hash, data_hash);
+    auto format_hash = ccf::crypto::Sha256Hash(to_string(resolution.format));
+    auto data_hash = ccf::crypto::Sha256Hash(resolution.data);
+    auto computed_sgx_report_data =
+      ccf::crypto::Sha256Hash(format_hash, data_hash);
     auto computed_sgx_report_data_vec = std::vector<uint8_t>(
       computed_sgx_report_data.h.begin(), computed_sgx_report_data.h.end());
     if (sgx_report_data != computed_sgx_report_data_vec)
@@ -273,10 +274,10 @@ namespace scitt::did
     auto trusted_vec = split_x509_cert_bundle(ca_certs.value_or(""));
 
     // Verify TLS certificate chain against Root CAs.
-    std::vector<crypto::Pem> chain_vec;
+    std::vector<ccf::crypto::Pem> chain_vec;
     for (auto& cert : fetch_data.result->certs)
     {
-      chain_vec.push_back(crypto::Pem(cert));
+      chain_vec.push_back(ccf::crypto::Pem(cert));
     }
     if (chain_vec.empty())
     {
@@ -285,21 +286,21 @@ namespace scitt::did
     }
 
     auto& target_pem = chain_vec[0];
-    std::vector<const crypto::Pem*> chain_ptr;
+    std::vector<const ccf::crypto::Pem*> chain_ptr;
     chain_ptr.reserve(chain_vec.size() - 1);
     for (auto it = chain_vec.begin() + 1; it != chain_vec.end(); it++)
     {
       chain_ptr.push_back(&*it);
     }
 
-    std::vector<const crypto::Pem*> trusted_ptr;
+    std::vector<const ccf::crypto::Pem*> trusted_ptr;
     trusted_ptr.reserve(trusted_vec.size());
     for (auto& pem : trusted_vec)
     {
       trusted_ptr.push_back(&pem);
     }
 
-    auto verifier = crypto::make_unique_verifier(target_pem);
+    auto verifier = ccf::crypto::make_unique_verifier(target_pem);
     if (!verifier->verify_certificate(trusted_ptr, chain_ptr))
     {
       throw AttestedResolutionError("Certificate chain is invalid");

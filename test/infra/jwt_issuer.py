@@ -25,6 +25,9 @@ class JwtIssuer:
         if "exp" not in claims:
             # Insert default Expiration Time claim, valid for ~1hr
             claims["exp"] = now + 3600
+        if "iss" not in claims:
+            # Insert default Expiration Time claim, valid for ~1hr
+            claims["iss"] = self.name
         return crypto.create_jwt(claims, self.key, self.key_id)
 
     def create_proposal(self) -> dict:

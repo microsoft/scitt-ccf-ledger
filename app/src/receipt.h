@@ -166,7 +166,7 @@ namespace scitt
 
     auto& write_set_digest = proof_receipt->leaf_components.write_set_digest;
     auto& commit_evidence = proof_receipt->leaf_components.commit_evidence;
-    auto node_cert_der = crypto::cert_pem_to_der(proof_receipt->cert);
+    auto node_cert_der = ccf::crypto::cert_pem_to_der(proof_receipt->cert);
 
     // Contents array: [signature, node_certificate, inclusion_proof, leaf_info]
     QCBOREncode_OpenArray(ctx);

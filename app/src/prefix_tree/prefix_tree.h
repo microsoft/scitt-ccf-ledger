@@ -26,12 +26,12 @@ namespace scitt::pt
    * nodes, but this implementation suffices for any application using SHA256.
    */
   template <size_t SIZE>
-  crypto::Sha256Hash hash_node(
+  ccf::crypto::Sha256Hash hash_node(
     const pt::bitprefix<SIZE>& prefix,
-    const crypto::Sha256Hash& left,
-    const crypto::Sha256Hash& right)
+    const ccf::crypto::Sha256Hash& left,
+    const ccf::crypto::Sha256Hash& right)
   {
-    auto h = crypto::make_incremental_sha256();
+    auto h = ccf::crypto::make_incremental_sha256();
     h->update_hash(prefix.data());
     h->update_hash(left.h);
     h->update_hash(right.h);
@@ -60,7 +60,7 @@ namespace scitt::pt
    */
   template <
     typename ValueT,
-    typename HashT = crypto::Sha256Hash,
+    typename HashT = ccf::crypto::Sha256Hash,
     size_t SIZE = 32>
   struct leaf
   {
@@ -70,7 +70,7 @@ namespace scitt::pt
   };
 
   template <
-    typename HashT = crypto::Sha256Hash,
+    typename HashT = ccf::crypto::Sha256Hash,
     size_t SIZE = 32,
     hash_node_t<SIZE, HashT> HASH_NODE = hash_node<SIZE>>
   struct path
@@ -136,7 +136,7 @@ namespace scitt::pt
    */
   template <
     typename ValueT,
-    typename HashT = crypto::Sha256Hash,
+    typename HashT = ccf::crypto::Sha256Hash,
     size_t SIZE = 32,
     hash_node_t<SIZE, HashT> HASH_NODE = hash_node<SIZE>>
   struct prefix_tree
@@ -299,8 +299,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         leaf->index == index,
         "invalid leaf index: {} vs {}",
-        ds::to_hex(leaf->index.data()),
-        ds::to_hex(index.data()));
+        ::ds::to_hex(leaf->index.data()),
+        ::ds::to_hex(index.data()));
       return {{result, std::get<leaf_ptr>(*p)->value}};
     }
 
@@ -438,8 +438,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           found->index == l.index,
           "invalid leaf index: {} vs {}",
-          ds::to_hex(found->index.data()),
-          ds::to_hex(l.index.data()));
+          ::ds::to_hex(found->index.data()),
+          ::ds::to_hex(l.index.data()));
         *found = l;
       }
 
@@ -510,8 +510,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           previous->index <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ds::to_hex(previous->index.data()),
-          ds::to_hex(l.index.data()));
+          ::ds::to_hex(previous->index.data()),
+          ::ds::to_hex(l.index.data()));
 
         depth = common_prefix(previous->index, l.index);
         rewind(depth);
@@ -567,8 +567,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         found->index == l.index,
         "invalid leaf index: {} vs {}",
-        ds::to_hex(found->index.data()),
-        ds::to_hex(l.index.data()));
+        ::ds::to_hex(found->index.data()),
+        ::ds::to_hex(l.index.data()));
       *found = l;
     }
 
@@ -646,8 +646,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           *last_leaf <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ds::to_hex(last_leaf->data()),
-          ds::to_hex(l.index.data()));
+          ::ds::to_hex(last_leaf->data()),
+          ::ds::to_hex(l.index.data()));
 
         size_t prefix = common_prefix(*last_leaf, l.index);
 
@@ -826,8 +826,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         leaf->index == index,
         "invalid leaf index: {} vs {}",
-        ds::to_hex(leaf->index.data()),
-        ds::to_hex(index.data()));
+        ::ds::to_hex(leaf->index.data()),
+        ::ds::to_hex(index.data()));
 
       stack.back().right = nullptr;
       stack.back().visited_left = true;
@@ -914,8 +914,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           *last_leaf <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ds::to_hex(last_leaf->data()),
-          ds::to_hex(l.index.data()));
+          ::ds::to_hex(last_leaf->data()),
+          ::ds::to_hex(l.index.data()));
 
         size_t prefix = common_prefix(*last_leaf, l.index);
 

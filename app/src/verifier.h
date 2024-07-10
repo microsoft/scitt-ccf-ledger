@@ -68,7 +68,7 @@ namespace scitt::verifier
 
     PublicKey process_ietf_profile(
       const cose::ProtectedHeader& phdr,
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
@@ -136,7 +136,7 @@ namespace scitt::verifier
 
     PublicKey process_x509_profile(
       const cose::ProtectedHeader& phdr,
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       const Configuration& configuration)
     {
       // X.509 SCITT profile validation.
@@ -284,7 +284,7 @@ namespace scitt::verifier
     PublicKey process_notary_profile(
       const cose::ProtectedHeader& phdr,
       const cose::UnprotectedHeader& uhdr,
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       const Configuration& configuration)
     {
       // Validate protected header
@@ -323,7 +323,7 @@ namespace scitt::verifier
 
     ClaimProfile verify_claim(
       const std::vector<uint8_t>& data,
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
@@ -413,7 +413,7 @@ namespace scitt::verifier
      * VerificationError.
      */
     static OpenSSL::Unique_X509 verify_chain(
-      std::span<const crypto::Pem> trusted,
+      std::span<const ccf::crypto::Pem> trusted,
       std::span<const std::vector<uint8_t>> chain)
     {
       if (chain.empty())
@@ -457,7 +457,7 @@ namespace scitt::verifier
 
   private:
     /** Parse a PEM certificate */
-    static OpenSSL::Unique_X509 parse_certificate(const crypto::Pem& pem)
+    static OpenSSL::Unique_X509 parse_certificate(const ccf::crypto::Pem& pem)
     {
       OpenSSL::Unique_BIO bio(pem);
       OpenSSL::Unique_X509 cert(bio, true);
@@ -489,7 +489,8 @@ namespace scitt::verifier
     /**
      * Get the set of trusted x509 CAs from the KV.
      */
-    static std::vector<crypto::Pem> x509_root_store(kv::ReadOnlyTx& tx)
+    static std::vector<ccf::crypto::Pem> x509_root_store(
+      ccf::kv::ReadOnlyTx& tx)
     {
       // TODO: move bundle name to constants and make more specific.
       auto ca_certs =
@@ -531,8 +532,8 @@ namespace scitt::verifier
 
       if (jwk.kty == "RSA" && jwk.n.has_value() && jwk.e.has_value())
       {
-        auto n = crypto::raw_from_b64url(jwk.n.value());
-        auto e = crypto::raw_from_b64url(jwk.e.value());
+        auto n = ccf::crypto::raw_from_b64url(jwk.n.value());
+        auto e = ccf::crypto::raw_from_b64url(jwk.e.value());
         OpenSSL::Unique_BIGNUM n_bn;
         OpenSSL::Unique_BIGNUM e_bn;
         if (BN_bin2bn(n.data(), n.size(), n_bn) == nullptr)
@@ -570,7 +571,7 @@ namespace scitt::verifier
 
       if (jwk.kty == "OKP" && jwk.crv == "Ed25519" && jwk.x.has_value())
       {
-        auto x = crypto::raw_from_b64url(jwk.x.value());
+        auto x = ccf::crypto::raw_from_b64url(jwk.x.value());
         return PublicKey(EVP_PKEY_ED25519, x, cose_alg);
       }
 
@@ -579,8 +580,8 @@ namespace scitt::verifier
         jwk.y.has_value())
       {
         auto crv = jwk.crv.value();
-        auto x = crypto::raw_from_b64url(jwk.x.value());
-        auto y = crypto::raw_from_b64url(jwk.y.value());
+        auto x = ccf::crypto::raw_from_b64url(jwk.x.value());
+        auto y = ccf::crypto::raw_from_b64url(jwk.y.value());
         OpenSSL::Unique_BIGNUM x_bn;
         OpenSSL::Unique_BIGNUM y_bn;
         if (BN_bin2bn(x.data(), x.size(), x_bn) == nullptr)

@@ -173,7 +173,7 @@ namespace scitt
         Unique_SSL_OBJECT(
           BIO_new_mem_buf(d.data(), d.size()), [](auto x) { BIO_free(x); })
       {}
-      Unique_BIO(const crypto::Pem& pem) :
+      Unique_BIO(const ccf::crypto::Pem& pem) :
         Unique_SSL_OBJECT(
           BIO_new_mem_buf(pem.data(), -1), [](auto x) { BIO_free(x); })
       {}
@@ -338,7 +338,7 @@ namespace scitt
       Unique_X509_TIME(const std::string& s) :
         Unique_SSL_OBJECT(ASN1_TIME_new(), ASN1_TIME_free, /*check_null=*/false)
       {
-        auto t = ds::to_x509_time_string(s);
+        auto t = ::ds::to_x509_time_string(s);
         CHECK1(ASN1_TIME_set_string(*this, t.c_str()));
         CHECK1(ASN1_TIME_normalize(*this));
       }
@@ -346,7 +346,7 @@ namespace scitt
         Unique_SSL_OBJECT(t, ASN1_TIME_free, /*check_null=*/false)
       {}
       Unique_X509_TIME(const std::chrono::system_clock::time_point& t) :
-        Unique_X509_TIME(ds::to_x509_time_string(t))
+        Unique_X509_TIME(::ds::to_x509_time_string(t))
       {}
     };
 

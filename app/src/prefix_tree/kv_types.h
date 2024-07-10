@@ -18,5 +18,5 @@ namespace scitt
   DECLARE_JSON_REQUIRED_FIELDS(PrefixTreeInfo, upper_bound, protected_headers);
 
   static constexpr auto PREFIX_TREE_TABLE = "public:scitt.prefix_tree";
-  using PrefixTreeTable = kv::Value<PrefixTreeInfo>;
+  using PrefixTreeTable = ccf::kv::Value<PrefixTreeInfo>;
 }

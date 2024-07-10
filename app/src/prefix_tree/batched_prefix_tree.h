@@ -10,7 +10,9 @@
 
 namespace scitt::pt
 {
-  template <typename SeqNoT = ccf::SeqNo, typename HashT = crypto::Sha256Hash>
+  template <
+    typename SeqNoT = ccf::SeqNo,
+    typename HashT = ccf::crypto::Sha256Hash>
   struct summary
   {
     SeqNoT upper_bound;
@@ -56,7 +58,7 @@ namespace scitt::pt
   template <
     typename ValueT,
     typename SeqNoT = ccf::SeqNo,
-    typename HashT = crypto::Sha256Hash,
+    typename HashT = ccf::crypto::Sha256Hash,
     size_t SIZE = 32>
   struct batched_prefix_tree
   {

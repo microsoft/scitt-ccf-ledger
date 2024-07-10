@@ -35,7 +35,7 @@ namespace scitt
   {
   public:
     static void init_handlers(
-      ccfapp::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
+      ccf::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
     {
       auto self = std::make_shared<PrefixTreeFrontend>(context, registry);
       const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
@@ -80,8 +80,7 @@ namespace scitt
     // This is only public to allow make_shared to work.
     // In practice, init_handlers should be used instead.
     PrefixTreeFrontend(
-      ccfapp::AbstractNodeContext& context,
-      ccf::BaseEndpointRegistry& registry) :
+      ccf::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry) :
       context(context),
       registry(registry),
       index(std::make_shared<PrefixTreeIndexingStrategy>())
@@ -108,7 +107,7 @@ namespace scitt
 
       ctx.rpc_ctx->set_response_body(body);
       ctx.rpc_ctx->set_response_header(
-        http::headers::CONTENT_TYPE, "application/cbor");
+        ccf::http::headers::CONTENT_TYPE, "application/cbor");
     }
 
     void current(ccf::endpoints::ReadOnlyEndpointContext& ctx)
@@ -128,7 +127,7 @@ namespace scitt
 
       ctx.rpc_ctx->set_response_body(body);
       ctx.rpc_ctx->set_response_header(
-        http::headers::CONTENT_TYPE, "application/cbor");
+        ccf::http::headers::CONTENT_TYPE, "application/cbor");
     }
 
     nlohmann::json debug(
@@ -185,8 +184,8 @@ namespace scitt
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
       auto service_cert = service_info.cert;
-      auto service_cert_der = crypto::cert_pem_to_der(service_cert);
-      auto service_id = crypto::Sha256Hash(service_cert_der).hex_str();
+      auto service_cert_der = ccf::crypto::cert_pem_to_der(service_cert);
+      auto service_id = ccf::crypto::Sha256Hash(service_cert_der).hex_str();
 
       PrefixTreeInfo entry;
       entry.upper_bound = tree.upper_bound;
@@ -245,7 +244,7 @@ namespace scitt
       return {info->protected_headers, receipt};
     }
 
-    ccfapp::AbstractNodeContext& context;
+    ccf::AbstractNodeContext& context;
 
     // The only reason we need a reference to the registry is to gain access to
     // get_untrusted_host_time_v1 function, which is unfortunate for a few

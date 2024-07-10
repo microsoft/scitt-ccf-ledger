@@ -21,7 +21,7 @@ namespace scitt
   {
   public:
     std::unique_ptr<ccf::AuthnIdentity> authenticate(
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       const std::shared_ptr<ccf::RpcContext>& ctx,
       std::string& error_reason) override
     {
@@ -110,7 +110,7 @@ namespace scitt
   class ConfigurableEmptyAuthnPolicy : public ccf::EmptyAuthnPolicy
   {
     std::unique_ptr<ccf::AuthnIdentity> authenticate(
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       const std::shared_ptr<ccf::RpcContext>& ctx,
       std::string& error_reason) override
     {

@@ -17,7 +17,7 @@ jobs:
     name: Analyze
     
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/ccf/app/dev:4.0.17-virtual
+    container: mcr.microsoft.com/ccf/app/dev:5.0.0-rc1-virtual
     
     permissions:
       actions: read

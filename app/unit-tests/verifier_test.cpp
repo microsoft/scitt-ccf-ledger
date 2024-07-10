@@ -15,15 +15,16 @@ namespace
    * If `parent` is non-null, it is used to sign the certificate. Otherwise
    * the certificate will be self-signed.
    */
-  std::pair<crypto::Pem, crypto::KeyPairPtr> create_cert(
+  std::pair<ccf::crypto::Pem, ccf::crypto::KeyPairPtr> create_cert(
     const std::string& subject_name,
     bool ca,
-    const std::pair<crypto::Pem, crypto::KeyPairPtr>* parent = nullptr)
+    const std::pair<ccf::crypto::Pem, ccf::crypto::KeyPairPtr>* parent =
+      nullptr)
   {
     std::string valid_from = "19700101000000Z";
     std::string valid_to = "20991231000000Z";
 
-    auto kp = crypto::make_key_pair();
+    auto kp = ccf::crypto::make_key_pair();
     if (parent)
     {
       auto csr = kp->create_csr(subject_name);
@@ -48,12 +49,12 @@ namespace
    * doesn't use it.
    */
   void verify_chain(
-    std::initializer_list<
-      std::reference_wrapper<std::pair<crypto::Pem, crypto::KeyPairPtr>>> store,
-    std::initializer_list<
-      std::reference_wrapper<std::pair<crypto::Pem, crypto::KeyPairPtr>>> chain)
+    std::initializer_list<std::reference_wrapper<
+      std::pair<ccf::crypto::Pem, ccf::crypto::KeyPairPtr>>> store,
+    std::initializer_list<std::reference_wrapper<
+      std::pair<ccf::crypto::Pem, ccf::crypto::KeyPairPtr>>> chain)
   {
-    std::vector<crypto::Pem> store_certs;
+    std::vector<ccf::crypto::Pem> store_certs;
     for (const auto& c : store)
     {
       store_certs.push_back(c.get().first);
@@ -61,7 +62,7 @@ namespace
     std::vector<std::vector<uint8_t>> chain_certs;
     for (const auto& c : chain)
     {
-      chain_certs.push_back(crypto::cert_pem_to_der(c.get().first));
+      chain_certs.push_back(ccf::crypto::cert_pem_to_der(c.get().first));
     }
     Verifier::verify_chain(store_certs, chain_certs);
   }
@@ -170,7 +171,7 @@ TEST(Verifier, GarbageCert)
       {{root.first}},
       {{
         garbage,
-        crypto::cert_pem_to_der(root.first),
+        ccf::crypto::cert_pem_to_der(root.first),
       }}),
     VerificationError);
 
@@ -178,7 +179,7 @@ TEST(Verifier, GarbageCert)
     Verifier::verify_chain(
       {{root.first}},
       {{
-        crypto::cert_pem_to_der(leaf.first),
+        ccf::crypto::cert_pem_to_der(leaf.first),
         garbage,
       }}),
     VerificationError);

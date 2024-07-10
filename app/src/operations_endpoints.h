@@ -183,7 +183,8 @@ namespace scitt
      * ServiceUnavailableError is thrown, allowing the caller to try again
      * later. Otherwise a BadRequestError or NotFoundError is thrown.
      */
-    crypto::Sha256Hash get_context_digest(const ccf::TxID& operation_id) const
+    ccf::crypto::Sha256Hash get_context_digest(
+      const ccf::TxID& operation_id) const
     {
       std::lock_guard guard(lock);
 
@@ -463,7 +464,7 @@ namespace scitt
       time_t created_at;
       std::optional<ccf::TxID> completion_tx;
       std::optional<ODataError> error;
-      std::optional<crypto::Sha256Hash> context_digest;
+      std::optional<ccf::crypto::Sha256Hash> context_digest;
     };
 
     // It might be worth replacing this with a deque. Entries are only ever
@@ -531,7 +532,7 @@ namespace scitt
       auto expected_context_digest = index->get_context_digest(txid);
 
       auto input = params.get<PostOperationCallback::In>();
-      if (crypto::Sha256Hash(input.context) != expected_context_digest)
+      if (ccf::crypto::Sha256Hash(input.context) != expected_context_digest)
       {
         throw BadRequestError(errors::InvalidInput, "Invalid context");
       }
@@ -584,7 +585,7 @@ namespace scitt
   }
 
   static void register_operations_endpoints(
-    ccfapp::AbstractNodeContext& context,
+    ccf::AbstractNodeContext& context,
     ccf::BaseEndpointRegistry& registry,
     const ccf::AuthnPolicies& authn_policy,
     OperationCallback callback)
@@ -645,7 +646,7 @@ namespace scitt
    * will have updated the node information after the port is bound.
    */
   static std::string get_bind_address(
-    ccfapp::AbstractNodeContext& context, kv::ReadOnlyTx& tx)
+    ccf::AbstractNodeContext& context, ccf::kv::ReadOnlyTx& tx)
   {
     auto nodes = tx.ro<ccf::Nodes>(ccf::Tables::NODES);
     ccf::NodeId node_id = context.get_node_id();
@@ -688,9 +689,9 @@ namespace scitt
    */
   static void start_asynchronous_operation(
     timespec current_time,
-    ccfapp::AbstractNodeContext& node_context,
+    ccf::AbstractNodeContext& node_context,
     ccf::endpoints::EndpointContext& endpoint_context,
-    crypto::Sha256Hash context_digest,
+    ccf::crypto::Sha256Hash context_digest,
     TriggerAsynchronousOperation trigger)
   {
     auto table =
@@ -716,7 +717,8 @@ namespace scitt
   /**
    * Mark this transaction as having executed a synchronous operation.
    */
-  static void record_synchronous_operation(timespec current_time, kv::Tx& tx)
+  static void record_synchronous_operation(
+    timespec current_time, ccf::kv::Tx& tx)
   {
     auto operations_table = tx.template rw<OperationsTable>(OPERATIONS_TABLE);
     operations_table->put(OperationLog{
@@ -761,16 +763,18 @@ namespace scitt
       .status = OperationStatus::Running,
     };
 
-    ctx.rpc_ctx->set_response_header(http::headers::CCF_TX_ID, tx_str);
+    ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(
-      http::headers::CONTENT_TYPE, http::headervalues::contenttype::JSON);
-    ctx.rpc_ctx->set_response_body(serdes::pack(operation, serdes::Pack::Text));
+      ccf::http::headers::CONTENT_TYPE,
+      ccf::http::headervalues::contenttype::JSON);
+    auto body = nlohmann::json(operation).dump();
+    ctx.rpc_ctx->set_response_body(std::move(body));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
-    if (auto host = ctx.rpc_ctx->get_request_header(http::headers::HOST))
+    if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
     {
       ctx.rpc_ctx->set_response_header(
-        http::headers::LOCATION,
+        ccf::http::headers::LOCATION,
         fmt::format("https://{}/operations/{}", *host, tx_str));
     }
 

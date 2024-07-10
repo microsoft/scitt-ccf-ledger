@@ -39,10 +39,10 @@ namespace scitt
    * This is defined as sha256(index || digest), where digest is the hash of the
    * COSE TBS bytes of the entry.
    */
-  static crypto::Sha256Hash hash_leaf(
-    pt::bitvector<32> index, const crypto::Sha256Hash& digest)
+  static ccf::crypto::Sha256Hash hash_leaf(
+    pt::bitvector<32> index, const ccf::crypto::Sha256Hash& digest)
   {
-    auto h = crypto::make_incremental_sha256();
+    auto h = ccf::crypto::make_incremental_sha256();
     h->update_hash(index.data());
     h->update_hash(digest.h);
     return h->finalise();
@@ -185,7 +185,7 @@ namespace scitt
      * determine whether the transaction is relevant to us or not.
      */
     void handle_committed_transaction(
-      const ccf::TxID& tx_id, const kv::ReadOnlyStorePtr& store) override
+      const ccf::TxID& tx_id, const ccf::kv::ReadOnlyStorePtr& store) override
     {
       last_seqno_ = tx_id.seqno;
 
@@ -249,7 +249,7 @@ namespace scitt
         seqno,
         issuer,
         feed,
-        ds::to_hex(index.data()));
+        ::ds::to_hex(index.data()));
 
       auto headers = create_read_receipt_protected_header(seqno);
       auto digest = cose::create_countersign_tbs_hash(claim, headers);

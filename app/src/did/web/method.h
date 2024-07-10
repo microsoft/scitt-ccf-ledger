@@ -114,7 +114,7 @@ namespace scitt::did::web
     }
 
     static void trigger_asynchronous_resolution(
-      ccfapp::AbstractNodeContext& context,
+      ccf::AbstractNodeContext& context,
       const std::string& callback_url,
       const std::vector<uint8_t>& callback_context,
       const std::string& did,
@@ -135,7 +135,7 @@ namespace scitt::did::web
      */
     static void update_did_document(
       ::timespec host_time,
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const AttestedResolution& result,
       const std::string& issuer,
       const std::string& expected_nonce)
