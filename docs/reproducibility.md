@@ -50,7 +50,7 @@ To reproduce the same measurement do a docker build locally using the expected b
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
         --env PLATFORM=sgx \
-        mcr.microsoft.com/ccf/app/dev:"$CCF_VERSION"-sgx git config --global --add safe.directory "*" && ./docker/build.sh
+        FROM ghcr.io/microsoft/ccf/app/dev/sgx:ccf-"$CCF_VERSION" git config --global --add safe.directory "*" && ./docker/build.sh
     ```
 - The build will print the value of `MRENCLAVE` in the output, similar to:
 

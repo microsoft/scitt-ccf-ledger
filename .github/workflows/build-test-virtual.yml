@@ -10,7 +10,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: mcr.microsoft.com/ccf/app/dev:5.0.0-rc1-virtual
+      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-5.0.0-rc1
       env:
         # Helps to distinguish between CI and local builds.
         SCITT_CI: 1

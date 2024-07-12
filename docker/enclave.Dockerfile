@@ -1,5 +1,5 @@
 ARG CCF_VERSION=5.0.0-rc1
-FROM mcr.microsoft.com/ccf/app/dev:${CCF_VERSION}-sgx as builder
+FROM ghcr.io/microsoft/ccf/app/dev/sgx:ccf-${CCF_VERSION} as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
