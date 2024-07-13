@@ -16,6 +16,7 @@ def retrieve_signed_claimsets(
     from_seqno: Optional[int],
     to_seqno: Optional[int],
     service_trust_store_path: Optional[Path],
+    dont_embed_receipt: bool = False,
 ):
     base_path.mkdir(parents=True, exist_ok=True)
 
@@ -25,7 +26,7 @@ def retrieve_signed_claimsets(
         service_trust_store = None
 
     for tx in client.enumerate_claims(start=from_seqno, end=to_seqno):
-        claim = client.get_claim(tx, embed_receipt=True)
+        claim = client.get_claim(tx, embed_receipt=(not dont_embed_receipt))
         path = base_path / f"{tx}.cose"
 
         if service_trust_store:
@@ -52,11 +53,22 @@ def cli(fn):
         type=Path,
         help="Folder containing JSON parameter files of SCITT services to trust",
     )
+    parser.add_argument(
+        "--dont-embed-receipt",
+        action="store_true",
+        default=False,
+        help="Whether to not return the signed claimsets with the receipt embedded. Default is False.",
+    )
 
     def cmd(args):
         client = create_client(args)
         retrieve_signed_claimsets(
-            client, args.path, args.from_seqno, args.to_seqno, args.service_trust_store
+            client,
+            args.path,
+            args.from_seqno,
+            args.to_seqno,
+            args.service_trust_store,
+            args.dont_embed_receipt,
         )
 
     parser.set_defaults(func=cmd)
