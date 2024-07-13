@@ -744,7 +744,12 @@ namespace scitt::cose
     auto x5chain = uhdr.x5chain;
 
     // Serialize COSE_Sign1 with new unprotected header.
-    cbor::encoder encoder;
+    // We set the encoder buffer size to the sum of the sizes of the entry and
+    // the receipt, plus a bit of arbitrary extra space to be safe. This should
+    // be a bit larger than the actual size needed as the final vector does not
+    // include the full unprotected header. Nonetheless, we prefer to
+    // overestimate to avoid possible buffer overflows.
+    cbor::encoder encoder(cose_sign1.size() + receipt.size() + (1024 * 10));
 
     QCBOREncode_AddTag(encoder, CBOR_TAG_COSE_SIGN1);
 
