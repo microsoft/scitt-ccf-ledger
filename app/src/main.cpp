@@ -501,13 +501,15 @@ namespace scitt
           {
             SCITT_DEBUG("Build SCITT receipt");
             receipt = serialize_receipt(entry_info, ccf_receipt_ptr);
+
+            SCITT_DEBUG("Embed SCITT receipt into the entry response");
+            entry_out = cose::embed_receipt(entry.value(), receipt);
           }
           catch (const ReceiptProcessingError& e)
           {
+            SCITT_FAIL("Failed to embed receipt: {}", e.what());
             throw InternalError(e.what());
           }
-          SCITT_DEBUG("Embed SCITT receipt into the entry response");
-          entry_out = cose::embed_receipt(entry.value(), receipt);
         }
         else
         {
