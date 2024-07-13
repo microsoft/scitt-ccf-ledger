@@ -163,6 +163,31 @@ class TestNonCanonicalEncoding:
         assert original_pieces[2] == updated_pieces[2]
         assert original_pieces[3] == updated_pieces[3]
 
+    def test_embed_receipt_with_large_claim(self, client: Client, did_web):
+        """
+        When embedding a receipt in a claim, we should have a sufficiently large buffer
+        to accommodate the claim and the receipt. This test creates a claim that is
+        500KB in size and embeds the receipt in it.
+        The receipt should be embedded in the claim without any issues.
+        """
+
+        identity = did_web.create_identity()
+
+        # Create a claim of 500KB in size
+        size = int(1024 * 1024 * 0.5)
+        claim = crypto.sign_claimset(identity, bytes(size), "binary/octet-stream")
+
+        tx = client.submit_claim(claim).tx
+        embedded = client.get_claim(tx, embed_receipt=True)
+
+        original_claim_array = cbor2.loads(claim).value  # type: ignore[attr-defined]
+        updated_claim_array = cbor2.loads(embedded).value  # type: ignore[attr-defined]
+
+        # Check that the protected header, the payload and the signature are preserved.
+        assert original_claim_array[0] == updated_claim_array[0]
+        assert original_claim_array[2] == updated_claim_array[2]
+        assert original_claim_array[3] == updated_claim_array[3]
+
 
 class TestHeaderParameters:
     @pytest.fixture(scope="class")
