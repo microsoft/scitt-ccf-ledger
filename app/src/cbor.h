@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "tracing.h"
+
 #include <ccf/ccf_assert.h>
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/sha256_hash.h>
@@ -75,6 +77,10 @@ namespace scitt::cbor
       QCBORError err = QCBOREncode_Finish(&context, &result);
       if (err != QCBOR_SUCCESS)
       {
+        SCITT_FAIL(
+          "Failed encoding CBOR with QCBOR error code {}. Refer to the QCBOR "
+          "documentation for more details on this error code.",
+          err);
         throw std::runtime_error("Error encoding CBOR");
       }
       buffer.resize(result.len);
