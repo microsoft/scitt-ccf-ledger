@@ -163,7 +163,7 @@ class TestNonCanonicalEncoding:
         assert original_pieces[2] == updated_pieces[2]
         assert original_pieces[3] == updated_pieces[3]
 
-    def test_embed_receipt_with_large_claim(self, client: Client, did_web):
+    def test_no_buffer_overflow_when_embedding_receipt(self, client: Client, did_web):
         """
         When embedding a receipt in a claim, we should have a sufficiently large buffer
         to accommodate the claim and the receipt. This test creates a claim that is
