@@ -299,8 +299,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         leaf->index == index,
         "invalid leaf index: {} vs {}",
-        ::ds::to_hex(leaf->index.data()),
-        ::ds::to_hex(index.data()));
+        ccf::ds::to_hex(leaf->index.data()),
+        ccf::ds::to_hex(index.data()));
       return {{result, std::get<leaf_ptr>(*p)->value}};
     }
 
@@ -438,8 +438,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           found->index == l.index,
           "invalid leaf index: {} vs {}",
-          ::ds::to_hex(found->index.data()),
-          ::ds::to_hex(l.index.data()));
+          ccf::ds::to_hex(found->index.data()),
+          ccf::ds::to_hex(l.index.data()));
         *found = l;
       }
 
@@ -510,8 +510,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           previous->index <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ::ds::to_hex(previous->index.data()),
-          ::ds::to_hex(l.index.data()));
+          ccf::ds::to_hex(previous->index.data()),
+          ccf::ds::to_hex(l.index.data()));
 
         depth = common_prefix(previous->index, l.index);
         rewind(depth);
@@ -567,8 +567,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         found->index == l.index,
         "invalid leaf index: {} vs {}",
-        ::ds::to_hex(found->index.data()),
-        ::ds::to_hex(l.index.data()));
+        ccf::ds::to_hex(found->index.data()),
+        ccf::ds::to_hex(l.index.data()));
       *found = l;
     }
 
@@ -646,8 +646,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           *last_leaf <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ::ds::to_hex(last_leaf->data()),
-          ::ds::to_hex(l.index.data()));
+          ccf::ds::to_hex(last_leaf->data()),
+          ccf::ds::to_hex(l.index.data()));
 
         size_t prefix = common_prefix(*last_leaf, l.index);
 
@@ -826,8 +826,8 @@ namespace scitt::pt
       CCF_ASSERT_FMT(
         leaf->index == index,
         "invalid leaf index: {} vs {}",
-        ::ds::to_hex(leaf->index.data()),
-        ::ds::to_hex(index.data()));
+        ccf::ds::to_hex(leaf->index.data()),
+        ccf::ds::to_hex(index.data()));
 
       stack.back().right = nullptr;
       stack.back().visited_left = true;
@@ -914,8 +914,8 @@ namespace scitt::pt
         CCF_ASSERT_FMT(
           *last_leaf <= l.index,
           "leaves must be inserted in order: {} > {}",
-          ::ds::to_hex(last_leaf->data()),
-          ::ds::to_hex(l.index.data()));
+          ccf::ds::to_hex(last_leaf->data()),
+          ccf::ds::to_hex(l.index.data()));
 
         size_t prefix = common_prefix(*last_leaf, l.index);
 

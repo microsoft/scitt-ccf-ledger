@@ -249,7 +249,7 @@ namespace scitt
         seqno,
         issuer,
         feed,
-        ::ds::to_hex(index.data()));
+        ccf::ds::to_hex(index.data()));
 
       auto headers = create_read_receipt_protected_header(seqno);
       auto digest = cose::create_countersign_tbs_hash(claim, headers);
