@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+  pull_request:
+
 jobs:
   build-test:
     runs-on: ubuntu-20.04
