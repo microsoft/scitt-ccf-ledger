@@ -1,5 +1,6 @@
 name: "Build/test (virtual)"
 on:
+  pull_request:
   push:
     branches:
       - main
