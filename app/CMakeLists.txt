@@ -25,15 +25,9 @@ set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if (CCF_UNSAFE)
-  if (NOT ${COMPILE_TARGET} STREQUAL "sgx")
-    message(FATAL_ERROR "The unsafe CCF variant is only available on SGX builds.")
-  endif()
 
-  find_package(ccf_sgx_unsafe 4.0.17 REQUIRED)
-else()
-  find_package(ccf_${COMPILE_TARGET} 4.0.17 REQUIRED)
-endif()
+find_package(ccf_${COMPILE_TARGET} 5.0.0 REQUIRED)
+
 
 if (ENABLE_PREFIX_TREE)
   add_compile_definitions(ENABLE_PREFIX_TREE)

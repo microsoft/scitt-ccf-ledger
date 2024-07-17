@@ -83,7 +83,7 @@ namespace scitt
     std::optional<ccf::TxID> operation_id;
 
     std::optional<time_t> created_at;
-    std::optional<crypto::Sha256Hash> context_digest;
+    std::optional<ccf::crypto::Sha256Hash> context_digest;
     std::optional<nlohmann::json> error;
   };
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(OperationLog);
@@ -189,21 +189,21 @@ namespace scitt
   // Tables
 
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";
-  using EntryTable = kv::RawCopySerialisedValue<std::vector<uint8_t>>;
+  using EntryTable = ccf::kv::RawCopySerialisedValue<std::vector<uint8_t>>;
 
   static constexpr auto ENTRY_INFO_TABLE = "public:scitt.entry_info";
-  using EntryInfoTable = kv::Value<EntryInfo>;
+  using EntryInfoTable = ccf::kv::Value<EntryInfo>;
 
   static constexpr auto ISSUERS_TABLE = "public:scitt.issuers";
-  using IssuersTable = kv::Map<Issuer, IssuerInfo>;
+  using IssuersTable = ccf::kv::Map<Issuer, IssuerInfo>;
 
   static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
-  using OperationsTable = kv::Value<OperationLog>;
+  using OperationsTable = ccf::kv::Value<OperationLog>;
 
   // The `ccf.gov` prefix is necessary to make the table writable
   // through governance.
   static constexpr auto CONFIGURATION_TABLE =
     "public:ccf.gov.scitt.configuration";
-  using ConfigurationTable = kv::JsonSerialisedValue<Configuration>;
+  using ConfigurationTable = ccf::kv::JsonSerialisedValue<Configuration>;
 
 } // namespace scitt

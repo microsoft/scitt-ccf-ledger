@@ -17,7 +17,7 @@ namespace scitt
   static GetServiceParameters::Out certificate_to_service_parameters(
     const std::vector<uint8_t>& certificate_der)
   {
-    auto service_id = crypto::Sha256Hash(certificate_der).hex_str();
+    auto service_id = ccf::crypto::Sha256Hash(certificate_der).hex_str();
 
     // TODO: extend to support multiple tree hash algorithms once CCF
     // supports them
@@ -26,7 +26,7 @@ namespace scitt
     out.service_id = service_id;
     out.tree_algorithm = TREE_ALGORITHM_CCF;
     out.signature_algorithm = JOSE_ALGORITHM_ES256;
-    out.service_certificate = crypto::b64_from_raw(certificate_der);
+    out.service_certificate = ccf::crypto::b64_from_raw(certificate_der);
     return out;
   }
 
@@ -34,12 +34,12 @@ namespace scitt
     std::string_view service_identifier,
     const std::vector<uint8_t>& certificate_der)
   {
-    auto verifier = crypto::make_unique_verifier(certificate_der);
-    auto key_id = crypto::Sha256Hash(certificate_der).hex_str();
+    auto verifier = ccf::crypto::make_unique_verifier(certificate_der);
+    auto key_id = ccf::crypto::Sha256Hash(certificate_der).hex_str();
 
     // We roundtrip via JSON to convert from CCF's JWK type to our own.
     did::Jwk jwk = nlohmann::json(verifier->public_key_jwk());
-    jwk.x5c = {{crypto::b64_from_raw(certificate_der)}};
+    jwk.x5c = {{ccf::crypto::b64_from_raw(certificate_der)}};
     return did::DidVerificationMethod{
       .id = fmt::format("{}#{}", service_identifier, key_id),
       .type = std::string(did::VERIFICATION_METHOD_TYPE_JWK),
@@ -92,7 +92,7 @@ namespace scitt
     {
       std::lock_guard guard(lock);
 
-      auto service_cert_der = crypto::cert_pem_to_der(service_info.cert);
+      auto service_cert_der = ccf::crypto::cert_pem_to_der(service_info.cert);
 
       // It is possible for multiple entries in the ServiceInfo table to contain
       // the same certificate, eg. if the service status changes. Using an
@@ -114,7 +114,7 @@ namespace scitt
     {
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
-      auto service_cert_der = crypto::cert_pem_to_der(service_info.cert);
+      auto service_cert_der = ccf::crypto::cert_pem_to_der(service_info.cert);
       return certificate_to_service_parameters(service_cert_der);
     }
 
@@ -184,7 +184,7 @@ namespace scitt
   }
 
   static void register_service_endpoints(
-    ccfapp::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
+    ccf::AbstractNodeContext& context, ccf::BaseEndpointRegistry& registry)
   {
     using namespace std::placeholders;
 

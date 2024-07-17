@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 4.0.17
+  default: 5.0.0-rc2
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -16,7 +16,7 @@ variables:
   SETUPTOOLS_USE_DISTUTILS: stdlib # python recommended fix for ubuntu 22.04
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
   # SGX container setup through "LinuxContainerImage2" does not work in the custom pool of SGX VMs and the default ones do not support SGX
-  LinuxContainerImage: 'mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-virtual' # implicit default but otherwise could be set like => target: 'linux_build_container'
+  LinuxContainerImage: 'ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${{ parameters.CCF_VERSION }}' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   # CodeQL settings to target the remote repository instead of this wrapper one
   Codeql.Language: 'cpp,python,javascript'
@@ -178,7 +178,7 @@ extends:
                 --env NINJA_FLAGS="-k 0" \
                 --env CXXFLAGS="-ferror-limit=0" \
                 --env ENABLE_PERF_TESTS="true" \
-                mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx /bin/bash -c '\
+                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
                   git config --global --add safe.directory "*"; \
                   sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
                   sudo usermod -a -G sgx_prv $(whoami); \
@@ -215,7 +215,7 @@ extends:
                 --env ENABLE_CLANG_TIDY="OFF" \
                 --env NINJA_FLAGS="-k 0" \
                 --env CXXFLAGS="-ferror-limit=0" \
-                mcr.microsoft.com/ccf/app/dev:${{ parameters.CCF_VERSION }}-sgx /bin/bash -c '\
+                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
                   sudo apt-get update && sudo apt-get install -y faketime; \
                   git config --global --add safe.directory "*"; \
                   sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \

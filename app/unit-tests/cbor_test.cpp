@@ -15,7 +15,7 @@ namespace
 {
   RC_GTEST_PROP(CborHasher, hash_text, ())
   {
-    crypto::openssl_sha256_init();
+    ccf::crypto::openssl_sha256_init();
     auto text = *rc::gen::arbitrary<std::string>();
 
     cbor::hasher hasher;
@@ -24,15 +24,15 @@ namespace
 
     cbor::encoder encoder;
     QCBOREncode_AddText(encoder, cbor::from_string(text));
-    auto h2 = crypto::Sha256Hash(encoder.finish());
+    auto h2 = ccf::crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
-    crypto::openssl_sha256_shutdown();
+    ccf::crypto::openssl_sha256_shutdown();
   }
 
   RC_GTEST_PROP(Cbor, hash_bytes, ())
   {
-    crypto::openssl_sha256_init();
+    ccf::crypto::openssl_sha256_init();
     auto bytes = *rc::gen::arbitrary<std::vector<uint8_t>>();
 
     cbor::hasher hasher;
@@ -41,15 +41,15 @@ namespace
 
     cbor::encoder encoder;
     QCBOREncode_AddBytes(encoder, cbor::from_bytes(bytes));
-    auto h2 = crypto::Sha256Hash(encoder.finish());
+    auto h2 = ccf::crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
-    crypto::openssl_sha256_shutdown();
+    ccf::crypto::openssl_sha256_shutdown();
   }
 
   RC_GTEST_PROP(Cbor, hash_array, ())
   {
-    crypto::openssl_sha256_init();
+    ccf::crypto::openssl_sha256_init();
     auto fields = *rc::gen::arbitrary<std::vector<std::vector<uint8_t>>>();
 
     cbor::hasher hasher;
@@ -67,9 +67,9 @@ namespace
       QCBOREncode_AddBytes(encoder, cbor::from_bytes(f));
     }
     QCBOREncode_CloseArray(encoder);
-    auto h2 = crypto::Sha256Hash(encoder.finish());
+    auto h2 = ccf::crypto::Sha256Hash(encoder.finish());
 
     RC_ASSERT(h1 == h2);
-    crypto::openssl_sha256_shutdown();
+    ccf::crypto::openssl_sha256_shutdown();
   }
 }

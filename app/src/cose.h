@@ -698,7 +698,7 @@ namespace scitt::cose
    *     ]
    * ]
    */
-  static crypto::Sha256Hash create_countersign_tbs_hash(
+  static ccf::crypto::Sha256Hash create_countersign_tbs_hash(
     std::span<const uint8_t> cose_sign1,
     std::span<const uint8_t> sign_protected)
   {

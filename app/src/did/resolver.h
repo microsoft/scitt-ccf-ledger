@@ -33,7 +33,7 @@ namespace scitt::did
 
   struct DidWebOptions
   {
-    kv::ReadOnlyTx& tx;
+    ccf::kv::ReadOnlyTx& tx;
     std::optional<std::chrono::seconds> max_age;
     std::optional<std::string> if_assertion_method_id_match;
   };

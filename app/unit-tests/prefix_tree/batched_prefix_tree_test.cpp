@@ -17,7 +17,7 @@ namespace
   typedef batched_prefix_tree<
     uint64_t,
     ccf::SeqNo,
-    crypto::Sha256Hash,
+    ccf::crypto::Sha256Hash,
     INDEX_SIZE>
     tree_t;
 
@@ -54,9 +54,9 @@ namespace
      * Compute the hash of the prefix tree formed by the entries.
      * Optionally includes the pending entries.
      */
-    crypto::Sha256Hash hash(bool include_pending) const
+    ccf::crypto::Sha256Hash hash(bool include_pending) const
     {
-      prefix_tree<uint64_t, crypto::Sha256Hash, INDEX_SIZE> t;
+      prefix_tree<uint64_t, ccf::crypto::Sha256Hash, INDEX_SIZE> t;
       for (const auto& [_, leaf] : entries)
       {
         t.insert(leaf);

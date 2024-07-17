@@ -79,7 +79,7 @@ namespace scitt
    */
   template <typename T>
   static std::optional<T> get_query_value(
-    const http::ParsedQuery& pq, std::string_view name)
+    const ccf::http::ParsedQuery& pq, std::string_view name)
   {
     SCITT_DEBUG("Get parameter value from parsed query");
     auto it = pq.find(name);
@@ -126,7 +126,7 @@ namespace scitt
     }
     else
     {
-      static_assert(nonstd::dependent_false<T>::value, "Unsupported type");
+      static_assert(ccf::nonstd::dependent_false<T>::value, "Unsupported type");
       return std::nullopt;
     }
   }
@@ -253,8 +253,9 @@ namespace scitt
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
       auto service_cert = service_info.cert;
-      auto service_cert_der = crypto::cert_pem_to_der(service_cert);
-      auto service_cert_digest = crypto::Sha256Hash(service_cert_der).hex_str();
+      auto service_cert_der = ccf::crypto::cert_pem_to_der(service_cert);
+      auto service_cert_digest =
+        ccf::crypto::Sha256Hash(service_cert_der).hex_str();
 
       // Take the service's DID from the configuration, if present.
       SCITT_DEBUG("Create protected header with countersignature");
@@ -327,7 +328,7 @@ namespace scitt
       const std::string& issuer,
       const std::vector<uint8_t>& body)
     {
-      auto nonce = ds::to_hex(ENTROPY->random(16));
+      auto nonce = ccf::ds::to_hex(ENTROPY->random(16));
 
       DIDFetchContext callback_context{
         .body = body,
@@ -337,7 +338,7 @@ namespace scitt
       std::string context_json = nlohmann::json(callback_context).dump();
       std::vector<uint8_t> context_bytes(
         context_json.begin(), context_json.end());
-      crypto::Sha256Hash context_digest(context_bytes);
+      ccf::crypto::Sha256Hash context_digest(context_bytes);
 
       auto trigger =
         [this, issuer, nonce, context_bytes](const std::string& callback_url) {
@@ -355,7 +356,7 @@ namespace scitt
     }
 
   public:
-    AppEndpoints(ccfapp::AbstractNodeContext& context_) :
+    AppEndpoints(ccf::AbstractNodeContext& context_) :
       ccf::UserEndpointRegistry(context_)
     {
       const ccf::AuthnPolicies authn_policy = {
@@ -466,7 +467,7 @@ namespace scitt
                          EndpointContext& ctx,
                          ccf::historical::StatePtr historical_state) {
         const auto parsed_query =
-          http::parse_query(ctx.rpc_ctx->get_request_query());
+          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
         bool embed_receipt =
           get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
@@ -518,7 +519,7 @@ namespace scitt
 
         ctx.rpc_ctx->set_response_body(entry_out);
         ctx.rpc_ctx->set_response_header(
-          http::headers::CONTENT_TYPE, "application/cose");
+          ccf::http::headers::CONTENT_TYPE, "application/cose");
       };
       make_endpoint(
         get_entry_path,
@@ -566,7 +567,7 @@ namespace scitt
         }
         ctx.rpc_ctx->set_response_body(receipt);
         ctx.rpc_ctx->set_response_header(
-          http::headers::CONTENT_TYPE, "application/cbor");
+          ccf::http::headers::CONTENT_TYPE, "application/cbor");
       };
 
       make_endpoint(
@@ -582,7 +583,7 @@ namespace scitt
       auto get_entries_tx_ids =
         [this](EndpointContext& ctx, nlohmann::json&& params) {
           const auto parsed_query =
-            http::parse_query(ctx.rpc_ctx->get_request_query());
+            ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
           SCITT_DEBUG("Parse input params and determine entries range");
           ccf::SeqNo from_seqno =
@@ -766,11 +767,11 @@ namespace scitt
   };
 } // namespace scitt
 
-namespace ccfapp
+namespace ccf
 {
   std::unique_ptr<ccf::endpoints::EndpointRegistry> make_user_endpoints(
-    ccfapp::AbstractNodeContext& context)
+    ccf::AbstractNodeContext& context)
   {
     return std::make_unique<scitt::AppEndpoints>(context);
   }
-} // namespace ccfapp
+} // namespace ccf

@@ -40,10 +40,10 @@ namespace scitt::pt
    * It assumes a uint64_t leaf value, and hashes over the key and value only.
    */
   template <size_t SIZE>
-  crypto::Sha256Hash hash_leaf(
+  ccf::crypto::Sha256Hash hash_leaf(
     const bitvector<SIZE>& key, const uint64_t& value)
   {
-    auto h = crypto::make_incremental_sha256();
+    auto h = ccf::crypto::make_incremental_sha256();
     h->update_hash(key.data());
     // This will be endian-specific. That's okay for unit tests, but should
     // not be used for production uses.
@@ -105,12 +105,12 @@ namespace rc
 
   // Generate an arbitrary leaf, assuming the leaf value is a uint64_t.
   template <size_t SIZE>
-  struct Arbitrary<scitt::pt::leaf<uint64_t, crypto::Sha256Hash, SIZE>>
+  struct Arbitrary<scitt::pt::leaf<uint64_t, ccf::crypto::Sha256Hash, SIZE>>
   {
     static auto arbitrary()
     {
       auto make_leaf = [](auto index, auto value) {
-        return scitt::pt::leaf<uint64_t, crypto::Sha256Hash, SIZE>{
+        return scitt::pt::leaf<uint64_t, ccf::crypto::Sha256Hash, SIZE>{
           index,
           value,
           scitt::pt::hash_leaf(index, value),

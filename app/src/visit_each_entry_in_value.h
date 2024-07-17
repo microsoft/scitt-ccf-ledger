@@ -8,8 +8,8 @@
 namespace scitt
 {
   /**
-   * A wrapper around VisitEachEntryInMap that works with any kv::TypedValue,
-   * providing access to the deserialized value.
+   * A wrapper around VisitEachEntryInMap that works with any
+   * ccf::kv::TypedValue, providing access to the deserialized value.
    */
   template <typename M>
   class VisitEachEntryInValueTyped

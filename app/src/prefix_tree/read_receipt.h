@@ -79,8 +79,9 @@ namespace scitt
    *
    * where root is the hash of the root of the tree.
    */
-  static crypto::Sha256Hash create_prefix_tree_tbs_hash(
-    std::span<const uint8_t> protected_headers, const crypto::Sha256Hash& root)
+  static ccf::crypto::Sha256Hash create_prefix_tree_tbs_hash(
+    std::span<const uint8_t> protected_headers,
+    const ccf::crypto::Sha256Hash& root)
   {
     cbor::hasher hasher;
     hasher.open_array(3);
@@ -129,7 +130,7 @@ namespace scitt
    */
   static std::vector<uint8_t> create_tree_receipt(
     std::span<const uint8_t> protected_headers,
-    const crypto::Sha256Hash& root,
+    const ccf::crypto::Sha256Hash& root,
     ccf::ReceiptPtr ccf_receipt)
   {
     cbor::encoder encoder;

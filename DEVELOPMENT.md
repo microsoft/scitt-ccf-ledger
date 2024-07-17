@@ -43,10 +43,10 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-4.0.17.tar.gz
-    tar xvzf ccf-4.0.17.tar.gz
-    cd CCF-ccf-4.0.17/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=4.0.17 -e platform=<sgx|virtual> -e clang_version=<11|15>
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-5.0.0-rc2.tar.gz
+    tar xvzf ccf-5.0.0-rc2.tar.gz
+    cd CCF-ccf-5.0.0-rc2/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=5.0.0 -e platform=<sgx|virtual> -e clang_version=<11|15>
     ```
 
 ## Building

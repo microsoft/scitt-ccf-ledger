@@ -39,18 +39,18 @@ To reproduce the same measurement do a docker build locally using the expected b
 
     ```
     $ cat docker/enclave.Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=4.0.17
+    ARG CCF_VERSION=5.0.0-rc2
     ```
 
 - Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
 
     ```sh
-    $ export CCF_VERSION="4.0.17"
+    $ export CCF_VERSION="5.0.0-rc2"
     $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
         --env PLATFORM=sgx \
-        mcr.microsoft.com/ccf/app/dev:"$CCF_VERSION"-sgx git config --global --add safe.directory "*" && ./docker/build.sh
+        FROM ghcr.io/microsoft/ccf/app/dev/sgx:ccf-"$CCF_VERSION" git config --global --add safe.directory "*" && ./docker/build.sh
     ```
 - The build will print the value of `MRENCLAVE` in the output, similar to:
 

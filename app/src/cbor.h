@@ -25,7 +25,7 @@ namespace scitt::cbor
     return UsefulBufC{v.data(), v.size()};
   }
 
-  inline UsefulBufC from_sha256_hash(const crypto::Sha256Hash& v)
+  inline UsefulBufC from_sha256_hash(const ccf::crypto::Sha256Hash& v)
   {
     return UsefulBufC{v.h.data(), v.h.size()};
   }
@@ -114,7 +114,7 @@ namespace scitt::cbor
    */
   struct hasher
   {
-    hasher() : h(crypto::make_incremental_sha256()) {}
+    hasher() : h(ccf::crypto::make_incremental_sha256()) {}
 
     void open_array(size_t size)
     {
@@ -134,7 +134,7 @@ namespace scitt::cbor
         {reinterpret_cast<const uint8_t*>(str.data()), str.size()});
     }
 
-    crypto::Sha256Hash finalise()
+    ccf::crypto::Sha256Hash finalise()
     {
       return h->finalise();
     }
@@ -147,6 +147,6 @@ namespace scitt::cbor
       h->update_hash(as_span(out));
     }
 
-    std::shared_ptr<crypto::ISha256Hash> h;
+    std::shared_ptr<ccf::crypto::ISha256Hash> h;
   };
 }
