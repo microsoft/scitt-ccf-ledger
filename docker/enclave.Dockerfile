@@ -36,7 +36,7 @@ RUN mkdir /tmp/app-build && \
 WORKDIR /usr/src/app
 RUN /opt/openenclave/bin/oesign dump -e lib/libscitt.enclave.so.signed | sed -n "s/mrenclave=//p" > mrenclave.txt
 
-FROM mcr.microsoft.com/ccf/app/run:${CCF_VERSION}-sgx
+FROM ghcr.io/microsoft/ccf/app/dev/sgx:ccf-${CCF_VERSION}
 ARG CCF_VERSION
 
 RUN apt update && apt install -y python3 wget
