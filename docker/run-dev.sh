@@ -55,16 +55,17 @@ sed -i "s/%CCF_PORT%/$CCF_PORT/g" "$WORKSPACE"/dev-config.json
 
 cp -r ./app/constitution "$WORKSPACE"
 
+echo "Generate keys"
 KEYGEN=$(pwd)/docker/keygenerator.sh
 pushd "$WORKSPACE"
 $KEYGEN --name member0 --gen-enc-key
 popd
 
-# Create a volume to store the workspace
+echo "Create a volume to store the workspace"
 # This works reliably on host as well as Docker-in-Docker
 docker volume create "$VOLUME_NAME"
 
-# Copy the workspace to the volume
+echo "Copy the workspace to the volume"
 # Note that this requires running a temporary container
 # https://stackoverflow.com/a/56085040
 tar -C "$WORKSPACE" -c . | docker run --rm \
@@ -85,7 +86,7 @@ else
     )
 fi
 
-# Run CCF
+echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, and tag $DOCKER_TAG"
 docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
