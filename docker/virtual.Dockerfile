@@ -28,7 +28,7 @@ RUN mkdir /tmp/app-build && \
     /tmp/app && \
     ninja && ninja install
 
-FROM ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${CCF_VERSION}
+FROM ghcr.io/microsoft/ccf/app/run/virtual:ccf-${CCF_VERSION}
 ARG CCF_VERSION
 
 RUN apt-get update && apt-get install -y python3 \
