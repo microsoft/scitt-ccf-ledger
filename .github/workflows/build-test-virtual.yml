@@ -18,8 +18,9 @@ jobs:
         SCITT_CI: 1
         # Additional CMake flags.
         PLATFORM: virtual
-        CMAKE_BUILD_TYPE: Debug
+        CMAKE_BUILD_TYPE: Release
         ENABLE_PREFIX_TREE: ON
+        CCF_UNSAFE: OFF
         ENABLE_CLANG_TIDY: ON
         # These make CI print all the errors, rather than stopping early.
         CXXFLAGS: -ferror-limit=0
