@@ -33,7 +33,7 @@
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
-#include <ccf/js/core/context.h>
+#include <ccf/js/common_context.h>
 #include <ccf/js/extensions/console.h>
 #include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
@@ -61,6 +61,13 @@ const x = 2;
 const y = 3;
 console.log(`x = ${x}, y = ${y}`);
 console.log(`x+y = ${x+y}`);
+
+export function apply(s) {
+  console.log(`Calling apply function`);
+  console.log(`Argument is: ${s}`);
+  // Return reversed string
+  return s.split('').reverse().join('');
+}
 )!!!";
 
 namespace scitt
@@ -147,46 +154,48 @@ namespace scitt
 
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
 
-    void apply_js_policy()
+    void apply_js_policy(ccf::kv::Tx& tx)
     {
-      auto interpreter = ccf::js::core::Context(ccf::js::TxAccess::APP_RO);
-      interpreter.add_extension(
-        std::make_shared<ccf::js::extensions::ConsoleExtension>());
+      // Allow the policy to access common globals (including shims for
+      // builtins) like "console", "ccf.crypto", and "ccf.kv"
+      ccf::js::CommonContextWithLocalTx interpreter(
+        ccf::js::TxAccess::APP_RO, &tx);
 
-      SCITT_INFO("About to eval");
+      const auto module_name = "sample_policy";
 
-      auto val = interpreter.eval(
-        sample_js_policy,
-        strlen(sample_js_policy),
-        "sample",
-        JS_EVAL_TYPE_GLOBAL);
-
-      SCITT_INFO("Called eval");
-
-      if (val.is_error())
+      ccf::js::core::JSWrappedValue apply_func;
+      try
       {
-        SCITT_INFO("Result of eval is an error");
+        apply_func = interpreter.get_exported_function(
+          sample_js_policy, "apply", module_name);
       }
-      else if (val.is_exception())
+      catch (const std::exception& e)
       {
-        SCITT_INFO("Result of eval is an exception");
+        SCITT_FAIL("Invalid policy module: {}", e.what());
+        return;
+      }
+
+      auto arg0 = interpreter.new_string("Hello world");
+
+      const auto result = interpreter.call_with_rt_options(
+        apply_func,
+        {arg0},
+        std::nullopt,
+        ccf::js::core::RuntimeLimitsPolicy::NONE);
+
+      if (result.is_exception())
+      {
         auto [reason, trace] = interpreter.error_message();
-        SCITT_INFO("Reason: {}", reason);
-        SCITT_INFO("Trace: {}", trace.value_or("<no trace>"));
+
+        SCITT_FAIL(
+          "Error while applying policy: {}\n{}",
+          reason,
+          trace.value_or("<no trace>"));
+        return;
       }
-      else if (val.is_undefined())
-      {
-        SCITT_INFO("Result of eval is undefined");
-      }
-      else if (val.is_str())
-      {
-        SCITT_INFO("Result of eval is string");
-        SCITT_INFO("Result: {}", interpreter.to_str(val));
-      }
-      else
-      {
-        SCITT_INFO("Result of eval is some other value");
-      }
+
+      auto s = interpreter.to_str(result);
+      SCITT_INFO("Result of policy.apply() is: {}", s.value_or("<empty>"));
     }
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
@@ -300,7 +309,7 @@ namespace scitt
       }
 
       // TODO: Apply further acceptance policies.
-      apply_js_policy();
+      apply_js_policy(ctx.tx);
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
