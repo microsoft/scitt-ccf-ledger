@@ -33,6 +33,8 @@
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
+#include <ccf/js/core/context.h>
+#include <ccf/js/extensions/console.h>
 #include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
 #include <ccf/node/host_processes_interface.h>
@@ -53,6 +55,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+static constexpr auto sample_js_policy = R"!!!(
+const x = 2;
+const y = 3;
+console.log(`x = ${x}, y = ${y}`);
+console.log(`x+y = ${x+y}`);
+)!!!";
 
 namespace scitt
 {
@@ -137,6 +146,48 @@ namespace scitt
     std::shared_ptr<EntrySeqnoIndexingStrategy> entry_seqno_index = nullptr;
 
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
+
+    void apply_js_policy()
+    {
+      auto interpreter = ccf::js::core::Context(ccf::js::TxAccess::APP_RO);
+      interpreter.add_extension(
+        std::make_shared<ccf::js::extensions::ConsoleExtension>());
+
+      SCITT_INFO("About to eval");
+
+      auto val = interpreter.eval(
+        sample_js_policy,
+        strlen(sample_js_policy),
+        "sample",
+        JS_EVAL_TYPE_GLOBAL);
+
+      SCITT_INFO("Called eval");
+
+      if (val.is_error())
+      {
+        SCITT_INFO("Result of eval is an error");
+      }
+      else if (val.is_exception())
+      {
+        SCITT_INFO("Result of eval is an exception");
+        auto [reason, trace] = interpreter.error_message();
+        SCITT_INFO("Reason: {}", reason);
+        SCITT_INFO("Trace: {}", trace.value_or("<no trace>"));
+      }
+      else if (val.is_undefined())
+      {
+        SCITT_INFO("Result of eval is undefined");
+      }
+      else if (val.is_str())
+      {
+        SCITT_INFO("Result of eval is string");
+        SCITT_INFO("Result: {}", interpreter.to_str(val));
+      }
+      else
+      {
+        SCITT_INFO("Result of eval is some other value");
+      }
+    }
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
     {
@@ -249,6 +300,7 @@ namespace scitt
       }
 
       // TODO: Apply further acceptance policies.
+      apply_js_policy();
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
