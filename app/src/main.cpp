@@ -57,16 +57,10 @@
 #include <vector>
 
 static constexpr auto sample_js_policy = R"!!!(
-const x = 2;
-const y = 3;
-console.log(`x = ${x}, y = ${y}`);
-console.log(`x+y = ${x+y}`);
-
-export function apply(s) {
+export function apply(profile, phdr) {
   console.log(`Calling apply function`);
-  console.log(`Argument is: ${s}`);
-  // Return reversed string
-  return s.split('').reverse().join('');
+  console.log(`ClaimProfile is: ${profile}`);
+  console.log(`phdr is: ${JSON.stringify(phdr)}`);
 }
 )!!!";
 
@@ -154,7 +148,146 @@ namespace scitt
 
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
 
-    void apply_js_policy(ccf::kv::Tx& tx)
+    ccf::js::core::JSWrappedValue claim_profile_to_js_val(
+      ccf::js::core::Context& ctx, ClaimProfile claim_profile)
+    {
+      switch (claim_profile)
+      {
+        case ClaimProfile::IETF:
+        {
+          return ctx.new_string("IETF");
+          break;
+        }
+        case ClaimProfile::X509:
+        {
+          return ctx.new_string("X509");
+          break;
+        }
+        case ClaimProfile::Notary:
+        {
+          return ctx.new_string("Notary");
+          break;
+        }
+        default:
+        {
+          throw std::logic_error("Unhandled ClaimProfile value");
+        }
+      }
+    }
+
+    ccf::js::core::JSWrappedValue protected_headers_to_js_val(
+      ccf::js::core::Context& ctx, const scitt::cose::ProtectedHeader& phdr)
+    {
+      auto obj = ctx.new_obj();
+
+      // Vanilla SCITT protected header parameters
+      {
+        if (phdr.alg.has_value())
+        {
+          obj.set_int64("alg", phdr.alg.value());
+        }
+
+        if (phdr.crit.has_value())
+        {
+          auto crit_array = ctx.new_array();
+          size_t i = 0;
+
+          for (const auto& e : phdr.crit.value())
+          {
+            if (std::holds_alternative<int64_t>(e))
+            {
+              crit_array.set_at_index(
+                i++,
+                ccf::js::core::JSWrappedValue(
+                  ctx, JS_NewInt64(ctx, std::get<int64_t>(e))));
+            }
+            else if (std::holds_alternative<std::string>(e))
+            {
+              crit_array.set_at_index(
+                i++, ctx.new_string(std::get<std::string>(e)));
+            }
+          }
+
+          obj.set("crit", std::move(crit_array));
+        }
+
+        if (phdr.kid.has_value())
+        {
+          obj.set("kid", ctx.new_string(phdr.kid.value()));
+        }
+
+        if (phdr.issuer.has_value())
+        {
+          obj.set("issuer", ctx.new_string(phdr.issuer.value()));
+        }
+
+        if (phdr.feed.has_value())
+        {
+          obj.set("feed", ctx.new_string(phdr.feed.value()));
+        }
+
+        if (phdr.cty.has_value())
+        {
+          if (std::holds_alternative<int64_t>(phdr.cty.value()))
+          {
+            obj.set_int64("cty", std::get<int64_t>(phdr.cty.value()));
+          }
+          else if (std::holds_alternative<std::string>(phdr.cty.value()))
+          {
+            obj.set(
+              "cty", ctx.new_string(std::get<std::string>(phdr.cty.value())));
+          }
+        }
+
+        if (phdr.x5chain.has_value())
+        {
+          auto x5_array = ctx.new_array();
+          size_t i = 0;
+
+          for (const auto& e : phdr.x5chain.value())
+          {
+            x5_array.set_at_index(i++, ctx.new_array_buffer_copy(e));
+          }
+
+          obj.set("x5chain", std::move(x5_array));
+        }
+      }
+
+      // Extra Notary protected header parameters.
+      {
+        if (phdr.notary_signing_scheme.has_value())
+        {
+          obj.set(
+            "notary_signing_scheme",
+            ctx.new_string(phdr.notary_signing_scheme.value()));
+        }
+
+        if (phdr.notary_signing_time.has_value())
+        {
+          obj.set_int64(
+            "notary_signing_time", phdr.notary_signing_time.value());
+        }
+
+        if (phdr.notary_authentic_signing_time.has_value())
+        {
+          obj.set_int64(
+            "notary_authentic_signing_time",
+            phdr.notary_authentic_signing_time.value());
+        }
+
+        if (phdr.notary_expiry.has_value())
+        {
+          obj.set_int64("notary_expiry", phdr.notary_expiry.value());
+        }
+      }
+
+      return obj;
+    }
+
+    void apply_js_policy(
+      ccf::kv::Tx& tx,
+      ClaimProfile claim_profile,
+      const scitt::cose::ProtectedHeader& phdr)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto", and "ccf.kv"
@@ -175,11 +308,12 @@ namespace scitt
         return;
       }
 
-      auto arg0 = interpreter.new_string("Hello world");
+      auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
+      auto phdr_val = protected_headers_to_js_val(interpreter, phdr);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {arg0},
+        {profile_val, phdr_val},
         std::nullopt,
         ccf::js::core::RuntimeLimitsPolicy::NONE);
 
@@ -271,10 +405,12 @@ namespace scitt
                    .value_or(Configuration{});
 
       ClaimProfile claim_profile;
+      cose::ProtectedHeader phdr;
+      cose::UnprotectedHeader uhdr;
       try
       {
         SCITT_DEBUG("Verify submitted claim");
-        claim_profile = verifier->verify_claim(
+        std::tie(claim_profile, phdr, uhdr) = verifier->verify_claim(
           body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
       }
       catch (const did::DIDMethodNotSupportedError& e)
@@ -308,8 +444,7 @@ namespace scitt
 #endif
       }
 
-      // TODO: Apply further acceptance policies.
-      apply_js_policy(ctx.tx);
+      apply_js_policy(ctx.tx, claim_profile, phdr);
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
