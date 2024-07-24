@@ -207,20 +207,12 @@ export function apply(profile, phdr) {{
     // really be basedon a stable issuer ID
     if (phdr.feed === "{feeds[0]}") {{
         if (phdr.x5chain[0] !== `{identities[0].x5c[0]}`) {{
-            console.warn(`MISMATCH`);
-            console.warn(`For feed: {feeds[0]}`);
-            console.warn(`Found: ${{phdr.x5chain[0]}}`);
-            console.warn(`Expected: {identities[0].x5c[0]}`);
             return false;
         }}
     }}
 
     if (phdr.feed === "{feeds[1]}") {{
         if (phdr.x5chain[0] !== `{identities[1].x5c[0]}`) {{
-            console.warn(`MISMATCH`);
-            console.warn(`For feed: {feeds[1]}`);
-            console.warn(`Found: ${{phdr.x5chain[0]}}`);
-            console.warn(`Expected: {identities[1].x5c[0]}`);
             return false;
         }}
     }}
