@@ -236,10 +236,10 @@ extends:
                   '
             displayName: Build test sgx through a dev container
 
-        - task: PublishPipelineArtifact@1
-          inputs:
-            artifactName: "run_functional_tests_local_virtual"
-            targetPath: pytest
+          - task: PublishPipelineArtifact@1
+            inputs:
+              artifactName: "run_functional_tests_local_virtual"
+              targetPath: pytest
 
 
     - stage: test_sgx_docker_build
