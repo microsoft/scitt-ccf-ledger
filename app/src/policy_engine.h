@@ -154,14 +154,6 @@ namespace scitt
       return obj;
     }
 
-    static constexpr auto sample_js_policy = R"!!!(
-export function apply(profile, phdr) {
-  console.log(`Calling apply function`);
-  console.log(`ClaimProfile is: ${profile}`);
-  console.log(`phdr is: ${JSON.stringify(phdr)}`);
-}
-)!!!";
-
     static inline bool apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
