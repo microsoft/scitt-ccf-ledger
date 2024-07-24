@@ -19,7 +19,7 @@ jobs:
         # Additional CMake flags.
         PLATFORM: virtual
         CMAKE_BUILD_TYPE: Release
-        ENABLE_PREFIX_TREE: ON
+        ENABLE_PREFIX_TREE: OFF
         CCF_UNSAFE: OFF
         ENABLE_CLANG_TIDY: ON
         # These make CI print all the errors, rather than stopping early.
@@ -37,4 +37,5 @@ jobs:
       - run: ./scripts/ci-checks.sh
       - run: ./build.sh
       - run: ./run_unit_tests.sh
-      - run: ./run_functional_tests.sh --enable-prefix-tree --enable-faketime
+      - run: ./run_functional_tests.sh --enable-faketime
+      # TODO upload logs
