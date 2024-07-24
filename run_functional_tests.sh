@@ -61,7 +61,7 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
     echo "Performance tests enabled"
 fi
 
-mkdir -p pytest
+mkdir -p out
 TEST_ARGS="$TEST_ARGS --basetemp=pytest"
 
 echo "Running functional tests..."

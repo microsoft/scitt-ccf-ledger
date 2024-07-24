@@ -115,7 +115,7 @@ extends:
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/pytest
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: virtual
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
@@ -149,13 +149,13 @@ extends:
       # when using custom pool image the usual container build support is not there so it 
       # need to be run manually through docker.
 
-      - job: test_sgx_no_prefixtree_with_perf
+      - job: test_sgx_with_perf
         pool:
           type: linux
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/pytest
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
         steps:
           - checkout: SCITT
             path: s/
@@ -187,44 +187,6 @@ extends:
                   '
             displayName: Build test sgx through a dev container
 
-      - job: test_sgx_with_prefixtree_no_perf
-        pool:
-          type: linux
-          isCustom: true
-          name: scitt-dc-pool
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/pytest
-        steps:
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            lfs: false
-          - script: |
-              docker run --rm \
-                --device /dev/sgx_enclave:/dev/sgx_enclave \
-                --device /dev/sgx_provision:/dev/sgx_provision \
-                --volume /dev/sgx:/dev/sgx \
-                --volume /var/run/docker.sock:/var/run/docker.sock \
-                --volume $(pwd):/opt/app \
-                --workdir /opt/app \
-                --env PLATFORM="sgx" \
-                --env CMAKE_BUILD_TYPE="Release" \
-                --env CCF_UNSAFE="OFF" \
-                --env ENABLE_PREFIX_TREE="ON" \
-                --env BUILD_TESTS="OFF" \
-                --env ENABLE_CLANG_TIDY="OFF" \
-                --env NINJA_FLAGS="-k 0" \
-                --env CXXFLAGS="-ferror-limit=0" \
-                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
-                  sudo apt-get update && sudo apt-get install -y faketime; \
-                  git config --global --add safe.directory "*"; \
-                  sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
-                  sudo usermod -a -G sgx_prv $(whoami); \
-                  ./build.sh && \
-                  ./run_functional_tests.sh --enable-faketime; \
-                  '
-            displayName: Build test sgx through a dev container
-
     - stage: test_sgx_docker_build
       jobs:
       - job: test_sgx_docker_build
@@ -233,7 +195,7 @@ extends:
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/pytest
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: sgx
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
