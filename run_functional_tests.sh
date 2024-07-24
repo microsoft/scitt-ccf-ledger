@@ -72,3 +72,6 @@ if [ -n "$ELEVATE_PRIVILEGES" ]; then
 else
     pytest ./test -v -rA $TEST_ARGS "$@"
 fi
+
+# OB pipeline can't copy out symlinks which are created by pytest.
+find out -maxdepth 1 -type l -delete
