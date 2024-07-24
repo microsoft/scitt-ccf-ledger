@@ -115,7 +115,7 @@ extends:
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          ob_outputDirectory: /tmp/pytest
           PLATFORM: virtual
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
@@ -155,7 +155,7 @@ extends:
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          ob_outputDirectory: /tmp/pytest
         steps:
           - checkout: SCITT
             path: s/
@@ -195,7 +195,7 @@ extends:
           isCustom: true
           name: scitt-dc-pool
         variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          ob_outputDirectory: /tmp/pytest
           PLATFORM: sgx
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
