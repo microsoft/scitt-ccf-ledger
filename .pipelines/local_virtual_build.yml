@@ -23,7 +23,7 @@ jobs:
     # if you want to use a different container, you need to set it in at job/script level
     pool:
       type: linux
-      # the steps below will implicitly use "target: linux_build_container" 
+      # the steps below will implicitly use "target: linux_build_container"
     variables:
       ob_outputDirectory: $(Build.SourcesDirectory)/pytest
       PLATFORM: virtual
@@ -64,9 +64,3 @@ jobs:
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         condition: ${{ parameters.RunTests }}
         displayName: Run Functional Tests
-
-      # - task: PublishPipelineArtifact@1
-      #   inputs:
-      #     artifactName: "run_functional_tests_local_virtual"
-      #     targetPath: pytest
-

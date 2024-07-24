@@ -44,6 +44,7 @@ jobs:
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
         with:
           name: pytest
           path: |
