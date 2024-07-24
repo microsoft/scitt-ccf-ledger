@@ -65,8 +65,8 @@ jobs:
         condition: ${{ parameters.RunTests }}
         displayName: Run Functional Tests
 
-      - task: PublishPipelineArtifact@1
-        inputs:
-          artifactName: "run_functional_tests_local_virtual"
-          targetPath: pytest
+      # - task: PublishPipelineArtifact@1
+      #   inputs:
+      #     artifactName: "run_functional_tests_local_virtual"
+      #     targetPath: pytest
 

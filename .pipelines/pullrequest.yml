@@ -137,10 +137,10 @@ extends:
               DOCKER: 1
               ELEVATE_PRIVILEGES: true
 
-          - task: PublishPipelineArtifact@1
-            inputs:
-              artifactName: "run_functional_tests_docker_virtual"
-              targetPath: pytest
+          # - task: PublishPipelineArtifact@1
+          #   inputs:
+          #     artifactName: "run_functional_tests_docker_virtual"
+          #     targetPath: pytest
 
 
     - stage: test_sgx_vm_container_build
@@ -193,10 +193,10 @@ extends:
                   '
             displayName: Build test sgx through a dev container
 
-          - task: PublishPipelineArtifact@1
-            inputs:
-              artifactName: "run_functional_tests_local_virtual"
-              targetPath: pytest
+          # - task: PublishPipelineArtifact@1
+          #   inputs:
+          #     artifactName: "run_functional_tests_local_virtual"
+          #     targetPath: pytest
 
       - job: test_sgx_with_prefixtree_no_perf
         pool:
@@ -236,10 +236,10 @@ extends:
                   '
             displayName: Build test sgx through a dev container
 
-          - task: PublishPipelineArtifact@1
-            inputs:
-              artifactName: "run_functional_tests_local_virtual"
-              targetPath: pytest
+          # - task: PublishPipelineArtifact@1
+          #   inputs:
+          #     artifactName: "run_functional_tests_local_virtual"
+          #     targetPath: pytest
 
 
     - stage: test_sgx_docker_build
@@ -271,8 +271,8 @@ extends:
               PLATFORM: sgx
               DOCKER: 1
               ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
-          - task: PublishPipelineArtifact@1
-            inputs:
-              artifactName: "run_functional_tests_sgx_docker"
-              targetPath: pytest
+          # - task: PublishPipelineArtifact@1
+          #   inputs:
+          #     artifactName: "run_functional_tests_sgx_docker"
+          #     targetPath: pytest
 
