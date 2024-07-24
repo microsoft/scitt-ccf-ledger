@@ -61,6 +61,9 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
     echo "Performance tests enabled"
 fi
 
+mkdir -p pytest
+TEST_ARGS="$TEST_ARGS --basetemp=pytest"
+
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
     sudo -E --preserve-env=PATH \

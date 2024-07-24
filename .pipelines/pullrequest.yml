@@ -136,7 +136,12 @@ extends:
               PLATFORM: virtual
               DOCKER: 1
               ELEVATE_PRIVILEGES: true
-          # TODO upload logs
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              artifactName: "run_functional_tests_docker_virtual"
+              targetPath: pytest
+
 
     - stage: test_sgx_vm_container_build
       jobs:
@@ -186,8 +191,12 @@ extends:
                   ./build.sh && \
                   ./run_functional_tests.sh; \
                   '
-            # TODO upload logs
             displayName: Build test sgx through a dev container
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              artifactName: "run_functional_tests_local_virtual"
+              targetPath: pytest
 
       - job: test_sgx_with_prefixtree_no_perf
         pool:
@@ -225,8 +234,13 @@ extends:
                   ./build.sh && \
                   ./run_functional_tests.sh --enable-faketime; \
                   '
-            # TODO upload logs
             displayName: Build test sgx through a dev container
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            artifactName: "run_functional_tests_local_virtual"
+            targetPath: pytest
+
 
     - stage: test_sgx_docker_build
       jobs:
@@ -257,5 +271,8 @@ extends:
               PLATFORM: sgx
               DOCKER: 1
               ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
-          # TODO upload logs
+          - task: PublishPipelineArtifact@1
+            inputs:
+              artifactName: "run_functional_tests_sgx_docker"
+              targetPath: pytest
 

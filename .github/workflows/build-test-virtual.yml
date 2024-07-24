@@ -37,4 +37,10 @@ jobs:
       - run: ./build.sh
       - run: ./run_unit_tests.sh
       - run: ./run_functional_tests.sh --enable-faketime
-      # TODO upload logs
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest
+          path: |
+            pytest

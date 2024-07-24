@@ -198,11 +198,6 @@ class CCHost(EventLoopThread):
 
         try:
             async with aiotools.TaskGroup() as tg:
-                # These sub-tasks will get cancelled automatically when this one
-                # is. They only get cancelled after we leave the `async with` block,
-                # which allows us to wait for the process to quit first. This
-                # works nicely as it makes sure the log processing tasks get to see
-                # the final log messages emitted by cchost on its way out.
                 tg.create_task(self._wait_ready())
 
                 await self._wait_for_process(process)

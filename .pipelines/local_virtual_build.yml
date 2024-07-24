@@ -64,4 +64,9 @@ jobs:
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         condition: ${{ parameters.RunTests }}
         displayName: Run Functional Tests
-      # TODO upload logs
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          artifactName: "run_functional_tests_local_virtual"
+          targetPath: pytest
+
