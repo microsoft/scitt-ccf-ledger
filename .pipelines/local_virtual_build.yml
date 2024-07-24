@@ -25,7 +25,7 @@ jobs:
       type: linux
       # the steps below will implicitly use "target: linux_build_container"
     variables:
-      ob_outputDirectory: /tmp/pytest
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
       PLATFORM: virtual
       # These make CI print all the errors, rather than stopping early.
       CXXFLAGS: -ferror-limit=0

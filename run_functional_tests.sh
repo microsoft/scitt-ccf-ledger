@@ -61,9 +61,8 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
     echo "Performance tests enabled"
 fi
 
-mkdir -p /tmp/pytest
-TEST_ARGS="$TEST_ARGS --basetemp=/tmp/pytest"
-echo "Something" > /tmp/pytest/something.txt
+mkdir -p out
+TEST_ARGS="$TEST_ARGS --basetemp=out"
 
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
