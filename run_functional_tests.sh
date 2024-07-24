@@ -62,7 +62,7 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
 fi
 
 mkdir -p out
-TEST_ARGS="$TEST_ARGS --basetemp=pytest"
+TEST_ARGS="$TEST_ARGS --basetemp=out"
 
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then

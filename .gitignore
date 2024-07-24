@@ -13,4 +13,3 @@ perf.json
 .mypy_cache/
 **/*.cose
 **/*.cbor
-pytest
