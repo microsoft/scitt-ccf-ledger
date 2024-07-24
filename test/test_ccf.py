@@ -90,7 +90,5 @@ def test_recovery(client, did_web, restart_service):
     assert new_network["recovery_count"] == 1
     assert new_network["service_certificate"] != old_network["service_certificate"]
 
-    assert False
-
     # Check that the service is still operating correctly
     client.submit_claim(crypto.sign_json_claimset(identity, {"foo": "hello"}))
