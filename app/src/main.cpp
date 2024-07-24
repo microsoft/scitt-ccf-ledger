@@ -13,6 +13,7 @@
 #include "http_error.h"
 #include "kv_types.h"
 #include "operations_endpoints.h"
+#include "policy_engine.h"
 #include "receipt.h"
 #include "service_endpoints.h"
 #include "tracing.h"
@@ -33,8 +34,6 @@
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
-#include <ccf/js/common_context.h>
-#include <ccf/js/extensions/console.h>
 #include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
 #include <ccf/node/host_processes_interface.h>
@@ -55,14 +54,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-static constexpr auto sample_js_policy = R"!!!(
-export function apply(profile, phdr) {
-  console.log(`Calling apply function`);
-  console.log(`ClaimProfile is: ${profile}`);
-  console.log(`phdr is: ${JSON.stringify(phdr)}`);
-}
-)!!!";
 
 namespace scitt
 {
@@ -147,190 +138,6 @@ namespace scitt
     std::shared_ptr<EntrySeqnoIndexingStrategy> entry_seqno_index = nullptr;
 
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
-
-    ccf::js::core::JSWrappedValue claim_profile_to_js_val(
-      ccf::js::core::Context& ctx, ClaimProfile claim_profile)
-    {
-      switch (claim_profile)
-      {
-        case ClaimProfile::IETF:
-        {
-          return ctx.new_string("IETF");
-          break;
-        }
-        case ClaimProfile::X509:
-        {
-          return ctx.new_string("X509");
-          break;
-        }
-        case ClaimProfile::Notary:
-        {
-          return ctx.new_string("Notary");
-          break;
-        }
-        default:
-        {
-          throw std::logic_error("Unhandled ClaimProfile value");
-        }
-      }
-    }
-
-    ccf::js::core::JSWrappedValue protected_headers_to_js_val(
-      ccf::js::core::Context& ctx, const scitt::cose::ProtectedHeader& phdr)
-    {
-      auto obj = ctx.new_obj();
-
-      // Vanilla SCITT protected header parameters
-      {
-        if (phdr.alg.has_value())
-        {
-          obj.set_int64("alg", phdr.alg.value());
-        }
-
-        if (phdr.crit.has_value())
-        {
-          auto crit_array = ctx.new_array();
-          size_t i = 0;
-
-          for (const auto& e : phdr.crit.value())
-          {
-            if (std::holds_alternative<int64_t>(e))
-            {
-              crit_array.set_at_index(
-                i++,
-                ccf::js::core::JSWrappedValue(
-                  ctx, JS_NewInt64(ctx, std::get<int64_t>(e))));
-            }
-            else if (std::holds_alternative<std::string>(e))
-            {
-              crit_array.set_at_index(
-                i++, ctx.new_string(std::get<std::string>(e)));
-            }
-          }
-
-          obj.set("crit", std::move(crit_array));
-        }
-
-        if (phdr.kid.has_value())
-        {
-          obj.set("kid", ctx.new_string(phdr.kid.value()));
-        }
-
-        if (phdr.issuer.has_value())
-        {
-          obj.set("issuer", ctx.new_string(phdr.issuer.value()));
-        }
-
-        if (phdr.feed.has_value())
-        {
-          obj.set("feed", ctx.new_string(phdr.feed.value()));
-        }
-
-        if (phdr.cty.has_value())
-        {
-          if (std::holds_alternative<int64_t>(phdr.cty.value()))
-          {
-            obj.set_int64("cty", std::get<int64_t>(phdr.cty.value()));
-          }
-          else if (std::holds_alternative<std::string>(phdr.cty.value()))
-          {
-            obj.set(
-              "cty", ctx.new_string(std::get<std::string>(phdr.cty.value())));
-          }
-        }
-
-        if (phdr.x5chain.has_value())
-        {
-          auto x5_array = ctx.new_array();
-          size_t i = 0;
-
-          for (const auto& e : phdr.x5chain.value())
-          {
-            x5_array.set_at_index(i++, ctx.new_array_buffer_copy(e));
-          }
-
-          obj.set("x5chain", std::move(x5_array));
-        }
-      }
-
-      // Extra Notary protected header parameters.
-      {
-        if (phdr.notary_signing_scheme.has_value())
-        {
-          obj.set(
-            "notary_signing_scheme",
-            ctx.new_string(phdr.notary_signing_scheme.value()));
-        }
-
-        if (phdr.notary_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_signing_time", phdr.notary_signing_time.value());
-        }
-
-        if (phdr.notary_authentic_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_authentic_signing_time",
-            phdr.notary_authentic_signing_time.value());
-        }
-
-        if (phdr.notary_expiry.has_value())
-        {
-          obj.set_int64("notary_expiry", phdr.notary_expiry.value());
-        }
-      }
-
-      return obj;
-    }
-
-    void apply_js_policy(
-      ccf::kv::Tx& tx,
-      ClaimProfile claim_profile,
-      const scitt::cose::ProtectedHeader& phdr)
-    {
-      // Allow the policy to access common globals (including shims for
-      // builtins) like "console", "ccf.crypto", and "ccf.kv"
-      ccf::js::CommonContextWithLocalTx interpreter(
-        ccf::js::TxAccess::APP_RO, &tx);
-
-      const auto module_name = "sample_policy";
-
-      ccf::js::core::JSWrappedValue apply_func;
-      try
-      {
-        apply_func = interpreter.get_exported_function(
-          sample_js_policy, "apply", module_name);
-      }
-      catch (const std::exception& e)
-      {
-        SCITT_FAIL("Invalid policy module: {}", e.what());
-        return;
-      }
-
-      auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
-      auto phdr_val = protected_headers_to_js_val(interpreter, phdr);
-
-      const auto result = interpreter.call_with_rt_options(
-        apply_func,
-        {profile_val, phdr_val},
-        std::nullopt,
-        ccf::js::core::RuntimeLimitsPolicy::NONE);
-
-      if (result.is_exception())
-      {
-        auto [reason, trace] = interpreter.error_message();
-
-        SCITT_FAIL(
-          "Error while applying policy: {}\n{}",
-          reason,
-          trace.value_or("<no trace>"));
-        return;
-      }
-
-      auto s = interpreter.to_str(result);
-      SCITT_INFO("Result of policy.apply() is: {}", s.value_or("<empty>"));
-    }
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
     {
@@ -444,7 +251,17 @@ namespace scitt
 #endif
       }
 
-      apply_js_policy(ctx.tx, claim_profile, phdr);
+      if (cfg.policy.policy_script.has_value())
+      {
+        if (!scitt::run_policy_engine(
+              cfg.policy.policy_script.value(),
+              "configured_policy",
+              claim_profile,
+              phdr))
+        {
+          throw BadRequestError(errors::PolicyFailed, "Policy was not met");
+        }
+      }
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
