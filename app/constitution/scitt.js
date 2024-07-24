@@ -24,8 +24,7 @@ actions.set("set_scitt_configuration",
             checkType(alg, "string", `configuration.policy.accepted_did_issuers[${i}]`);
           }
         }
-
-        // TODO: Validate type of policy_script
+        checkType(args.configuration.policy.policy_script, "string?", "configuration.policy.policy_script");
       }
 
       checkType(args.configuration.authentication, "object?", "configuration.authentication");
