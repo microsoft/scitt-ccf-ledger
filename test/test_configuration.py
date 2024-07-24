@@ -14,6 +14,7 @@ from pyscitt.verify import DIDResolverTrustStore, verify_receipt
 
 from .infra.assertions import service_error
 from .infra.did_web_server import DIDWebServer
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class TestAcceptedAlgorithms:
@@ -108,6 +109,182 @@ class TestAcceptedDIDIssuers:
             {"policy": {"accepted_did_issuers": [identity.issuer, "else"]}}
         )
         client.submit_claim(claims)
+
+
+class TestPolicyEngine:
+    @pytest.fixture(scope="class")
+    def signed_claimset(self, trusted_ca: X5ChainCertificateAuthority):
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
+        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+
+    def test_x509_policy(
+        self,
+        client: Client,
+        configure_service,
+        trusted_ca: X5ChainCertificateAuthority,
+        did_web,
+    ):
+        # We will apply a policy that only allows feed[0] to be edited
+        # by identity[0], and feed[1] by identity[1]. All other feeds are unprotected
+        identities = [
+            trusted_ca.create_identity(alg="ES256", kty="ec"),
+            trusted_ca.create_identity(alg="ES256", kty="ec"),
+            trusted_ca.create_identity(alg="ES256", kty="ec"),
+        ]
+        feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue"]
+
+        claims = {"foo": "bar"}
+
+        permitted_signed_claims = [
+            # Protected feed for first identity
+            crypto.sign_json_claimset(
+                identities[0],
+                claims,
+                feed=feeds[0],
+            ),
+            # Protected feed for second identity
+            crypto.sign_json_claimset(
+                identities[1],
+                claims,
+                feed=feeds[1],
+            ),
+            # Unprotected feed
+            crypto.sign_json_claimset(
+                identities[0],
+                claims,
+                feed=feeds[2],
+            ),
+            crypto.sign_json_claimset(
+                identities[1],
+                claims,
+                feed=feeds[2],
+            ),
+            crypto.sign_json_claimset(
+                identities[2],
+                claims,
+                feed=feeds[2],
+            ),
+        ]
+
+        refused_signed_claims = [
+            # No others can publish to first feed
+            crypto.sign_json_claimset(
+                identities[1],
+                claims,
+                feed=feeds[0],
+            ),
+            crypto.sign_json_claimset(
+                identities[2],
+                claims,
+                feed=feeds[0],
+            ),
+            # No others can publish to second feed
+            crypto.sign_json_claimset(
+                identities[0],
+                claims,
+                feed=feeds[1],
+            ),
+            crypto.sign_json_claimset(
+                identities[2],
+                claims,
+                feed=feeds[1],
+            ),
+            # Other claim profiles are refused
+            crypto.sign_json_claimset(
+                did_web.create_identity(),
+                claims,
+            ),
+        ]
+
+        policy_script = f"""
+export function apply(profile, phdr) {{
+    // Only accept x509 submissions with a feed
+    if (profile !== "X509") {{ return false; }}
+    if (!("feed" in phdr)) {{ return false; }}
+
+    // Protect access to the first feed
+    // Note this is doing direct cert comparison for simplicity, should
+    // really be basedon a stable issuer ID
+    if (phdr.feed === "{feeds[0]}") {{
+        if (phdr.x5chain[0] !== `{identities[0].x5c[0]}`) {{
+            console.warn(`MISMATCH`);
+            console.warn(`For feed: {feeds[0]}`);
+            console.warn(`Found: ${{phdr.x5chain[0]}}`);
+            console.warn(`Expected: {identities[0].x5c[0]}`);
+            return false;
+        }}
+    }}
+
+    if (phdr.feed === "{feeds[1]}") {{
+        if (phdr.x5chain[0] !== `{identities[1].x5c[0]}`) {{
+            console.warn(`MISMATCH`);
+            console.warn(`For feed: {feeds[1]}`);
+            console.warn(`Found: ${{phdr.x5chain[0]}}`);
+            console.warn(`Expected: {identities[1].x5c[0]}`);
+            return false;
+        }}
+    }}
+
+    return true;
+}}"""
+
+        configure_service({"policy": {"policy_script": policy_script}})
+
+        for signed_claimset in permitted_signed_claims:
+            client.submit_claim(signed_claimset)
+
+        for signed_claimset in refused_signed_claims:
+            with service_error("Policy was not met"):
+                client.submit_claim(signed_claimset)
+
+    def test_trivial_true_policy(
+        self, client: Client, configure_service, signed_claimset
+    ):
+        configure_service(
+            {"policy": {"policy_script": "export function apply() { return true }"}}
+        )
+
+        client.submit_claim(signed_claimset)
+
+    def test_trivial_false_policy(
+        self, client: Client, configure_service, signed_claimset
+    ):
+        configure_service(
+            {"policy": {"policy_script": "export function apply() { return false }"}}
+        )
+
+        with service_error("Policy was not met"):
+            client.submit_claim(signed_claimset)
+
+    def test_exceptional_policy(
+        self, client: Client, configure_service, signed_claimset
+    ):
+        configure_service(
+            {
+                "policy": {
+                    "policy_script": 'export function apply() { throw new Error("Boom"); }'
+                }
+            }
+        )
+
+        with service_error("Error while applying policy"):
+            client.submit_claim(signed_claimset)
+
+    @pytest.mark.parametrize(
+        "script",
+        [
+            "",
+            "return true",
+            "function apply() {}",
+        ],
+    )
+    def test_invalid_policy(
+        self, client: Client, configure_service, signed_claimset, script
+    ):
+        configure_service({"policy": {"policy_script": script}})
+
+        with service_error("Invalid policy module"):
+            client.submit_claim(signed_claimset)
 
 
 def test_service_identifier(
