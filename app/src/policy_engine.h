@@ -113,9 +113,10 @@ namespace scitt
           auto x5_array = ctx.new_array();
           size_t i = 0;
 
-          for (const auto& e : phdr.x5chain.value())
+          for (const auto& der_cert : phdr.x5chain.value())
           {
-            x5_array.set_at_index(i++, ctx.new_array_buffer_copy(e));
+            auto pem = ccf::crypto::cert_der_to_pem(der_cert);
+            x5_array.set_at_index(i++, ctx.new_string(pem.str()));
           }
 
           obj.set("x5chain", std::move(x5_array));
