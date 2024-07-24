@@ -136,6 +136,7 @@ extends:
               PLATFORM: virtual
               DOCKER: 1
               ELEVATE_PRIVILEGES: true
+          # TODO upload logs
 
     - stage: test_sgx_vm_container_build
       jobs:
@@ -185,6 +186,7 @@ extends:
                   ./build.sh && \
                   ./run_functional_tests.sh; \
                   '
+            # TODO upload logs
             displayName: Build test sgx through a dev container
 
       - job: test_sgx_with_prefixtree_no_perf
@@ -223,6 +225,7 @@ extends:
                   ./build.sh && \
                   ./run_functional_tests.sh --enable-faketime; \
                   '
+            # TODO upload logs
             displayName: Build test sgx through a dev container
 
     - stage: test_sgx_docker_build
@@ -254,4 +257,5 @@ extends:
               PLATFORM: sgx
               DOCKER: 1
               ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
+          # TODO upload logs
 

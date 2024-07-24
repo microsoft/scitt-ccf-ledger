@@ -64,5 +64,4 @@ jobs:
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         condition: ${{ parameters.RunTests }}
         displayName: Run Functional Tests
-
       # TODO upload logs
