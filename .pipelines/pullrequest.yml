@@ -178,7 +178,7 @@ extends:
                 --env NINJA_FLAGS="-k 0" \
                 --env CXXFLAGS="-ferror-limit=0" \
                 --env ENABLE_PERF_TESTS="true" \
-                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
+                ghcr.io/microsoft/ccf/app/dev/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
                   git config --global --add safe.directory "*"; \
                   sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
                   sudo usermod -a -G sgx_prv $(whoami); \
