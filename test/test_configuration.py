@@ -196,6 +196,11 @@ class TestPolicyEngine:
             ),
         ]
 
+        assert identities[0].x5c is not None
+        assert identities[1].x5c is not None
+        cert_0 = identities[0].x5c[0]
+        cert_1 = identities[1].x5c[0]
+
         policy_script = f"""
 export function apply(profile, phdr) {{
     // Only accept x509 submissions with a feed
@@ -206,13 +211,13 @@ export function apply(profile, phdr) {{
     // Note this is doing direct cert comparison for simplicity, should
     // really be basedon a stable issuer ID
     if (phdr.feed === "{feeds[0]}") {{
-        if (phdr.x5chain[0] !== `{identities[0].x5c[0]}`) {{
+        if (phdr.x5chain[0] !== `{cert_0}`) {{
             return false;
         }}
     }}
 
     if (phdr.feed === "{feeds[1]}") {{
-        if (phdr.x5chain[0] !== `{identities[1].x5c[0]}`) {{
+        if (phdr.x5chain[0] !== `{cert_1}`) {{
             return false;
         }}
     }}
