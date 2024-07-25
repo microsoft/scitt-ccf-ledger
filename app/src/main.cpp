@@ -253,14 +253,24 @@ namespace scitt
 
       if (cfg.policy.policy_script.has_value())
       {
-        if (!scitt::run_policy_engine(
-              cfg.policy.policy_script.value(),
-              "configured_policy",
-              claim_profile,
-              phdr))
+        SCITT_DEBUG("Applying policy");
+        const auto policy_violation_reason = check_for_policy_violations(
+          cfg.policy.policy_script.value(),
+          "configured_policy",
+          claim_profile,
+          phdr);
+        if (policy_violation_reason.has_value())
         {
-          throw BadRequestError(errors::PolicyFailed, "Policy was not met");
+          throw BadRequestError(
+            errors::PolicyFailed,
+            fmt::format(
+              "Policy was not met: {}", policy_violation_reason.value()));
         }
+        SCITT_DEBUG("Policy check passed");
+      }
+      else
+      {
+        SCITT_DEBUG("No policy applied");
       }
 
       // TODO: Apply further acceptance policies.

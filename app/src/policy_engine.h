@@ -154,7 +154,7 @@ namespace scitt
       return obj;
     }
 
-    static inline bool apply_js_policy(
+    static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
       ClaimProfile claim_profile,
@@ -198,12 +198,30 @@ namespace scitt
             trace.value_or("<no trace>")));
       }
 
-      // JS-style semantics - anything truthy becomes true
-      return result.is_true();
+      if (result.is_str())
+      {
+        return interpreter.to_str(result);
+      }
+
+      // Note this does JS-style truthy conversion, so lots of truthy values may
+      // become true here
+      if (result.is_true())
+      {
+        return std::nullopt;
+      }
+
+      throw BadRequestError(
+        scitt::errors::PolicyError,
+        fmt::format(
+          "Unexpected return value from policy: {}",
+          interpreter.to_str(result)));
     }
   }
 
-  static inline bool run_policy_engine(
+  // Returns nullopt for success, else a string describing why the policy was
+  // refused. May also throw if given invalid policies, or policy execution
+  // throws.
+  static inline std::optional<std::string> check_for_policy_violations(
     const PolicyScript& script,
     const std::string& policy_name,
     ClaimProfile claim_profile,

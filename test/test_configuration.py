@@ -166,35 +166,62 @@ class TestPolicyEngine:
             ),
         ]
 
-        refused_signed_claims = [
-            # No others can publish to first feed
-            crypto.sign_json_claimset(
-                identities[1],
-                claims,
-                feed=feeds[0],
-            ),
-            crypto.sign_json_claimset(
-                identities[2],
-                claims,
-                feed=feeds[0],
-            ),
-            # No others can publish to second feed
-            crypto.sign_json_claimset(
-                identities[0],
-                claims,
-                feed=feeds[1],
-            ),
-            crypto.sign_json_claimset(
-                identities[2],
-                claims,
-                feed=feeds[1],
-            ),
+        feed_0_error = f"{feeds[0]} is a protected feed, this request does not come from correct issuer"
+        feed_1_error = f"{feeds[1]} is a protected feed, this request does not come from correct issuer"
+        claim_profile_error = f"This policy only accepts X509 claims"
+        missing_feed_error = f"COSE protected header does not contain 'feed'"
+
+        # Keyed by expected error, values are lists of claimsets which should trigger this error
+        refused_signed_claims = {
+            # Other identities cannot publish to first feed
+            feed_0_error: [
+                crypto.sign_json_claimset(
+                    identities[1],
+                    claims,
+                    feed=feeds[0],
+                ),
+                crypto.sign_json_claimset(
+                    identities[2],
+                    claims,
+                    feed=feeds[0],
+                ),
+            ],
+            # Other identities cannot publish to second feed
+            feed_1_error: [
+                crypto.sign_json_claimset(
+                    identities[0],
+                    claims,
+                    feed=feeds[1],
+                ),
+                crypto.sign_json_claimset(
+                    identities[2],
+                    claims,
+                    feed=feeds[1],
+                ),
+            ],
             # Other claim profiles are refused
-            crypto.sign_json_claimset(
-                did_web.create_identity(),
-                claims,
-            ),
-        ]
+            claim_profile_error: [
+                crypto.sign_json_claimset(
+                    did_web.create_identity(),
+                    claims,
+                ),
+            ],
+            # Claims without feed are refused
+            missing_feed_error: [
+                crypto.sign_json_claimset(
+                    identities[0],
+                    claims,
+                ),
+                crypto.sign_json_claimset(
+                    identities[1],
+                    claims,
+                ),
+                crypto.sign_json_claimset(
+                    identities[2],
+                    claims,
+                ),
+            ],
+        }
 
         assert identities[0].x5c is not None
         assert identities[1].x5c is not None
@@ -204,21 +231,21 @@ class TestPolicyEngine:
         policy_script = f"""
 export function apply(profile, phdr) {{
     // Only accept x509 submissions with a feed
-    if (profile !== "X509") {{ return false; }}
-    if (!("feed" in phdr)) {{ return false; }}
+    if (profile !== "X509") {{ return "{claim_profile_error}"; }}
+    if (!("feed" in phdr)) {{ return "{missing_feed_error}"; }}
 
     // Protect access to the first feed
     // Note this is doing direct cert comparison for simplicity, should
     // really be basedon a stable issuer ID
     if (phdr.feed === "{feeds[0]}") {{
         if (phdr.x5chain[0] !== `{cert_0}`) {{
-            return false;
+            return "{feed_0_error}";
         }}
     }}
 
     if (phdr.feed === "{feeds[1]}") {{
         if (phdr.x5chain[0] !== `{cert_1}`) {{
-            return false;
+            return "{feed_1_error}";
         }}
     }}
 
@@ -230,9 +257,10 @@ export function apply(profile, phdr) {{
         for signed_claimset in permitted_signed_claims:
             client.submit_claim(signed_claimset)
 
-        for signed_claimset in refused_signed_claims:
-            with service_error("Policy was not met"):
-                client.submit_claim(signed_claimset)
+        for err, signed_claimsets in refused_signed_claims.items():
+            for signed_claimset in signed_claimsets:
+                with service_error(err):
+                    client.submit_claim(signed_claimset)
 
     def test_trivial_true_policy(
         self, client: Client, configure_service, signed_claimset
