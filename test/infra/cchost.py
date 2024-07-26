@@ -182,6 +182,8 @@ class CCHost(EventLoopThread):
             cchost_env["FAKETIME_NO_CACHE"] = "1"
 
         LOG.debug("Starting cchost process...")
+        stdout_file = open(f"{self.workspace}/std.out", "w")
+        stderr_file = open(f"{self.workspace}/std.err", "w")
         process = await asyncio.create_subprocess_exec(
             self.binary,
             "--config",
@@ -189,20 +191,13 @@ class CCHost(EventLoopThread):
             cwd=self.workspace,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_file,
+            stderr=stderr_file,
             env=cchost_env,
         )
 
         try:
             async with aiotools.TaskGroup() as tg:
-                # These sub-tasks will get cancelled automatically when this one
-                # is. They only get cancelled after we leave the `async with` block,
-                # which allows us to wait for the process to quit first. This
-                # works nicely as it makes sure the log processing tasks get to see
-                # the final log messages emitted by cchost on its way out.
-                tg.create_task(self._process_stdout(process.stdout))
-                tg.create_task(self._process_stderr(process.stderr))
                 tg.create_task(self._wait_ready())
 
                 await self._wait_for_process(process)

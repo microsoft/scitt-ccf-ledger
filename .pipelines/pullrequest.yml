@@ -24,7 +24,7 @@ variables:
   Codeql.ADO.Build.Repository.Uri: https://github.com/microsoft/scitt-ccf-ledger # reference another repository
 
 resources:
-  repositories: 
+  repositories:
     - repository: templates
       type: git
       name: OneBranch.Pipelines/GovernedTemplates
@@ -51,7 +51,7 @@ extends:
       policheck:
         break: true
       codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
-        compiled: 
+        compiled:
           enabled: true
     stages:
     - stage: setup
@@ -59,7 +59,7 @@ extends:
       - job: setup
         pool:
           type: linux
-        variables:    
+        variables:
           ob_outputDirectory: '$(Build.SourcesDirectory)/out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
         steps:
         - task: onebranch.pipeline.version@1 # generates automatic version. For other versioning options check https://aka.ms/obpipelines/versioning
@@ -69,15 +69,15 @@ extends:
             major: '1'
             minor: '0'
             name: scitt-ccf-ledger
-    
+
     - stage: test_virtual_vm_build
       jobs:
-      
+
       - job: format
         displayName: Code Formatting
         pool:
           type: linux
-        variables:    
+        variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
         steps:
         - checkout: SCITT
@@ -94,7 +94,7 @@ extends:
           RunTests: false
           Environment:
             CMAKE_BUILD_TYPE: Debug
-            ENABLE_PREFIX_TREE: ON
+            ENABLE_PREFIX_TREE: OFF
             ENABLE_CLANG_TIDY: ON
           InstallPackages: [ libcurl4-openssl-dev, clang-tidy-10 ]
 
@@ -103,14 +103,14 @@ extends:
           Name: test_virtual
           DisplayName: Build and test (Virtual, with prefix tree)
           Environment:
-            ENABLE_PREFIX_TREE: ON
-          FunctionalTestArguments: '--enable-prefix-tree --enable-faketime'
+            ENABLE_PREFIX_TREE: OFF
+          FunctionalTestArguments: '--enable-faketime'
           InstallPackages: [ libcurl4-openssl-dev, faketime ]
 
     - stage: test_virtual_docker_build
       jobs:
       - job: test_virtual_docker
-        pool: 
+        pool:
           type: linux
           isCustom: true
           name: scitt-dc-pool
@@ -119,7 +119,7 @@ extends:
           PLATFORM: virtual
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
-          ENABLE_PREFIX_TREE: ON
+          ENABLE_PREFIX_TREE: OFF
         steps:
           - checkout: SCITT
             path: s/
@@ -139,7 +139,7 @@ extends:
 
     - stage: test_sgx_vm_container_build
       jobs:
-      
+
       ## About SGX support on OneBranch
       # Local sgx build is not possible without changing the vm image in the pool
       # from ubuntu 22 to ubuntu 20 because dcap was not released to v22 and is not
@@ -149,8 +149,8 @@ extends:
       # when using custom pool image the usual container build support is not there so it 
       # need to be run manually through docker.
 
-      - job: test_sgx_no_prefixtree_with_perf
-        pool: 
+      - job: test_sgx_with_perf
+        pool:
           type: linux
           isCustom: true
           name: scitt-dc-pool
@@ -178,7 +178,7 @@ extends:
                 --env NINJA_FLAGS="-k 0" \
                 --env CXXFLAGS="-ferror-limit=0" \
                 --env ENABLE_PERF_TESTS="true" \
-                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
+                ghcr.io/microsoft/ccf/app/dev/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
                   git config --global --add safe.directory "*"; \
                   sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
                   sudo usermod -a -G sgx_prv $(whoami); \
@@ -186,49 +186,11 @@ extends:
                   ./run_functional_tests.sh; \
                   '
             displayName: Build test sgx through a dev container
-      
-      - job: test_sgx_with_prefixtree_no_perf
-        pool: 
-          type: linux
-          isCustom: true
-          name: scitt-dc-pool
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
-        steps:
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            lfs: false
-          - script: |
-              docker run --rm \
-                --device /dev/sgx_enclave:/dev/sgx_enclave \
-                --device /dev/sgx_provision:/dev/sgx_provision \
-                --volume /dev/sgx:/dev/sgx \
-                --volume /var/run/docker.sock:/var/run/docker.sock \
-                --volume $(pwd):/opt/app \
-                --workdir /opt/app \
-                --env PLATFORM="sgx" \
-                --env CMAKE_BUILD_TYPE="Release" \
-                --env CCF_UNSAFE="OFF" \
-                --env ENABLE_PREFIX_TREE="ON" \
-                --env BUILD_TESTS="OFF" \
-                --env ENABLE_CLANG_TIDY="OFF" \
-                --env NINJA_FLAGS="-k 0" \
-                --env CXXFLAGS="-ferror-limit=0" \
-                ghcr.io/microsoft/ccf/app/run/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
-                  sudo apt-get update && sudo apt-get install -y faketime; \
-                  git config --global --add safe.directory "*"; \
-                  sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
-                  sudo usermod -a -G sgx_prv $(whoami); \
-                  ./build.sh && \
-                  ./run_functional_tests.sh --enable-prefix-tree --enable-faketime; \
-                  '
-            displayName: Build test sgx through a dev container
 
     - stage: test_sgx_docker_build
       jobs:
       - job: test_sgx_docker_build
-        pool: 
+        pool:
           type: linux
           isCustom: true
           name: scitt-dc-pool
@@ -237,7 +199,7 @@ extends:
           PLATFORM: sgx
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
-          ENABLE_PREFIX_TREE: ON
+          ENABLE_PREFIX_TREE: OFF
         steps:
           - checkout: SCITT
             path: s/
@@ -254,4 +216,3 @@ extends:
               PLATFORM: sgx
               DOCKER: 1
               ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
-
