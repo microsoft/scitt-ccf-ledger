@@ -25,17 +25,14 @@ namespace scitt
         case ClaimProfile::IETF:
         {
           return ctx.new_string("IETF");
-          break;
         }
         case ClaimProfile::X509:
         {
           return ctx.new_string("X509");
-          break;
         }
         case ClaimProfile::Notary:
         {
           return ctx.new_string("Notary");
-          break;
         }
         default:
         {
