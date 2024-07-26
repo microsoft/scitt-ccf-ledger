@@ -275,7 +275,11 @@ export function apply(profile, phdr) {{
         self, client: Client, configure_service, signed_claimset
     ):
         configure_service(
-            {"policy": {"policy_script": "export function apply() { return `All entries are refused`; }"}}
+            {
+                "policy": {
+                    "policy_script": "export function apply() { return `All entries are refused`; }"
+                }
+            }
         )
 
         with service_error("Policy was not met"):
