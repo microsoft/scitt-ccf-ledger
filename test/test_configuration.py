@@ -236,7 +236,7 @@ export function apply(profile, phdr) {{
 
     // Protect access to the first feed
     // Note this is doing direct cert comparison for simplicity, should
-    // really be basedon a stable issuer ID
+    // really be based on a stable issuer ID
     if (phdr.feed === "{feeds[0]}") {{
         if (phdr.x5chain[0] !== `{cert_0}`) {{
             return "{feed_0_error}";
