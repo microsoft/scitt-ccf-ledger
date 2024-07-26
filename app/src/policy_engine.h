@@ -180,7 +180,7 @@ namespace scitt
       const auto result = interpreter.call_with_rt_options(
         apply_func,
         {profile_val, phdr_val},
-        std::nullopt,
+        std::nullopt, // TODO: add runtime limits (heap, stack, time)
         ccf::js::core::RuntimeLimitsPolicy::NONE);
 
       if (result.is_exception())
