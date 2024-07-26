@@ -262,7 +262,7 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.submit_claim(signed_claimset)
 
-    def test_trivial_true_policy(
+    def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_claimset
     ):
         configure_service(
@@ -271,11 +271,11 @@ export function apply(profile, phdr) {{
 
         client.submit_claim(signed_claimset)
 
-    def test_trivial_false_policy(
+    def test_trivial_fail_policy(
         self, client: Client, configure_service, signed_claimset
     ):
         configure_service(
-            {"policy": {"policy_script": "export function apply() { return false }"}}
+            {"policy": {"policy_script": "export function apply() { return `All entries are refused`; }"}}
         )
 
         with service_error("Policy was not met"):
