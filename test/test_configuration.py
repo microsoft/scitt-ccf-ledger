@@ -130,8 +130,12 @@ class TestPolicyEngine:
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
+            trusted_ca.create_identity(alg="ES256", kty="ec"),
         ]
-        feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue"]
+
+        identities[3].issuer = "did:x509:0:sha256:DIGEST::eku:OID"
+
+        feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue", "ValueThatRequiresADIDx509"]
 
         claims = {"foo": "bar"}
 
@@ -164,6 +168,14 @@ class TestPolicyEngine:
                 claims,
                 feed=feeds[2],
             ),
+            # Fails at the moment, because
+            # DIDMethodNotSupported: DID 'did:x509:0:sha256:DIGEST::eku:OID' is not supported
+            # # Feed protect by CA + EKU
+            # crypto.sign_json_claimset(
+            #     identities[3],
+            #     claims,
+            #     feed=feeds[2],
+            # ),
         ]
 
         feed_0_error = f"{feeds[0]} is a protected feed, this request does not come from correct issuer"
@@ -247,6 +259,11 @@ export function apply(profile, phdr) {{
         if (phdr.x5chain[0] !== `{cert_1}`) {{
             return "{feed_1_error}";
         }}
+    }}
+
+    // On feed ValueThatRequiresADIDx509
+    if (phdr.feed === "{feeds[3]}") {{
+    
     }}
 
     return true;
