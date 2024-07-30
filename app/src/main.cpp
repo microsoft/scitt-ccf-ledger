@@ -401,9 +401,7 @@ namespace scitt
       SCITT_DEBUG("Register DID:web resolver");
       auto resolver = std::make_unique<did::UniversalResolver>();
       resolver->register_resolver(std::make_unique<did::web::DidWebResolver>());
-
-      auto mock_x509_resolver = std::make_unique<MockMethodResolver>("did:x509:");
-      resolver->register_resolver(mock_x509_resolver);
+      resolver->register_resolver(std::make_unique<did::x509::DidX509Resolver>());
 
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 

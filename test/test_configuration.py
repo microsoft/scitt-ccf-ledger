@@ -135,8 +135,10 @@ class TestPolicyEngine:
 
         identities[3].issuer = "did:x509:0:sha256:DIGEST::eku:OID"
 
+        # sub
         feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue", "ValueThatRequiresADIDx509"]
 
+        # SBOMs
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
@@ -263,7 +265,7 @@ export function apply(profile, phdr) {{
 
     // On feed ValueThatRequiresADIDx509
     if (phdr.feed === "{feeds[3]}") {{
-    
+      iss =~ /did:x509:0:....root cert...:eku::.../
     }}
 
     return true;
