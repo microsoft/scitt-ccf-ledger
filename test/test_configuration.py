@@ -133,7 +133,11 @@ class TestPolicyEngine:
             trusted_ca.create_identity(alg="ES256", kty="ec"),
         ]
 
-        identities[3].issuer = "did:x509:0:sha256:DIGEST::eku:OID"
+        for i, cert in enumerate(identities[3].x5c):
+            print(f"{i}: {crypto.get_cert_fingerprint_b64url(cert)}")
+
+        root_fingerprint = crypto.get_cert_fingerprint_b64url(identities[3].x5c[-1])
+        identities[3].issuer = f"did:x509:0:sha256:{root_fingerprint}::eku:2.999"
 
         # sub
         feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue", "ValueThatRequiresADIDx509"]
@@ -170,14 +174,12 @@ class TestPolicyEngine:
                 claims,
                 feed=feeds[2],
             ),
-            # Fails at the moment, because
-            # DIDMethodNotSupported: DID 'did:x509:0:sha256:DIGEST::eku:OID' is not supported
-            # # Feed protect by CA + EKU
-            # crypto.sign_json_claimset(
-            #     identities[3],
-            #     claims,
-            #     feed=feeds[2],
-            # ),
+            # Feed protected by CA + EKU
+            crypto.sign_json_claimset(
+                identities[3],
+                claims,
+                feed=feeds[2],
+            ),
         ]
 
         feed_0_error = f"{feeds[0]} is a protected feed, this request does not come from correct issuer"

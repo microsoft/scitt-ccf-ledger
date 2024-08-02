@@ -276,6 +276,11 @@ def get_cert_fingerprint(pem: Pem) -> str:
     return cert.fingerprint(hashes.SHA256()).hex()
 
 
+def get_cert_fingerprint_b64url(pem: Pem) -> str:
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
+    return base64.urlsafe_b64encode(cert.fingerprint(hashes.SHA256())).decode("ascii").strip("=")
+
+
 def get_public_key_fingerprint(pem: Pem) -> str:
     pub_key = load_pem_public_key(pem.encode("ascii"))
     der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)

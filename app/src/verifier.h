@@ -11,6 +11,8 @@
 #include "signature_algorithms.h"
 #include "tracing.h"
 
+#include "didx509cpp/didx509cpp.h"
+
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
@@ -362,17 +364,59 @@ namespace scitt::verifier
         }
         else if (phdr.issuer.has_value())
         {
-          // IETF SCITT claim
-          key = process_ietf_profile(
-            phdr, tx, current_time, resolution_cache_expiry, configuration);
+          if (phdr.issuer->starts_with("did:x509"))
+          {
+            // IETF SCITT did:x509 claim
+            if (phdr.x5chain.has_value())
+            {
+              // In later revisions, x5chain is unprotected, and only x5t is
+              // So this will need to authenticate x5chain[0] against x5t first
+              OpenSSL::Unique_X509 leaf = parse_certificate(phdr.x5chain.value()[0]);
+              key = PublicKey(leaf, std::nullopt);
+              try
+              {
+                cose::verify(data, key);
+              }
+              catch (const cose::COSESignatureValidationError& e)
+              {
+                throw VerificationError(e.what());
+              }
+              // Authenticate did:x509 claim
+              std::string pem_chain;
+              for (auto const& c : phdr.x5chain.value())
+              {
+                pem_chain += ccf::crypto::cert_der_to_pem(c).str();
 
-          try
-          {
-            cose::verify(data, key);
+              }
+              auto did_document_str = didx509::resolve(pem_chain, phdr.issuer.value(), true /* Do not validate time */);
+              auto did_document = nlohmann::json::parse(did_document_str);
+              SCITT_INFO("DUMP {}", did_document.dump());
+              // TODO: Extract signing key from phdr.x5chain.value()[0]
+              // and verify its presence in the document under
+              // verification_method.controller.public_key_jwk.jwk
+            }
+            else
+            {
+              throw VerificationError(
+                "Claim has an x5chain (label 33) parameter in its protected "
+                "header, but is not a Notary claim.");
+            }
+
           }
-          catch (const cose::COSESignatureValidationError& e)
+          else
           {
-            throw VerificationError(e.what());
+            // IETF SCITT did:web claim
+            key = process_ietf_profile(
+              phdr, tx, current_time, resolution_cache_expiry, configuration);
+
+            try
+            {
+              cose::verify(data, key);
+            }
+            catch (const cose::COSESignatureValidationError& e)
+            {
+              throw VerificationError(e.what());
+            }
           }
 
           profile = ClaimProfile::IETF;
