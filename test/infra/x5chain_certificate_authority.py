@@ -29,6 +29,13 @@ class X5ChainCertificateAuthority:
         self, *, length: int = 1, ca: bool = False, **kwargs
     ) -> Tuple[List[Pem], Pem]:
         assert length > 0
+        generate_cert_kwargs = {}
+        # Unlike the rest of the kwards, which are handed over to the keypair generation
+        # call, inject_eku is passed to the certificate generation call.
+        inject_eku = "inject_eku"
+        if inject_eku in kwargs:
+            generate_cert_kwargs[inject_eku] = kwargs[inject_eku]
+            del kwargs[inject_eku]
 
         chain = [(self.root_cert_pem, self.root_key_pem)]
         for i in range(length):
@@ -37,6 +44,7 @@ class X5ChainCertificateAuthority:
                 private_key_pem=private_key,
                 issuer=chain[-1],
                 ca=(i < length - 1) or ca,
+                **generate_cert_kwargs
             )
             chain.append((cert_pem, private_key))
 

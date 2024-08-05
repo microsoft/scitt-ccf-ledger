@@ -124,20 +124,20 @@ class TestPolicyEngine:
         trusted_ca: X5ChainCertificateAuthority,
         did_web,
     ):
+        example_eku = "2.999"
+
         # We will apply a policy that only allows feed[0] to be edited
         # by identity[0], and feed[1] by identity[1]. All other feeds are unprotected
         identities = [
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec"),
+            trusted_ca.create_identity(alg="ES256", kty="ec", inject_eku=example_eku),
         ]
 
-        for i, cert in enumerate(identities[3].x5c):
-            print(f"{i}: {crypto.get_cert_fingerprint_b64url(cert)}")
-
         root_fingerprint = crypto.get_cert_fingerprint_b64url(identities[3].x5c[-1])
-        identities[3].issuer = f"did:x509:0:sha256:{root_fingerprint}::eku:2.999"
+        common_issuer_prefix = f"did:x509:0:sha256:{root_fingerprint}::eku:"
+        identities[3].issuer = f"{common_issuer_prefix}{example_eku}"
 
         # sub
         feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue", "ValueThatRequiresADIDx509"]
@@ -178,7 +178,7 @@ class TestPolicyEngine:
             crypto.sign_json_claimset(
                 identities[3],
                 claims,
-                feed=feeds[2],
+                feed=feeds[3],
             ),
         ]
 
@@ -246,6 +246,16 @@ class TestPolicyEngine:
 
         policy_script = f"""
 export function apply(profile, phdr) {{
+    // On feed ValueThatRequiresADIDx509
+    if (phdr.feed === "{feeds[3]}") {{
+        if (profile !== "IETF") {{ return "{claim_profile_error}"; }}
+        if (!("issuer" in phdr)) {{ return "{missing_feed_error}"; }}
+        // Check pinned root and presence of EKU bits (did:x509 resolution enforces that they are not empty) 
+        if (!phdr.issuer.startsWith("{common_issuer_prefix}")) {{ return "Not a valid issuer"; }}
+
+        return true;
+    }}
+
     // Only accept x509 submissions with a feed
     if (profile !== "X509") {{ return "{claim_profile_error}"; }}
     if (!("feed" in phdr)) {{ return "{missing_feed_error}"; }}
@@ -263,11 +273,6 @@ export function apply(profile, phdr) {{
         if (phdr.x5chain[0] !== `{cert_1}`) {{
             return "{feed_1_error}";
         }}
-    }}
-
-    // On feed ValueThatRequiresADIDx509
-    if (phdr.feed === "{feeds[3]}") {{
-      iss =~ /did:x509:0:....root cert...:eku::.../
     }}
 
     return true;
