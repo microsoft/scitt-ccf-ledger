@@ -4,9 +4,23 @@
 
 set -e
 
-if ! command -v python3.8 &> /dev/null; then
-    echo "python3.8 could not be found."
-    echo "On Ubuntu, run: apt install python3.8 python3.8-venv"
+# Check if Python is installed
+if ! command -v python3 &> /dev/null; then
+    echo "Python is not installed"
+    exit 1
+fi
+
+# Get the Python version, pyscitt requires version 3.8 or more
+PYTHON_VERSION=$(python3 -c 'import sys; version=sys.version_info; print(f"{version[1]}")')
+
+MINIMUM_VERSION=3.8
+
+MINIMUM_VERSION=$(echo $MINIMUM_VERSION | cut -d. -f2)
+
+# Compare the Python version
+if awk 'BEGIN { if (('$PYTHON_VERSION' < '$MINIMUM_VERSION')) exit 0; exit 1 }'; then
+    echo "Installed version python3.$PYTHON_VERSION should be greater than python3.$MINIMUM_VERSION"
+    echo "On Ubuntu, run: apt install python3.$MINIMUM_VERSION python3.$MINIMUM_VERSION-venv"
     exit 1
 fi
 
@@ -94,7 +108,7 @@ docker run --name "$CONTAINER_NAME" \
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3 -m venv "venv"
 fi
 source venv/bin/activate 
 pip install --disable-pip-version-check -q -e ./pyscitt
