@@ -5,7 +5,7 @@
 [![Build/test (all platforms)](https://msazure.visualstudio.com/One/_apis/build/status%2FCustom%2FSCITT%2Fmicrosoft.scitt-ccf-ledger?branchName=main)](https://msazure.visualstudio.com/One/_build/latest?definitionId=332749&branchName=main)
 
 This repository contains the source code for scitt-ccf-ledger, an application
-that runs on top of [CCF](https://ccf.dev/) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
+that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
 
 This research project is at an early stage and is open sourced to facilitate academic collaborations. We are keen to engage in research collaborations on this project, please do reach out to discuss this by opening an issue.
 
