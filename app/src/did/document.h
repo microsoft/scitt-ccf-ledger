@@ -199,3 +199,53 @@ namespace scitt::did
     return method.public_key_jwk.value();
   }
 }
+
+// Alternative DID document spec imported from CCF/src/node/did.h
+// Unlike scitt::did::DidDocument, this expects a single string for assertion_method
+// and leaves the JWK parsing to specific sub-type to the caller based on the kty,
+// rather than expose a single merged type where every field is optional.
+// This is needed now for compatibility with didx509cpp, but the types should be merged
+// eventually if they are still both needed.
+namespace scitt::did::alt
+{
+  // From https://www.w3.org/TR/did-core.
+  // Note that the types defined in this file do not exhaustively cover
+  // all fields and types from the spec.
+  struct DIDDocumentVerificationMethod
+  {
+    std::string id;
+    std::string type;
+    std::string controller;
+    std::optional<nlohmann::json> public_key_jwk = std::nullopt;
+
+    bool operator==(const DIDDocumentVerificationMethod&) const = default;
+  };
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(DIDDocumentVerificationMethod);
+  DECLARE_JSON_REQUIRED_FIELDS(
+    DIDDocumentVerificationMethod, id, type, controller);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    DIDDocumentVerificationMethod, public_key_jwk, "publicKeyJwk");
+
+  struct DIDDocument
+  {
+    std::string id;
+    std::string context;
+    std::string type;
+    std::vector<DIDDocumentVerificationMethod> verification_method = {};
+    nlohmann::json assertion_method = {};
+
+    bool operator==(const DIDDocument&) const = default;
+  };
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(DIDDocument);
+  DECLARE_JSON_REQUIRED_FIELDS(DIDDocument, id);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    DIDDocument,
+    context,
+    "@context",
+    type,
+    "type",
+    verification_method,
+    "verificationMethod",
+    assertion_method,
+    "assertionMethod"); 
+}

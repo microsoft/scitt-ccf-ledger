@@ -250,7 +250,8 @@ export function apply(profile, phdr) {{
     if (phdr.feed === "{feeds[3]}") {{
         if (profile !== "IETF") {{ return "{claim_profile_error}"; }}
         if (!("issuer" in phdr)) {{ return "{missing_feed_error}"; }}
-        // Check pinned root and presence of EKU bits (did:x509 resolution enforces that they are not empty) 
+
+        // Check pinned root and presence of EKU bits - did:x509 resolution enforces that they are not empty 
         if (!phdr.issuer.startsWith("{common_issuer_prefix}")) {{ return "Not a valid issuer"; }}
 
         return true;

@@ -369,9 +369,10 @@ namespace scitt::verifier
             // IETF SCITT did:x509 claim
             if (phdr.x5chain.has_value())
             {
-              // NB: In later revisions, x5chain is unprotected, and only x5t is.
+              // NB: In later revisions of SCITT, x5chain is unprotected, and only x5t is.
               // This logic will need to authenticate x5chain[0] against x5t before it
               // can proceed to verify the signature.
+              // Verify the signature as early as possible
               OpenSSL::Unique_X509 leaf = parse_certificate(phdr.x5chain.value()[0]);
               key = PublicKey(leaf, std::nullopt);
               try
@@ -382,7 +383,7 @@ namespace scitt::verifier
               {
                 throw VerificationError(e.what());
               }
-              // Authenticate did:x509 claim
+              // Then authenticate the did:x509 claim against the x5chain
               std::string pem_chain;
               for (auto const& c : phdr.x5chain.value())
               {
@@ -390,22 +391,18 @@ namespace scitt::verifier
 
               }
               auto did_document_str = didx509::resolve(pem_chain, phdr.issuer.value(), true /* Do not validate time */);
-              SCITT_INFO("Resolved DID document: {}", did_document_str);
-              scitt::did::DidDocument did_document = nlohmann::json::parse(did_document_str);
-              // TODO: fails because scitt::did::DidDocument expects assertionMethod to be an array somehow
+              scitt::did::alt::DIDDocument did_document = nlohmann::json::parse(did_document_str);
 
-              if (!did_document.verification_method.has_value() ||
-                   did_document.verification_method->empty())
+              if (did_document.verification_method.empty())
               {
                 throw VerificationError("Could not find verification method in resolved DID document");
               }
-
-              if (did_document.verification_method->size() != 1)
+              // x5chain has a single leaf certificate, so the verification method should also have a single key
+              if (did_document.verification_method.size() != 1)
               {
                 throw VerificationError("Unexpected number of verification methods in resolved DID document");
               }
-
-              auto const& vm = did_document.verification_method.value()[0];
+              auto const& vm = did_document.verification_method[0];
               if (vm.controller != phdr.issuer.value())
               {
                 throw VerificationError("Verification method controller does not match issuer");
@@ -415,12 +412,19 @@ namespace scitt::verifier
               {
                 throw VerificationError("Verification method does not contain a public key");
               }
-              auto resolved_jwk = vm.public_key_jwk.value();
-              // TODO: construct jwk for x5chain[0] and compare with resolved_jwk
+
+              auto resolved_jwk = vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
+              // Need to dispatch on kty if we want to support RSA, Eddsa, etc.
+              if (resolved_jwk.kty != ccf::crypto::JsonWebKeyType::EC)
+              {
+                throw VerificationError("Verification method public key is not an EC key");
+              }
               auto signing_key = ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_jwk();
-              bool keys_match = resolved_jwk.crv.has_value() && resolved_jwk.crv.value() == signing_key.crv &&
-              resolved_jwk.x.has_value() && resolved_jwk.y.has_value() &&
-                                resolved_jwk.x == signing_key.x && resolved_jwk.y == signing_key.y;
+
+              if (resolved_jwk != signing_key)
+              {
+                throw VerificationError("Resolved verification method public key does not match signing key");
+              }
             }
             else
             {
@@ -428,7 +432,6 @@ namespace scitt::verifier
                 "Claim has an x5chain (label 33) parameter in its protected "
                 "header, but is not a Notary claim.");
             }
-
           }
           else
           {
