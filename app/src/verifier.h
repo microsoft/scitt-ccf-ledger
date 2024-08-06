@@ -369,8 +369,9 @@ namespace scitt::verifier
             // IETF SCITT did:x509 claim
             if (phdr.x5chain.has_value())
             {
-              // In later revisions, x5chain is unprotected, and only x5t is
-              // So this will need to authenticate x5chain[0] against x5t first
+              // NB: In later revisions, x5chain is unprotected, and only x5t is.
+              // This logic will need to authenticate x5chain[0] against x5t before it
+              // can proceed to verify the signature.
               OpenSSL::Unique_X509 leaf = parse_certificate(phdr.x5chain.value()[0]);
               key = PublicKey(leaf, std::nullopt);
               try
@@ -389,11 +390,37 @@ namespace scitt::verifier
 
               }
               auto did_document_str = didx509::resolve(pem_chain, phdr.issuer.value(), true /* Do not validate time */);
-              auto did_document = nlohmann::json::parse(did_document_str);
-              SCITT_INFO("DUMP {}", did_document.dump());
-              // TODO: Extract signing key from phdr.x5chain.value()[0]
-              // and verify its presence in the document under
-              // verification_method.controller.public_key_jwk.jwk
+              SCITT_INFO("Resolved DID document: {}", did_document_str);
+              scitt::did::DidDocument did_document = nlohmann::json::parse(did_document_str);
+              // TODO: fails because scitt::did::DidDocument expects assertionMethod to be an array somehow
+
+              if (!did_document.verification_method.has_value() ||
+                   did_document.verification_method->empty())
+              {
+                throw VerificationError("Could not find verification method in resolved DID document");
+              }
+
+              if (did_document.verification_method->size() != 1)
+              {
+                throw VerificationError("Unexpected number of verification methods in resolved DID document");
+              }
+
+              auto const& vm = did_document.verification_method.value()[0];
+              if (vm.controller != phdr.issuer.value())
+              {
+                throw VerificationError("Verification method controller does not match issuer");
+              }
+
+              if (!vm.public_key_jwk.has_value())
+              {
+                throw VerificationError("Verification method does not contain a public key");
+              }
+              auto resolved_jwk = vm.public_key_jwk.value();
+              // TODO: construct jwk for x5chain[0] and compare with resolved_jwk
+              auto signing_key = ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_jwk();
+              bool keys_match = resolved_jwk.crv.has_value() && resolved_jwk.crv.value() == signing_key.crv &&
+              resolved_jwk.x.has_value() && resolved_jwk.y.has_value() &&
+                                resolved_jwk.x == signing_key.x && resolved_jwk.y == signing_key.y;
             }
             else
             {
