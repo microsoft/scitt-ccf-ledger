@@ -233,9 +233,11 @@ def generate_cert(
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
     )
     if inject_eku:
-        cert = cert.add_extension(x509.ExtendedKeyUsage([x509.ObjectIdentifier(inject_eku)]), critical=False)
-    cert = cert.sign(issuer_key, hash_alg)
-    return cert.public_bytes(Encoding.PEM).decode("ascii")
+        cert = cert.add_extension(
+            x509.ExtendedKeyUsage([x509.ObjectIdentifier(inject_eku)]), critical=False
+        )
+    signed_cert = cert.sign(issuer_key, hash_alg)
+    return signed_cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
 def get_priv_key_type(priv_pem: str) -> str:
@@ -281,7 +283,11 @@ def get_cert_fingerprint(pem: Pem) -> str:
 
 def get_cert_fingerprint_b64url(pem: Pem) -> str:
     cert = load_pem_x509_certificate(pem.encode("ascii"))
-    return base64.urlsafe_b64encode(cert.fingerprint(hashes.SHA256())).decode("ascii").strip("=")
+    return (
+        base64.urlsafe_b64encode(cert.fingerprint(hashes.SHA256()))
+        .decode("ascii")
+        .strip("=")
+    )
 
 
 def get_public_key_fingerprint(pem: Pem) -> str:

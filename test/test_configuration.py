@@ -135,12 +135,18 @@ class TestPolicyEngine:
             trusted_ca.create_identity(alg="ES256", kty="ec", inject_eku=example_eku),
         ]
 
-        root_fingerprint = crypto.get_cert_fingerprint_b64url(identities[3].x5c[-1])
+        root_cert = trusted_ca.cert_bundle
+        root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
         common_issuer_prefix = f"did:x509:0:sha256:{root_fingerprint}::eku:"
         identities[3].issuer = f"{common_issuer_prefix}{example_eku}"
 
         # sub
-        feeds = ["MyFirstFeed", "SomeOtherFeed", "AnyOtherValue", "ValueThatRequiresADIDx509"]
+        feeds = [
+            "MyFirstFeed",
+            "SomeOtherFeed",
+            "AnyOtherValue",
+            "ValueThatRequiresADIDx509",
+        ]
 
         # SBOMs
         claims = {"foo": "bar"}

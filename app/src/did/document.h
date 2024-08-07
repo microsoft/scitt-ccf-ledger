@@ -201,11 +201,11 @@ namespace scitt::did
 }
 
 // Alternative DID document spec imported from CCF/src/node/did.h
-// Unlike scitt::did::DidDocument, this expects a single string for assertion_method
-// and leaves the JWK parsing to specific sub-type to the caller based on the kty,
-// rather than expose a single merged type where every field is optional.
-// This is needed now for compatibility with didx509cpp, but the types should be merged
-// eventually if they are still both needed.
+// Unlike scitt::did::DidDocument, this expects a single string for
+// assertion_method and leaves the JWK parsing to specific sub-type to the
+// caller based on the kty, rather than expose a single merged type where every
+// field is optional. This is needed now for compatibility with didx509cpp, but
+// the types should be merged eventually if they are still both needed.
 namespace scitt::did::alt
 {
   // From https://www.w3.org/TR/did-core.
@@ -247,5 +247,5 @@ namespace scitt::did::alt
     verification_method,
     "verificationMethod",
     assertion_method,
-    "assertionMethod"); 
+    "assertionMethod");
 }
