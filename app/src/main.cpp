@@ -13,6 +13,7 @@
 #include "http_error.h"
 #include "kv_types.h"
 #include "operations_endpoints.h"
+#include "policy_engine.h"
 #include "receipt.h"
 #include "service_endpoints.h"
 #include "tracing.h"
@@ -211,10 +212,12 @@ namespace scitt
                    .value_or(Configuration{});
 
       ClaimProfile claim_profile;
+      cose::ProtectedHeader phdr;
+      cose::UnprotectedHeader uhdr;
       try
       {
         SCITT_DEBUG("Verify submitted claim");
-        claim_profile = verifier->verify_claim(
+        std::tie(claim_profile, phdr, uhdr) = verifier->verify_claim(
           body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
       }
       catch (const did::DIDMethodNotSupportedError& e)
@@ -246,6 +249,29 @@ namespace scitt
         measurement =
           "0000000000000000000000000000000000000000000000000000000000000000";
 #endif
+      }
+
+      if (cfg.policy.policy_script.has_value())
+      {
+        const auto policy_violation_reason = check_for_policy_violations(
+          cfg.policy.policy_script.value(),
+          "configured_policy",
+          claim_profile,
+          phdr);
+        if (policy_violation_reason.has_value())
+        {
+          SCITT_DEBUG(
+            "Policy check failed: {}", policy_violation_reason.value());
+          throw BadRequestError(
+            errors::PolicyFailed,
+            fmt::format(
+              "Policy was not met: {}", policy_violation_reason.value()));
+        }
+        SCITT_DEBUG("Policy check passed");
+      }
+      else
+      {
+        SCITT_DEBUG("No policy applied");
       }
 
       // TODO: Apply further acceptance policies.

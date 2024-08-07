@@ -321,13 +321,15 @@ namespace scitt::verifier
       return PublicKey(cert, std::nullopt);
     }
 
-    ClaimProfile verify_claim(
+    std::tuple<ClaimProfile, cose::ProtectedHeader, cose::UnprotectedHeader>
+    verify_claim(
       const std::vector<uint8_t>& data,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
     {
+      ClaimProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       try
@@ -356,7 +358,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          return ClaimProfile::Notary;
+          profile = ClaimProfile::Notary;
         }
         else if (phdr.issuer.has_value())
         {
@@ -373,7 +375,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          return ClaimProfile::IETF;
+          profile = ClaimProfile::IETF;
         }
         else if (phdr.x5chain.has_value())
         {
@@ -389,7 +391,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          return ClaimProfile::X509;
+          profile = ClaimProfile::X509;
         }
         else
         {
@@ -401,6 +403,8 @@ namespace scitt::verifier
       {
         throw VerificationError(e.what());
       }
+
+      return std::make_tuple(profile, phdr, uhdr);
     }
 
     /**

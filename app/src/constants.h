@@ -32,6 +32,8 @@ namespace scitt
     const std::string NoPrefixTree = "NoPrefixTree";
     const std::string NotFound = "NotFound";
     const std::string OperationExpired = "OperationExpired";
+    const std::string PolicyError = "PolicyError";
+    const std::string PolicyFailed = "PolicyFailed";
   } // namespace errors
 
 } // namespace scitt

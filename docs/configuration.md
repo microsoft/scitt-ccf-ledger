@@ -53,9 +53,9 @@ Until a JWT provider is configured or API authentication is disabled, the initia
 If API authentication is disabled then requests won't require any form of authentication. (Claims submitted via the API are still validated.)
 
 Example `set_scitt_configuration` snippet:
-```
+```json
 "authentication": {
-  "allow_unauthenticated": True
+  "allow_unauthenticated": true
 }
 ```
 
@@ -66,13 +66,12 @@ If JWT authentication is enabled then API requests must include a header contain
 Extra `required_claims` can be configured which must then be present in an API request's JWT for authentication to succeed.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
-```
+```json
 "authentication": {
-  "allow_unauthenticated": False,
+  "allow_unauthenticated": false,
   "jwt": {
     "required_claims": {
       "foo": "bar",
-        ...
     }
   }
 }
@@ -83,32 +82,64 @@ The long-term stable identifier of this service, as a DID.
 If set, it will be used to populate the issuer field of receipts.
 
 Example `set_scitt_configuration` snippet:
-```
+```json
 "service_identifier": "did:web:example.com:scitt"
 ```
 
-## Accepted algorithms
+## Policy object
+
+### Accepted algorithms
 List of accepted COSE signature algorithms when verifying signatures in submitted claims.
 If not set, the default accepted algorithms are shown in the example snippet below.
 - Note: Items in the accepted algorithms list are case sensitive.
 
 Example `set_scitt_configuration` snippet:
-```
+```json
 "accepted_algorithms": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EDDSA"]
 ```
 
-## Accepted DID issuers
+### Accepted DID issuers
 List of accepted signers of a given COSE_Sign1 payload if DID is used in that case.
 
 **Note:** TLS roots (`did_web_tls_roots`) need to be set up as well for the service to be able to resolve DIDs from the accepted issuers, see "Trust stores" below.
 
 Example `set_scitt_configuration` snippet:
-```
+```json
 "policy": {
   "accepted_did_issuers": [
     "did:web:firstallowedsubmitter.com",
     "did:web:secondallowedsubmitter.com"
   ]
+}
+```
+
+### Policy script
+JS code that determines whether an entry should be accepted. Should export an `apply` function taking 2 arguments `(claim_profile, protected_header)`, and return true if the entry should be accepted or a string describing why the entry has failed the policy.
+
+`claim_profile` is a string representation of a [`scitt::ClaimProfile`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/profiles.h#L10) value, mapped through [`scitt::js::claim_profile_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L20).
+
+`protected_header` is an object representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger, namely:
+
+- alg (Number)
+- crit (Array containing values of type Number or String)
+- kid (String)
+- issuer (String)
+- feed (String)
+- cty (Number or String)
+- x5chain (Array of String values)
+- notary_signing_scheme (String)
+- notary_signing_time (String)
+- notary_authentic_signing_time (String)
+- notary_expiry (Number)
+
+The mapping takes place in [`scitt::js::protected_header_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L44).
+
+Policy scripts are executed by the [CCF JavaScript runtime](https://github.com/microsoft/CCF/blob/main/include/ccf/js/core/runtime.h), which wraps and extends [QuickJS](https://bellard.org/quickjs/). Most ES2023 features are [supported](https://test262.fyi/#|qjs).
+
+Example `set_scitt_configuration` snippet:
+```json
+"policy": {
+  "policy_script": "export function apply(profile, phdr) {\n  if (profile === \"X509\") { return true; }\n  return \"Only X509 claim profile is allowed\";\n}"
 }
 ```
 
@@ -119,13 +150,13 @@ SCITT has two trust stores that can be configured: `x509_roots` and `did_web_tls
 CA certificates which are used as trusted roots during verification of submitted claims which use an X509 certificate for identity rather than a DID.
 
 Example governance proposal:
-```
+```json
 {
   "actions": [
     {
       "name": "set_ca_cert_bundle",
       "args": {
-        "name": x509_roots,
+        "name": "x509_roots",
         "cert_bundle": "-----BEGIN CERTIFICATE-----\nMI...<Omitted for brevity>...Eo\n-----END CERTIFICATE-----\n"
       }
     }
@@ -139,13 +170,13 @@ CA certificates which are used as trusted roots during DID web resolution (as pa
 **Note:** this applies to the trusted issuers configured through `policy.accepted_did_issuers`
 
 Example governance proposal:
-```
+```json
 {
   "actions": [
     {
       "name": "set_ca_cert_bundle",
       "args": {
-        "name": did_web_tls_roots,
+        "name": "did_web_tls_roots",
         "cert_bundle": "-----BEGIN CERTIFICATE-----\nMI...<Omitted for brevity>...Eo\n-----END CERTIFICATE-----\n"
       }
     }

@@ -4,6 +4,7 @@
 #pragma once
 #include "did/document.h"
 #include "odata_error.h"
+#include "policy_engine.h"
 #include "signature_algorithms.h"
 
 #include <ccf/crypto/hash_provider.h>
@@ -116,6 +117,11 @@ namespace scitt
        */
       std::optional<std::vector<std::string>> accepted_did_issuers;
 
+      /**
+       * Script defining executable policy to be applied to each incoming entry.
+       */
+      std::optional<PolicyScript> policy_script;
+
       std::vector<std::string> get_accepted_algorithms() const
       {
         if (accepted_algorithms.has_value())
@@ -169,7 +175,10 @@ namespace scitt
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Policy, accepted_algorithms, accepted_did_issuers);
+    Configuration::Policy,
+    accepted_algorithms,
+    accepted_did_issuers,
+    policy_script);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
