@@ -305,12 +305,13 @@ export function apply(profile, phdr) {{
             "",
             "return true",
             "function apply() {}",
+            "function apply() { not valid javascript }",
         ],
     )
     def test_invalid_policy(
         self, client: Client, configure_service, signed_claimset, script
     ):
-        configure_service({"policy": {"policy_script": script}})
+        proposal = configure_service({"policy": {"policy_script": script}})
 
         with service_error("Invalid policy module"):
             client.submit_claim(signed_claimset)
