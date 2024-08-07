@@ -163,6 +163,81 @@ namespace scitt::verifier
       return key;
     }
 
+    void process_ietf_didx509_subprofile(
+      const cose::ProtectedHeader& phdr, const std::vector<uint8_t>& data)
+    {
+      // NB: In later revisions of SCITT, x5chain is unprotected, and
+      // only x5t is. This logic will need to authenticate x5chain[0]
+      // against x5t before it can proceed to verify the signature.
+      // Verify the signature as early as possible
+      OpenSSL::Unique_X509 leaf = parse_certificate(phdr.x5chain.value()[0]);
+      PublicKey key(leaf, std::nullopt);
+      try
+      {
+        cose::verify(data, key);
+      }
+      catch (const cose::COSESignatureValidationError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // Then authenticate the did:x509 claim against the x5chain
+      std::string pem_chain;
+      for (auto const& c : phdr.x5chain.value())
+      {
+        pem_chain += ccf::crypto::cert_der_to_pem(c).str();
+      }
+      auto did_document_str = didx509::resolve(
+        pem_chain, phdr.issuer.value(), true /* Do not validate time */);
+      scitt::did::alt::DIDDocument did_document =
+        nlohmann::json::parse(did_document_str);
+
+      if (did_document.verification_method.empty())
+      {
+        throw VerificationError(
+          "Could not find verification method in resolved DID "
+          "document");
+      }
+      // x5chain has a single leaf certificate, so the verification
+      // method should also have a single key
+      if (did_document.verification_method.size() != 1)
+      {
+        throw VerificationError(
+          "Unexpected number of verification methods in resolved DID "
+          "document");
+      }
+      auto const& vm = did_document.verification_method[0];
+      if (vm.controller != phdr.issuer.value())
+      {
+        throw VerificationError(
+          "Verification method controller does not match issuer");
+      }
+
+      if (!vm.public_key_jwk.has_value())
+      {
+        throw VerificationError(
+          "Verification method does not contain a public key");
+      }
+
+      auto resolved_jwk =
+        vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
+      // Need to dispatch on kty if we want to support RSA, Eddsa, etc.
+      if (resolved_jwk.kty != ccf::crypto::JsonWebKeyType::EC)
+      {
+        throw VerificationError(
+          "Verification method public key is not an EC key");
+      }
+      auto signing_key =
+        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_jwk();
+
+      if (resolved_jwk != signing_key)
+      {
+        throw VerificationError(
+          "Resolved verification method public key does not match "
+          "signing key");
+      }
+    }
+
     void validate_notary_protected_header(
       const cose::ProtectedHeader& phdr, const Configuration& configuration)
     {
@@ -363,91 +438,10 @@ namespace scitt::verifier
         }
         else if (phdr.issuer.has_value())
         {
-          if (phdr.issuer->starts_with("did:x509"))
+          if (phdr.issuer->starts_with("did:x509") && phdr.x5chain.has_value())
           {
             // IETF SCITT did:x509 claim
-            if (phdr.x5chain.has_value())
-            {
-              // NB: In later revisions of SCITT, x5chain is unprotected, and
-              // only x5t is. This logic will need to authenticate x5chain[0]
-              // against x5t before it can proceed to verify the signature.
-              // Verify the signature as early as possible
-              OpenSSL::Unique_X509 leaf =
-                parse_certificate(phdr.x5chain.value()[0]);
-              key = PublicKey(leaf, std::nullopt);
-              try
-              {
-                cose::verify(data, key);
-              }
-              catch (const cose::COSESignatureValidationError& e)
-              {
-                throw VerificationError(e.what());
-              }
-              // Then authenticate the did:x509 claim against the x5chain
-              std::string pem_chain;
-              for (auto const& c : phdr.x5chain.value())
-              {
-                pem_chain += ccf::crypto::cert_der_to_pem(c).str();
-              }
-              auto did_document_str = didx509::resolve(
-                pem_chain,
-                phdr.issuer.value(),
-                true /* Do not validate time */);
-              scitt::did::alt::DIDDocument did_document =
-                nlohmann::json::parse(did_document_str);
-
-              if (did_document.verification_method.empty())
-              {
-                throw VerificationError(
-                  "Could not find verification method in resolved DID "
-                  "document");
-              }
-              // x5chain has a single leaf certificate, so the verification
-              // method should also have a single key
-              if (did_document.verification_method.size() != 1)
-              {
-                throw VerificationError(
-                  "Unexpected number of verification methods in resolved DID "
-                  "document");
-              }
-              auto const& vm = did_document.verification_method[0];
-              if (vm.controller != phdr.issuer.value())
-              {
-                throw VerificationError(
-                  "Verification method controller does not match issuer");
-              }
-
-              if (!vm.public_key_jwk.has_value())
-              {
-                throw VerificationError(
-                  "Verification method does not contain a public key");
-              }
-
-              auto resolved_jwk =
-                vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
-              // Need to dispatch on kty if we want to support RSA, Eddsa, etc.
-              if (resolved_jwk.kty != ccf::crypto::JsonWebKeyType::EC)
-              {
-                throw VerificationError(
-                  "Verification method public key is not an EC key");
-              }
-              auto signing_key =
-                ccf::crypto::make_verifier(phdr.x5chain.value()[0])
-                  ->public_key_jwk();
-
-              if (resolved_jwk != signing_key)
-              {
-                throw VerificationError(
-                  "Resolved verification method public key does not match "
-                  "signing key");
-              }
-            }
-            else
-            {
-              throw VerificationError(
-                "Claim has an x5chain (label 33) parameter in its protected "
-                "header, but is not a Notary claim.");
-            }
+            process_ietf_didx509_subprofile(phdr, data);
           }
           else
           {
