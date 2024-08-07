@@ -114,7 +114,27 @@ Example `set_scitt_configuration` snippet:
 ```
 
 ### Policy script
-JS code that determines whether an entry should be accepted. Should export an `apply` function taking 2 arguments `(claim_profile, protected_headers)`, and return true if the entry should be accepted or a string describing why the entry has failed the policy
+JS code that determines whether an entry should be accepted. Should export an `apply` function taking 2 arguments `(claim_profile, protected_header)`, and return true if the entry should be accepted or a string describing why the entry has failed the policy.
+
+`claim_profile` is a string representation of a [`scitt::ClaimProfile`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/profiles.h#L10) value, mapped through [`scitt::js::claim_profile_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L20).
+
+`protected_header` is an object representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger, namely:
+
+- alg (Number)
+- crit (Array containing values of type Number or String)
+- kid (String)
+- issuer (String)
+- feed (String)
+- cty (Number or String)
+- x5chain (Array of String values)
+- notary_signing_scheme (String)
+- notary_signing_time (String)
+- notary_authentic_signing_time (String)
+- notary_expiry (Number)
+
+The mapping takes place in [`scitt::js::protected_header_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L44).
+
+Policy scripts are executed by the [CCF JavaScript runtime](https://github.com/microsoft/CCF/blob/main/include/ccf/js/core/runtime.h), which wraps and extends [QuickJS](https://bellard.org/quickjs/). Most ES2023 features are [supported](https://test262.fyi/#|qjs).
 
 Example `set_scitt_configuration` snippet:
 ```json

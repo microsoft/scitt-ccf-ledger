@@ -41,7 +41,7 @@ namespace scitt
       }
     }
 
-    static inline ccf::js::core::JSWrappedValue protected_headers_to_js_val(
+    static inline ccf::js::core::JSWrappedValue protected_header_to_js_val(
       ccf::js::core::Context& ctx, const scitt::cose::ProtectedHeader& phdr)
     {
       auto obj = ctx.new_obj();
@@ -175,12 +175,20 @@ namespace scitt
       }
 
       auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
-      auto phdr_val = protected_headers_to_js_val(interpreter, phdr);
+      auto phdr_val = protected_header_to_js_val(interpreter, phdr);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
         {profile_val, phdr_val},
-        std::nullopt, // TODO: add runtime limits (heap, stack, time)
+        ccf::JSRuntimeOptions{
+          10 * 1024 * 1024, // max_heap_bytes (10MB)
+          1024 * 1024, // max_stack_bytes (1MB)
+          1000, // max_execution_time_ms (1s)
+          true, // log_exception_details
+          false, // return_exception_details
+          0, // max_cached_interpreters
+        },
+        // Limits defined explicitly above
         ccf::js::core::RuntimeLimitsPolicy::NONE);
 
       if (result.is_exception())

@@ -338,6 +338,7 @@ export function apply(profile, phdr) {{
             "",
             "return true",
             "function apply() {}",
+            "function apply() { not valid javascript }",
         ],
     )
     def test_invalid_policy(
