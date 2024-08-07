@@ -41,7 +41,7 @@ namespace scitt
       }
     }
 
-    static inline ccf::js::core::JSWrappedValue protected_headers_to_js_val(
+    static inline ccf::js::core::JSWrappedValue protected_header_to_js_val(
       ccf::js::core::Context& ctx, const scitt::cose::ProtectedHeader& phdr)
     {
       auto obj = ctx.new_obj();
@@ -175,7 +175,7 @@ namespace scitt
       }
 
       auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
-      auto phdr_val = protected_headers_to_js_val(interpreter, phdr);
+      auto phdr_val = protected_header_to_js_val(interpreter, phdr);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
