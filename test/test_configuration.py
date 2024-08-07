@@ -132,7 +132,7 @@ class TestPolicyEngine:
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec", inject_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
         ]
 
         root_cert = trusted_ca.cert_bundle

@@ -173,7 +173,7 @@ def generate_cert(
     issuer: Optional[Tuple[Pem, Pem]] = None,
     ca: bool = False,
     cn: Optional[str] = None,
-    inject_eku: Optional[str] = None,
+    add_eku: Optional[str] = None,
 ):
     if not cn:
         cn = str(uuid4())
@@ -232,9 +232,9 @@ def generate_cert(
         )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
     )
-    if inject_eku:
+    if add_eku:
         cert = cert.add_extension(
-            x509.ExtendedKeyUsage([x509.ObjectIdentifier(inject_eku)]), critical=False
+            x509.ExtendedKeyUsage([x509.ObjectIdentifier(add_eku)]), critical=False
         )
     signed_cert = cert.sign(issuer_key, hash_alg)
     return signed_cert.public_bytes(Encoding.PEM).decode("ascii")

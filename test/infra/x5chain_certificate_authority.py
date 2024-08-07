@@ -31,11 +31,11 @@ class X5ChainCertificateAuthority:
         assert length > 0
         generate_cert_kwargs = {}
         # Unlike the rest of the kwards, which are handed over to the keypair generation
-        # call, inject_eku is passed to the certificate generation call.
-        inject_eku = "inject_eku"
-        if inject_eku in kwargs:
-            generate_cert_kwargs[inject_eku] = kwargs[inject_eku]
-            del kwargs[inject_eku]
+        # call, add_eku is passed to the certificate generation call.
+        add_eku = "add_eku"
+        if add_eku in kwargs:
+            generate_cert_kwargs[add_eku] = kwargs[add_eku]
+            del kwargs[add_eku]
 
         chain = [(self.root_cert_pem, self.root_key_pem)]
         for i in range(length):
