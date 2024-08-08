@@ -124,28 +124,19 @@ class TestPolicyEngine:
         trusted_ca: X5ChainCertificateAuthority,
         did_web,
     ):
-        example_eku = "2.999"
-
         # We will apply a policy that only allows feed[0] to be edited
         # by identity[0], and feed[1] by identity[1]. All other feeds are unprotected
         identities = [
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
             trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
         ]
-
-        root_cert = trusted_ca.cert_bundle
-        root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
-        common_issuer_prefix = f"did:x509:0:sha256:{root_fingerprint}::eku:"
-        identities[3].issuer = f"{common_issuer_prefix}{example_eku}"
 
         # sub
         feeds = [
             "MyFirstFeed",
             "SomeOtherFeed",
             "AnyOtherValue",
-            "ValueThatRequiresADIDx509",
         ]
 
         # SBOMs
@@ -179,12 +170,6 @@ class TestPolicyEngine:
                 identities[2],
                 claims,
                 feed=feeds[2],
-            ),
-            # Feed protected by CA + EKU
-            crypto.sign_json_claimset(
-                identities[3],
-                claims,
-                feed=feeds[3],
             ),
         ]
 
@@ -252,17 +237,6 @@ class TestPolicyEngine:
 
         policy_script = f"""
 export function apply(profile, phdr) {{
-    // On feed ValueThatRequiresADIDx509
-    if (phdr.feed === "{feeds[3]}") {{
-        if (profile !== "IETF") {{ return "{claim_profile_error}"; }}
-        if (!("issuer" in phdr)) {{ return "{missing_feed_error}"; }}
-
-        // Check pinned root and presence of EKU bits - did:x509 resolution enforces that they are not empty 
-        if (!phdr.issuer.startsWith("{common_issuer_prefix}")) {{ return "Not a valid issuer"; }}
-
-        return true;
-    }}
-
     // Only accept x509 submissions with a feed
     if (profile !== "X509") {{ return "{claim_profile_error}"; }}
     if (!("feed" in phdr)) {{ return "{missing_feed_error}"; }}
@@ -281,6 +255,130 @@ export function apply(profile, phdr) {{
             return "{feed_1_error}";
         }}
     }}
+
+    return true;
+}}"""
+
+        configure_service({"policy": {"policy_script": policy_script}})
+
+        for signed_claimset in permitted_signed_claims:
+            client.submit_claim(signed_claimset)
+
+        for err, signed_claimsets in refused_signed_claims.items():
+            for signed_claimset in signed_claimsets:
+                with service_error(err):
+                    client.submit_claim(signed_claimset)
+
+    def test_ietf_didx509_policy(
+        self,
+        client: Client,
+        configure_service,
+        trusted_ca: X5ChainCertificateAuthority,
+        untrusted_ca: X5ChainCertificateAuthority,
+        did_web,
+    ):
+        example_eku = "2.999"
+
+        # We will apply a policy that only allows issuers endorsed by a specific trusted CA
+        # and containing a specific EKU to be registered.
+        identities = [
+            untrusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec"),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+        ]
+
+        def didx509_issuer(ca):
+            root_cert = ca.cert_bundle
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
+            return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
+
+        identities[0].issuer = didx509_issuer(untrusted_ca)
+        identities[1].issuer = didx509_issuer(trusted_ca)
+        identities[2].issuer = didx509_issuer(trusted_ca)
+
+        identities[3].issuer = didx509_issuer(trusted_ca).strip(
+            example_eku
+        )  # No EKU bits
+        identities[4].issuer = didx509_issuer(trusted_ca).strip(
+            f"::eku:{example_eku}"
+        )  # No query
+        identities[5].issuer = "did:x509:"  # Malformed
+        identities[6].issuer = "not did"  # Not did
+
+        feed = "SomeFeed"
+        # SBOMs
+        claims = {"foo": "bar"}
+
+        permitted_signed_claims = [
+            crypto.sign_json_claimset(
+                identities[1],
+                claims,
+                feed=feed,
+            ),
+        ]
+
+        profile_error = "This policy only accepts IETF did:x509 claims"
+        invalid_issuer = "Invalid issuer"
+        eku_not_found = "EKU not found"
+        openssl_error = "OpenSSL error"
+        invalid_did = "invalid DID string"
+        not_supported = "not supported"
+
+        # Keyed by expected error, values are lists of claimsets which should trigger this error
+        refused_signed_claims = {
+            # Well-constructed, but not a valid issuer
+            invalid_issuer: [
+                crypto.sign_json_claimset(
+                    identities[0],
+                    claims,
+                    feed=feed,
+                ),
+            ],
+            eku_not_found: [
+                crypto.sign_json_claimset(
+                    identities[2],
+                    claims,
+                    feed=feed,
+                ),
+            ],
+            openssl_error: [
+                crypto.sign_json_claimset(
+                    identities[3],
+                    claims,
+                    feed=feed,
+                ),
+            ],
+            invalid_did: [
+                crypto.sign_json_claimset(
+                    identities[4],
+                    claims,
+                    feed=feed,
+                ),
+                crypto.sign_json_claimset(
+                    identities[5],
+                    claims,
+                    feed=feed,
+                ),
+            ],
+            not_supported: [
+                crypto.sign_json_claimset(
+                    identities[6],
+                    claims,
+                    feed=feed,
+                ),
+            ],
+        }
+
+        policy_script = f"""
+export function apply(profile, phdr) {{
+    if (profile !== "IETF") {{ return "{profile_error}"; }}
+
+    // Check exact issuer 
+    if (phdr.issuer !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
 
     return true;
 }}"""
