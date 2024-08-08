@@ -274,8 +274,6 @@ namespace scitt
         SCITT_DEBUG("No policy applied");
       }
 
-      // TODO: Apply further acceptance policies.
-
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
       auto service_info = service->get().value();
       auto service_cert = service_info.cert;

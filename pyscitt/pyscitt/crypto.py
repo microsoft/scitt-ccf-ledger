@@ -173,6 +173,7 @@ def generate_cert(
     issuer: Optional[Tuple[Pem, Pem]] = None,
     ca: bool = False,
     cn: Optional[str] = None,
+    add_eku: Optional[str] = None,
 ):
     if not cn:
         cn = str(uuid4())
@@ -230,9 +231,13 @@ def generate_cert(
             critical=True,
         )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-        .sign(issuer_key, hash_alg)
     )
-    return cert.public_bytes(Encoding.PEM).decode("ascii")
+    if add_eku:
+        cert = cert.add_extension(
+            x509.ExtendedKeyUsage([x509.ObjectIdentifier(add_eku)]), critical=False
+        )
+    signed_cert = cert.sign(issuer_key, hash_alg)
+    return signed_cert.public_bytes(Encoding.PEM).decode("ascii")
 
 
 def get_priv_key_type(priv_pem: str) -> str:
@@ -274,6 +279,15 @@ def get_cert_public_key(pem: Pem) -> Pem:
 def get_cert_fingerprint(pem: Pem) -> str:
     cert = load_pem_x509_certificate(pem.encode("ascii"))
     return cert.fingerprint(hashes.SHA256()).hex()
+
+
+def get_cert_fingerprint_b64url(pem: Pem) -> str:
+    cert = load_pem_x509_certificate(pem.encode("ascii"))
+    return (
+        base64.urlsafe_b64encode(cert.fingerprint(hashes.SHA256()))
+        .decode("ascii")
+        .strip("=")
+    )
 
 
 def get_public_key_fingerprint(pem: Pem) -> str:
