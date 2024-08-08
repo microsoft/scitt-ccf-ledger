@@ -125,6 +125,7 @@ JS code that determines whether an entry should be accepted. Should export an `a
 - kid (String)
 - issuer (String)
 - feed (String)
+- svn (Number)
 - cty (Number or String)
 - x5chain (Array of String values)
 - notary_signing_scheme (String)
