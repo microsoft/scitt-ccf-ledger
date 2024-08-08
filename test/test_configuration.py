@@ -393,6 +393,70 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.submit_claim(signed_claimset)
 
+    def test_svn_policy(
+        self,
+        client: Client,
+        configure_service,
+        trusted_ca: X5ChainCertificateAuthority,
+        did_web,
+    ):
+        example_eku = "2.999"
+
+        identity = trusted_ca.create_identity(
+            alg="ES256", kty="ec", add_eku=example_eku
+        )
+
+        def didx509_issuer(ca):
+            root_cert = ca.cert_bundle
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
+            return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
+
+        identity.issuer = didx509_issuer(trusted_ca)
+        feed = "SomeFeed"
+        # SBOMs
+        claims = {"foo": "bar"}
+
+        permitted_signed_claims = [
+            crypto.sign_json_claimset(identity, claims, feed=feed, svn=1),
+        ]
+
+        profile_error = "This policy only accepts IETF did:x509 claims"
+        invalid_svn = "Invalid SVN"
+
+        # Keyed by expected error, values are lists of claimsets which should trigger this error
+        refused_signed_claims = {
+            # Well-constructed, but not a valid issuer
+            invalid_svn: [
+                crypto.sign_json_claimset(
+                    identity,
+                    claims,
+                    feed=feed,
+                ),
+                crypto.sign_json_claimset(identity, claims, feed=feed, svn=-11),
+            ],
+        }
+
+        policy_script = f"""
+export function apply(profile, phdr) {{
+    if (profile !== "IETF") {{ return "{profile_error}"; }}
+
+    // Check exact issuer 
+    if (phdr.issuer !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
+    if (phdr.svn === undefined || phdr.svn < 0) {{ return "Invalid SVN"; }}
+
+    return true;
+}}"""
+
+        configure_service({"policy": {"policy_script": policy_script}})
+
+        for signed_claimset in permitted_signed_claims:
+            client.submit_claim(signed_claimset)
+
+        for err, signed_claimsets in refused_signed_claims.items():
+            for signed_claimset in signed_claimsets:
+                with service_error(err):
+                    client.submit_claim(signed_claimset)
+
     def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_claimset
     ):

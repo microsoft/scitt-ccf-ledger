@@ -64,6 +64,8 @@ namespace scitt::cose
   static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
     "io.cncf.notary.expiry";
 
+  static constexpr const char* SVN_HEADER_PARAM = "svn";
+
   static const std::set<std::variant<int64_t, std::string>>
     NOTARY_HEADER_PARAMS{
       NOTARY_HEADER_PARAM_SIGNING_SCHEME,
@@ -89,6 +91,7 @@ namespace scitt::cose
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
+    std::optional<int64_t> svn;
     std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
 
@@ -296,6 +299,7 @@ namespace scitt::cose
       CRIT_INDEX,
       ISSUER_INDEX,
       FEED_INDEX,
+      SVN_INDEX,
       KID_INDEX,
       CTY_INDEX,
       X5CHAIN_INDEX,
@@ -322,6 +326,10 @@ namespace scitt::cose
     header_items[FEED_INDEX].label.int64 = COSE_HEADER_PARAM_FEED;
     header_items[FEED_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[FEED_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
+    header_items[SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
+    header_items[SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[SVN_INDEX].uDataType = QCBOR_TYPE_INT64;
 
     header_items[KID_INDEX].label.int64 = COSE_HEADER_PARAM_KID;
     header_items[KID_INDEX].uLabelType = QCBOR_TYPE_INT64;
@@ -424,6 +432,10 @@ namespace scitt::cose
     if (header_items[FEED_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.feed = cbor::as_string(header_items[FEED_INDEX].val.string);
+    }
+    if (header_items[SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.svn = header_items[SVN_INDEX].val.int64;
     }
 
     if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_TEXT_STRING)

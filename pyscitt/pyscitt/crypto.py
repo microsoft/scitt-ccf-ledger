@@ -685,10 +685,13 @@ def sign_claimset(
     content_type: str,
     feed: Optional[str] = None,
     registration_info: RegistrationInfo = {},
+    svn: Optional[int] = None,
 ) -> bytes:
     headers: dict = {}
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
+    if svn is not None:
+        headers["svn"] = svn
 
     if signer.x5c is not None:
         headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
@@ -711,9 +714,14 @@ def sign_json_claimset(
     claims: Any,
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
+    svn: Optional[int] = None,
 ) -> bytes:
     return sign_claimset(
-        signer, json.dumps(claims).encode("ascii"), content_type=content_type, feed=feed
+        signer,
+        json.dumps(claims).encode("ascii"),
+        content_type=content_type,
+        feed=feed,
+        svn=svn,
     )
 
 

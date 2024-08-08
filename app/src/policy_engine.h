@@ -92,6 +92,11 @@ namespace scitt
           obj.set("feed", ctx.new_string(phdr.feed.value()));
         }
 
+        if (phdr.svn.has_value())
+        {
+          obj.set_int64("svn", phdr.svn.value());
+        }
+
         if (phdr.cty.has_value())
         {
           if (std::holds_alternative<int64_t>(phdr.cty.value()))
