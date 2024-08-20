@@ -26,10 +26,11 @@ Example configuration proposal:
             "accepted_did_issuers": [
               "did:web:firstallowedsubmitter.com",
               "did:web:secondallowedsubmitter.com"
-            ]
+            ],
+            "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
           "authentication": {
-            "allow_unauthenticated": False,
+            "allow_unauthenticated": false,
             "jwt": {
               "required_claims": {
                 "aud": "scitt",
