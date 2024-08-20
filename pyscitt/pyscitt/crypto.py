@@ -709,6 +709,42 @@ def sign_claimset(
     return msg.encode(tag=True)
 
 
+def sign_claimset_with_cwt(
+    signer: Signer,
+    claims: bytes,
+    content_type: str,
+    feed: Optional[str] = None,
+    registration_info: RegistrationInfo = {},
+    svn: Optional[int] = None,
+) -> bytes:
+    headers: dict = {}
+    headers[pycose.headers.Algorithm] = signer.algorithm
+    headers[pycose.headers.ContentType] = content_type
+
+    CWT_Claims = 15
+    CWT_iss = 1
+    CWT_sub = 2
+    CWT_svn = "svn"
+
+    headers[CWT_Claims] = {CWT_iss: signer.issuer}
+
+    if feed is not None:
+        headers[CWT_Claims][CWT_sub] = feed
+    if svn is not None:
+        headers[CWT_Claims][CWT_svn] = svn
+
+    if signer.x5c is not None:
+        headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
+    if signer.kid is not None:
+        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
+    if registration_info:
+        headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
+
+    msg = Sign1Message(phdr=headers, payload=claims)
+    msg.key = cose_private_key_from_pem(signer.private_key)
+    return msg.encode(tag=True)
+
+
 def sign_json_claimset(
     signer: Signer,
     claims: Any,
@@ -717,6 +753,22 @@ def sign_json_claimset(
     svn: Optional[int] = None,
 ) -> bytes:
     return sign_claimset(
+        signer,
+        json.dumps(claims).encode("ascii"),
+        content_type=content_type,
+        feed=feed,
+        svn=svn,
+    )
+
+
+def sign_json_claimset_with_cwt(
+    signer: Signer,
+    claims: Any,
+    content_type: str = "application/vnd.dummy+json",
+    feed: Optional[str] = None,
+    svn: Optional[int] = None,
+) -> bytes:
+    return sign_claimset_with_cwt(
         signer,
         json.dumps(claims).encode("ascii"),
         content_type=content_type,
