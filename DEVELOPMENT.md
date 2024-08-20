@@ -72,7 +72,7 @@ PLATFORM=<sgx|virtual> ./build.sh
 
 ### Using Docker development script
 
-The script is used in testing, it starts the docker image and sets basic configuration. For more details refer to [docker/README.md](./docker/README.md).
+The script is used in testing, it starts the docker image and sets basic [configuration](docs/configuration.md). For more details refer to [docker/README.md](./docker/README.md).
 
 ```sh
 export PLATFORM=virtual
@@ -101,7 +101,7 @@ export PLATFORM=virtual
 
 ## Configuring
 
-The application expects the configuration to be submitted via the CCF proposals, for that you could use the CLI.
+The application expects the [configuration](docs/configuration.md) to be submitted via the CCF proposals, for that you could use the CLI.
 
 ```sh
 echo <<< EOL
@@ -122,7 +122,7 @@ Above you can see a special `workspace` directory which would have been created 
 
 ### Adding x509 CA roots
 
-Root CAs are used to validate COSE envelopes being submitted to the `/entries` endpoint. Similar to the configuration CA roots can be set with the CLI.
+Root CAs are used to validate COSE envelopes being submitted to the `/entries` endpoint. Similar to the [configuration](docs/configuration.md) CA roots can be set with the CLI.
 
 ```sh
 ./pyscitt.sh governance propose_ca_certs --name x509_roots -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --ca-certs myexpectedca.pem
