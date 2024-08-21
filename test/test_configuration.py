@@ -511,6 +511,32 @@ export function apply(profile, phdr) {{
         with service_error("Invalid policy module"):
             client.submit_claim(signed_claimset)
 
+    def test_cts_hashv_cwtclaims_payload_with_policy(
+        self,
+        client: Client,
+        configure_service,
+        trusted_ca: X5ChainCertificateAuthority,
+        untrusted_ca: X5ChainCertificateAuthority,
+        did_web,
+    ):
+
+        policy_script = f"""
+export function apply(profile, phdr) {{
+if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 claims"; }}
+
+// Check exact issuer 
+if (phdr.issuer !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
+
+return true;
+}}"""
+
+        configure_service({"policy": {"policy_script": policy_script}})
+
+        with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+            cts_hashv_cwtclaims = f.read()
+
+        client.submit_claim(cts_hashv_cwtclaims)
+
 
 def test_service_identifier(
     client: Client,
