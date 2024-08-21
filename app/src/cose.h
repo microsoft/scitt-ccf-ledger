@@ -96,6 +96,7 @@ namespace scitt::cose
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
+    std::optional<int64_t> iat;
     std::optional<int64_t> svn;
     std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
@@ -381,7 +382,7 @@ namespace scitt::cose
     {
       CWT_ISS_INDEX,
       CWT_SUB_INDEX,
-      // CWT_IAT_INDEX,
+      CWT_IAT_INDEX,
       CWT_SVN_INDEX,
       CWT_END_INDEX,
     };
@@ -394,6 +395,10 @@ namespace scitt::cose
     cwt_items[CWT_SUB_INDEX].label.int64 = COSE_CWT_CLAIM_SUB;
     cwt_items[CWT_SUB_INDEX].uLabelType = QCBOR_TYPE_INT64;
     cwt_items[CWT_SUB_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
+    cwt_items[CWT_SUB_INDEX].label.int64 = COSE_CWT_CLAIM_IAT;
+    cwt_items[CWT_SUB_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_SUB_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
 
     cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
     cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
@@ -515,6 +520,10 @@ namespace scitt::cose
       if (cwt_items[CWT_SUB_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
         parsed.feed = cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
+      }
+      if (cwt_items[CWT_IAT_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
       }
       if (cwt_items[CWT_SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
       {

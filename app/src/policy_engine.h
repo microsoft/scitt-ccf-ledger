@@ -92,6 +92,11 @@ namespace scitt
           obj.set("feed", ctx.new_string(phdr.feed.value()));
         }
 
+        if (phdr.iat.has_value())
+        {
+          obj.set_int64("iat", phdr.iat.value());
+        }
+
         if (phdr.svn.has_value())
         {
           obj.set_int64("svn", phdr.svn.value());

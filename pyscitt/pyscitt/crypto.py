@@ -724,6 +724,7 @@ def sign_claimset_with_cwt(
     CWT_Claims = 15
     CWT_iss = 1
     CWT_sub = 2
+    CWT_iat = 6
     CWT_svn = "svn"
 
     headers[CWT_Claims] = {CWT_iss: signer.issuer}
