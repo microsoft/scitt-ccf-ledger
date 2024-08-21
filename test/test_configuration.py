@@ -526,6 +526,7 @@ if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 claims
 
 // Check exact issuer 
 if (phdr.issuer !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
+if (phdr.svn === undefined || phdr.svn < 0) {{ return "Invalid SVN"; }}
 
 return true;
 }}"""
