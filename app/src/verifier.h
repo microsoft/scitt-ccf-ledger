@@ -12,6 +12,7 @@
 #include "signature_algorithms.h"
 #include "tracing.h"
 
+#include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
@@ -221,20 +222,44 @@ namespace scitt::verifier
 
       auto resolved_jwk =
         vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
-      // Need to dispatch on kty if we want to support RSA, Eddsa, etc.
-      if (resolved_jwk.kty != ccf::crypto::JsonWebKeyType::EC)
-      {
-        throw VerificationError(
-          "Verification method public key is not an EC key");
-      }
-      auto signing_key =
-        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_jwk();
+      auto signing_key_pem =
+        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_pem();
+      ccf::crypto::Pem resolved_pem;
 
-      if (resolved_jwk != signing_key)
+      switch (resolved_jwk.kty)
+      {
+        case ccf::crypto::JsonWebKeyType::EC:
+        {
+          {
+            auto specific_jwk =
+              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyECPublic>();
+            resolved_pem =
+              ccf::crypto::make_public_key(specific_jwk)->public_key_pem();
+          }
+          break;
+        }
+        case ccf::crypto::JsonWebKeyType::RSA:
+        {
+          {
+            auto specific_jwk =
+              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyRSAPublic>();
+            resolved_pem =
+              ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
+          }
+          break;
+        }
+        default:
+        {
+          throw VerificationError(fmt::format(
+            "Verification method public key (kty: {}) is unsupported",
+            resolved_jwk.kty));
+        }
+      }
+
+      if (resolved_pem != signing_key_pem)
       {
         throw VerificationError(
-          "Resolved verification method public key does not match "
-          "signing key");
+          "Resolved verification method public key does not match signing key");
       }
     }
 
