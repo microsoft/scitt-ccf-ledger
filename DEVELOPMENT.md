@@ -10,32 +10,30 @@ This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
 
-### Using Codespaces
+### Develop within Codespaces
 
 For *virtual* mode development only, instead of following the steps below, you can also use GitHub Codespaces and then continue with the "Building" section: 
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=562968818&machine=standardLinux32gb&devcontainer_path=.devcontainer%2Fdevcontainer.json&location=WestEurope)
 
-### Using a Docker image
+### Develop within a running Docker image
 
 Similar to Codespaces you could build and test the application within the running docker image:
 
 ```sh
 docker build -t mytestimg -f .devcontainer/Dockerfile .
-
 docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg
-
 # workaround to make git happy in a running docker image
 /opt/app# git config --global --add safe.directory "*"
 
 ## ready to build and test now, see below commands
 ```
 
-### Using a host machine
+### Develop within a host machine
 
-Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
+It is expected that you have Ubuntu 20.04. Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
 
-1. Set up machine: 
+1. Set up your host machine: 
     - If using SGX, it is recommended that you provision a virtual machine:
       - On Azure, provision a DC-series VM, for example, [DCsv3](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv3-series)
       - Enable running SGX enclaves: `sudo usermod -a -G sgx_prv $(whoami)`
@@ -49,28 +47,44 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
     ./run.sh app-dev.yml -e ccf_ver=5.0.0 -e platform=<sgx|virtual> -e clang_version=<11|15>
     ```
 
-## Building
+## Compiling
 
-1. Clone the repository and change into the scitt-ccf-ledger folder:
-    ```sh
-    git clone https://github.com/microsoft/scitt-ccf-ledger
-    cd scitt-ccf-ledger
-    ```
+### Using Docker build container
 
-2. Select the development environment (see above)
+When you need to quickly build it and do not have the configured development environment yet.
 
-3. Build scitt-ccf-ledger by running:
-    ```sh
-    PLATFORM=<sgx|virtual> ./build.sh
-    ```
+```sh
+export PLATFORM=virtual
+./docker/build.sh
+```
+
+### Using your development environment
+
+This will expect all of the required dependencies to be set correctly.
+
+Build scitt-ccf-ledger by running:
+
+```sh
+PLATFORM=<sgx|virtual> ./build.sh
+```
 
 ## Running
 
-### In your environment
+### Using Docker development script
+
+The script is used in testing, it starts the docker image and sets basic [configuration](docs/configuration.md). For more details refer to [docker/README.md](./docker/README.md).
+
+```sh
+export PLATFORM=virtual
+./docker/run-dev.sh
+```
+
+### In your development environment
 
 1. Build first (see above)
 
 2. Start a single-node CCF network running the scitt-ccf-ledger application:
+
     ```sh
     PLATFORM=<sgx|virtual> ./start.sh
     ```
@@ -85,13 +99,34 @@ Follow the steps below to setup your development environment, replacing `<sgx|vi
    Note this command should not be used for a production instance, as it will leave the service
    open to all.
 
-### Development Docker image
+## Configuring
 
-For more details refer to [docker/README.md](./docker/README.md).
+The application expects the [configuration](docs/configuration.md) to be submitted via the CCF proposals, for that you could use the CLI.
 
-1. Build the image first `PLATFORM="virtual" ./docker/build.sh`
+```sh
+echo <<< EOL
+{
+    "policy": {
+        "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
+    },
+    "authentication": {
+        "allow_unauthenticated": true
+    }
+}
+EOL >> test-config.json;
 
-2. Run the image and setup the development instance `PLATFORM="virtual" ./docker/run-dev.sh`
+./pyscitt.sh governance propose_configuration -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --configuration test-config.json
+```
+
+Above you can see a special `workspace` directory which would have been created when running with `docker/run-dev.sh` and would contain the member keys.
+
+### Adding x509 CA roots
+
+Root CAs are used to validate COSE envelopes being submitted to the `/entries` endpoint. Similar to the [configuration](docs/configuration.md) CA roots can be set with the CLI.
+
+```sh
+./pyscitt.sh governance propose_ca_certs --name x509_roots -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --ca-certs myexpectedca.pem
+```
 
 ## Testing
 
