@@ -35,6 +35,13 @@ class SigningType(Enum):
     HTTP = "HTTP"
 
 
+class ReceiptType(Enum):
+    """Receipt types supported by the ledger."""
+
+    EMBEDDED = "EMBEDDED"
+    RAW = "RAW"
+
+
 class MemberAuthenticationMethod(ABC):
     cert: str
 
@@ -482,7 +489,7 @@ class BaseClient:
 @dataclass
 class PendingSubmission:
     """
-    The result of submitting a claim to the service.
+    The pending result of submitting a claim to the service.
     """
 
     operation_tx: str
@@ -490,17 +497,31 @@ class PendingSubmission:
 
 @dataclass
 class Submission(PendingSubmission):
+    """
+    The result of submitting a claim to the service.
+    """
+
     tx: str
-    raw_receipt: bytes
+    receipt_bytes: bytes
+    is_receipt_embedded: bool
 
     @property
     def seqno(self) -> int:
+        """Extract the sequence number from the transaction ID."""
         view, seqno = self.tx.split(".")
         return int(seqno)
 
     @property
     def receipt(self) -> Receipt:
-        return Receipt.decode(self.raw_receipt)
+        """Parse the receipt bytes and return a Receipt object."""
+        if self.is_receipt_embedded:
+            embedded_receipt = crypto.get_last_embedded_receipt_from_cose(
+                self.receipt_bytes
+            )
+            if embedded_receipt:
+                return Receipt.decode(embedded_receipt)
+            raise ValueError("No embedded receipt found in COSE message header")
+        return Receipt.decode(self.receipt_bytes)
 
 
 class Client(BaseClient):
@@ -523,33 +544,39 @@ class Client(BaseClient):
         # Note: This endpoint only returns data for did:web DIDs.
         return self.get(f"/did/{did}").json()["did_document"]
 
-    @overload
     def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[False] = False
-    ) -> Submission: ...
-
-    @overload
-    def submit_claim(
-        self, claim: bytes, *, skip_confirmation: Literal[True]
-    ) -> PendingSubmission: ...
-
-    def submit_claim(
-        self, claim: bytes, *, skip_confirmation=False
-    ) -> Union[Submission, PendingSubmission]:
+        self,
+        claim: bytes,
+    ) -> PendingSubmission:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
             headers=headers,
             content=claim,
         ).json()
-
         operation_id = response["operationId"]
-        if skip_confirmation:
-            return PendingSubmission(operation_id)
-        else:
-            tx = self.wait_for_operation(operation_id)
-            receipt = self.get_receipt(tx, decode=False)
-            return Submission(operation_id, tx, receipt)
+        return PendingSubmission(operation_id)
+
+    def submit_claim_and_confirm(
+        self,
+        claim: bytes,
+        *,
+        receipt_type: ReceiptType = ReceiptType.RAW,
+    ) -> Submission:
+        headers = {"Content-Type": "application/cose"}
+        response = self.post(
+            "/entries",
+            headers=headers,
+            content=claim,
+        ).json()
+        operation_id = response["operationId"]
+        tx = self.wait_for_operation(operation_id)
+        if receipt_type == ReceiptType.EMBEDDED:
+            receipt = self.get_claim(tx, embed_receipt=True)
+            return Submission(operation_id, tx, receipt, True)
+
+        receipt = self.get_receipt(tx, decode=False)
+        return Submission(operation_id, tx, receipt, False)
 
     def wait_for_operation(self, operation: str) -> str:
         response = self.get(

@@ -34,7 +34,7 @@ def test_submit_claim(client: Client, did_web, trust_store, params):
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims).raw_receipt
+    receipt = client.submit_claim_and_confirm(claims).receipt_bytes
     verify_receipt(claims, trust_store, receipt)
 
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
@@ -72,14 +72,14 @@ def test_default_did_port(client: Client, trust_store, tmp_path):
 
         # Sign and submit a dummy claim using our new identity
         claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-        receipt = client.submit_claim(claims).receipt
+        receipt = client.submit_claim_and_confirm(claims).receipt
         verify_receipt(claims, trust_store, receipt)
 
 
 @pytest.mark.isolated_test
 def test_recovery(client, did_web, restart_service):
     identity = did_web.create_identity()
-    client.submit_claim(crypto.sign_json_claimset(identity, {"foo": "bar"}))
+    client.submit_claim_and_confirm(crypto.sign_json_claimset(identity, {"foo": "bar"}))
 
     old_network = client.get("/node/network").json()
     assert old_network["recovery_count"] == 0
@@ -91,4 +91,6 @@ def test_recovery(client, did_web, restart_service):
     assert new_network["service_certificate"] != old_network["service_certificate"]
 
     # Check that the service is still operating correctly
-    client.submit_claim(crypto.sign_json_claimset(identity, {"foo": "hello"}))
+    client.submit_claim_and_confirm(
+        crypto.sign_json_claimset(identity, {"foo": "hello"})
+    )

@@ -39,5 +39,5 @@ def test_faketime(
     # attested-fetch from starting up.
     identity = did_web.create_identity()
     claim = crypto.sign_json_claimset(identity, "Payload")
-    receipt = client.submit_claim(claim).receipt
+    receipt = client.submit_claim_and_confirm(claim).receipt
     verify_receipt(claim, trust_store, receipt)

@@ -143,7 +143,7 @@ class TestNonCanonicalEncoding:
 
     def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
-        receipt = client.submit_claim(claim).receipt
+        receipt = client.submit_claim_and_confirm(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
     def test_embed_receipt(self, client: Client, trust_store, claim):
@@ -151,7 +151,7 @@ class TestNonCanonicalEncoding:
         When embedding a receipt in a claim, the ledger should not affect the
         encoding of byte-string pieces.
         """
-        tx = client.submit_claim(claim).tx
+        tx = client.submit_claim_and_confirm(claim).tx
         embedded = client.get_claim(tx, embed_receipt=True)
 
         original_pieces = cbor2.loads(claim).value  # type: ignore[attr-defined]
@@ -177,7 +177,7 @@ class TestNonCanonicalEncoding:
         size = int(1024 * 1024 * 0.5)
         claim = crypto.sign_claimset(identity, bytes(size), "binary/octet-stream")
 
-        tx = client.submit_claim(claim).tx
+        tx = client.submit_claim_and_confirm(claim).tx
         embedded = client.get_claim(tx, embed_receipt=True)
 
         original_claim_array = cbor2.loads(claim).value  # type: ignore[attr-defined]
@@ -197,7 +197,7 @@ class TestHeaderParameters:
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
         def f(parameters, *, signer=identity):
-            return client.submit_claim(sign(signer, b"Hello", parameters))
+            return client.submit_claim_and_confirm(sign(signer, b"Hello", parameters))
 
         return f
 

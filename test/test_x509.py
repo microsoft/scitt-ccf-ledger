@@ -44,7 +44,7 @@ def test_submit_claim_x5c(
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims).receipt
+    receipt = client.submit_claim_and_confirm(claims).receipt
     # check if the header struct contains mrenclave header
     assert "enclave_measurement" in receipt.phdr
     env_platform = os.environ.get("PLATFORM")
@@ -77,7 +77,7 @@ def test_invalid_certificate_chain(
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 def test_wrong_certificate(
@@ -97,7 +97,7 @@ def test_wrong_certificate(
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     with service_error("Signature verification failed"):
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 def test_untrusted_ca(client: Client):
@@ -109,7 +109,7 @@ def test_untrusted_ca(client: Client):
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 def test_self_signed_trusted(
@@ -134,7 +134,7 @@ def test_self_signed_trusted(
     # We're pretty flexible about the error message here, because the exact
     # behaviour depends on the OpenSSL version.
     with service_error("Certificate chain"):
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
@@ -154,8 +154,8 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
     second_identity = second_ca.create_identity(alg="ES256", kty="ec")
     second_claims = crypto.sign_json_claimset(second_identity, {"foo": "bar"})
 
-    first_receipt = client.submit_claim(first_claims).receipt
-    second_receipt = client.submit_claim(second_claims).receipt
+    first_receipt = client.submit_claim_and_confirm(first_claims).receipt
+    second_receipt = client.submit_claim_and_confirm(second_claims).receipt
 
     verify_receipt(first_claims, trust_store, first_receipt)
     verify_receipt(second_claims, trust_store, second_receipt)
@@ -172,7 +172,7 @@ def test_self_signed_untrusted(client: Client):
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 def test_leaf_ca(
@@ -185,7 +185,7 @@ def test_leaf_ca(
     identity = trusted_ca.create_identity(alg="ES256", kty="ec", ca=True)
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     with service_error("Signing certificate is CA"):
-        client.submit_claim(claims).receipt
+        client.submit_claim_and_confirm(claims).receipt
 
 
 def test_root_ca(
@@ -199,7 +199,7 @@ def test_root_ca(
     identity = crypto.Signer(trusted_ca.root_key_pem, x5c=[trusted_ca.root_cert_pem])
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
     with service_error("Certificate chain must include at least one CA certificate"):
-        client.submit_claim(claims).receipt
+        client.submit_claim_and_confirm(claims).receipt
 
 
 @pytest.mark.parametrize(
@@ -251,7 +251,7 @@ def test_submit_claim_notary_x509(
     msg.key = crypto.cose_private_key_from_pem(identity.private_key)
     claim = msg.encode(tag=True)
 
-    submission = client.submit_claim(claim)
+    submission = client.submit_claim_and_confirm(claim)
     verify_receipt(claim, trust_store, submission.receipt)
 
     # Embedding the receipt requires re-encoding the unprotected header.
@@ -259,4 +259,4 @@ def test_submit_claim_notary_x509(
     # This checks whether x5chain is preserved after re-encoding by simply
     # submitting the claim again.
     claim_with_receipt = client.get_claim(submission.tx, embed_receipt=True)
-    client.submit_claim(claim_with_receipt)
+    client.submit_claim_and_confirm(claim_with_receipt)

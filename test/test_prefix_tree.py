@@ -16,7 +16,7 @@ def test_prefix_tree(did_web, client):
     service_parameters = client.get_parameters()
 
     first_claims = crypto.sign_json_claimset(identity, {"value": "first"}, feed=feed)
-    first_submit = client.submit_claim(first_claims)
+    first_submit = client.submit_claim_and_confirm(first_claims)
 
     pt = client.prefix_tree
 
@@ -36,7 +36,7 @@ def test_prefix_tree(did_web, client):
     # Submit a new claim to the same feed. The sequence numbers reflect the submission
     # ordering.
     second_claims = crypto.sign_json_claimset(identity, {"value": "second"}, feed=feed)
-    second_submit = client.submit_claim(second_claims)
+    second_submit = client.submit_claim_and_confirm(second_claims)
     assert second_submit.seqno > first_submit.seqno
 
     # Get a read receipt again - this will still reference the first claim,
@@ -60,7 +60,7 @@ def test_prefix_tree(did_web, client):
     # We submit a final claim, but to a different feed.
     # This should not affect read receipts for the original feed.
     third_claims = crypto.sign_json_claimset(identity, {"value": "third"}, feed="other")
-    third_submit = client.submit_claim(third_claims)
+    third_submit = client.submit_claim_and_confirm(third_claims)
     pt.flush()
 
     receipt = pt.get_read_receipt(identity.issuer, feed)

@@ -37,7 +37,7 @@ See the `demo/` folder on how to interact with the application.
 
 ### Development setup
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger without Docker.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger.
 
 ### Using the CLI
 
