@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   checks:
-    name: "Format and License Checks"
+    name: Format and License Checks
     runs-on: ubuntu-20.04
     container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-5.0.0
     steps:
@@ -21,7 +21,7 @@ jobs:
       - run: ./scripts/ci-checks.sh
   
   build-test:
-    name: "Build and Test"
+    name: CI
     needs: checks
     strategy:
       matrix:
@@ -35,9 +35,6 @@ jobs:
             nodes: [self-hosted, 1ES.Pool=gha-sgx-ccf-sub]
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device 
     runs-on: ${{ matrix.platform.nodes }}
-    defaults:
-      run:
-        shell: bash
     container:
       image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-5.0.0
       env:
@@ -61,7 +58,6 @@ jobs:
         run: |
           sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv
           sudo usermod -a -G sgx_prv $(whoami)
-          samples/scripts/sgxinfo.sh
           cat /proc/cpuinfo | grep flags | uniq
         shell: bash
         if: "${{ matrix.platform.name == 'sgx' }}"
@@ -74,10 +70,11 @@ jobs:
       - run: ./run_unit_tests.sh
       - run: ./run_functional_tests.sh --enable-faketime
 
-      - name: Upload logs
+      - name: "Upload logs for ${{ matrix.platform.name }}"
         uses: actions/upload-artifact@v4
-        if: ${{ failure() }}
+        if: success() || failure()
         with:
-          name: out
+          name: logs-${{ matrix.platform.name }}
           path: |
             out
+          if-no-files-found: ignore
