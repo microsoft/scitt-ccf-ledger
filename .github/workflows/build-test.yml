@@ -1,0 +1,83 @@
+name: "Build/test"
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: "Format and License Checks"
+    runs-on: ubuntu-20.04
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-5.0.0
+    steps:
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - run: ./scripts/ci-checks.sh
+  
+  build-test:
+    name: "Build and Test"
+    needs: checks
+    strategy:
+      matrix:
+        platform:
+          - name: virtual
+            image: virtual
+            nodes: ubuntu-20.04
+            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
+          - name: sgx
+            image: sgx
+            nodes: [self-hosted, 1ES.Pool=gha-sgx-ccf-sub]
+            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device 
+    runs-on: ${{ matrix.platform.nodes }}
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-5.0.0
+      env:
+        # Helps to distinguish between CI and local builds.
+        SCITT_CI: 1
+        # Additional CMake flags.
+        PLATFORM: ${{ matrix.platform.name }}
+        CMAKE_BUILD_TYPE: Debug
+        ENABLE_PREFIX_TREE: OFF
+        ENABLE_CLANG_TIDY: ON
+        # These make CI print all the errors, rather than stopping early.
+        CXXFLAGS: -ferror-limit=0
+        NINJA_FLAGS: -k 0
+    steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Platform SGX"
+        run: |
+          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv
+          sudo usermod -a -G sgx_prv $(whoami)
+          samples/scripts/sgxinfo.sh
+          cat /proc/cpuinfo | grep flags | uniq
+        shell: bash
+        if: "${{ matrix.platform.name == 'sgx' }}"
+
+      # Work-around for https://github.com/actions/runner/issues/2033
+      - name: Work around git safe.directory in container
+        run: chown -R $(id -u):$(id -g) $PWD
+      - run: apt-get update && apt-get install -y libcurl4-openssl-dev faketime clang-tidy-10
+      - run: ./build.sh
+      - run: ./run_unit_tests.sh
+      - run: ./run_functional_tests.sh --enable-faketime
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: out
+          path: |
+            out
