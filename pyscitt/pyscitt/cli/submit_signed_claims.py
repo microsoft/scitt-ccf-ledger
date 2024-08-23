@@ -73,7 +73,7 @@ def cli(fn):
     )
     parser.add_argument(
         "--receipt-type",
-        choices=[ReceiptType.EMBEDDED.value, ReceiptType.RAW.value],
+        choices=[e.value for e in ReceiptType],
         default=ReceiptType.RAW.value,  # default to raw for backwards compatibility
         help="""
         Downloads the receipt of a given type where raw means a countersignature (CBOR) binary 
