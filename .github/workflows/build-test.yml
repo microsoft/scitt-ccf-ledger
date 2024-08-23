@@ -37,6 +37,7 @@ jobs:
     runs-on: ${{ matrix.platform.nodes }}
     container:
       image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-5.0.0
+      options: ${{ matrix.platform.options }}
       env:
         # Helps to distinguish between CI and local builds.
         SCITT_CI: 1
