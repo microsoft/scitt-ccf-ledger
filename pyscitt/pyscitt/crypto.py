@@ -231,8 +231,13 @@ def generate_cert(
             critical=True,
         )
         .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-        .add_extension(x509.SubjectKeyIdentifier.from_public_key(subject_pub_key), critical=False)
-        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False)
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(subject_pub_key), critical=False
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()),
+            critical=False,
+        )
     )
     if add_eku:
         cert = cert.add_extension(
