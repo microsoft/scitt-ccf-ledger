@@ -21,9 +21,9 @@ def submit_signed_claimset(
     if path.suffix != ".cose":
         raise ValueError("unsupported file extension, must end with .cose")
 
-    if receipt_type == "raw":
+    if receipt_type == ReceiptType.RAW.value:
         r_type = ReceiptType.RAW
-    elif receipt_type == "embedded":
+    elif receipt_type == ReceiptType.EMBEDDED.value:
         r_type = ReceiptType.EMBEDDED
     else:
         raise ValueError(f"unsupported receipt type {receipt_type}")
@@ -73,8 +73,8 @@ def cli(fn):
     )
     parser.add_argument(
         "--receipt-type",
-        choices=["embedded", "raw"],
-        default="raw",  # default to raw for backwards compatibility
+        choices=[ReceiptType.EMBEDDED.value, ReceiptType.RAW.value],
+        default=ReceiptType.RAW.value,  # default to raw for backwards compatibility
         help="""
         Downloads the receipt of a given type where raw means a countersignature (CBOR) binary 
         and embedded means the original claimset (COSE) with the raw receipt added to the unprotected header

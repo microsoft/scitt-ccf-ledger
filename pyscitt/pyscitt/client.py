@@ -38,8 +38,8 @@ class SigningType(Enum):
 class ReceiptType(Enum):
     """Receipt types supported by the ledger."""
 
-    EMBEDDED = "EMBEDDED"
-    RAW = "RAW"
+    EMBEDDED = "embedded"
+    RAW = "raw"
 
 
 class MemberAuthenticationMethod(ABC):

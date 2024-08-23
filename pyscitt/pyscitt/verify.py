@@ -92,7 +92,7 @@ def verify_receipt(
     else:
         if receipt is None:
             embedded_receipt = crypto.get_last_embedded_receipt_from_cose(buf)
-            if embedded_receipt is None:
+            if not embedded_receipt:
                 raise ValueError("No embedded receipt found in COSE message")
             parsed_receipt = cbor2.loads(embedded_receipt)
         else:
