@@ -189,7 +189,9 @@ namespace scitt::verifier
         pem_chain += ccf::crypto::cert_der_to_pem(c).str();
       }
       auto did_document_str = didx509::resolve(
-        pem_chain, phdr.issuer.value(), true /* Do not validate time */);
+        pem_chain,
+        phdr.cwt_claims.iss.value(),
+        true /* Do not validate time */);
       scitt::did::alt::DIDDocument did_document =
         nlohmann::json::parse(did_document_str);
 
@@ -208,7 +210,7 @@ namespace scitt::verifier
           "document");
       }
       auto const& vm = did_document.verification_method[0];
-      if (vm.controller != phdr.issuer.value())
+      if (vm.controller != phdr.cwt_claims.iss.value())
       {
         throw VerificationError(
           "Verification method controller does not match issuer");
@@ -461,27 +463,36 @@ namespace scitt::verifier
 
           profile = ClaimProfile::Notary;
         }
-        else if (phdr.issuer.has_value())
+        else if (phdr.cwt_claims.iss.has_value())
         {
-          if (phdr.issuer->starts_with("did:x509") && phdr.x5chain.has_value())
+          if (
+            phdr.cwt_claims.iss->starts_with("did:x509") &&
+            phdr.x5chain.has_value())
           {
             // IETF SCITT did:x509 claim
             process_ietf_didx509_subprofile(phdr, data);
           }
           else
           {
-            // IETF SCITT did:web claim
-            key = process_ietf_profile(
-              phdr, tx, current_time, resolution_cache_expiry, configuration);
+            throw VerificationError(
+              "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
+          }
 
-            try
-            {
-              cose::verify(data, key);
-            }
-            catch (const cose::COSESignatureValidationError& e)
-            {
-              throw VerificationError(e.what());
-            }
+          profile = ClaimProfile::IETF;
+        }
+        else if (phdr.issuer.has_value())
+        {
+          // IETF SCITT did:web claim
+          key = process_ietf_profile(
+            phdr, tx, current_time, resolution_cache_expiry, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
           }
 
           profile = ClaimProfile::IETF;

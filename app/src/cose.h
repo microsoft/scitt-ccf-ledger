@@ -83,6 +83,14 @@ namespace scitt::cose
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  struct CWTClaims
+  {
+    std::optional<std::string> iss;
+    std::optional<std::string> sub;
+    std::optional<int64_t> iat;
+    std::optional<int64_t> svn;
+  };
+
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
     // All headers are optional here but optionality will later be validated
@@ -100,6 +108,10 @@ namespace scitt::cose
     std::optional<int64_t> svn;
     std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+
+    // CWT Claims header, as defined in
+    // https://datatracker.ietf.org/doc/rfc9597/
+    CWTClaims cwt_claims;
 
     // Extra Notary protected header parameters.
     std::optional<std::string> notary_signing_scheme;
@@ -492,9 +504,7 @@ namespace scitt::cose
         "Content-type must be of type text string or int64");
     }
 
-    // If a CWT claims map is present, parse it, and for the time being,
-    // map iss to issuer, sub to feed, and svn to svn.
-    // Note that iat is not extracted
+    // If a CWT claims map is present, parse it
     if (header_items[CWT_CLAIMS_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       QCBORDecode_EnterMapFromMapN(&ctx, COSE_HEADER_PARAM_CWT_CLAIMS);
@@ -515,19 +525,21 @@ namespace scitt::cose
 
       if (cwt_items[CWT_ISS_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
-        parsed.issuer = cbor::as_string(cwt_items[CWT_ISS_INDEX].val.string);
+        parsed.cwt_claims.iss =
+          cbor::as_string(cwt_items[CWT_ISS_INDEX].val.string);
       }
       if (cwt_items[CWT_SUB_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
-        parsed.feed = cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
+        parsed.cwt_claims.sub =
+          cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
       }
       if (cwt_items[CWT_IAT_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
-        parsed.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
+        parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
       }
       if (cwt_items[CWT_SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
-        parsed.svn = cwt_items[CWT_SVN_INDEX].val.int64;
+        parsed.cwt_claims.svn = cwt_items[CWT_SVN_INDEX].val.int64;
       }
       QCBORDecode_ExitMap(&ctx);
     }
