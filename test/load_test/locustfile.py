@@ -59,7 +59,9 @@ class Submitter(ScittUser):
         claim = self._claims[random.randrange(len(self._claims))]
         self.trace(
             "submit_claim",
-            lambda: self.client.submit_claim(
-                claim, skip_confirmation=self.skip_confirmation
+            lambda: (
+                self.client.submit_claim(claim)
+                if self.skip_confirmation
+                else self.client.submit_claim_and_confirm(claim)
             ),
         )

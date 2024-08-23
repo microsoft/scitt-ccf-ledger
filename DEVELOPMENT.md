@@ -132,18 +132,37 @@ Root CAs are used to validate COSE envelopes being submitted to the `/entries` e
 
 scitt-ccf-ledger has unit tests, covering individual components of the source code, and functional tests, covering end-to-end use cases of scitt-ccf-ledger.
 
-The unit tests can be run with:
+### Unit tests
+
+The unit tests can be run with `run_unit_tests.sh` script.
 
 ```sh
+PLATFORM="virtual" ./docker/build.sh
 ./run_unit_tests.sh
 ```
 
-All functional tests can be run with:
+### Functional (e2e) tests
 
-```sh
-./run_functional_tests.sh
-```
+To start the tests you need to use the script `run_functional_tests.sh`.
 
 Specific functional test can also be run by passing additional `pytest` arguments, e.g. `./run_functional_tests.sh -k test_use_cacert_submit_verify_x509_signature`
 
 Note: the functional tests will launch their own CCF network on a randomly assigned port. You do not need to start an instance beforehand.
+
+**Using Docker**
+
+The script will launch the built Docker image and will execute tests against it:
+
+```sh
+PLATFORM="virtual" ./docker/build.sh
+DOCKER=1 PLATFORM=virtual ./run_functional_tests.sh
+```
+
+**Using your host environment**
+
+```sh
+PLATFORM=virtual ./build.sh
+PLATFORM=virtual ./run_functional_tests.sh
+```
+
+

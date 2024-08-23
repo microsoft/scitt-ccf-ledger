@@ -32,10 +32,7 @@ def submit_concurrently(
 
     def f(claims: List[bytes]) -> List[str]:
         with did_web.suspend():
-            operations = [
-                client.submit_claim(c, skip_confirmation=True).operation_tx
-                for c in claims
-            ]
+            operations = [client.submit_claim(c).operation_tx for c in claims]
 
             # Give the ledger a second to kick off the requests before we
             # unblock the DID server.
@@ -61,10 +58,10 @@ def test_cache_resolution(
 
     with did_web.monitor() as metrics:
         claim1 = crypto.sign_json_claimset(identity, "Hello")
-        receipt1 = client.submit_claim(claim1).receipt
+        receipt1 = client.submit_claim_and_confirm(claim1).receipt
 
         claim2 = crypto.sign_json_claimset(identity, "World")
-        receipt2 = client.submit_claim(claim2).receipt
+        receipt2 = client.submit_claim_and_confirm(claim2).receipt
 
     assert metrics.request_count == 1
     verify_receipt(claim1, trust_store, receipt1)
@@ -110,11 +107,11 @@ def test_key_rotation(
     with did_web.monitor() as metrics:
         identity1 = did_web.create_identity()
         claim1 = crypto.sign_json_claimset(identity1, "Hello")
-        receipt1 = client.submit_claim(claim1).receipt
+        receipt1 = client.submit_claim_and_confirm(claim1).receipt
 
         identity2 = did_web.create_identity(identifier=identity1.issuer)
         claim2 = crypto.sign_json_claimset(identity2, "World")
-        receipt2 = client.submit_claim(claim2).receipt
+        receipt2 = client.submit_claim_and_confirm(claim2).receipt
 
     assert identity1.issuer == identity2.issuer
     assert identity1.kid != identity2.kid
@@ -124,7 +121,7 @@ def test_key_rotation(
 
     # The old claim can't be submitted anymore, since it uses the old key.
     with service_error("Missing assertion method in DID document"):
-        client.submit_claim(claim1)
+        client.submit_claim_and_confirm(claim1)
 
 
 @pytest.mark.isolated_test(enable_faketime=True)
@@ -136,14 +133,14 @@ def test_key_expiry(client, did_web, cchost):
 
     identity = did_web.create_identity()
     claim = crypto.sign_json_claimset(identity, "Hello")
-    client.submit_claim(claim)
+    client.submit_claim_and_confirm(claim)
 
     # Rotate the key
     did_web.create_identity(identifier=identity.issuer)
 
     # The ledger still has the DID document cached, so will accept a claim
     # signed with the old key.
-    client.submit_claim(claim)
+    client.submit_claim_and_confirm(claim)
 
     # Time travel, enough for the cached document to expire.
     cchost.advance_time(seconds=constants.DID_RESOLUTION_CACHE_EXPIRY_SECONDS)
@@ -153,7 +150,7 @@ def test_key_expiry(client, did_web, cchost):
     # now contains a new key. When it does, the document won't contain the old
     # key anymore and resolution will fail.
     with service_error("Missing assertion method in DID document"):
-        client.submit_claim(claim)
+        client.submit_claim_and_confirm(claim)
 
 
 def test_multiple_keys(
@@ -187,7 +184,7 @@ def test_multiple_keys(
     def submit(private_key, kid, payload):
         identity = crypto.Signer(private_key, issuer=issuer, kid=kid)
         claim = crypto.sign_json_claimset(identity, payload)
-        receipt = client.submit_claim(claim).receipt
+        receipt = client.submit_claim_and_confirm(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
     # We can submit claims with either key, using a single DID document.
@@ -218,7 +215,7 @@ def test_claim_without_kid(
     identity = crypto.Signer(issuer=issuer, private_key=private_key)
     claim = crypto.sign_json_claimset(identity, "Payload")
 
-    receipt = client.submit_claim(claim).receipt
+    receipt = client.submit_claim_and_confirm(claim).receipt
     verify_receipt(claim, trust_store, receipt)
 
 
@@ -254,7 +251,7 @@ class TestDIDMismatch:
         claim = crypto.sign_json_claimset(identity, "Payload")
 
         with service_error("DID document ID does not match expected value"):
-            client.submit_claim(claim)
+            client.submit_claim_and_confirm(claim)
 
     def test_submit_concurrently(
         self,
@@ -306,7 +303,7 @@ class TestDIDMismatch:
 
         # Submit the claim a first time, with the invalid document
         with service_error("DID document ID does not match expected value"):
-            client.submit_claim(claim)
+            client.submit_claim_and_confirm(claim)
 
         # Update the published document. This time it uses the correct DID.
         document = did.create_document(
@@ -316,7 +313,7 @@ class TestDIDMismatch:
         did_web.write_did_document(document)
 
         # Submitting the same claim now works just fine.
-        receipt = client.submit_claim(claim).receipt
+        receipt = client.submit_claim_and_confirm(claim).receipt
         verify_receipt(claim, trust_store, receipt)
 
 
@@ -334,7 +331,7 @@ def test_fetch_not_found(
     claim = crypto.sign_json_claimset(identity, "Payload")
 
     with service_error("DID Resolution failed with status code: 404"):
-        client.submit_claim(claim)
+        client.submit_claim_and_confirm(claim)
 
 
 def test_untrusted_server(
@@ -354,7 +351,7 @@ def test_untrusted_server(
         claim = crypto.sign_json_claimset(identity, "Payload")
 
         with service_error("DIDResolutionError: Certificate chain is invalid"):
-            client.submit_claim(claim)
+            client.submit_claim_and_confirm(claim)
 
 
 def test_consistent_kid(
@@ -378,7 +375,7 @@ def test_consistent_kid(
     assert header["kid"] == kid
 
     # Submit the claim and verify the resulting receipt.
-    receipt = client.submit_claim(claim).receipt
+    receipt = client.submit_claim_and_confirm(claim).receipt
     verify_receipt(claim, trust_store, receipt)
 
     # Check that the resolved DID document contains the expected assertion
