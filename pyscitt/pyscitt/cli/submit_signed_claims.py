@@ -15,7 +15,6 @@ def submit_signed_claimset(
     path: Path,
     receipt_path: Optional[Path],
     receipt_type: str,
-    service_trust_store_path: Optional[Path],
     skip_confirmation: bool,
 ):
     if path.suffix != ".cose":
@@ -49,14 +48,6 @@ def submit_signed_claimset(
             f.write(submission.receipt_bytes)
         print(f"Received {receipt_path}")
 
-    if service_trust_store_path:
-        service_trust_store = StaticTrustStore.load(service_trust_store_path)
-        verify_receipt(
-            signed_claimset,
-            receipt=submission.receipt,
-            service_trust_store=service_trust_store,
-        )
-
 
 def cli(fn):
     parser = fn(
@@ -80,11 +71,6 @@ def cli(fn):
         and embedded means the original claimset (COSE) with the raw receipt added to the unprotected header
         """,
     )
-    parser.add_argument(
-        "--service-trust-store",
-        type=Path,
-        help="Folder containing JSON parameter files of SCITT services to trust, used to verify the claim",
-    )
 
     def cmd(args):
         client = create_client(args)
@@ -93,7 +79,6 @@ def cli(fn):
             args.path,
             args.receipt,
             args.receipt_type,
-            args.service_trust_store,
             args.skip_confirmation,
         )
 
