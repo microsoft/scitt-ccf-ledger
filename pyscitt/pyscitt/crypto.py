@@ -82,6 +82,12 @@ COSE_HEADER_PARAM_FEED = 392
 COSE_HEADER_PARAM_REGISTRATION_INFO = 393
 COSE_HEADER_PARAM_SCITT_RECEIPTS = 394
 
+COSE_HEADER_PARAM_CWT_CLAIMS = 15
+CWT_ISS = 1
+CWT_SUB = 2
+CWT_IAT = 6
+CWT_SVN = "svn"
+
 RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
 
@@ -686,58 +692,33 @@ def sign_claimset(
     feed: Optional[str] = None,
     registration_info: RegistrationInfo = {},
     svn: Optional[int] = None,
-) -> bytes:
-    headers: dict = {}
-    headers[pycose.headers.Algorithm] = signer.algorithm
-    headers[pycose.headers.ContentType] = content_type
-    if svn is not None:
-        headers["svn"] = svn
-
-    if signer.x5c is not None:
-        headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
-    if signer.kid is not None:
-        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
-    if signer.issuer is not None:
-        headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
-    if feed is not None:
-        headers[COSE_HEADER_PARAM_FEED] = feed
-    if registration_info:
-        headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
-
-    msg = Sign1Message(phdr=headers, payload=claims)
-    msg.key = cose_private_key_from_pem(signer.private_key)
-    return msg.encode(tag=True)
-
-
-def sign_claimset_with_cwt(
-    signer: Signer,
-    claims: bytes,
-    content_type: str,
-    feed: Optional[str] = None,
-    registration_info: RegistrationInfo = {},
-    svn: Optional[int] = None,
+    cwt: bool = False,
 ) -> bytes:
     headers: dict = {}
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
 
-    CWT_Claims = 15
-    CWT_iss = 1
-    CWT_sub = 2
-    CWT_iat = 6
-    CWT_svn = "svn"
-
-    headers[CWT_Claims] = {CWT_iss: signer.issuer}
-
-    if feed is not None:
-        headers[CWT_Claims][CWT_sub] = feed
-    if svn is not None:
-        headers[CWT_Claims][CWT_svn] = svn
-
     if signer.x5c is not None:
         headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
     if signer.kid is not None:
         headers[pycose.headers.KID] = signer.kid.encode("utf-8")
+    if cwt:
+        cwt_claims: Dict[Union[int, str], Union[int, str]] = {}
+        if signer.issuer is not None:
+            cwt_claims[CWT_ISS] = signer.issuer
+        if feed is not None:
+            cwt_claims[CWT_SUB] = feed
+        if svn is not None:
+            cwt_claims[CWT_SVN] = svn
+        headers[COSE_HEADER_PARAM_CWT_CLAIMS] = cwt_claims
+    else:
+        if signer.issuer is not None:
+            headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
+        if feed is not None:
+            headers[COSE_HEADER_PARAM_FEED] = feed
+        if svn is not None:
+            headers["svn"] = svn
+
     if registration_info:
         headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
 
@@ -752,6 +733,7 @@ def sign_json_claimset(
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
     svn: Optional[int] = None,
+    cwt: bool = False,
 ) -> bytes:
     return sign_claimset(
         signer,
@@ -759,22 +741,7 @@ def sign_json_claimset(
         content_type=content_type,
         feed=feed,
         svn=svn,
-    )
-
-
-def sign_json_claimset_with_cwt(
-    signer: Signer,
-    claims: Any,
-    content_type: str = "application/vnd.dummy+json",
-    feed: Optional[str] = None,
-    svn: Optional[int] = None,
-) -> bytes:
-    return sign_claimset_with_cwt(
-        signer,
-        json.dumps(claims).encode("ascii"),
-        content_type=content_type,
-        feed=feed,
-        svn=svn,
+        cwt=cwt,
     )
 
 

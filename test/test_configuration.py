@@ -314,11 +314,7 @@ export function apply(profile, phdr) {{
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
-            crypto.sign_json_claimset_with_cwt(
-                identities[1],
-                claims,
-                feed=feed,
-            ),
+            crypto.sign_json_claimset(identities[1], claims, feed=feed, cwt=True),
         ]
 
         profile_error = "This policy only accepts IETF did:x509 claims"
@@ -332,44 +328,20 @@ export function apply(profile, phdr) {{
         refused_signed_claims = {
             # Well-constructed, but not a valid issuer
             invalid_issuer: [
-                crypto.sign_json_claimset_with_cwt(
-                    identities[0],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[0], claims, feed=feed, cwt=True),
             ],
             eku_not_found: [
-                crypto.sign_json_claimset_with_cwt(
-                    identities[2],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[2], claims, feed=feed, cwt=True),
             ],
             openssl_error: [
-                crypto.sign_json_claimset_with_cwt(
-                    identities[3],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[3], claims, feed=feed, cwt=True),
             ],
             invalid_did: [
-                crypto.sign_json_claimset_with_cwt(
-                    identities[4],
-                    claims,
-                    feed=feed,
-                ),
-                crypto.sign_json_claimset_with_cwt(
-                    identities[5],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[4], claims, feed=feed, cwt=True),
+                crypto.sign_json_claimset(identities[5], claims, feed=feed, cwt=True),
             ],
             not_supported: [
-                crypto.sign_json_claimset_with_cwt(
-                    identities[6],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[6], claims, feed=feed, cwt=True),
             ],
         }
 
