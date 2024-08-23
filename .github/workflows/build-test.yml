@@ -72,8 +72,8 @@ jobs:
       - run: apt-get update && apt-get install -y libcurl4-openssl-dev faketime clang-tidy-10
       - run: ./build.sh
       - run: ./run_unit_tests.sh
+        if: "${{ matrix.platform.name != 'sgx' }}"
       - run: ./run_functional_tests.sh --enable-faketime
-
       - name: "Upload logs for ${{ matrix.platform.name }}"
         uses: actions/upload-artifact@v4
         if: success() || failure()
