@@ -33,7 +33,7 @@ jobs:
           - name: sgx
             image: sgx
             nodes: [self-hosted, 1ES.Pool=gha-sgx-scitt-pool]
-            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device 
+            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device /dev/sgx_provision:/dev/sgx_provision 
     runs-on: ${{ matrix.platform.nodes }}
     container:
       image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-5.0.0
@@ -56,9 +56,9 @@ jobs:
 
       - name: "Platform SGX"
         run: |
-          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv
-          sudo usermod -a -G sgx_prv $(whoami)
-          cat /proc/cpuinfo | grep flags | uniq
+          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv;
+          sudo usermod -a -G sgx_prv $(whoami);
+          cat /proc/cpuinfo | grep flags | uniq;
         shell: bash
         if: "${{ matrix.platform.name == 'sgx' }}"
 
