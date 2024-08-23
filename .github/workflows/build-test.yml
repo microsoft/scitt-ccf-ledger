@@ -32,7 +32,7 @@ jobs:
           #   options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
           - name: sgx
             image: sgx
-            nodes: [self-hosted, 1ES.Pool=gha-sgx-ccf-sub]
+            nodes: [self-hosted, 1ES.Pool=gha-sgx-scitt-pool]
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device 
     runs-on: ${{ matrix.platform.nodes }}
     container:
