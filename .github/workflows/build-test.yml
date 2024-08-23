@@ -57,7 +57,7 @@ jobs:
 
       - name: "Platform SGX"
         run: |
-          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv;
+          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx_provision) sgx_prv;
           sudo usermod -a -G sgx_prv $(whoami);
           cat /proc/cpuinfo | grep flags | uniq;
         shell: bash
