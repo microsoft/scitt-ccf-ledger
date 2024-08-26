@@ -44,7 +44,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
-from pycose.keys.curves import P256, P384, P521, Ed25519
+from pycose.keys.curves import P256, P384, P521, Ed25519, CoseCurve
 from pycose.keys.ec2 import EC2Key
 from pycose.keys.keyparam import (
     EC2KpCurve,
@@ -68,12 +68,6 @@ from pycose.keys.rsa import RSAKey
 from pycose.messages import Sign1Message
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
-
-REGISTERED_EC_CURVES = {
-    "P-256": P256,
-    "P-384": P384,
-    "P-521": P521,
-}
 
 Pem = str
 
@@ -101,6 +95,17 @@ def ec_curve_from_name(name: str) -> EllipticCurve:
         return ec.SECP521R1()
     else:
         raise ValueError(f"Unsupported EC curve: {name}")
+
+
+def cose_curve_from_ec(curve: EllipticCurve) -> Tuple[str, CoseCurve]:
+    if curve == ec.SECP256R1():
+        return ("P-256", P256)
+    elif curve == ec.SECP384R1():
+        return ("P-384", P384)
+    elif curve == ec.SECP521R1():
+        return ("P-521", P521)
+    else:
+        raise ValueError(f"Unsupported EC curve: {curve}")
 
 
 def generate_rsa_keypair() -> Tuple[Pem, Pem]:
@@ -498,13 +503,7 @@ def from_cryptography_eckey_obj(
         priv_nums = None
         pub_nums = ext_key.public_numbers()
 
-    # Create map of cryptography curves to cose curves. E.g. {ec.SECP256R1: P256, ...}
-    registered_crvs = {
-        type(crv.curve_obj): crv for crv in REGISTERED_EC_CURVES.values()
-    }
-    if type(pub_nums.curve) not in registered_crvs:
-        raise ValueError(f"Unsupported EC Curve: {type(pub_nums.curve)}")
-    curve = registered_crvs[type(pub_nums.curve)]
+    _, curve = cose_curve_from_ec(pub_nums.curve)
 
     cose_key = {}
     if pub_nums:
@@ -660,16 +659,9 @@ def jwk_from_public_key(
     elif isinstance(pub_key, EllipticCurvePublicKey):
         pub_numbers = pub_key.public_numbers()
         curve = pub_numbers.curve
-        # Create map of curves to names. E.g. {ec.SECP256R1: "P-256", ...}
-        registered_crvs = {
-            type(crv.curve_obj): name for name, crv in REGISTERED_EC_CURVES.items()
-        }
-        if type(curve) not in registered_crvs:
-            raise ValueError(f"Unsupported EC Curve: {curve}")
-        crv_name = registered_crvs[type(curve)]
-        x = pub_numbers.x.to_bytes(REGISTERED_EC_CURVES[crv_name].size, "big")
-        y = pub_numbers.y.to_bytes(REGISTERED_EC_CURVES[crv_name].size, "big")
-
+        crv_name, crv = cose_curve_from_ec(curve)
+        x = pub_numbers.x.to_bytes(crv.size, "big")
+        y = pub_numbers.y.to_bytes(crv.size, "big")
         jwk = {
             "kty": "EC",
             "crv": crv_name,
