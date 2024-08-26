@@ -616,7 +616,7 @@ def get_last_embedded_receipt_from_cose(buf: bytes) -> Union[bytes, None]:
 
 
 def load_private_key(key_path: Path) -> Pem:
-    with open(key_path) as f:
+    with open(key_path, encoding="utf-8") as f:
         key_priv_pem = f.read()
     if is_ssh_private_key(key_priv_pem):
         key_priv_pem = ssh_private_key_to_pem(key_priv_pem)
@@ -715,7 +715,7 @@ def sign_claimset(
     claims: bytes,
     content_type: str,
     feed: Optional[str] = None,
-    registration_info: RegistrationInfo = {},
+    registration_info: RegistrationInfo = None,
     svn: Optional[int] = None,
     cwt: bool = False,
 ) -> bytes:
