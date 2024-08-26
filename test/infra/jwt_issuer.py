@@ -9,7 +9,7 @@ from pyscitt import crypto
 class JwtIssuer:
     def __init__(self, name="example.com"):
         self.name = name
-        self.key, _ = crypto.generate_rsa_keypair(2048)
+        self.key, _ = crypto.generate_rsa_keypair()
         self.cert = crypto.generate_cert(self.key, cn=name)
         self.key_id = crypto.get_cert_fingerprint(self.cert)
 

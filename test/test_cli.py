@@ -347,7 +347,7 @@ def test_local_development(run, service_url, tmp_path: Path):
 
 
 def test_create_ssh_did_web(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair(2048)
+    private_key, public_key = crypto.generate_rsa_keypair()
     ssh_private_key = crypto.private_key_pem_to_ssh(private_key)
     ssh_public_key = crypto.pub_key_pem_to_ssh(public_key)
 
@@ -401,7 +401,7 @@ def test_create_ssh_did_web(run, tmp_path: Path):
 
 
 def test_adhoc_signer(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair(2048)
+    private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "key_pub.pem").write_text(public_key)
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
@@ -519,7 +519,7 @@ def test_prefix_tree(run, tmp_path: Path):
 
 
 def test_registration_info(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair(2048)
+    private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 

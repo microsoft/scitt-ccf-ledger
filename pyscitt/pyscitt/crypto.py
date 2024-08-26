@@ -92,10 +92,21 @@ RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
 
 
-def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
+def ec_curve_from_name(name: str) -> EllipticCurve:
+    if name == "P-256":
+        return ec.SECP256R1()
+    elif name == "P-384":
+        return ec.SECP384R1()
+    elif name == "P-521":
+        return ec.SECP521R1()
+    else:
+        raise ValueError(f"Unsupported EC curve: {name}")
+
+
+def generate_rsa_keypair() -> Tuple[Pem, Pem]:
     priv = rsa.generate_private_key(
         public_exponent=RECOMMENDED_RSA_PUBLIC_EXPONENT,
-        key_size=key_size,
+        key_size=2048,
     )
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
@@ -107,12 +118,8 @@ def generate_rsa_keypair(key_size: int) -> Tuple[Pem, Pem]:
     return priv_pem, pub_pem
 
 
-def generate_ec_keypair(curve: str) -> Tuple[Pem, Pem]:
-    if curve not in REGISTERED_EC_CURVES:
-        raise NotImplementedError(f"Unsupported curve: {curve}")
-    curve_obj = REGISTERED_EC_CURVES[curve].curve_obj
-    assert isinstance(curve_obj, EllipticCurve)
-    priv = ec.generate_private_key(curve=curve_obj)
+def generate_ec_keypair(curve_name: str) -> Tuple[Pem, Pem]:
+    priv = ec.generate_private_key(curve=ec_curve_from_name(curve_name))
     pub = priv.public_key()
     priv_pem = priv.private_bytes(
         Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
@@ -140,11 +147,10 @@ def generate_ed25519_keypair() -> Tuple[Pem, Pem]:
 def generate_keypair(
     kty: str,
     *,
-    rsa_key_size: Optional[int] = None,
     ec_curve: Optional[str] = None,
 ) -> Tuple[str, str]:
     if kty == "rsa":
-        return generate_rsa_keypair(rsa_key_size or 2048)
+        return generate_rsa_keypair()
     elif kty == "ec":
         return generate_ec_keypair(ec_curve or "P-256")
     elif kty == "ed25519":
@@ -804,8 +810,7 @@ def convert_jwk_to_pem(jwk: dict) -> Pem:
     if jwk.get("kty") == "EC":
         x = int.from_bytes(base64.urlsafe_b64decode(jwk["x"]), "big")
         y = int.from_bytes(base64.urlsafe_b64decode(jwk["y"]), "big")
-        crv = REGISTERED_EC_CURVES[jwk["crv"]].curve_obj
-        assert isinstance(crv, EllipticCurve)
+        crv = ec_curve_from_name(jwk["crv"])
         key = EllipticCurvePublicNumbers(x, y, crv).public_key()
     else:
         raise NotImplementedError("Unsupported JWK type")

@@ -99,7 +99,7 @@ class DIDWebServer(AbstractContextManager):
             self.port = self.httpd.server_address[1]
             self.base_url = f"https://{self.host}:{self.port}"
 
-        tls_key_pem, _ = crypto.generate_rsa_keypair(2048)
+        tls_key_pem, _ = crypto.generate_rsa_keypair()
         self.tls_cert_pem = crypto.generate_cert(tls_key_pem, cn=host)
 
         context = _create_tls_context(self.tls_cert_pem, tls_key_pem)
