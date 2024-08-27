@@ -8,7 +8,7 @@ import json
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 warnings.filterwarnings("ignore", category=Warning)
@@ -44,7 +44,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
-from pycose.keys.curves import P256, P384, P521, Ed25519, CoseCurve
+from pycose.keys.curves import P256, P384, P521, CoseCurve, Ed25519
 from pycose.keys.ec2 import EC2Key
 from pycose.keys.keyparam import (
     EC2KpCurve,
@@ -84,6 +84,8 @@ CWT_SVN = "svn"
 
 RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
+CoseCurveTypes = Union[Type[P256], Type[P384], Type[P521]]
+CoseCurveType = Tuple[str, CoseCurveTypes]
 
 
 def ec_curve_from_name(name: str) -> EllipticCurve:
@@ -97,7 +99,7 @@ def ec_curve_from_name(name: str) -> EllipticCurve:
         raise ValueError(f"Unsupported EC curve: {name}")
 
 
-def cose_curve_from_ec(curve: EllipticCurve) -> Tuple[str, CoseCurve]:
+def cose_curve_from_ec(curve: EllipticCurve) -> CoseCurveType:
     if curve == ec.SECP256R1():
         return ("P-256", P256)
     elif curve == ec.SECP384R1():
@@ -713,7 +715,7 @@ def sign_claimset(
     claims: bytes,
     content_type: str,
     feed: Optional[str] = None,
-    registration_info: RegistrationInfo = None,
+    registration_info: Optional[RegistrationInfo] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
 ) -> bytes:
