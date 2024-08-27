@@ -44,7 +44,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
-from pycose.keys.curves import P256, P384, P521, CoseCurve, Ed25519
+from pycose.keys.curves import P256, P384, P521, Ed25519
 from pycose.keys.ec2 import EC2Key
 from pycose.keys.keyparam import (
     EC2KpCurve,
@@ -100,11 +100,11 @@ def ec_curve_from_name(name: str) -> EllipticCurve:
 
 
 def cose_curve_from_ec(curve: EllipticCurve) -> CoseCurveType:
-    if curve == ec.SECP256R1():
+    if isinstance(curve, ec.SECP256R1):
         return ("P-256", P256)
-    elif curve == ec.SECP384R1():
+    elif isinstance(curve, ec.SECP384R1):
         return ("P-384", P384)
-    elif curve == ec.SECP521R1():
+    elif isinstance(curve, ec.SECP521R1):
         return ("P-521", P521)
     else:
         raise ValueError(f"Unsupported EC curve: {curve}")
