@@ -91,10 +91,10 @@ def verify_receipt(
         decoded_receipt = receipt
     else:
         if receipt is None:
-            parsed_receipts = msg.uhdr[COSE_HEADER_PARAM_SCITT_RECEIPTS]
-            # For now, assume there is only one receipt
-            assert len(parsed_receipts) == 1
-            parsed_receipt = parsed_receipts[0]
+            embedded_receipt = crypto.get_last_embedded_receipt_from_cose(buf)
+            if not embedded_receipt:
+                raise ValueError("No embedded receipt found in COSE message")
+            parsed_receipt = cbor2.loads(embedded_receipt)
         else:
             parsed_receipt = cbor2.loads(receipt)
 

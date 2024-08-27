@@ -43,11 +43,11 @@ class TestPerf:
 
         # Test did:web performance (uncached resolution).
         latency_did_web_uncached_submit_s = measure_latency(
-            lambda claim: client.submit_claim(claim, skip_confirmation=True),
+            lambda claim: client.submit_claim(claim),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
         )
         latency_did_web_uncached_submit_and_receipt_s = measure_latency(
-            lambda claim: client.submit_claim(claim, skip_confirmation=False),
+            lambda claim: client.submit_claim_and_confirm(claim),
             lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
         )
 
@@ -56,13 +56,13 @@ class TestPerf:
         claim = crypto.sign_json_claimset(identity, payload)
 
         # Make sure DID document is cached.
-        client.submit_claim(claim)
+        client.submit_claim_and_confirm(claim)
 
         latency_did_web_cached_submit_s = measure_latency(
-            lambda _: client.submit_claim(claim, skip_confirmation=True)
+            lambda _: client.submit_claim(claim)
         )
         latency_did_web_cached_submit_and_receipt_s = measure_latency(
-            lambda _: client.submit_claim(claim, skip_confirmation=False)
+            lambda _: client.submit_claim_and_confirm(claim)
         )
 
         # Test x5c performance.
@@ -71,11 +71,9 @@ class TestPerf:
         )
         claim = crypto.sign_json_claimset(identity, payload)
 
-        latency_x5c_submit_s = measure_latency(
-            lambda _: client.submit_claim(claim, skip_confirmation=True)
-        )
+        latency_x5c_submit_s = measure_latency(lambda _: client.submit_claim(claim))
         latency_x5c_submit_and_receipt_s = measure_latency(
-            lambda _: client.submit_claim(claim, skip_confirmation=False)
+            lambda _: client.submit_claim_and_confirm(claim)
         )
 
         # Time-to-receipt depends on the configured signature interval of

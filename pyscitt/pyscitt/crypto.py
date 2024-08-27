@@ -580,6 +580,7 @@ def sha256_file(path: Path) -> str:
 
 
 def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
+    """Append the receipt to an unprotected header in a COSE_Sign1 message."""
     # Need to parse the receipt to avoid wrapping it in a bstr.
     parsed_receipt = cbor2.loads(receipt)
 
@@ -595,6 +596,23 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
         uhdr[key] = []
     uhdr[key].append(parsed_receipt)
     return cbor2.dumps(outer)
+
+
+def get_last_embedded_receipt_from_cose(buf: bytes) -> Union[bytes, None]:
+    """Extract the last receipt from the unprotected header of a COSE_Sign1 message."""
+    outer = cbor2.loads(buf)
+    if hasattr(outer, "tag"):
+        assert outer.tag == 18  # COSE_Sign1
+        val = outer.value  # type: ignore[attr-defined]
+    else:
+        val = outer
+    [_, uhdr, _, _] = val
+    key = COSE_HEADER_PARAM_SCITT_RECEIPTS
+    if key in uhdr:
+        parsed_receipts = uhdr[key]
+        if isinstance(parsed_receipts, list) and parsed_receipts:
+            return cbor2.dumps(parsed_receipts[-1])
+    return None
 
 
 def load_private_key(key_path: Path) -> Pem:

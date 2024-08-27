@@ -24,7 +24,7 @@ class TestAcceptedAlgorithms:
             """Sign and submit the claims with a new identity"""
             identity = did_web.create_identity(**kwargs)
             claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-            client.submit_claim(claims)
+            client.submit_claim_and_confirm(claims)
 
         return f
 
@@ -78,7 +78,7 @@ class TestAcceptedDIDIssuers:
         configure_service({"policy": {"accepted_did_issuers": []}})
 
         with service_error("InvalidInput: Unsupported DID issuer in protected header"):
-            client.submit_claim(claims)
+            client.submit_claim_and_confirm(claims)
 
     def test_wrong_accepted_issuer(self, client: Client, configure_service, claims):
         # Add just one issuer to the policy. Claims signed not with this
@@ -86,19 +86,19 @@ class TestAcceptedDIDIssuers:
         configure_service({"policy": {"accepted_did_issuers": ["else"]}})
 
         with service_error("InvalidInput: Unsupported DID issuer in protected header"):
-            client.submit_claim(claims)
+            client.submit_claim_and_confirm(claims)
 
     def test_allow_any_issuer(self, client: Client, configure_service, claims):
         # If no accepted_issuers are defined in the policy, any issuers
         # are accepted.
         configure_service({"policy": {}})
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
     def test_valid_issuer(self, client: Client, configure_service, identity, claims):
         # Add just one issuer to the policy. Claims signed with this
         # issuer are accepted.
         configure_service({"policy": {"accepted_did_issuers": [identity.issuer]}})
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
     def test_multiple_accepted_issuers(
         self, client: Client, configure_service, identity, claims
@@ -108,7 +108,7 @@ class TestAcceptedDIDIssuers:
         configure_service(
             {"policy": {"accepted_did_issuers": [identity.issuer, "else"]}}
         )
-        client.submit_claim(claims)
+        client.submit_claim_and_confirm(claims)
 
 
 class TestPolicyEngine:
@@ -206,12 +206,12 @@ export function apply(profile, phdr) {{
         configure_service({"policy": {"policy_script": policy_script}})
 
         for signed_claimset in permitted_signed_claims:
-            client.submit_claim(signed_claimset)
+            client.submit_claim_and_confirm(signed_claimset)
 
         for err, signed_claimsets in refused_signed_claims.items():
             for signed_claimset in signed_claimsets:
                 with service_error(err):
-                    client.submit_claim(signed_claimset)
+                    client.submit_claim_and_confirm(signed_claimset)
 
     def test_svn_policy(
         self,
@@ -268,12 +268,12 @@ export function apply(profile, phdr) {{
         configure_service({"policy": {"policy_script": policy_script}})
 
         for signed_claimset in permitted_signed_claims:
-            client.submit_claim(signed_claimset)
+            client.submit_claim_and_confirm(signed_claimset)
 
         for err, signed_claimsets in refused_signed_claims.items():
             for signed_claimset in signed_claimsets:
                 with service_error(err):
-                    client.submit_claim(signed_claimset)
+                    client.submit_claim_and_confirm(signed_claimset)
 
     def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_claimset
@@ -282,7 +282,7 @@ export function apply(profile, phdr) {{
             {"policy": {"policy_script": "export function apply() { return true }"}}
         )
 
-        client.submit_claim(signed_claimset)
+        client.submit_claim_and_confirm(signed_claimset)
 
     def test_trivial_fail_policy(
         self, client: Client, configure_service, signed_claimset
@@ -296,7 +296,7 @@ export function apply(profile, phdr) {{
         )
 
         with service_error("Policy was not met"):
-            client.submit_claim(signed_claimset)
+            client.submit_claim_and_confirm(signed_claimset)
 
     def test_exceptional_policy(
         self, client: Client, configure_service, signed_claimset
@@ -310,7 +310,7 @@ export function apply(profile, phdr) {{
         )
 
         with service_error("Error while applying policy"):
-            client.submit_claim(signed_claimset)
+            client.submit_claim_and_confirm(signed_claimset)
 
     @pytest.mark.parametrize(
         "script",
@@ -327,7 +327,7 @@ export function apply(profile, phdr) {{
         configure_service({"policy": {"policy_script": script}})
 
         with service_error("Invalid policy module"):
-            client.submit_claim(signed_claimset)
+            client.submit_claim_and_confirm(signed_claimset)
 
     def test_cts_hashv_cwtclaims_payload_with_policy(
         self,
@@ -367,7 +367,7 @@ def test_service_identifier(
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # Receipts include an issuer and kid.
-    receipt = client.submit_claim(claim).receipt
+    receipt = client.submit_claim_and_confirm(claim).receipt
     assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
     assert pycose.headers.KID in receipt.phdr
 
@@ -392,7 +392,7 @@ def test_without_service_identifier(
     assert httpx.get(url, verify=False).status_code == 404
 
     # The receipts it returns have no issuer or kid.
-    receipt = client.submit_claim(claim).receipt
+    receipt = client.submit_claim_and_confirm(claim).receipt
     assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
     assert pycose.headers.KID not in receipt.phdr
 
@@ -433,7 +433,7 @@ def test_did_multiple_service_keys(
     # Create a claim and get a receipt before the service is restarted.
     identity = did_web.create_identity()
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim(claims).receipt
+    receipt = client.submit_claim_and_confirm(claims).receipt
     verify_receipt(claims, trust_store, receipt)
 
     restart_service()
@@ -449,5 +449,5 @@ def test_did_multiple_service_keys(
 
     # We can also get new receipts, which will use the new identity, and these
     # can also be verified.
-    new_receipt = client.submit_claim(claims).receipt
+    new_receipt = client.submit_claim_and_confirm(claims).receipt
     verify_receipt(claims, trust_store, new_receipt)

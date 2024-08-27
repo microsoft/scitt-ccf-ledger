@@ -43,7 +43,7 @@ class TestAuthentication:
     @pytest.fixture
     def submit(self, client: Client, claim: bytes):
         def f(**kwargs):
-            client.replace(**kwargs).submit_claim(claim)
+            client.replace(**kwargs).submit_claim_and_confirm(claim)
 
         return f
 

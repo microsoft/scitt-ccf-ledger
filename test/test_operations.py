@@ -26,10 +26,10 @@ def test_purge_old_operations(
 
     # Create two operations, such that one will be old enough to be purged but
     # not the other.
-    tx1 = client.submit_claim(claim).operation_tx
+    tx1 = client.submit_claim_and_confirm(claim).operation_tx
     cchost.advance_time(seconds=constants.OPERATION_EXPIRY_SECONDS // 2)
 
-    tx2 = client.submit_claim(claim).operation_tx
+    tx2 = client.submit_claim_and_confirm(claim).operation_tx
     cchost.advance_time(seconds=constants.OPERATION_EXPIRY_SECONDS // 2)
 
     # Just moving time forward doesn't actually do anything yet.
@@ -40,7 +40,7 @@ def test_purge_old_operations(
 
     # Submit a claim again, just to get the indexing strategy
     # to run. This is what actually triggers a purge.
-    client.submit_claim(claim)
+    client.submit_claim_and_confirm(claim)
 
     # Now the first operation has actually been purged, but not the second,
     # since that one is only half as old.

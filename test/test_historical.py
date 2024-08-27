@@ -18,7 +18,7 @@ class TestHistorical:
         result = []
         for i in range(COUNT):
             claim = crypto.sign_json_claimset(identity, {"value": i})
-            submission = client.submit_claim(claim)
+            submission = client.submit_claim_and_confirm(claim)
             result.append(
                 SimpleNamespace(
                     claim=claim,
