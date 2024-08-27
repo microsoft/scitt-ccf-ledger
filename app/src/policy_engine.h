@@ -92,6 +92,11 @@ namespace scitt
           obj.set("feed", ctx.new_string(phdr.feed.value()));
         }
 
+        if (phdr.iat.has_value())
+        {
+          obj.set_int64("iat", phdr.iat.value());
+        }
+
         if (phdr.svn.has_value())
         {
           obj.set_int64("svn", phdr.svn.value());
@@ -123,6 +128,25 @@ namespace scitt
 
           obj.set("x5chain", std::move(x5_array));
         }
+
+        auto cwt = ctx.new_obj();
+        if (phdr.cwt_claims.iss.has_value())
+        {
+          cwt.set("iss", ctx.new_string(phdr.cwt_claims.iss.value()));
+        }
+        if (phdr.cwt_claims.sub.has_value())
+        {
+          cwt.set("sub", ctx.new_string(phdr.cwt_claims.sub.value()));
+        }
+        if (phdr.cwt_claims.iat.has_value())
+        {
+          cwt.set_int64("iat", phdr.cwt_claims.iat.value());
+        }
+        if (phdr.cwt_claims.svn.has_value())
+        {
+          cwt.set_int64("svn", phdr.cwt_claims.svn.value());
+        }
+        obj.set("cwt", std::move(cwt));
       }
 
       // Extra Notary protected header parameters.

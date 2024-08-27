@@ -133,6 +133,11 @@ JS code that determines whether an entry should be accepted. Should export an `a
 - notary_signing_time (String)
 - notary_authentic_signing_time (String)
 - notary_expiry (Number)
+- cwt (object), containing
+  - iss (string)
+  - sub (string)
+  - iat (Number)
+  - svn (Number)
 
 The mapping takes place in [`scitt::js::protected_header_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L44).
 

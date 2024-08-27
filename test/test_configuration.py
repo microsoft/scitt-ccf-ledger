@@ -117,158 +117,6 @@ class TestPolicyEngine:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
-    def test_x509_policy(
-        self,
-        client: Client,
-        configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
-        did_web,
-    ):
-        # We will apply a policy that only allows feed[0] to be edited
-        # by identity[0], and feed[1] by identity[1]. All other feeds are unprotected
-        identities = [
-            trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec"),
-        ]
-
-        # sub
-        feeds = [
-            "MyFirstFeed",
-            "SomeOtherFeed",
-            "AnyOtherValue",
-        ]
-
-        # SBOMs
-        claims = {"foo": "bar"}
-
-        permitted_signed_claims = [
-            # Protected feed for first identity
-            crypto.sign_json_claimset(
-                identities[0],
-                claims,
-                feed=feeds[0],
-            ),
-            # Protected feed for second identity
-            crypto.sign_json_claimset(
-                identities[1],
-                claims,
-                feed=feeds[1],
-            ),
-            # Unprotected feed
-            crypto.sign_json_claimset(
-                identities[0],
-                claims,
-                feed=feeds[2],
-            ),
-            crypto.sign_json_claimset(
-                identities[1],
-                claims,
-                feed=feeds[2],
-            ),
-            crypto.sign_json_claimset(
-                identities[2],
-                claims,
-                feed=feeds[2],
-            ),
-        ]
-
-        feed_0_error = f"{feeds[0]} is a protected feed, this request does not come from correct issuer"
-        feed_1_error = f"{feeds[1]} is a protected feed, this request does not come from correct issuer"
-        claim_profile_error = f"This policy only accepts X509 claims"
-        missing_feed_error = f"COSE protected header does not contain 'feed'"
-
-        # Keyed by expected error, values are lists of claimsets which should trigger this error
-        refused_signed_claims = {
-            # Other identities cannot publish to first feed
-            feed_0_error: [
-                crypto.sign_json_claimset(
-                    identities[1],
-                    claims,
-                    feed=feeds[0],
-                ),
-                crypto.sign_json_claimset(
-                    identities[2],
-                    claims,
-                    feed=feeds[0],
-                ),
-            ],
-            # Other identities cannot publish to second feed
-            feed_1_error: [
-                crypto.sign_json_claimset(
-                    identities[0],
-                    claims,
-                    feed=feeds[1],
-                ),
-                crypto.sign_json_claimset(
-                    identities[2],
-                    claims,
-                    feed=feeds[1],
-                ),
-            ],
-            # Other claim profiles are refused
-            claim_profile_error: [
-                crypto.sign_json_claimset(
-                    did_web.create_identity(),
-                    claims,
-                ),
-            ],
-            # Claims without feed are refused
-            missing_feed_error: [
-                crypto.sign_json_claimset(
-                    identities[0],
-                    claims,
-                ),
-                crypto.sign_json_claimset(
-                    identities[1],
-                    claims,
-                ),
-                crypto.sign_json_claimset(
-                    identities[2],
-                    claims,
-                ),
-            ],
-        }
-
-        assert identities[0].x5c is not None
-        assert identities[1].x5c is not None
-        cert_0 = identities[0].x5c[0]
-        cert_1 = identities[1].x5c[0]
-
-        policy_script = f"""
-export function apply(profile, phdr) {{
-    // Only accept x509 submissions with a feed
-    if (profile !== "X509") {{ return "{claim_profile_error}"; }}
-    if (!("feed" in phdr)) {{ return "{missing_feed_error}"; }}
-
-    // Protect access to the first feed
-    // Note this is doing direct cert comparison for simplicity, should
-    // really be based on a stable issuer ID
-    if (phdr.feed === "{feeds[0]}") {{
-        if (phdr.x5chain[0] !== `{cert_0}`) {{
-            return "{feed_0_error}";
-        }}
-    }}
-
-    if (phdr.feed === "{feeds[1]}") {{
-        if (phdr.x5chain[0] !== `{cert_1}`) {{
-            return "{feed_1_error}";
-        }}
-    }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policy_script": policy_script}})
-
-        for signed_claimset in permitted_signed_claims:
-            client.submit_claim_and_confirm(signed_claimset)
-
-        for err, signed_claimsets in refused_signed_claims.items():
-            for signed_claimset in signed_claimsets:
-                with service_error(err):
-                    client.submit_claim_and_confirm(signed_claimset)
-
     def test_ietf_didx509_policy(
         self,
         client: Client,
@@ -314,11 +162,7 @@ export function apply(profile, phdr) {{
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
-            crypto.sign_json_claimset(
-                identities[1],
-                claims,
-                feed=feed,
-            ),
+            crypto.sign_json_claimset(identities[1], claims, feed=feed, cwt=True),
         ]
 
         profile_error = "This policy only accepts IETF did:x509 claims"
@@ -326,50 +170,26 @@ export function apply(profile, phdr) {{
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
-        not_supported = "not supported"
+        not_supported = "Payloads with CWT_Claims must have a did:x509 iss and x5chain"
 
         # Keyed by expected error, values are lists of claimsets which should trigger this error
         refused_signed_claims = {
             # Well-constructed, but not a valid issuer
             invalid_issuer: [
-                crypto.sign_json_claimset(
-                    identities[0],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[0], claims, feed=feed, cwt=True),
             ],
             eku_not_found: [
-                crypto.sign_json_claimset(
-                    identities[2],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[2], claims, feed=feed, cwt=True),
             ],
             openssl_error: [
-                crypto.sign_json_claimset(
-                    identities[3],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[3], claims, feed=feed, cwt=True),
             ],
             invalid_did: [
-                crypto.sign_json_claimset(
-                    identities[4],
-                    claims,
-                    feed=feed,
-                ),
-                crypto.sign_json_claimset(
-                    identities[5],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[4], claims, feed=feed, cwt=True),
+                crypto.sign_json_claimset(identities[5], claims, feed=feed, cwt=True),
             ],
             not_supported: [
-                crypto.sign_json_claimset(
-                    identities[6],
-                    claims,
-                    feed=feed,
-                ),
+                crypto.sign_json_claimset(identities[6], claims, feed=feed, cwt=True),
             ],
         }
 
@@ -378,7 +198,7 @@ export function apply(profile, phdr) {{
     if (profile !== "IETF") {{ return "{profile_error}"; }}
 
     // Check exact issuer 
-    if (phdr.issuer !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
+    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
 
     return true;
 }}"""
@@ -417,7 +237,7 @@ export function apply(profile, phdr) {{
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
-            crypto.sign_json_claimset(identity, claims, feed=feed, svn=1),
+            crypto.sign_json_claimset(identity, claims, feed=feed, svn=1, cwt=True),
         ]
 
         profile_error = "This policy only accepts IETF did:x509 claims"
@@ -427,12 +247,10 @@ export function apply(profile, phdr) {{
         refused_signed_claims = {
             # Well-constructed, but not a valid issuer
             invalid_svn: [
+                crypto.sign_json_claimset(identity, claims, feed=feed, cwt=True),
                 crypto.sign_json_claimset(
-                    identity,
-                    claims,
-                    feed=feed,
+                    identity, claims, feed=feed, svn=-11, cwt=True
                 ),
-                crypto.sign_json_claimset(identity, claims, feed=feed, svn=-11),
             ],
         }
 
@@ -441,8 +259,8 @@ export function apply(profile, phdr) {{
     if (profile !== "IETF") {{ return "{profile_error}"; }}
 
     // Check exact issuer 
-    if (phdr.issuer !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
-    if (phdr.svn === undefined || phdr.svn < 0) {{ return "Invalid SVN"; }}
+    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
+    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
 
     return true;
 }}"""
@@ -510,6 +328,34 @@ export function apply(profile, phdr) {{
 
         with service_error("Invalid policy module"):
             client.submit_claim_and_confirm(signed_claimset)
+
+    def test_cts_hashv_cwtclaims_payload_with_policy(
+        self,
+        client: Client,
+        configure_service,
+        trusted_ca: X5ChainCertificateAuthority,
+        untrusted_ca: X5ChainCertificateAuthority,
+        did_web,
+    ):
+
+        policy_script = f"""
+export function apply(profile, phdr) {{
+if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 claims"; }}
+
+// Check exact issuer 
+if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
+if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+
+return true;
+}}"""
+
+        configure_service({"policy": {"policy_script": policy_script}})
+
+        with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+            cts_hashv_cwtclaims = f.read()
+
+        client.submit_claim(cts_hashv_cwtclaims)
 
 
 def test_service_identifier(

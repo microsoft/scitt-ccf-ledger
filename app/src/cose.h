@@ -34,6 +34,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_CTY = 3;
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
+  static constexpr int64_t COSE_HEADER_PARAM_CWT_CLAIMS = 15;
 
   static const std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
@@ -47,6 +48,10 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
+
+  static constexpr int64_t COSE_CWT_CLAIM_ISS = 1;
+  static constexpr int64_t COSE_CWT_CLAIM_SUB = 2;
+  static constexpr int64_t COSE_CWT_CLAIM_IAT = 6;
 
   static const std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
     COSE_HEADER_PARAM_ISSUER,
@@ -78,6 +83,14 @@ namespace scitt::cose
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  struct CWTClaims
+  {
+    std::optional<std::string> iss;
+    std::optional<std::string> sub;
+    std::optional<int64_t> iat;
+    std::optional<int64_t> svn;
+  };
+
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
     // All headers are optional here but optionality will later be validated
@@ -91,9 +104,14 @@ namespace scitt::cose
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
+    std::optional<int64_t> iat;
     std::optional<int64_t> svn;
     std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+
+    // CWT Claims header, as defined in
+    // https://datatracker.ietf.org/doc/rfc9597/
+    CWTClaims cwt_claims;
 
     // Extra Notary protected header parameters.
     std::optional<std::string> notary_signing_scheme;
@@ -307,6 +325,7 @@ namespace scitt::cose
       NOTARY_SIGNING_TIME_INDEX,
       NOTARY_AUTHENTIC_SIGNING_TIME_INDEX,
       NOTARY_EXPIRY_INDEX,
+      CWT_CLAIMS_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
@@ -366,6 +385,38 @@ namespace scitt::cose
       UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_EXPIRY);
     header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    header_items[CWT_CLAIMS_INDEX].label.int64 = COSE_HEADER_PARAM_CWT_CLAIMS;
+    header_items[CWT_CLAIMS_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    header_items[CWT_CLAIMS_INDEX].uDataType = QCBOR_TYPE_MAP;
+
+    enum
+    {
+      CWT_ISS_INDEX,
+      CWT_SUB_INDEX,
+      CWT_IAT_INDEX,
+      CWT_SVN_INDEX,
+      CWT_END_INDEX,
+    };
+    QCBORItem cwt_items[CWT_END_INDEX + 1];
+
+    cwt_items[CWT_ISS_INDEX].label.int64 = COSE_CWT_CLAIM_ISS;
+    cwt_items[CWT_ISS_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_ISS_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
+    cwt_items[CWT_SUB_INDEX].label.int64 = COSE_CWT_CLAIM_SUB;
+    cwt_items[CWT_SUB_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_SUB_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
+    cwt_items[CWT_IAT_INDEX].label.int64 = COSE_CWT_CLAIM_IAT;
+    cwt_items[CWT_IAT_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
+    cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    cwt_items[CWT_SVN_INDEX].uDataType = QCBOR_TYPE_INT64;
+
+    cwt_items[CWT_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
@@ -451,6 +502,46 @@ namespace scitt::cose
     {
       throw COSEDecodeError(
         "Content-type must be of type text string or int64");
+    }
+
+    // If a CWT claims map is present, parse it
+    if (header_items[CWT_CLAIMS_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      QCBORDecode_EnterMapFromMapN(&ctx, COSE_HEADER_PARAM_CWT_CLAIMS);
+      auto decode_error = QCBORDecode_GetError(&ctx);
+      if (decode_error != QCBOR_SUCCESS)
+      {
+        throw COSEDecodeError(
+          fmt::format("Failed to decode CWT claims: {}", decode_error));
+      }
+
+      QCBORDecode_GetItemsInMap(&ctx, cwt_items);
+      decode_error = QCBORDecode_GetError(&ctx);
+      if (decode_error != QCBOR_SUCCESS)
+      {
+        throw COSEDecodeError(
+          fmt::format("Failed to decode CWT claim contents: {}", decode_error));
+      }
+
+      if (cwt_items[CWT_ISS_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.cwt_claims.iss =
+          cbor::as_string(cwt_items[CWT_ISS_INDEX].val.string);
+      }
+      if (cwt_items[CWT_SUB_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.cwt_claims.sub =
+          cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
+      }
+      if (cwt_items[CWT_IAT_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
+      }
+      if (cwt_items[CWT_SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.cwt_claims.svn = cwt_items[CWT_SVN_INDEX].val.int64;
+      }
+      QCBORDecode_ExitMap(&ctx);
     }
 
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)

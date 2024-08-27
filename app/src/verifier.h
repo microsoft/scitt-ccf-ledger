@@ -12,6 +12,7 @@
 #include "signature_algorithms.h"
 #include "tracing.h"
 
+#include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
@@ -23,6 +24,11 @@
 
 namespace scitt::verifier
 {
+  inline static bool contains_cwt_issuer(const cose::ProtectedHeader& phdr)
+  {
+    return phdr.cwt_claims.iss.has_value();
+  }
+
   struct VerificationError : public std::runtime_error
   {
     VerificationError(const std::string& msg) : std::runtime_error(msg) {}
@@ -188,7 +194,9 @@ namespace scitt::verifier
         pem_chain += ccf::crypto::cert_der_to_pem(c).str();
       }
       auto did_document_str = didx509::resolve(
-        pem_chain, phdr.issuer.value(), true /* Do not validate time */);
+        pem_chain,
+        phdr.cwt_claims.iss.value(),
+        true /* Do not validate time */);
       scitt::did::alt::DIDDocument did_document =
         nlohmann::json::parse(did_document_str);
 
@@ -207,7 +215,7 @@ namespace scitt::verifier
           "document");
       }
       auto const& vm = did_document.verification_method[0];
-      if (vm.controller != phdr.issuer.value())
+      if (vm.controller != phdr.cwt_claims.iss.value())
       {
         throw VerificationError(
           "Verification method controller does not match issuer");
@@ -221,20 +229,44 @@ namespace scitt::verifier
 
       auto resolved_jwk =
         vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
-      // Need to dispatch on kty if we want to support RSA, Eddsa, etc.
-      if (resolved_jwk.kty != ccf::crypto::JsonWebKeyType::EC)
-      {
-        throw VerificationError(
-          "Verification method public key is not an EC key");
-      }
-      auto signing_key =
-        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_jwk();
+      auto signing_key_pem =
+        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_pem();
+      ccf::crypto::Pem resolved_pem;
 
-      if (resolved_jwk != signing_key)
+      switch (resolved_jwk.kty)
+      {
+        case ccf::crypto::JsonWebKeyType::EC:
+        {
+          {
+            auto specific_jwk =
+              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyECPublic>();
+            resolved_pem =
+              ccf::crypto::make_public_key(specific_jwk)->public_key_pem();
+          }
+          break;
+        }
+        case ccf::crypto::JsonWebKeyType::RSA:
+        {
+          {
+            auto specific_jwk =
+              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyRSAPublic>();
+            resolved_pem =
+              ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
+          }
+          break;
+        }
+        default:
+        {
+          throw VerificationError(fmt::format(
+            "Verification method public key (kty: {}) is unsupported",
+            resolved_jwk.kty));
+        }
+      }
+
+      if (resolved_pem != signing_key_pem)
       {
         throw VerificationError(
-          "Resolved verification method public key does not match "
-          "signing key");
+          "Resolved verification method public key does not match signing key");
       }
     }
 
@@ -436,27 +468,36 @@ namespace scitt::verifier
 
           profile = ClaimProfile::Notary;
         }
-        else if (phdr.issuer.has_value())
+        else if (contains_cwt_issuer(phdr))
         {
-          if (phdr.issuer->starts_with("did:x509") && phdr.x5chain.has_value())
+          if (
+            phdr.cwt_claims.iss->starts_with("did:x509") &&
+            phdr.x5chain.has_value())
           {
             // IETF SCITT did:x509 claim
             process_ietf_didx509_subprofile(phdr, data);
           }
           else
           {
-            // IETF SCITT did:web claim
-            key = process_ietf_profile(
-              phdr, tx, current_time, resolution_cache_expiry, configuration);
+            throw VerificationError(
+              "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
+          }
 
-            try
-            {
-              cose::verify(data, key);
-            }
-            catch (const cose::COSESignatureValidationError& e)
-            {
-              throw VerificationError(e.what());
-            }
+          profile = ClaimProfile::IETF;
+        }
+        else if (phdr.issuer.has_value())
+        {
+          // IETF SCITT did:web claim
+          key = process_ietf_profile(
+            phdr, tx, current_time, resolution_cache_expiry, configuration);
+
+          try
+          {
+            cose::verify(data, key);
+          }
+          catch (const cose::COSESignatureValidationError& e)
+          {
+            throw VerificationError(e.what());
           }
 
           profile = ClaimProfile::IETF;
