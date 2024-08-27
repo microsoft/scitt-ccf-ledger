@@ -271,7 +271,17 @@ namespace scitt
       }
       else
       {
-        SCITT_DEBUG("No policy applied");
+        if (verifier::contains_cwt_issuer(phdr))
+        {
+          SCITT_DEBUG("No policy applied, but CWT issuer present");
+          throw BadRequestError(
+            errors::PolicyFailed,
+            "Policy was not met: CWT issuer present but no policy configured");
+        }
+        else
+        {
+          SCITT_DEBUG("No policy applied");
+        }
       }
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);

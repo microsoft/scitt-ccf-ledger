@@ -24,6 +24,11 @@
 
 namespace scitt::verifier
 {
+  inline static bool contains_cwt_issuer(const cose::ProtectedHeader& phdr)
+  {
+    return phdr.cwt_claims.iss.has_value();
+  }
+
   struct VerificationError : public std::runtime_error
   {
     VerificationError(const std::string& msg) : std::runtime_error(msg) {}
@@ -463,7 +468,7 @@ namespace scitt::verifier
 
           profile = ClaimProfile::Notary;
         }
-        else if (phdr.cwt_claims.iss.has_value())
+        else if (contains_cwt_issuer(phdr))
         {
           if (
             phdr.cwt_claims.iss->starts_with("did:x509") &&
