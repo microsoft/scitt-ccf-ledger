@@ -18,7 +18,6 @@ from loguru import logger as LOG
 
 from . import crypto
 from .governance import GovernanceClient
-from .prefix_tree import PrefixTreeClient
 from .receipt import Receipt
 from .verify import ServiceParameters
 
@@ -682,7 +681,3 @@ class Client(BaseClient):
     @property
     def governance(self):
         return GovernanceClient(self)
-
-    @property
-    def prefix_tree(self):
-        return PrefixTreeClient(self)
