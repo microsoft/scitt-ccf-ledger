@@ -17,12 +17,6 @@ from pyscitt.client import MemberAuthenticationMethod
 
 from . import crypto
 
-ALGORITHMS = {
-    256: ("ES256", "sha256"),
-    384: ("ES384", "sha384"),
-    521: ("ES512", "sha384"),
-}
-
 
 class KeyVaultSignClient(MemberAuthenticationMethod):
     """MemberIdentity implementation that uses Azure Key Vault."""
@@ -120,7 +114,15 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
         pub_key = cert.public_key()
         assert isinstance(pub_key, (EllipticCurvePublicKey))
         key_size = pub_key.curve.key_size
-        signature_algorithm, hash_algorithm = ALGORITHMS[key_size]
+
+        if key_size == 256:
+            signature_algorithm, hash_algorithm = ("ES256", "sha256")
+        elif key_size == 384:
+            signature_algorithm, hash_algorithm = ("ES384", "sha384")
+        elif key_size == 521:
+            signature_algorithm, hash_algorithm = ("ES512", "sha512")
+        else:
+            raise ValueError(f"Unsupported EC size: {key_size}")
 
         digest_to_sign = hashlib.new(hash_algorithm, data).digest()
         sign_result = crypto_client.sign(
