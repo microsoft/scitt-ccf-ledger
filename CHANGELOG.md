@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+
+## [0.9.0]
+
+### Changes
+- Updating URL from ccf.dev (#204)
+- Add configurable policy via sandboxed JS execution (#203)
+- did:x509 issuer support in IETF profile (#206)
+- Allow svn parameter in the protected header (#209)
+- example policy script and how to configure the application in dev (#210)
+- Adds SGX build using custom 1ES GitHub SGX pool (#213)
+- New cli argument allowing to specify receipt type to get after submission (#212)
+- Accept CWT_Claims in envelopes, and expose them to policy (#211)
+- Resolve Codeql complaints by @ivarprudnikov in (#215)
+- Update build status badges on readme [ci skip] (#214)
+
+## [0.8.0]
+
+### Changes
+- Improve reproducibility steps (#194)
+- Fix CBOR encoder buffer overflow for large claims (#196)
+- Update the CCF version to 5.0.0 (#200)
+- Fix the path to runtime version (#201)
+- Update OneBranch pipeline (#202)
+
 ## [0.7.2]
 
 ### Changes
