@@ -10,15 +10,11 @@ from typing import Dict, Optional, Union
 
 import cbor2
 import pycose
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.x509 import load_pem_x509_certificate
-from pycose.keys.ec2 import EC2Key
-from pycose.keys.rsa import RSAKey
+from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
-from .crypto import COSE_HEADER_PARAM_ISSUER, COSE_HEADER_PARAM_SCITT_RECEIPTS
+from .crypto import COSE_HEADER_PARAM_ISSUER
 from .receipt import Receipt
 
 
@@ -63,19 +59,8 @@ class TrustStore(ABC):
 
 
 def verify_cose_sign1(buf: bytes, cert_pem: str):
-    cert = load_pem_x509_certificate(cert_pem.encode("ascii"))
-    key = cert.public_key()
-
-    cose_key: Union[EC2Key, RSAKey]
-    if isinstance(key, RSAPublicKey):
-        cose_key = crypto.from_cryptography_rsakey_obj(key)
-    elif isinstance(key, EllipticCurvePublicKey):
-        cose_key = crypto.from_cryptography_eckey_obj(key)
-    else:
-        raise NotImplementedError("unsupported key type")
-
     msg = Sign1Message.decode(buf)
-    msg.key = cose_key
+    msg.key = msg.key = CoseKey.from_pem_public_key(cert_pem)
     if not msg.verify_signature():
         raise ValueError("signature is invalid")
 

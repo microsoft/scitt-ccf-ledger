@@ -44,27 +44,8 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
-from pycose.keys.curves import P256, P384, P521, Ed25519
-from pycose.keys.ec2 import EC2Key
-from pycose.keys.keyparam import (
-    EC2KpCurve,
-    EC2KpD,
-    EC2KpX,
-    EC2KpY,
-    OKPKpCurve,
-    OKPKpD,
-    OKPKpX,
-    RSAKpD,
-    RSAKpDP,
-    RSAKpDQ,
-    RSAKpE,
-    RSAKpN,
-    RSAKpP,
-    RSAKpQ,
-    RSAKpQInv,
-)
-from pycose.keys.okp import OKPKey
-from pycose.keys.rsa import RSAKey
+from pycose.keys.cosekey import CoseKey
+from pycose.keys.curves import P256, P384, P521
 from pycose.messages import Sign1Message
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
@@ -429,153 +410,6 @@ def parse_cose_sign1(buf: bytes) -> Tuple[dict, bytes]:
     return header, payload
 
 
-def pretty_cose_sign1(buf: bytes) -> str:
-    header, payload = parse_cose_sign1(buf)
-    try:
-        claims = json.loads(payload)
-    except json.JSONDecodeError:
-        claims = f"<{len(payload)} bytes>"
-    try:
-        return (
-            "COSE_Sign1(\nheader="
-            + json.dumps(header, indent=2)
-            + "\npayload="
-            + json.dumps(claims, indent=2)
-            + "\n<signature>)"
-        )
-    except TypeError:
-        print(header)
-        raise
-
-
-# temporary, from https://github.com/BrianSipos/pycose/blob/rsa_keys_algs/cose/keys/rsa.py
-# until https://github.com/TimothyClaeys/pycose/issues/44 is implemented
-def from_cryptography_rsakey_obj(ext_key: Union[RSAPrivateKey, RSAPublicKey]) -> RSAKey:
-    """
-    Returns an initialized COSE Key object of type RSAKey.
-    :param ext_key: Python cryptography key.
-    :return: an initialized RSA key
-    """
-
-    def to_bstr(dec):
-        blen = (dec.bit_length() + 7) // 8
-        return dec.to_bytes(blen, byteorder="big")
-
-    if hasattr(ext_key, "private_numbers"):
-        priv_nums = ext_key.private_numbers()
-        pub_nums = priv_nums.public_numbers
-    else:
-        priv_nums = None
-        pub_nums = ext_key.public_numbers()
-
-    cose_key = {}
-    if pub_nums:
-        cose_key.update(
-            {
-                RSAKpE: to_bstr(pub_nums.e),
-                RSAKpN: to_bstr(pub_nums.n),
-            }
-        )
-    if priv_nums:
-        cose_key.update(
-            {
-                RSAKpD: to_bstr(priv_nums.d),
-                RSAKpP: to_bstr(priv_nums.p),
-                RSAKpQ: to_bstr(priv_nums.q),
-                RSAKpDP: to_bstr(priv_nums.dmp1),
-                RSAKpDQ: to_bstr(priv_nums.dmq1),
-                RSAKpQInv: to_bstr(priv_nums.iqmp),
-            }
-        )
-    return RSAKey.from_dict(cose_key)
-
-
-def from_cryptography_eckey_obj(
-    ext_key: Union[EllipticCurvePrivateKey, EllipticCurvePublicKey]
-) -> EC2Key:
-    """
-    Returns an initialized COSE Key object of type EC2Key.
-    :param ext_key: Python cryptography key.
-    :return: an initialized EC key
-    """
-    if hasattr(ext_key, "private_numbers"):
-        priv_nums = ext_key.private_numbers()
-        pub_nums = priv_nums.public_numbers
-    else:
-        priv_nums = None
-        pub_nums = ext_key.public_numbers()
-
-    _, curve = cose_curve_from_ec(pub_nums.curve)
-
-    cose_key = {}
-    if pub_nums:
-        cose_key.update(
-            {
-                EC2KpCurve: curve,
-                EC2KpX: pub_nums.x.to_bytes(curve.size, "big"),
-                EC2KpY: pub_nums.y.to_bytes(curve.size, "big"),
-            }
-        )
-    if priv_nums:
-        cose_key.update(
-            {
-                EC2KpD: priv_nums.private_value.to_bytes(curve.size, "big"),
-            }
-        )
-    return EC2Key.from_dict(cose_key)
-
-
-def from_cryptography_ed25519key_obj(
-    ext_key: Union[Ed25519PrivateKey, Ed25519PublicKey]
-) -> OKPKey:
-    """
-    Returns an initialized COSE Key object of type OKPKey.
-    :param ext_key: Python cryptography key.
-    :return: an initialized OKP key
-    """
-    if isinstance(ext_key, Ed25519PrivateKey):
-        priv_bytes = ext_key.private_bytes(
-            encoding=Encoding.Raw,
-            format=PrivateFormat.Raw,
-            encryption_algorithm=NoEncryption(),
-        )
-        pub_bytes = ext_key.public_key().public_bytes(
-            encoding=Encoding.Raw, format=PublicFormat.Raw
-        )
-    else:
-        assert isinstance(ext_key, Ed25519PublicKey)
-        priv_bytes = None
-        pub_bytes = ext_key.public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
-
-    curve = Ed25519
-
-    cose_key = {}
-    cose_key.update(
-        {
-            OKPKpCurve: curve,
-            OKPKpX: pub_bytes,
-        }
-    )
-    if priv_bytes:
-        cose_key.update(
-            {
-                OKPKpD: priv_bytes,
-            }
-        )
-    return OKPKey.from_dict(cose_key)
-
-
-def cose_private_key_from_pem(pem: Pem):
-    key = load_pem_private_key(pem.encode("ascii"), None)
-    if isinstance(key, RSAPrivateKey):
-        return from_cryptography_rsakey_obj(key)
-    elif isinstance(key, EllipticCurvePrivateKey):
-        return from_cryptography_eckey_obj(key)
-    elif isinstance(key, Ed25519PrivateKey):
-        return from_cryptography_ed25519key_obj(key)
-    raise NotImplementedError("unsupported key type")
-
-
 def b64url(b: bytes) -> str:
     return base64.b64encode(b, altchars=b"-_").decode("ascii")
 
@@ -710,6 +544,7 @@ class Signer:
         self.x5c = x5c
 
 
+# TODO: merge with Key Vault signer implementation
 def sign_claimset(
     signer: Signer,
     claims: bytes,
@@ -748,7 +583,7 @@ def sign_claimset(
         headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
 
     msg = Sign1Message(phdr=headers, payload=claims)
-    msg.key = cose_private_key_from_pem(signer.private_key)
+    msg.key = CoseKey.from_pem_private_key(signer.private_key)
     return msg.encode(tag=True)
 
 

@@ -7,6 +7,7 @@ from io import BytesIO
 import cbor2
 import pycose
 import pytest
+from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from pyscitt import crypto
@@ -123,7 +124,7 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
     encoded_headers = cbor_encode(parameters, canonical=canonical)
 
-    key = crypto.cose_private_key_from_pem(signer.private_key)
+    key = CoseKey.from_pem_private_key(signer.private_key)
 
     tbs = cbor_encode(["Signature1", encoded_headers, b"", payload], canonical=True)
     signature = algorithm.sign(key, tbs)

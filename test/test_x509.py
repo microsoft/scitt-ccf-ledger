@@ -8,6 +8,7 @@ import time
 import cbor2
 import pycose
 import pytest
+from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from pyscitt import crypto, governance
@@ -248,7 +249,7 @@ def test_submit_claim_notary_x509(
     ).encode("utf-8")
 
     msg = Sign1Message(phdr=phdr, uhdr=uhdr, payload=payload)
-    msg.key = crypto.cose_private_key_from_pem(identity.private_key)
+    msg.key = CoseKey.from_pem_private_key(identity.private_key)
     claim = msg.encode(tag=True)
 
     submission = client.submit_claim_and_confirm(claim)
