@@ -8,8 +8,8 @@ import time
 import cbor2
 import pycose
 import pytest
-from pycose.messages import Sign1Message
 from pycose.keys.cosekey import CoseKey
+from pycose.messages import Sign1Message
 
 from pyscitt import crypto, governance
 from pyscitt.client import Client

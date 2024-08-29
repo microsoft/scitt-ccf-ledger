@@ -10,16 +10,11 @@ from typing import Dict, Optional, Union
 
 import cbor2
 import pycose
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.x509 import load_pem_x509_certificate
-from pycose.keys.ec2 import EC2Key
-from pycose.keys.rsa import RSAKey
-from pycose.messages import Sign1Message
 from pycose.keys.cosekey import CoseKey
+from pycose.messages import Sign1Message
 
 from . import crypto, did
-from .crypto import COSE_HEADER_PARAM_ISSUER, COSE_HEADER_PARAM_SCITT_RECEIPTS
+from .crypto import COSE_HEADER_PARAM_ISSUER
 from .receipt import Receipt
 
 

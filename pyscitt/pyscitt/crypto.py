@@ -44,8 +44,8 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
-from pycose.keys.curves import P256, P384, P521
 from pycose.keys.cosekey import CoseKey
+from pycose.keys.curves import P256, P384, P521
 from pycose.messages import Sign1Message
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537

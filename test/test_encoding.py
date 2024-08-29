@@ -7,8 +7,8 @@ from io import BytesIO
 import cbor2
 import pycose
 import pytest
-from pycose.messages import Sign1Message
 from pycose.keys.cosekey import CoseKey
+from pycose.messages import Sign1Message
 
 from pyscitt import crypto
 from pyscitt.client import Client
