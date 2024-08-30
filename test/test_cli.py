@@ -135,6 +135,9 @@ def test_smoke_test(run, client, tmp_path: Path):
             tmp_path / "claims.embedded.cose",
         )
 
+        # make sure preview works for embedded receipts as well
+        run("pretty-receipt", tmp_path / "claims.embedded.cose")
+
         run(
             "validate",
             tmp_path / "claims.cose",

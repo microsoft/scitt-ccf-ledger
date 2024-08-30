@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import base64
+import datetime
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -23,21 +24,24 @@ HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
 
 
+def display_cbor_val(item):
+    print(f"Displaying {type(item)} {item}")
+    if hasattr(item, "__name__"):
+        return item.__name__
+    if type(item) is bytes:
+        return item.hex()
+    if type(item) is datetime:
+        return item.isoformat()
+    return item
+
+
 def hdr_as_dict(phdr: dict) -> dict:
     """
     Return a representation of a list of COSE header parameters that
     is amenable to pretty-printing.
     """
-
-    def display(item):
-        if hasattr(item, "__name__"):
-            return item.__name__
-        if type(item) is bytes:
-            return item.hex()
-        return item
-
     # Decode KID into a 'readable' text string if present.
-    hdr_dict = {display(k): display(v) for k, v in phdr.items()}
+    hdr_dict = {display_cbor_val(k): display_cbor_val(v) for k, v in phdr.items()}
     if hdr_dict.get("KID"):
         hdr_dict["KID"] = bytes.fromhex(hdr_dict["KID"]).decode()
 
