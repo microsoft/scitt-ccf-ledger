@@ -9,7 +9,7 @@ from pycose.messages import CoseMessage
 
 from .. import prefix_tree
 from ..client import Client
-from ..crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
+from ..crypto import SCITTFeed, SCITTIssuer
 from ..verify import StaticTrustStore
 from .client_arguments import add_client_arguments, create_client
 
@@ -35,8 +35,8 @@ def prefix_tree_get_receipt(
     if claim_path:
         claim = CoseMessage.decode(claim_path.read_bytes())
 
-        issuer = claim.phdr[COSE_HEADER_PARAM_ISSUER]
-        feed = claim.phdr[COSE_HEADER_PARAM_FEED]
+        issuer = claim.get_attr(SCITTIssuer)
+        feed = claim.get_attr(SCITTFeed)
     elif not issuer or not feed:
         raise ValueError("Either a claim or an issuer and feed must be specified.")
 

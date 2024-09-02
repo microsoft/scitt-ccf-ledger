@@ -368,7 +368,7 @@ def test_service_identifier(
 
     # Receipts include an issuer and kid.
     receipt = client.submit_claim_and_confirm(claim).receipt
-    assert receipt.phdr[crypto.COSE_HEADER_PARAM_ISSUER] == service_identifier
+    assert receipt.phdr[crypto.SCITTIssuer] == service_identifier
     assert pycose.headers.KID in receipt.phdr
 
     trust_store = DIDResolverTrustStore(Resolver(verify=False))
@@ -393,7 +393,7 @@ def test_without_service_identifier(
 
     # The receipts it returns have no issuer or kid.
     receipt = client.submit_claim_and_confirm(claim).receipt
-    assert crypto.COSE_HEADER_PARAM_ISSUER not in receipt.phdr
+    assert crypto.SCITTIssuer.identifier not in receipt.phdr
     assert pycose.headers.KID not in receipt.phdr
 
 

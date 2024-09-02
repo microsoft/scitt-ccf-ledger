@@ -13,7 +13,7 @@ import ccf.receipt
 from cbor2 import CBORError
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
-from pycose.headers import KID, CoseHeaderAttribute, X5chain, X5t, is_bstr
+from pycose.headers import KID, X5chain, X5t
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
 
@@ -28,36 +28,6 @@ TREE_ALGORITHM_CCF = "CCF"
 # Include SCITT-specific COSE header attributes to be recognized by pycose
 # Registered COSE headers are in https://www.iana.org/assignments/cose/cose.xhtml
 # Draft SCITT-specific headers are in https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
-
-
-@CoseHeaderAttribute.register_attribute()
-class CWTClaims(CoseHeaderAttribute):
-    identifier = 15
-    fullname = "CWT_CLAIMS"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTIssuer(CoseHeaderAttribute):
-    identifier = 391
-    fullname = "SCITT_ISSUER"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTFeed(CoseHeaderAttribute):
-    identifier = 392
-    fullname = "SCITT_FEED"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTRegistrationInfo(CoseHeaderAttribute):
-    identifier = 393
-    fullname = "SCITT_REGISTRATION_INFO"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTReceipts(CoseHeaderAttribute):
-    identifier = 394
-    fullname = "SCITT_RECEIPTS"
 
 
 def display_cbor_val(item: Any) -> str:
@@ -77,8 +47,9 @@ def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     Return a printable representation of a CBOR object.
     """
 
+    # pycose will use class instances for known and registered headers instead of ints
     if hasattr(cbor_obj_key, "identifier"):
-        if cbor_obj_key.identifier == SCITTReceipts.identifier:
+        if cbor_obj_key.identifier == crypto.SCITTReceipts.identifier:
             parsed_receipts = []
             for item in cbor_obj:
                 if type(item) is bytes:

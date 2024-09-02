@@ -555,7 +555,7 @@ def test_registration_info(run, tmp_path: Path):
 
     data = (tmp_path / "claims.cose").read_bytes()
     msg = CoseMessage.decode(data)
-    info = msg.phdr[crypto.COSE_HEADER_PARAM_REGISTRATION_INFO]
+    info = msg.get_attr(crypto.SCITTRegistrationInfo)
     assert info == {
         "foo": 42,
         "negative": -42,
