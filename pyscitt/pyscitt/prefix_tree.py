@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .client import BaseClient
 
 from .crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
-from .receipt import ReceiptContents, hdr_as_dict
+from .receipt import ReceiptContents, cbor_as_dict
 from .verify import ServiceParameters
 
 
@@ -151,8 +151,8 @@ class ReadReceipt:
 
     def as_dict(self) -> dict:
         return {
-            "tree_headers": hdr_as_dict(self.tree_headers),
-            "leaf_headers": hdr_as_dict(self.leaf_headers),
+            "tree_headers": cbor_as_dict(self.tree_headers),
+            "leaf_headers": cbor_as_dict(self.leaf_headers),
             "proof": {
                 "positions": self.proof.positions.hex(),
                 "hashes": [h.hex() for h in self.proof.hashes],

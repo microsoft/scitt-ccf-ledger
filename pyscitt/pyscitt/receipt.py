@@ -12,8 +12,10 @@ import cbor2
 import ccf.receipt
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
+from pycose.headers import CoseHeaderAttribute, X5chain, KID, X5t, is_bstr
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
+from cbor2 import CBORError
 
 from . import crypto
 
@@ -23,29 +25,90 @@ if TYPE_CHECKING:
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
 
+# Include SCITT-specific COSE header attributes to be recognized by pycose
+# Registered COSE headers are in https://www.iana.org/assignments/cose/cose.xhtml
+# Draft SCITT-specific headers are in https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
 
-def display_cbor_val(item):
-    print(f"Displaying {type(item)} {item}")
+
+@CoseHeaderAttribute.register_attribute()
+class CWTClaims(CoseHeaderAttribute):
+    identifier = 15
+    fullname = "CWT_CLAIMS"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTIssuer(CoseHeaderAttribute):
+    identifier = 391
+    fullname = "SCITT_ISSUER"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTFeed(CoseHeaderAttribute):
+    identifier = 392
+    fullname = "SCITT_FEED"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTRegistrationInfo(CoseHeaderAttribute):
+    identifier = 393
+    fullname = "SCITT_REGISTRATION_INFO"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTReceipts(CoseHeaderAttribute):
+    identifier = 394
+    fullname = "SCITT_RECEIPTS"
+
+
+def display_cbor_val(item: Any) -> str:
+    """Convert a CBOR item to a string for pretty-printing."""
+    out = str(item)
     if hasattr(item, "__name__"):
-        return item.__name__
-    if type(item) is bytes:
-        return item.hex()
-    if type(item) is datetime:
-        return item.isoformat()
-    return item
+        out = item.__name__
+    elif isinstance(item, datetime.datetime):
+        out = item.isoformat()
+    elif type(item) is bytes:
+        out = item.hex()
+    return out
 
 
-def hdr_as_dict(phdr: dict) -> dict:
+def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     """
-    Return a representation of a list of COSE header parameters that
-    is amenable to pretty-printing.
+    Return a printable representation of a CBOR object.
     """
-    # Decode KID into a 'readable' text string if present.
-    hdr_dict = {display_cbor_val(k): display_cbor_val(v) for k, v in phdr.items()}
-    if hdr_dict.get("KID"):
-        hdr_dict["KID"] = bytes.fromhex(hdr_dict["KID"]).decode()
 
-    return hdr_dict
+    if hasattr(cbor_obj_key, "identifier"):
+        if cbor_obj_key.identifier == SCITTReceipts.identifier:
+            return [Receipt.decode(receipt).as_dict() for receipt in cbor_obj]
+        if cbor_obj_key.identifier == X5chain.identifier:
+            return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
+        if cbor_obj_key.identifier == KID.identifier:
+            return cbor_obj.decode()
+        if cbor_obj_key.identifier == X5t.identifier:
+            return {"alg": cbor_obj[0], "hash": cbor_obj[1].hex()}
+
+    if isinstance(cbor_obj, list):
+        if not cbor_obj_key:
+            cbor_obj_key = "idx"
+        out_key = display_cbor_val(cbor_obj_key)
+        return {
+            display_cbor_val(f"{out_key}_{idx}"): cbor_as_dict(v, f"{out_key}_{idx}")
+            for idx, v in enumerate(cbor_obj)
+        }
+
+    if isinstance(cbor_obj, dict):
+        return {display_cbor_val(k): cbor_as_dict(v, k) for k, v in cbor_obj.items()}
+
+    # attempt to decode nested cbor
+    if type(cbor_obj) is bytes:
+        try:
+            decoded = cbor2.loads(cbor_obj)
+            return cbor_as_dict(decoded, cbor_obj_key)
+        except (CBORError, UnicodeDecodeError):
+            pass
+
+    # otherwise return as is
+    return display_cbor_val(cbor_obj)
 
 
 @dataclass
@@ -190,6 +253,6 @@ class Receipt:
         to pretty-printing.
         """
         return {
-            "protected": hdr_as_dict(self.phdr),
+            "protected": cbor_as_dict(self.phdr),
             "contents": self.contents.as_dict(),
         }
