@@ -17,7 +17,6 @@ import cbor2
 import jwt
 import pycose.algorithms
 import pycose.headers
-from pycose.headers import CoseHeaderAttribute
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
@@ -45,6 +44,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
+from pycose.headers import CoseHeaderAttribute
 from pycose.keys.cosekey import CoseKey
 from pycose.keys.curves import P256, P384, P521
 from pycose.messages import Sign1Message
@@ -52,6 +52,7 @@ from pycose.messages import Sign1Message
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
 Pem = str
+
 
 @CoseHeaderAttribute.register_attribute()
 class CWTClaims(CoseHeaderAttribute):
