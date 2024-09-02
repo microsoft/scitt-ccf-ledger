@@ -12,6 +12,7 @@ from ..receipt import Receipt, cbor_as_dict
 
 
 def prettyprint_receipt(receipt_path: Path):
+    """Pretty-print a SCITT receipt file and detect both embedded COSE_Sign1 and standalone receipt formats"""
     with open(receipt_path, "rb") as f:
         receipt = f.read()
 
@@ -20,7 +21,7 @@ def prettyprint_receipt(receipt_path: Path):
         assert cbor_obj.tag == 18  # COSE_Sign1
         parsed = Sign1Message.from_cose_obj(cbor_obj.value, True)
         output_dict = {
-            "protected": cbor_as_dict(parsed.phdr), 
+            "protected": cbor_as_dict(parsed.phdr),
             "unprotected": cbor_as_dict(parsed.uhdr),
             "payload": base64.b64encode(parsed.payload).decode("ascii"),
         }
@@ -28,14 +29,12 @@ def prettyprint_receipt(receipt_path: Path):
         parsed = Receipt.decode(receipt)
         output_dict = parsed.as_dict()
 
-    print(output_dict)
-
     print(json.dumps(output_dict, indent=2))
 
 
 def cli(fn):
     parser = fn(description="Pretty-print a SCITT receipt")
-    parser.add_argument("receipt", type=Path, help="Path to SCITT receipt file")
+    parser.add_argument("receipt", type=Path, help="Path to SCITT receipt file (embedded or standalone)")
 
     def cmd(args):
         prettyprint_receipt(args.receipt)

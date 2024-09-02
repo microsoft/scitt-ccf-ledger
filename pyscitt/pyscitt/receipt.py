@@ -79,7 +79,14 @@ def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
 
     if hasattr(cbor_obj_key, "identifier"):
         if cbor_obj_key.identifier == SCITTReceipts.identifier:
-            return [Receipt.decode(receipt).as_dict() for receipt in cbor_obj]
+            parsed_receipts = []
+            for item in cbor_obj:
+                if type(item) is bytes:
+                    receipt_as_dict = Receipt.decode(item).as_dict()
+                else:
+                    receipt_as_dict = Receipt.from_cose_obj(item).as_dict()
+            parsed_receipts.append(receipt_as_dict)
+            return parsed_receipts
         if cbor_obj_key.identifier == X5chain.identifier:
             return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
         if cbor_obj_key.identifier == KID.identifier:
