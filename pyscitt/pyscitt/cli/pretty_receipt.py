@@ -1,13 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import argparse
+import base64
 import json
 from pathlib import Path
-from typing import Any
-import base64
+from typing import Union
 
 import cbor2
 from pycose.messages import Sign1Message
+
 from ..receipt import Receipt, cbor_as_dict
 
 
@@ -16,6 +17,7 @@ def prettyprint_receipt(receipt_path: Path):
     with open(receipt_path, "rb") as f:
         receipt = f.read()
 
+    parsed: Union[Sign1Message, Receipt]
     cbor_obj = cbor2.loads(receipt)
     if hasattr(cbor_obj, "tag"):
         assert cbor_obj.tag == 18  # COSE_Sign1
@@ -23,7 +25,11 @@ def prettyprint_receipt(receipt_path: Path):
         output_dict = {
             "protected": cbor_as_dict(parsed.phdr),
             "unprotected": cbor_as_dict(parsed.uhdr),
-            "payload": base64.b64encode(parsed.payload).decode("ascii"),
+            "payload": (
+                base64.b64encode(parsed.payload).decode("ascii")
+                if parsed.payload
+                else None
+            ),
         }
     else:
         parsed = Receipt.decode(receipt)
@@ -34,7 +40,9 @@ def prettyprint_receipt(receipt_path: Path):
 
 def cli(fn):
     parser = fn(description="Pretty-print a SCITT receipt")
-    parser.add_argument("receipt", type=Path, help="Path to SCITT receipt file (embedded or standalone)")
+    parser.add_argument(
+        "receipt", type=Path, help="Path to SCITT receipt file (embedded or standalone)"
+    )
 
     def cmd(args):
         prettyprint_receipt(args.receipt)
