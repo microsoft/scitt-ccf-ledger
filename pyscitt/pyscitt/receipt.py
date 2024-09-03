@@ -25,10 +25,6 @@ if TYPE_CHECKING:
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
 
-# Include SCITT-specific COSE header attributes to be recognized by pycose
-# Registered COSE headers are in https://www.iana.org/assignments/cose/cose.xhtml
-# Draft SCITT-specific headers are in https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
-
 
 def display_cbor_val(item: Any) -> str:
     """Convert a CBOR item to a string for pretty-printing."""

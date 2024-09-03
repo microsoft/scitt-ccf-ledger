@@ -52,8 +52,15 @@ from pycose.messages import Sign1Message
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
 Pem = str
+RegistrationInfoValue = Union[str, bytes, int]
+RegistrationInfo = Dict[str, RegistrationInfoValue]
+CoseCurveTypes = Union[Type[P256], Type[P384], Type[P521]]
+CoseCurveType = Tuple[str, CoseCurveTypes]
 
 
+# Include SCITT-specific COSE header attributes to be recognized by pycose
+# Registered COSE header labels are in https://www.iana.org/assignments/cose/cose.xhtml
+# Draft SCITT-specific header labels are in https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
 @CoseHeaderAttribute.register_attribute()
 class CWTClaims(CoseHeaderAttribute):
     identifier = 15
@@ -84,15 +91,12 @@ class SCITTReceipts(CoseHeaderAttribute):
     fullname = "SCITT_RECEIPTS"
 
 
+# CWT Claims (RFC9597) defined in https://www.iana.org/assignments/cwt/cwt.xhtml
 CWT_ISS = 1
 CWT_SUB = 2
 CWT_IAT = 6
-CWT_SVN = "svn"
-
-RegistrationInfoValue = Union[str, bytes, int]
-RegistrationInfo = Dict[str, RegistrationInfoValue]
-CoseCurveTypes = Union[Type[P256], Type[P384], Type[P521]]
-CoseCurveType = Tuple[str, CoseCurveTypes]
+# Other expected CWT claims
+CWT_SVN = "svn"  # AMD Security Version Number
 
 
 def ec_curve_from_name(name: str) -> EllipticCurve:
