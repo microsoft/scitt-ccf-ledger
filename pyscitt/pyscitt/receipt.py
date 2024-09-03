@@ -6,7 +6,7 @@ import datetime
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 
 import cbor2
 import ccf.receipt
@@ -24,6 +24,21 @@ if TYPE_CHECKING:
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
+COMMON_CWT_KEYS_MAP = {
+    1: "iss",
+    2: "sub",
+    3: "aud",
+    4: "exp",
+    5: "nbf",
+    6: "iat",
+    7: "cti",
+}
+
+
+def display_cwt_key(item: Any) -> Union[int, str]:
+    """Convert a CWT key to a string for pretty-printing."""
+    out = str(item)
+    return COMMON_CWT_KEYS_MAP.get(item, out)
 
 
 def display_cbor_val(item: Any) -> str:
@@ -54,6 +69,8 @@ def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                     receipt_as_dict = Receipt.from_cose_obj(item).as_dict()
             parsed_receipts.append(receipt_as_dict)
             return parsed_receipts
+        if cbor_obj_key.identifier == crypto.CWTClaims.identifier:
+            return {display_cwt_key(k): cbor_as_dict(v, k) for k, v in cbor_obj.items()}
         if cbor_obj_key.identifier == X5chain.identifier:
             return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
         if cbor_obj_key.identifier == KID.identifier:

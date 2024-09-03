@@ -8,7 +8,8 @@ import pycose
 import pytest
 
 from pyscitt import crypto
-from pyscitt.client import Client
+from pyscitt.cli.main import main
+from pyscitt.client import Client, ReceiptType
 from pyscitt.did import Resolver, did_web_document_url
 from pyscitt.verify import DIDResolverTrustStore, verify_receipt
 
@@ -331,6 +332,7 @@ export function apply(profile, phdr) {{
 
     def test_cts_hashv_cwtclaims_payload_with_policy(
         self,
+        tmp_path,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
@@ -355,7 +357,15 @@ return true;
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
-        client.submit_claim(cts_hashv_cwtclaims)
+        submission = client.submit_claim_and_confirm(
+            cts_hashv_cwtclaims, receipt_type=ReceiptType.EMBEDDED
+        )
+
+        # store submission receipt in random file in tmp_path
+        receipt_path = tmp_path / "receipt.cose"
+        receipt_path.write_bytes(submission.receipt_bytes)
+        # print to preview what was accepted and to check if pretty-receipt understands the given receipt
+        main(["pretty-receipt", str(receipt_path)])
 
 
 def test_service_identifier(
