@@ -90,14 +90,6 @@ def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     if isinstance(cbor_obj, dict):
         return {display_cbor_val(k): cbor_as_dict(v, k) for k, v in cbor_obj.items()}
 
-    # attempt to decode nested cbor
-    if type(cbor_obj) is bytes:
-        try:
-            decoded = cbor2.loads(cbor_obj)
-            return cbor_as_dict(decoded, cbor_obj_key)
-        except (CBORError, UnicodeDecodeError):
-            pass
-
     # otherwise return as is
     return display_cbor_val(cbor_obj)
 
