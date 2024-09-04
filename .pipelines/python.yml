@@ -9,3 +9,4 @@ steps:
     sudo rm -rf /var/lib/apt/lists/*
     sudo rm -rf /tmp/*
   displayName: Install python dependencies
+- template: ado_pipauth.yml@self
