@@ -13,8 +13,8 @@ from pycose.messages.cosebase import CoseBase
 if TYPE_CHECKING:
     from .client import BaseClient
 
-from .crypto import COSE_HEADER_PARAM_FEED, COSE_HEADER_PARAM_ISSUER
-from .receipt import ReceiptContents, hdr_as_dict
+from .crypto import SCITTFeed, SCITTIssuer
+from .receipt import ReceiptContents, cbor_to_printable
 from .verify import ServiceParameters
 
 
@@ -129,8 +129,8 @@ class ReadReceipt:
 
     @classmethod
     def claim_index(cls, claim: Sign1Message):
-        issuer = claim.phdr[COSE_HEADER_PARAM_ISSUER]
-        feed = claim.phdr.get(COSE_HEADER_PARAM_FEED, "")
+        issuer = claim.get_attr(SCITTIssuer)
+        feed = claim.get_attr(SCITTFeed, "")
         return hashlib.sha256(cbor2.dumps([issuer, feed])).digest()
 
     def leaf_hash(self, index: bytes, claim: Sign1Message) -> bytes:
@@ -151,8 +151,8 @@ class ReadReceipt:
 
     def as_dict(self) -> dict:
         return {
-            "tree_headers": hdr_as_dict(self.tree_headers),
-            "leaf_headers": hdr_as_dict(self.leaf_headers),
+            "tree_headers": cbor_to_printable(self.tree_headers),
+            "leaf_headers": cbor_to_printable(self.leaf_headers),
             "proof": {
                 "positions": self.proof.positions.hex(),
                 "hashes": [h.hex() for h in self.proof.hashes],

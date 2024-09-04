@@ -115,7 +115,7 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
     if signer.kid is not None:
         parameters.setdefault(KID, signer.kid.encode("utf-8"))
     if signer.issuer is not None:
-        parameters.setdefault(crypto.COSE_HEADER_PARAM_ISSUER, signer.issuer)
+        parameters.setdefault(crypto.SCITTIssuer.identifier, signer.issuer)
 
     # The caller can set a parameter to None to stop this function from adding
     # defaults, but we don't want those None to be encoded, so we filter them

@@ -135,6 +135,9 @@ def test_smoke_test(run, client, tmp_path: Path):
             tmp_path / "claims.embedded.cose",
         )
 
+        # make sure preview works for embedded receipts as well
+        run("pretty-receipt", tmp_path / "claims.embedded.cose")
+
         run(
             "validate",
             tmp_path / "claims.cose",
@@ -552,7 +555,7 @@ def test_registration_info(run, tmp_path: Path):
 
     data = (tmp_path / "claims.cose").read_bytes()
     msg = CoseMessage.decode(data)
-    info = msg.phdr[crypto.COSE_HEADER_PARAM_REGISTRATION_INFO]
+    info = msg.get_attr(crypto.SCITTRegistrationInfo)
     assert info == {
         "foo": 42,
         "negative": -42,
