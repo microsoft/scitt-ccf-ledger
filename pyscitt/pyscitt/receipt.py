@@ -67,16 +67,24 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                     try:
                         receipt_as_dict = Receipt.decode(item).as_dict()
                     except Exception:
-                        receipt_as_dict = {"error": "Failed to parse receipt", "cbor": item.hex()}
+                        receipt_as_dict = {
+                            "error": "Failed to parse receipt",
+                            "cbor": item.hex(),
+                        }
                 else:
                     try:
                         receipt_as_dict = Receipt.from_cose_obj(item).as_dict()
                     except Exception:
-                        receipt_as_dict = {"error": "Failed to parse receipt", "cbor": item}
+                        receipt_as_dict = {
+                            "error": "Failed to parse receipt",
+                            "cbor": item,
+                        }
                 parsed_receipts.append(receipt_as_dict)
             return parsed_receipts
         if cbor_obj_key.identifier == crypto.CWTClaims.identifier:
-            return {display_cwt_key(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()}
+            return {
+                display_cwt_key(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()
+            }
         if cbor_obj_key.identifier == X5chain.identifier:
             return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
         if cbor_obj_key.identifier == KID.identifier:
@@ -89,12 +97,16 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
             cbor_obj_key = "idx"
         out_key = display_cbor_val(cbor_obj_key)
         return {
-            display_cbor_val(f"{out_key}_{idx}"): cbor_to_printable(v, f"{out_key}_{idx}")
+            display_cbor_val(f"{out_key}_{idx}"): cbor_to_printable(
+                v, f"{out_key}_{idx}"
+            )
             for idx, v in enumerate(cbor_obj)
         }
 
     if isinstance(cbor_obj, dict):
-        return {display_cbor_val(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()}
+        return {
+            display_cbor_val(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()
+        }
 
     # otherwise return as is
     return display_cbor_val(cbor_obj)
