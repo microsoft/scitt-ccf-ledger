@@ -14,7 +14,7 @@ from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
-from .crypto import COSE_HEADER_PARAM_ISSUER
+from .crypto import SCITTIssuer
 from .receipt import Receipt
 
 
@@ -158,7 +158,7 @@ class DIDDocumentTrustStore(TrustStore):
         self.document = document
 
     def lookup(self, phdr) -> ServiceParameters:
-        issuer = phdr.get(COSE_HEADER_PARAM_ISSUER)
+        issuer = phdr.get(SCITTIssuer)
         if issuer != self.document.get("id"):
             raise ValueError(
                 f"Incorrect issuer {issuer!r}, expected {self.document['id']}"
@@ -195,10 +195,10 @@ class DIDResolverTrustStore(TrustStore):
             self.resolver = did.Resolver()
 
     def lookup(self, phdr) -> ServiceParameters:
-        if COSE_HEADER_PARAM_ISSUER not in phdr:
+        if SCITTIssuer not in phdr:
             raise ValueError("Receipt does not have an issuer")
 
-        issuer = phdr[COSE_HEADER_PARAM_ISSUER]
+        issuer = phdr[SCITTIssuer]
         document = self.resolver.resolve(issuer)
 
         return DIDDocumentTrustStore(document).lookup(phdr)

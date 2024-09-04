@@ -44,6 +44,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certificate
 from cryptography.x509.oid import NameOID
+from pycose.headers import CoseHeaderAttribute
 from pycose.keys.cosekey import CoseKey
 from pycose.keys.curves import P256, P384, P521
 from pycose.messages import Sign1Message
@@ -51,22 +52,51 @@ from pycose.messages import Sign1Message
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
 Pem = str
-
-COSE_HEADER_PARAM_ISSUER = 391
-COSE_HEADER_PARAM_FEED = 392
-COSE_HEADER_PARAM_REGISTRATION_INFO = 393
-COSE_HEADER_PARAM_SCITT_RECEIPTS = 394
-
-COSE_HEADER_PARAM_CWT_CLAIMS = 15
-CWT_ISS = 1
-CWT_SUB = 2
-CWT_IAT = 6
-CWT_SVN = "svn"
-
 RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
 CoseCurveTypes = Union[Type[P256], Type[P384], Type[P521]]
 CoseCurveType = Tuple[str, CoseCurveTypes]
+
+
+# Include SCITT-specific COSE header attributes to be recognized by pycose
+# Registered COSE header labels are in https://www.iana.org/assignments/cose/cose.xhtml
+# Draft SCITT-specific header labels are in https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
+@CoseHeaderAttribute.register_attribute()
+class CWTClaims(CoseHeaderAttribute):
+    identifier = 15
+    fullname = "CWT_CLAIMS"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTIssuer(CoseHeaderAttribute):
+    identifier = 391
+    fullname = "SCITT_ISSUER"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTFeed(CoseHeaderAttribute):
+    identifier = 392
+    fullname = "SCITT_FEED"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTRegistrationInfo(CoseHeaderAttribute):
+    identifier = 393
+    fullname = "SCITT_REGISTRATION_INFO"
+
+
+@CoseHeaderAttribute.register_attribute()
+class SCITTReceipts(CoseHeaderAttribute):
+    identifier = 394
+    fullname = "SCITT_RECEIPTS"
+
+
+# CWT Claims (RFC9597) defined in https://www.iana.org/assignments/cwt/cwt.xhtml
+CWT_ISS = 1
+CWT_SUB = 2
+CWT_IAT = 6
+# Other expected CWT claims
+CWT_SVN = "svn"  # AMD Security Version Number
 
 
 def ec_curve_from_name(name: str) -> EllipticCurve:
@@ -432,7 +462,7 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
     else:
         val = outer
     [_, uhdr, _, _] = val
-    key = COSE_HEADER_PARAM_SCITT_RECEIPTS
+    key = SCITTReceipts.identifier
     if key not in uhdr:
         uhdr[key] = []
     uhdr[key].append(parsed_receipt)
@@ -448,7 +478,7 @@ def get_last_embedded_receipt_from_cose(buf: bytes) -> Union[bytes, None]:
     else:
         val = outer
     [_, uhdr, _, _] = val
-    key = COSE_HEADER_PARAM_SCITT_RECEIPTS
+    key = SCITTReceipts.identifier
     if key in uhdr:
         parsed_receipts = uhdr[key]
         if isinstance(parsed_receipts, list) and parsed_receipts:
@@ -570,17 +600,17 @@ def sign_claimset(
             cwt_claims[CWT_SUB] = feed
         if svn is not None:
             cwt_claims[CWT_SVN] = svn
-        headers[COSE_HEADER_PARAM_CWT_CLAIMS] = cwt_claims
+        headers[CWTClaims] = cwt_claims
     else:
         if signer.issuer is not None:
-            headers[COSE_HEADER_PARAM_ISSUER] = signer.issuer
+            headers[SCITTIssuer] = signer.issuer
         if feed is not None:
-            headers[COSE_HEADER_PARAM_FEED] = feed
+            headers[SCITTFeed] = feed
         if svn is not None:
             headers["svn"] = svn
 
     if registration_info:
-        headers[COSE_HEADER_PARAM_REGISTRATION_INFO] = registration_info
+        headers[SCITTRegistrationInfo] = registration_info
 
     msg = Sign1Message(phdr=headers, payload=claims)
     msg.key = CoseKey.from_pem_private_key(signer.private_key)

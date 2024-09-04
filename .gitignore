@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 build/
 tmp/
+out/
 venv/
 .venv_ccf_sandbox/
 workspace/

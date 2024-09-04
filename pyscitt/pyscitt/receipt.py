@@ -2,15 +2,18 @@
 # Licensed under the MIT License.
 
 import base64
+import datetime
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 
 import cbor2
 import ccf.receipt
+from cbor2 import CBORError
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
+from pycose.headers import KID, X5chain, X5t
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
 
@@ -21,27 +24,92 @@ if TYPE_CHECKING:
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
+COMMON_CWT_KEYS_MAP = {
+    1: "iss",
+    2: "sub",
+    3: "aud",
+    4: "exp",
+    5: "nbf",
+    6: "iat",
+    7: "cti",
+}
 
 
-def hdr_as_dict(phdr: dict) -> dict:
+def display_cwt_key(item: Any) -> Union[int, str]:
+    """Convert a CWT key to a string for pretty-printing."""
+    out = str(item)
+    return COMMON_CWT_KEYS_MAP.get(item, out)
+
+
+def display_cbor_val(item: Any) -> str:
+    """Convert a CBOR item to a string for pretty-printing."""
+    out = str(item)
+    if hasattr(item, "__name__"):
+        out = item.__name__
+    elif isinstance(item, datetime.datetime):
+        out = item.isoformat()
+    elif type(item) is bytes:
+        out = item.hex()
+    return out
+
+
+def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     """
-    Return a representation of a list of COSE header parameters that
-    is amenable to pretty-printing.
+    Return a printable representation of a CBOR object.
     """
 
-    def display(item):
-        if hasattr(item, "__name__"):
-            return item.__name__
-        if type(item) is bytes:
-            return item.hex()
-        return item
+    # pycose will use class instances for known and registered headers instead of ints
+    if hasattr(cbor_obj_key, "identifier"):
+        if cbor_obj_key.identifier == crypto.SCITTReceipts.identifier:
+            parsed_receipts = []
+            for item in cbor_obj:
+                if type(item) is bytes:
+                    try:
+                        receipt_as_dict = Receipt.decode(item).as_dict()
+                    except Exception:
+                        receipt_as_dict = {
+                            "error": "Failed to parse receipt",
+                            "cbor": item.hex(),
+                        }
+                else:
+                    try:
+                        receipt_as_dict = Receipt.from_cose_obj(item).as_dict()
+                    except Exception:
+                        receipt_as_dict = {
+                            "error": "Failed to parse receipt",
+                            "cbor": item,
+                        }
+                parsed_receipts.append(receipt_as_dict)
+            return parsed_receipts
+        if cbor_obj_key.identifier == crypto.CWTClaims.identifier:
+            return {
+                display_cwt_key(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()
+            }
+        if cbor_obj_key.identifier == X5chain.identifier:
+            return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
+        if cbor_obj_key.identifier == KID.identifier:
+            return cbor_obj.decode()
+        if cbor_obj_key.identifier == X5t.identifier:
+            return {"alg": cbor_obj[0], "hash": cbor_obj[1].hex()}
 
-    # Decode KID into a 'readable' text string if present.
-    hdr_dict = {display(k): display(v) for k, v in phdr.items()}
-    if hdr_dict.get("KID"):
-        hdr_dict["KID"] = bytes.fromhex(hdr_dict["KID"]).decode()
+    if isinstance(cbor_obj, list):
+        if not cbor_obj_key:
+            cbor_obj_key = "idx"
+        out_key = display_cbor_val(cbor_obj_key)
+        return {
+            display_cbor_val(f"{out_key}_{idx}"): cbor_to_printable(
+                v, f"{out_key}_{idx}"
+            )
+            for idx, v in enumerate(cbor_obj)
+        }
 
-    return hdr_dict
+    if isinstance(cbor_obj, dict):
+        return {
+            display_cbor_val(k): cbor_to_printable(v, k) for k, v in cbor_obj.items()
+        }
+
+    # otherwise return as is
+    return display_cbor_val(cbor_obj)
 
 
 @dataclass
@@ -186,6 +254,6 @@ class Receipt:
         to pretty-printing.
         """
         return {
-            "protected": hdr_as_dict(self.phdr),
+            "protected": cbor_to_printable(self.phdr),
             "contents": self.contents.as_dict(),
         }
