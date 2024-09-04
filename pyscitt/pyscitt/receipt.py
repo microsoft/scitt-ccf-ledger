@@ -67,7 +67,7 @@ def cbor_as_dict(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                     receipt_as_dict = Receipt.decode(item).as_dict()
                 else:
                     receipt_as_dict = Receipt.from_cose_obj(item).as_dict()
-            parsed_receipts.append(receipt_as_dict)
+                parsed_receipts.append(receipt_as_dict)
             return parsed_receipts
         if cbor_obj_key.identifier == crypto.CWTClaims.identifier:
             return {display_cwt_key(k): cbor_as_dict(v, k) for k, v in cbor_obj.items()}
