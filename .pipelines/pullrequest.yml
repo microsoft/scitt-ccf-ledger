@@ -73,6 +73,11 @@ extends:
     - stage: test_virtual_vm_build
       jobs:
 
+      - task: PipAuthenticate@1
+        displayName: 'Pip Authenticate'
+        inputs:
+          artifactFeeds: 'ConfidentialLedger/external-dependencies'
+
       - job: format
         displayName: Code Formatting
         pool:
