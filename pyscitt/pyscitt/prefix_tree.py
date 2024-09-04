@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .client import BaseClient
 
 from .crypto import SCITTFeed, SCITTIssuer
-from .receipt import ReceiptContents, cbor_as_dict
+from .receipt import ReceiptContents, cbor_to_printable
 from .verify import ServiceParameters
 
 
@@ -151,8 +151,8 @@ class ReadReceipt:
 
     def as_dict(self) -> dict:
         return {
-            "tree_headers": cbor_as_dict(self.tree_headers),
-            "leaf_headers": cbor_as_dict(self.leaf_headers),
+            "tree_headers": cbor_to_printable(self.tree_headers),
+            "leaf_headers": cbor_to_printable(self.leaf_headers),
             "proof": {
                 "positions": self.proof.positions.hex(),
                 "hashes": [h.hex() for h in self.proof.hashes],

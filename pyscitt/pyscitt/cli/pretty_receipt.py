@@ -9,7 +9,7 @@ from typing import Union
 import cbor2
 from pycose.messages import Sign1Message
 
-from ..receipt import Receipt, cbor_as_dict
+from ..receipt import Receipt, cbor_to_printable
 
 
 def prettyprint_receipt(receipt_path: Path):
@@ -23,8 +23,8 @@ def prettyprint_receipt(receipt_path: Path):
         assert cbor_obj.tag == 18  # COSE_Sign1
         parsed = Sign1Message.from_cose_obj(cbor_obj.value, True)
         output_dict = {
-            "protected": cbor_as_dict(parsed.phdr),
-            "unprotected": cbor_as_dict(parsed.uhdr),
+            "protected": cbor_to_printable(parsed.phdr),
+            "unprotected": cbor_to_printable(parsed.uhdr),
             "payload": (
                 base64.b64encode(parsed.payload).decode("ascii")
                 if parsed.payload
@@ -35,7 +35,8 @@ def prettyprint_receipt(receipt_path: Path):
         parsed = Receipt.decode(receipt)
         output_dict = parsed.as_dict()
 
-    print(json.dumps(output_dict, indent=2))
+    fallback_serialization = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
+    print(json.dumps(output_dict, default=fallback_serialization, indent=2))
 
 
 def cli(fn):
