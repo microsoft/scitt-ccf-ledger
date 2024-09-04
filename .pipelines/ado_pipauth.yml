@@ -1,0 +1,4 @@
+- task: PipAuthenticate@1
+  displayName: 'Pip Authenticate to private feed'
+  inputs:
+    artifactFeeds: 'ConfidentialLedger/external-dependencies'

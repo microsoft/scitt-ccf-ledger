@@ -61,6 +61,8 @@ jobs:
         condition: ${{ parameters.RunTests }}
         displayName: Run Unit tests
 
+      - template: ado_pipauth.yml@self
+
       - script: ./run_functional_tests.sh ${{ parameters.FunctionalTestArguments }}
         condition: ${{ parameters.RunTests }}
         displayName: Run Functional Tests
