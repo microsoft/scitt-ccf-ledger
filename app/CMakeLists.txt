@@ -27,11 +27,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ccf_${COMPILE_TARGET} 5.0.0 REQUIRED)
 
-
-if (ENABLE_PREFIX_TREE)
-  add_compile_definitions(ENABLE_PREFIX_TREE)
-endif ()
-
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
 

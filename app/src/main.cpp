@@ -789,10 +789,6 @@ namespace scitt
       register_service_endpoints(context, *this);
       register_operations_endpoints(
         context, *this, authn_policy, post_entry_continuation);
-
-#ifdef ENABLE_PREFIX_TREE
-      PrefixTreeFrontend::init_handlers(context, *this);
-#endif
     }
   };
 } // namespace scitt

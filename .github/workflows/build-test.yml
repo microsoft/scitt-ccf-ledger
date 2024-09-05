@@ -45,7 +45,6 @@ jobs:
         # Additional CMake flags.
         PLATFORM: ${{ matrix.platform.name }}
         CMAKE_BUILD_TYPE: Debug
-        ENABLE_PREFIX_TREE: OFF
         ENABLE_CLANG_TIDY: ON
         BUILD_TESTS: ${{ matrix.platform.unit_tests_enabled }}
         # These make CI print all the errors, rather than stopping early.

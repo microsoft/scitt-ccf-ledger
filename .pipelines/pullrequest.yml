@@ -94,7 +94,6 @@ extends:
           RunTests: false
           Environment:
             CMAKE_BUILD_TYPE: Debug
-            ENABLE_PREFIX_TREE: OFF
             ENABLE_CLANG_TIDY: ON
           InstallPackages: [ libcurl4-openssl-dev, clang-tidy-10 ]
 
@@ -102,8 +101,6 @@ extends:
         parameters:
           Name: test_virtual
           DisplayName: Build and test (Virtual)
-          Environment:
-            ENABLE_PREFIX_TREE: OFF
           FunctionalTestArguments: '--enable-faketime'
           InstallPackages: [ libcurl4-openssl-dev, faketime ]
 
@@ -119,7 +116,6 @@ extends:
           PLATFORM: virtual
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
-          ENABLE_PREFIX_TREE: OFF
         steps:
           - checkout: SCITT
             path: s/
@@ -172,7 +168,6 @@ extends:
                 --env PLATFORM="sgx" \
                 --env CMAKE_BUILD_TYPE="Release" \
                 --env CCF_UNSAFE="OFF" \
-                --env ENABLE_PREFIX_TREE="OFF" \
                 --env BUILD_TESTS="OFF" \
                 --env ENABLE_CLANG_TIDY="OFF" \
                 --env NINJA_FLAGS="-k 0" \
@@ -199,7 +194,6 @@ extends:
           PLATFORM: sgx
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0
-          ENABLE_PREFIX_TREE: OFF
         steps:
           - checkout: SCITT
             path: s/
