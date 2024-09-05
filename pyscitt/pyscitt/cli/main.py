@@ -7,7 +7,6 @@ from . import (
     create_did_web,
     embed_receipt_in_cose,
     governance,
-    prefix_tree,
     pretty_receipt,
     retrieve_signed_claims,
     sign_claims,
@@ -26,7 +25,6 @@ COMMANDS = [
     ("embed-receipt", embed_receipt_in_cose),
     ("validate", validate_cose),
     ("governance", governance),
-    ("prefix-tree", prefix_tree),
 ]
 
 

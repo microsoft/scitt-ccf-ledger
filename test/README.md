@@ -101,10 +101,6 @@ infrastructure, or to skip the test when certain conditions aren't met.
 Annotations are added using a `@pytest.mark.foo` decorator on the particular
 test function or class.
 
-The `needs_prefix_tree` marker will skip the test, unless pytest was invoked
-with the `--enable-prefix-tree` flag. This is necessary as prefix tree support
-is a compile-time opt-in feature of the ledger.
-
 The `isolated_test` marker will instruct the test infrastructure to use a
 dedicated ledger instance, shared among all tests in the class. If applied on a
 test function that is not part of a class, then the ledger instance is used for

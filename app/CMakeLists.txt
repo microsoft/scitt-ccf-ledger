@@ -17,7 +17,6 @@ project(scitt
 set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
-option(ENABLE_PREFIX_TREE "Enable the prefix tree" OFF)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 
 set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
@@ -142,9 +141,6 @@ if (BUILD_TESTS)
     unit-tests/did/resolver_test.cpp
     unit-tests/did/web/syntax_test.cpp
     unit-tests/historical/lru_test.cpp
-    unit-tests/prefix_tree/bitvector_test.cpp
-    unit-tests/prefix_tree/prefix_tree_test.cpp
-    unit-tests/prefix_tree/batched_prefix_tree_test.cpp
   )
   add_san(unit_tests)
   target_compile_options(unit_tests PUBLIC ${COMPILE_LIBCXX})

@@ -101,7 +101,7 @@ extends:
       - template: .pipelines/local_virtual_build.yml@self
         parameters:
           Name: test_virtual
-          DisplayName: Build and test (Virtual, with prefix tree)
+          DisplayName: Build and test (Virtual)
           Environment:
             ENABLE_PREFIX_TREE: OFF
           FunctionalTestArguments: '--enable-faketime'

@@ -20,10 +20,6 @@
 #include "util.h"
 #include "verifier.h"
 
-#ifdef ENABLE_PREFIX_TREE
-#  include "prefix_tree/frontend.h"
-#endif
-
 #include <ccf/app_interface.h>
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/common_auth_policies.h>
