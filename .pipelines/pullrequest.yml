@@ -72,7 +72,6 @@ extends:
 
     - stage: test_virtual_vm_build
       jobs:
-
       - job: format
         displayName: Code Formatting
         pool:
@@ -84,6 +83,7 @@ extends:
           path: s/
           submodules: recursive
           lfs: false
+        - template: .pipelines/ado_pipauth.yml@self
         - script: $(Build.SourcesDirectory)/scripts/ci-checks.sh
           displayName: "CI checks"
 

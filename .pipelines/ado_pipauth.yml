@@ -1,0 +1,5 @@
+steps:
+- task: PipAuthenticate@1
+  displayName: 'Pip Authenticate to private feed'
+  inputs:
+    artifactFeeds: accl-cts-ccf-external-dependencies
