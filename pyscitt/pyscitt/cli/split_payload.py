@@ -30,7 +30,7 @@ def cli(fn):
     )
 
     def cmd(args):
-        split_payload(args.cose, args.output)
+        split_payload(args.cose, args.out)
 
     parser.set_defaults(func=cmd)
 
