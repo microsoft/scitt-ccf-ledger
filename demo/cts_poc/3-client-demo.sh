@@ -36,39 +36,22 @@ curl -k -f "$SCITT_URL"/parameters/historic > "$SERVICE_PARAMS_FOLDER"/scitt.jso
 echo -e "\nSubmitting claim to the ledger and getting receipt for the committed transaction"
 RECEIPT_FOLDER="$OUTPUT_FOLDER"/receipts
 mkdir -p "$RECEIPT_FOLDER"
-RECEIPT_PATH="$RECEIPT_FOLDER"/claims.receipt.cbor
+RECEIPT_PATH="$RECEIPT_FOLDER"/embedded.receipt.cose
 
 # Submit signed claim
 scitt submit "$COSE_CLAIMS_PATH" \
     --receipt "$RECEIPT_PATH" \
+    --receipt-type embedded \
     --url "$SCITT_URL" \
     --development
 
-# Get entries with embedded receipts
-echo -e "\nGetting all entries with embedded receipts"
-scitt retrieve "$RECEIPT_FOLDER" \
-    --url "$SCITT_URL" \
-    --service-trust-store "$SERVICE_PARAMS_FOLDER" \
-    --development
-
-# View CBOR receipt
-echo -e "\nViewing decoded receipt content"
+# Preview receipt
+echo -e "\nViewing embedded receipt content"
 scitt pretty-receipt "$RECEIPT_PATH"
 
-# Verify CBOR receipt
+# Verify receipt
 echo -e "\nVerifying receipt"
-scitt validate "$COSE_CLAIMS_PATH" \
-    --receipt "$RECEIPT_PATH" \
+scitt validate "$RECEIPT_PATH" \
     --service-trust-store "$SERVICE_PARAMS_FOLDER"
-
-# Get a list of all the COSE claims inside the RECEIPT_FOLDER directory
-COSE_FILES=$(find "$RECEIPT_FOLDER" -type f -name "*.cose")
-
-# Verify entry with embedded receipt for each retrieved COSE claim
-for COSE_ENTRY in $COSE_FILES; do
-    echo -e "\nVerifying entry with embedded receipt for $COSE_ENTRY"
-    scitt validate "$COSE_ENTRY" \
-        --service-trust-store "$SERVICE_PARAMS_FOLDER"
-done
 
 echo -e "\nScript completed successfully"
