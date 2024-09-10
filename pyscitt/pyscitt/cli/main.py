@@ -10,6 +10,7 @@ from . import (
     pretty_receipt,
     retrieve_signed_claims,
     sign_claims,
+    split_payload,
     submit_signed_claims,
     upload_did_web_doc_to_github,
     validate_cose,
@@ -21,6 +22,7 @@ COMMANDS = [
     ("sign", sign_claims),
     ("submit", submit_signed_claims),
     ("retrieve", retrieve_signed_claims),
+    ("split-payload", split_payload),
     ("pretty-receipt", pretty_receipt),
     ("embed-receipt", embed_receipt_in_cose),
     ("validate", validate_cose),
@@ -34,7 +36,7 @@ def main(argv=None):
     # https://github.com/python/cpython/issues/67037
     # https://docs.python.org/3/library/argparse.html#sub-commands
     sub = parser.add_subparsers(
-        metavar="{submit,retrieve,pretty-receipt,embed-receipt,validate}",
+        metavar="{submit,retrieve,pretty-receipt,embed-receipt,validate,split-payload}",
         help="""Choose one of the available commands to run. 
                                 Use the --help flag to see the options for each command.
                                 For instance 'scitt submit --help' will show the options for the submit command.
