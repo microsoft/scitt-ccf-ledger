@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.4.0"
+PACKAGE_VERSION = "0.5.0"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -37,8 +37,10 @@ setup(
     license="Apache License 2.0",
     author="SCITT CCF Team",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
+        "Intended Audience :: System Administrators",
+        "Intended Audience :: Science/Research",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
     ],
