@@ -110,6 +110,11 @@ def test_smoke_test(run, client, tmp_path: Path):
         )
 
         run(
+            "split-payload",
+            tmp_path / "claims.cose",
+        )
+
+        run(
             "submit",
             "--skip-confirmation",
             tmp_path / "claims.cose",
@@ -120,17 +125,26 @@ def test_smoke_test(run, client, tmp_path: Path):
             "submit",
             tmp_path / "claims.cose",
             "--receipt",
-            tmp_path / "receipt.cose",
+            tmp_path / "receipt.cbor",
             with_service_url=True,
         )
 
-        run("pretty-receipt", tmp_path / "receipt.cose")
+        run("pretty-receipt", tmp_path / "receipt.cbor")
+
+        run(
+            "validate",
+            tmp_path / "claims.cose",
+            "--receipt",
+            tmp_path / "receipt.cbor",
+            "--service-trust-store",
+            trust_store_path,
+        )
 
         run(
             "embed-receipt",
             tmp_path / "claims.cose",
             "--receipt",
-            tmp_path / "receipt.cose",
+            tmp_path / "receipt.cbor",
             "--out",
             tmp_path / "claims.embedded.cose",
         )
@@ -140,9 +154,7 @@ def test_smoke_test(run, client, tmp_path: Path):
 
         run(
             "validate",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cose",
+            tmp_path / "claims.embedded.cose",
             "--service-trust-store",
             trust_store_path,
         )
@@ -486,6 +498,35 @@ def test_registration_info(run, tmp_path: Path):
         "binary_data": binary_data,
         "unicode_data": unicode_data,
     }
+
+
+def test_extract_payload_from_cose(run, tmp_path: Path):
+    private_key, public_key = crypto.generate_rsa_keypair()
+    (tmp_path / "key.pem").write_text(private_key)
+    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+
+    run(
+        "sign",
+        "--key",
+        tmp_path / "key.pem",
+        "--content-type",
+        "application/json",
+        "--claims",
+        tmp_path / "claims.json",
+        "--out",
+        tmp_path / "claims.cose",
+    )
+
+    run(
+        "split-payload",
+        tmp_path / "claims.cose",
+        "--out",
+        tmp_path / "payload.json",
+    )
+
+    data = (tmp_path / "payload.json").read_bytes()
+    claims = json.loads(data)
+    assert claims.get("foo") == "bar"
 
 
 @pytest.mark.isolated_test
