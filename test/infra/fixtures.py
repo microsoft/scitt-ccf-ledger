@@ -239,7 +239,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--platform",
         default="virtual",
-        choices=["sgx", "virtual"],
+        choices=["sgx", "virtual", "snp"],
         help="Type of enclave used when starting cchost. Requires --start-cchost.",
     )
     parser.addoption(
