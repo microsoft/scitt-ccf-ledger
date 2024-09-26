@@ -14,7 +14,7 @@ project(scitt
   LANGUAGES C CXX
 )
 
-set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx' or 'virtual'")
+set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx', 'virtual', or 'snp'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
@@ -45,6 +45,8 @@ if (COMPILE_TARGET STREQUAL "sgx")
   set(SCITT_TARGET scitt.enclave)
 elseif (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
+elseif (COMPILE_TARGET STREQUAL "snp")
+  set(SCITT_TARGET scitt.snp)
 endif ()
 
 # The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
