@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 5.0.0
+  default: 5.0.6
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -102,6 +102,8 @@ extends:
           Name: test_virtual
           DisplayName: Build and test (Virtual)
           FunctionalTestArguments: '--enable-faketime'
+          Environment:
+            CMAKE_BUILD_TYPE: Debug
           InstallPackages: [ libcurl4-openssl-dev, faketime ]
 
     - stage: test_virtual_docker_build
