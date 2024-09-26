@@ -25,7 +25,7 @@ set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
-find_package(ccf_${COMPILE_TARGET} 5.0.0 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 5.0.6 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
