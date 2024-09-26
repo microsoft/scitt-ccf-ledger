@@ -12,8 +12,10 @@ if [ "$PLATFORM" = "sgx" ]; then
     DOCKERFILE="enclave.Dockerfile"
 elif [ "$PLATFORM" = "virtual" ]; then
     DOCKERFILE="virtual.Dockerfile"
+elif [ "$PLATFORM" = "snp" ]; then
+    DOCKERFILE="snp.Dockerfile"
 else
-    echo "Unknown platform: $PLATFORM, must be 'sgx' or 'virtual'"
+    echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
     exit 1
 fi
 

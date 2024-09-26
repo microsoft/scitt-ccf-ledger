@@ -47,6 +47,14 @@ elif [ "$PLATFORM" = "virtual" ]; then
     enclave_type="Virtual"
     enclave_file="libscitt.virtual.so"
     DOCKER_FLAGS=()
+elif [ "$PLATFORM" = "snp" ]; then
+    enclave_platform="SNP"
+    enclave_type="Release"
+    enclave_file="libscitt.snp.so"
+    DOCKER_FLAGS=()
+else 
+    echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
+    exit 1
 fi
 sed -i "s/%ENCLAVE_PLATFORM%/$enclave_platform/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%ENCLAVE_TYPE%/$enclave_type/g" "$WORKSPACE"/dev-config.json
