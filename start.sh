@@ -14,7 +14,7 @@ SCITT_DIR=/tmp/scitt
 
 CONSTITUTION_DIR=$SCITT_DIR/share/scitt/constitution
 
-if [ "$PLATFORM" != "sgx" ] && [ "$PLATFORM" != "virtual" ]; then
+if [ "$PLATFORM" != "sgx" ] && [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Invalid platform: $PLATFORM"
     exit 1
 fi
