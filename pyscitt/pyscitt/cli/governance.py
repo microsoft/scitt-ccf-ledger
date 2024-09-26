@@ -180,11 +180,17 @@ def update_scitt_constitution(client: Client, scitt_constitution_path: Path, yes
 def get_constitution(client: Client, path: Path):
     path.write_text(client.get_constitution())
 
+
 def clean_pem_file(bundle: str) -> str:
     """
     Cleans a PEM file by removing lines that start with '#' or are empty.
     """
-    return '\n'.join(line for line in bundle.splitlines() if line.strip() and not line.startswith('#'))
+    return "\n".join(
+        line
+        for line in bundle.splitlines()
+        if line.strip() and not line.startswith("#")
+    )
+
 
 def setup_local_development(
     client: Client, trust_store_dir: Optional[Path], did_web_ca_certs: Optional[Path]
