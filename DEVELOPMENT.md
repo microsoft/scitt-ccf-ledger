@@ -5,7 +5,7 @@ The following explains how to build, run, and test scitt-ccf-ledger.
 ## Development environment
 
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
-This means TEE hardware, here SGX, is required to run and test scitt-ccf-ledger in full.
+This means TEE hardware, in SGX or SNP, is required to run and test scitt-ccf-ledger in full.
 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
@@ -31,20 +31,21 @@ docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /o
 
 ### Develop within a host machine
 
-It is expected that you have Ubuntu 20.04. Follow the steps below to setup your development environment, replacing `<sgx|virtual>` with either one, as desired:
+It is expected that you have Ubuntu 20.04. Follow the steps below to setup your development environment, replacing `<sgx|virtual|snp>` with either one, as desired:
 
 1. Set up your host machine: 
     - If using SGX, it is recommended that you provision a virtual machine:
       - On Azure, provision a DC-series VM, for example, [DCsv3](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv3-series)
       - Enable running SGX enclaves: `sudo usermod -a -G sgx_prv $(whoami)`
     - If using virtual mode, running Ubuntu 20.04 on any platform (WSL, VM, etc.) is enough
+    - If using SNP, you should use a machine with SNP hardware support and a platform that allows to enforce security policies for containers running on it (e.g., [Confidential Containers on AKS](https://learn.microsoft.com/en-us/azure/aks/confidential-containers-overview), [Confidential Containers on ACI](https://learn.microsoft.com/en-us/azure/container-instances/container-instances-confidential-overview))
 
 2. Install dependencies:
     ```sh
     wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-5.0.6.tar.gz
     tar xvzf ccf-5.0.6.tar.gz
     cd CCF-ccf-5.0.6/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=5.0.6 -e platform=<sgx|virtual> -e clang_version=<11|15>
+    ./run.sh app-dev.yml -e ccf_ver=5.0.6 -e platform=<sgx|virtual|snp> -e clang_version=<11|15>
     ```
 
 ## Compiling
@@ -65,7 +66,7 @@ This will expect all of the required dependencies to be set correctly.
 Build scitt-ccf-ledger by running:
 
 ```sh
-PLATFORM=<sgx|virtual> ./build.sh
+PLATFORM=<sgx|virtual|snp> ./build.sh
 ```
 
 ## Running
@@ -86,7 +87,7 @@ export PLATFORM=virtual
 2. Start a single-node CCF network running the scitt-ccf-ledger application:
 
     ```sh
-    PLATFORM=<sgx|virtual> ./start.sh
+    PLATFORM=<sgx|virtual|snp> ./start.sh
     ```
 
 3. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local
