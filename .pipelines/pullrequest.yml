@@ -102,6 +102,8 @@ extends:
           Name: test_virtual
           DisplayName: Build and test (Virtual)
           FunctionalTestArguments: '--enable-faketime'
+          Environment:
+            CMAKE_BUILD_TYPE: Debug
           InstallPackages: [ libcurl4-openssl-dev, faketime ]
 
     - stage: test_virtual_docker_build
