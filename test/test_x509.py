@@ -53,9 +53,9 @@ def test_submit_claim_x5c(
     expected_virtual_measurement = (
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
-    if env_platform == "virtual" or env_platform == "snp":
+    if env_platform == "virtual":
         assert actual_measurement == expected_virtual_measurement
-    elif env_platform == "sgx":
+    elif env_platform == "sgx" or env_platform == "snp":
         assert (
             len(actual_measurement) == 64
             and actual_measurement != expected_virtual_measurement
