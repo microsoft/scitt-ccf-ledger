@@ -90,8 +90,8 @@ install(
   DESTINATION share/scitt/constitution)
 
 if (BUILD_TESTS)
-  if (COMPILE_TARGET STREQUAL "sgx")
-    message(FATAL_ERROR "Unit tests are not supported on SGX builds. Set BUILD_TESTS=OFF to disable them.")
+  if (COMPILE_TARGET STREQUAL "sgx" OR COMPILE_TARGET STREQUAL "snp")
+    message(FATAL_ERROR "Unit tests are not supported on SGX or SNP builds. Set BUILD_TESTS=OFF to disable them.")
   endif()
 
   # Avoid Gtest files ending up in the scitt install directory
