@@ -401,7 +401,7 @@ def get_enclave_path(platform: str, enclave_package) -> Path:
     ENCLAVE_SUFFIX = {
         "virtual": "virtual.so",
         "sgx": "enclave.so.signed",
-        "snp": "snp.so.signed",
+        "snp": "snp.so",
     }
     return Path(f"{enclave_package}.{ENCLAVE_SUFFIX[platform]}")
 
