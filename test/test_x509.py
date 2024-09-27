@@ -66,7 +66,9 @@ def test_submit_claim_x5c(
             and actual_measurement != expected_virtual_measurement
         )
     else:
-        raise Exception(f"Unknown PLATFORM, should be sgx, virtual, or snp: {env_platform}")
+        raise Exception(
+            f"Unknown PLATFORM, should be sgx, virtual, or snp: {env_platform}"
+        )
 
     verify_receipt(claims, trust_store, receipt)
 

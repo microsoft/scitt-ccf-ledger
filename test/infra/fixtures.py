@@ -30,12 +30,21 @@ from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class ManagedCCHostFixtures:
-    def __init__(self, binary, platform, enclave_file, constitution, enable_faketime):
+    def __init__(
+        self,
+        binary,
+        platform,
+        enclave_file,
+        constitution,
+        enable_faketime,
+        snp_attestation_config,
+    ):
         self.binary = binary
         self.platform = platform
         self.enclave_file = enclave_file
         self.constitution = constitution
         self.enable_faketime = enable_faketime
+        self.snp_attestation_config = snp_attestation_config
 
     def pytest_collection_modifyitems(self, config, items):
         faketime_skip = pytest.mark.skip(reason="faketime support was not enabled")
@@ -87,6 +96,7 @@ class ManagedCCHostFixtures:
                 self.enclave_file,
                 workspace=workspace,
                 constitution=constitution_files,
+                snp_attestation_config=self.snp_attestation_config,
                 **kwargs,
             )
 
@@ -257,6 +267,12 @@ def pytest_addoption(parser):
         "--enable-faketime",
         action="store_true",
     )
+    parser.addoption(
+        "--snp-attestation-config",
+        type=Path,
+        default=None,
+        help="Path to a JSON configuration file containing the CCF SNP attestation configurations (only for the SNP platform). Please refer to https://microsoft.github.io/CCF/main/operations/configuration.html#attestation for more details. Requires --start-cchost.",
+    )
 
 
 def pytest_configure(config):
@@ -278,9 +294,15 @@ def pytest_configure(config):
         constitution = config.getoption("--constitution")
         enclave_file = get_enclave_path(platform, enclave_package)
         enable_faketime = config.getoption("--enable-faketime")
+        snp_attestation_config = config.getoption("--snp-attestation-config")
         config.pluginmanager.register(
             ManagedCCHostFixtures(
-                binary, platform, enclave_file, constitution, enable_faketime
+                binary,
+                platform,
+                enclave_file,
+                constitution,
+                enable_faketime,
+                snp_attestation_config,
             )
         )
     else:

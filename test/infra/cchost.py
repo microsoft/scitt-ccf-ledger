@@ -58,6 +58,8 @@ class CCHost(EventLoopThread):
     faketime_lib: Optional[Path]
     clock_offset: int
 
+    snp_attestation_config: dict
+
     def __init__(
         self,
         binary: str,
@@ -68,6 +70,7 @@ class CCHost(EventLoopThread):
         rpc_port: int = 0,
         node_port: int = 0,
         enable_faketime: bool = False,
+        snp_attestation_config: Optional[Path] = None,
     ):
         super().__init__()
 
@@ -121,6 +124,17 @@ class CCHost(EventLoopThread):
                 LOG.info("Using faketime library at {}", self.faketime_lib)
             else:
                 LOG.warning("Could not find faketime library")
+
+        if platform == "snp":
+            if not snp_attestation_config or not snp_attestation_config.exists():
+                raise ValueError(
+                    "SNP attestation configuration file must be provided for SNP platform"
+                )
+            self.snp_attestation_config = json.loads(
+                snp_attestation_config.absolute().read_text()
+            )
+        else:
+            self.snp_attestation_config = {}
 
     def restart(self) -> None:
         # Delete PID file to let cchost restart
@@ -363,6 +377,7 @@ class CCHost(EventLoopThread):
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
             },
+            "attestation": self.snp_attestation_config,
         }
 
         if start:
@@ -455,6 +470,12 @@ def main():
         help="Enable faketime support. The `faketime` file in the workspace can be used to adjust the time as seen by cchost",
         action="store_true",
     )
+    parser.add_argument(
+        "--snp-attestation-config",
+        type=Path,
+        default=None,
+        help="Path to a JSON configuration file containing the CCF SNP attestation configurations (only for the SNP platform). Please refer to https://microsoft.github.io/CCF/main/operations/configuration.html#attestation for more details.",
+    )
 
     args = parser.parse_args()
     if args.workspace.exists():
@@ -472,6 +493,7 @@ def main():
         rpc_port=args.port,
         node_port=args.node_port,
         enable_faketime=args.enable_faketime,
+        snp_attestation_config=args.snp_attestation_config,
     ) as cchost:
         while True:
             signal.pause()
