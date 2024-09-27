@@ -166,4 +166,33 @@ PLATFORM=virtual ./build.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 
+## AMD SEV-SNP platform
 
+To use [AMD SEV-SNP](https://microsoft.github.io/CCF/main/operations/platforms/snp.html) as a platform, it is required to pass additional configuration values required by CCF for the attestation on AMD SEV-SNP hardware. These values may differ depending on which SNP platform you are using (e.g., Confidential Containers on ACI, Confidential Containers on AKS).
+
+The required configs can be set using the `SNP_ATTESTATION_CONFIG` environment variable in any of the development and test scripts. The variable should be set to the path of a JSON file containing the [CCF SNP attestation configuration](https://microsoft.github.io/CCF/main/operations/configuration.html#attestation). An example file would look like this:
+
+```json
+{
+    "snp_endorsements_servers": [
+      {
+        "type": "AMD",
+        "url": "kdsintf.amd.com"
+      }
+    ],
+    "snp_security_policy_file": "/path/to/security-policy-base64",
+    "snp_uvm_endorsements_file": "/path/to/reference-info-base64"
+}
+```
+
+To start SCITT on SNP, you would run:
+
+```sh
+SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json PLATFORM=snp ./start.sh
+```
+
+To run the SCITT functional tests on SNP, you would run:
+
+```sh
+SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json PLATFORM=snp ./run_functional_tests.sh
+```
