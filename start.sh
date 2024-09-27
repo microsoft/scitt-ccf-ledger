@@ -14,6 +14,9 @@ SCITT_DIR=/tmp/scitt
 
 CONSTITUTION_DIR=$SCITT_DIR/share/scitt/constitution
 
+# SNP attestation config
+SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
+
 if [ "$PLATFORM" != "sgx" ] && [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Invalid platform: $PLATFORM"
     exit 1
@@ -38,4 +41,5 @@ exec python3.8 -m test.infra.cchost \
     --constitution-file $CONSTITUTION_DIR/actions.js \
     --constitution-file $CONSTITUTION_DIR/scitt.js \
     --platform "$PLATFORM" \
+    --snp-attestation-config "$SNP_ATTESTATION_CONFIG" \
     "$@"
