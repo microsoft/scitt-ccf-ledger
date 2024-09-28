@@ -41,6 +41,5 @@
         }
       ]
     }
-  },
-  "attestation": "%SNP_ATTESTATION_CONFIG%"
+  }
 }

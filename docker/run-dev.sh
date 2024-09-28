@@ -69,11 +69,9 @@ if [ "$PLATFORM" = "snp" ]; then
         SNP_ATTESTATION_CONTENT=$(jq '.' "$SNP_ATTESTATION_CONFIG")
         jq --argjson content "$SNP_ATTESTATION_CONTENT" '.attestation = $content' "$WORKSPACE"/dev-config.json > tmp.json && mv tmp.json "$WORKSPACE"/dev-config.json
     else
-        echo "SNP attestation config file not found: $SNP_ATTESTATION_CONFIG"
+        echo "SNP attestation config file not found or not set: $SNP_ATTESTATION_CONFIG"
         exit 1
     fi
-else
-    sed -i "s/%SNP_ATTESTATION_CONFIG%/{}/g" "$WORKSPACE"/dev-config.json
 fi
 
 cp -r ./app/constitution "$WORKSPACE"
