@@ -185,14 +185,16 @@ The required configs can be set using the `SNP_ATTESTATION_CONFIG` environment v
 }
 ```
 
+Please refer to [the CCF documentation on the AMD SEV-SNP platform](https://microsoft.github.io/CCF/main/operations/platforms/snp.html) for more details on how to set these values in each platform.
+
 To start SCITT on SNP, you would run:
 
 ```sh
-SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json PLATFORM=snp ./start.sh
+PLATFORM=snp SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./start.sh
 ```
 
 To run the SCITT functional tests on SNP, you would run:
 
 ```sh
-SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json PLATFORM=snp ./run_functional_tests.sh
+PLATFORM=snp SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
 ```
