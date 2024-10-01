@@ -7,8 +7,11 @@ set -ex
 DOCKER=${DOCKER:-0}
 PLATFORM=${PLATFORM:-sgx}
 
-# Variable to set enable performance tests
+# Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
+
+# SNP attestation config
+SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
 
 # If ELEVATE_PRIVILEGES is non-empty, the functional tests will be run with
 # the NET_BIND_SERVICE capability, allowing certain tests that bind
@@ -43,7 +46,7 @@ if [ "$DOCKER" = "1" ]; then
     TEST_ARGS="-s"
 else
     SCITT_DIR=/tmp/scitt
-    TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution"
+    TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
 fi
 
 echo "Setting up python virtual environment."

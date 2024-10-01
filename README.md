@@ -11,7 +11,7 @@ This research project is at an early stage and is open sourced to facilitate aca
 
 The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
 
-Being a CCF application, scitt-ccf-ledger runs in SGX enclaves. However, for testing purposes, it also supports running on non-SGX hardware in what is called *virtual* mode.
+Being a CCF application, scitt-ccf-ledger runs in Intel SGX enclaves or AMD SEV-SNP platforms. However, for testing purposes, it also supports running on regular hardware in what is called *virtual* mode.
 
 All instructions below assume Linux as the operating system.
 
@@ -19,10 +19,11 @@ All instructions below assume Linux as the operating system.
 
 Use the following commands to start a single-node CCF network with the scitt-ccf-ledger application setup for development purposes.
 
-Note: `PLATFORM` should be set to `sgx` or `virtual` to select the type of build.
+> Note: `PLATFORM` should be set to `sgx`, `virtual`, or `snp` to select the type of build.
+> Note: if `PLATFORM` is set to `snp`, additional configuration is required. Refer to [this section](DEVELOPMENT.md#amd-sev-snp-platform) for more details.
 
 ```sh
-export PLATFORM=<sgx|virtual>
+export PLATFORM=<sgx|virtual|snp>
 ./docker/build.sh
 ./docker/run-dev.sh
 ```

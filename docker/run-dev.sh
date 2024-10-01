@@ -22,6 +22,9 @@ WORKSPACE=${WORKSPACE:-"workspace/"}
 
 VOLUME_NAME="${CONTAINER_NAME}-vol"
 
+# SNP attestation config
+SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
+
 function cleanup() {
     docker stop "$CONTAINER_NAME" || true
     docker rm "$CONTAINER_NAME" || true
@@ -47,11 +50,29 @@ elif [ "$PLATFORM" = "virtual" ]; then
     enclave_type="Virtual"
     enclave_file="libscitt.virtual.so"
     DOCKER_FLAGS=()
+elif [ "$PLATFORM" = "snp" ]; then
+    enclave_platform="SNP"
+    enclave_type="Release"
+    enclave_file="libscitt.snp.so"
+    DOCKER_FLAGS=()
+else 
+    echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
+    exit 1
 fi
 sed -i "s/%ENCLAVE_PLATFORM%/$enclave_platform/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%ENCLAVE_TYPE%/$enclave_type/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%ENCLAVE_FILE%/$enclave_file/g" "$WORKSPACE"/dev-config.json
 sed -i "s/%CCF_PORT%/$CCF_PORT/g" "$WORKSPACE"/dev-config.json
+
+if [ "$PLATFORM" = "snp" ]; then
+    if [ -f "$SNP_ATTESTATION_CONFIG" ]; then
+        SNP_ATTESTATION_CONTENT=$(jq '.' "$SNP_ATTESTATION_CONFIG")
+        jq --argjson content "$SNP_ATTESTATION_CONTENT" '.attestation = $content' "$WORKSPACE"/dev-config.json > tmp.json && mv tmp.json "$WORKSPACE"/dev-config.json
+    else
+        echo "SNP attestation config file not found or not set: $SNP_ATTESTATION_CONFIG"
+        exit 1
+    fi
+fi
 
 cp -r ./app/constitution "$WORKSPACE"
 

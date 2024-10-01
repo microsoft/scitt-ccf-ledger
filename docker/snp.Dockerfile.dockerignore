@@ -1,0 +1,4 @@
+*
+!app
+!3rdparty/attested-fetch
+!docker
