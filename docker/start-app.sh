@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
 # This script just runs cchost with some input arguments. Due to SNP cce policy limitations, we cannot
 # express a container command containing an environment variable as the value is dynamic. By
