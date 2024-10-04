@@ -231,6 +231,10 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y libcurl4-openssl-dev
+            displayName: Install additional packages
           - script: ./build.sh
             displayName: Build snp
             env:
@@ -241,6 +245,8 @@ extends:
       - job: snp_docker_build
         pool:
           type: linux
+          isCustom: true
+          name: scitt-dc-pool
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: snp
