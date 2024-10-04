@@ -35,6 +35,11 @@ jobs:
             nodes: [self-hosted, 1ES.Pool=gha-sgx-scitt-pool]
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device /dev/sgx_provision:/dev/sgx_provision 
             unit_tests_enabled: OFF
+          - name: snp
+            image: snp
+            nodes: ubuntu-20.04
+            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
+            unit_tests_enabled: OFF
     runs-on: ${{ matrix.platform.nodes }}
     container:
       image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-5.0.6
@@ -70,8 +75,9 @@ jobs:
       - run: apt-get update && apt-get install -y libcurl4-openssl-dev faketime clang-tidy-10
       - run: ./build.sh
       - run: ./run_unit_tests.sh
-        if: "${{ matrix.platform.name != 'sgx' }}"
+        if: "${{ matrix.platform.name == 'virtual' }}"
       - run: ./run_functional_tests.sh --enable-faketime
+        if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform for the moment
       - name: "Upload logs for ${{ matrix.platform.name }}"
         uses: actions/upload-artifact@v4
         if: success() || failure()

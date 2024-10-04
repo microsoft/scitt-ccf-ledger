@@ -212,3 +212,55 @@ extends:
               PLATFORM: sgx
               DOCKER: 1
               ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
+
+    - stage: snp_build
+      jobs:
+      - job: snp_build
+        pool:
+          type: linux
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          PLATFORM: snp
+          CXXFLAGS: -ferror-limit=0
+          NINJA_FLAGS: -k 0 
+          LinuxContainerImage: 'ghcr.io/microsoft/ccf/app/dev/snp:ccf-${{ parameters.CCF_VERSION }}'
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            fetchTags: true
+            fetchDepth: 0
+            lfs: false
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y libcurl4-openssl-dev
+            displayName: Install additional packages
+          - script: ./build.sh
+            displayName: Build snp
+            env:
+              PLATFORM: snp
+              BUILD_TESTS: OFF
+    
+    - stage: snp_docker_build
+      jobs:
+      - job: snp_docker_build
+        pool:
+          type: linux
+          isCustom: true
+          name: scitt-dc-pool
+        variables:
+          ob_outputDirectory: $(Build.SourcesDirectory)/out
+          PLATFORM: snp
+          CXXFLAGS: -ferror-limit=0
+          NINJA_FLAGS: -k 0 
+        steps:
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            fetchTags: true
+            fetchDepth: 0
+            lfs: false
+          - script: ./docker/build.sh
+            displayName: Build snp with Docker
+            env:
+              PLATFORM: snp
