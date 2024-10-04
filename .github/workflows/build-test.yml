@@ -77,7 +77,7 @@ jobs:
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"
       - run: ./run_functional_tests.sh --enable-faketime
-        if: "${{ matrix.platform.name != 'snp' }}"
+        if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform for the moment
       - name: "Upload logs for ${{ matrix.platform.name }}"
         uses: actions/upload-artifact@v4
         if: success() || failure()
