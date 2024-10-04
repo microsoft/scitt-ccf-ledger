@@ -239,6 +239,7 @@ extends:
             displayName: Build snp
             env:
               PLATFORM: snp
+              BUILD_TESTS: OFF
     
     - stage: snp_docker_build
       jobs:
