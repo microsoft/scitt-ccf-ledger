@@ -46,4 +46,7 @@ COPY --from=builder /usr/src/app/attested-fetch /tmp/scitt/
 
 WORKDIR /host/node
 
+COPY start-app.sh start-app.sh
+RUN ["chmod", "+x", "start-app.sh"]
+
 ENTRYPOINT [ "cchost" ]
