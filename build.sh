@@ -66,7 +66,6 @@ CC="$CC" CXX="$CXX" \
     -DCOMPILE_TARGET="${PLATFORM}" \
     -DCCF_UNSAFE="${CCF_UNSAFE}" \
     -DBUILD_TESTS="${BUILD_TESTS}" \
-    -DLVI_MITIGATIONS=OFF \
     -DCMAKE_INSTALL_PREFIX=$install_dir \
     -DENABLE_CLANG_TIDY="${ENABLE_CLANG_TIDY}" \
     "$root_dir/app"
