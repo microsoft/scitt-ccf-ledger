@@ -137,7 +137,8 @@ namespace scitt::did
         break;
 #else
       case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2:
-        throw AttestedResolutionError("Open Enclave attestation is not supported");
+        throw AttestedResolutionError(
+          "Open Enclave attestation is not supported");
         break;
 #endif
 
