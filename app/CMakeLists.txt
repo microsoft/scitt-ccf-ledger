@@ -18,6 +18,9 @@ set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx'
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
+# Added as option to enable Azure Linux build in 6.0.0-dev2, will eventually be removed
+# once the transition to libstdc++ is complete
+set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
 set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
 set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path to the DID Web resolver script")
@@ -25,7 +28,7 @@ set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
-find_package(ccf_${COMPILE_TARGET} 5.0.6 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
