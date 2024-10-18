@@ -7,7 +7,6 @@
 #include "did/resolver.h"
 #include "did/web/syntax.h"
 #include "generated/constants.h"
-#include "openenclave.h"
 #include "util.h"
 
 #include <algorithm>
@@ -117,49 +116,7 @@ namespace scitt::did
   static void verify_openenclave_attestation(
     const AttestedResolution& resolution)
   {
-    if (
-      !resolution.evidence.has_value() || !resolution.endorsements.has_value())
-    {
-      throw AttestedResolutionError(
-        "Evidence or endorsements missing from attestation");
-    }
-
-    // Verify evidence and extract claims.
-    oe::VerifyEvidenceResult evidence_result;
-    try
-    {
-      evidence_result = oe::verify_evidence(
-        oe::OE_UUID_SGX_ECDSA, *resolution.evidence, *resolution.endorsements);
-    }
-    catch (const std::exception& e)
-    {
-      throw AttestedResolutionError(
-        fmt::format("Failed to verify Open Enclave evidence: {}", e.what()));
-    }
-
-    // Match MRENCLAVE claim against known value.
-    auto mrenclave = evidence_result.claims.at("unique_id");
-
-    std::vector<uint8_t> expected_mrenclave =
-      ccf::ds::from_hex(ATTESTED_FETCH_MRENCLAVE_HEX);
-    if (mrenclave != expected_mrenclave)
-    {
-      throw AttestedResolutionError("MRENCLAVE does not match expected value");
-    }
-
-    // Match sgx_report_data custom claim against hash of format and data.
-    auto sgx_report_data = evidence_result.custom_claims.at("sgx_report_data");
-    auto format_hash = ccf::crypto::Sha256Hash(to_string(resolution.format));
-    auto data_hash = ccf::crypto::Sha256Hash(resolution.data);
-    auto computed_sgx_report_data =
-      ccf::crypto::Sha256Hash(format_hash, data_hash);
-    auto computed_sgx_report_data_vec = std::vector<uint8_t>(
-      computed_sgx_report_data.h.begin(), computed_sgx_report_data.h.end());
-    if (sgx_report_data != computed_sgx_report_data_vec)
-    {
-      throw AttestedResolutionError(
-        "SGX report data does not match computed hash");
-    }
+    throw AttestedResolutionError("Open Enclave attestation is not supported");
   }
 
   static DidResolutionResult verify_attested_resolution(
@@ -180,7 +137,7 @@ namespace scitt::did
         break;
 #else
       case EvidenceFormat::ATTESTED_FETCH_OE_SGX_ECDSA_V2:
-        verify_openenclave_attestation(resolution);
+        throw AttestedResolutionError("Open Enclave attestation is not supported");
         break;
 #endif
 
