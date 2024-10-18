@@ -31,21 +31,18 @@ docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /o
 
 ### Develop within a host machine
 
-It is expected that you have Ubuntu 20.04. Follow the steps below to setup your development environment, replacing `<sgx|virtual|snp>` with either one, as desired:
+It is expected that you have Ubuntu 20.04. Follow the steps below to setup your development environment, replacing `<virtual|snp>` with either one, as desired:
 
-1. Set up your host machine: 
-    - If using SGX, it is recommended that you provision a virtual machine:
-      - On Azure, provision a DC-series VM, for example, [DCsv3](https://learn.microsoft.com/en-us/azure/virtual-machines/dcv3-series)
-      - Enable running SGX enclaves: `sudo usermod -a -G sgx_prv $(whoami)`
+1. Set up your host machine:
     - If using virtual mode, running Ubuntu 20.04 on any platform (WSL, VM, etc.) is enough
     - If using SNP, you should use a machine with SNP hardware support and a platform that allows to enforce security policies for containers running on it (e.g., [Confidential Containers on AKS](https://learn.microsoft.com/en-us/azure/aks/confidential-containers-overview), [Confidential Containers on ACI](https://learn.microsoft.com/en-us/azure/container-instances/container-instances-confidential-overview))
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-5.0.6.tar.gz
-    tar xvzf ccf-5.0.6.tar.gz
-    cd CCF-ccf-5.0.6/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=5.0.6 -e platform=<sgx|virtual|snp> -e clang_version=<11|15>
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.0-dev2.tar.gz
+    tar xvzf ccf-6.0.0-dev2.tar.gz
+    cd CCF-ccf-6.0.0-dev2/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=6.0.0-dev2 -e platform=<virtual|snp> -e clang_version=15
     ```
 
 ## Compiling
