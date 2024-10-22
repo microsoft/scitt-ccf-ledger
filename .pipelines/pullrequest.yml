@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 5.0.6
+  default: 6.0.0-dev2
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -146,72 +146,6 @@ extends:
       # Alternatively, it was being executed through the container in azure pipelines but
       # when using custom pool image the usual container build support is not there so it 
       # need to be run manually through docker.
-
-      - job: test_sgx_with_perf
-        pool:
-          type: linux
-          isCustom: true
-          name: scitt-dc-pool
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
-        steps:
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            lfs: false
-          - script: |
-              docker run --rm \
-                --device /dev/sgx_enclave:/dev/sgx_enclave \
-                --device /dev/sgx_provision:/dev/sgx_provision \
-                --volume /dev/sgx:/dev/sgx \
-                --volume /var/run/docker.sock:/var/run/docker.sock \
-                --volume $(pwd):/opt/app \
-                --workdir /opt/app \
-                --env PLATFORM="sgx" \
-                --env CMAKE_BUILD_TYPE="Release" \
-                --env CCF_UNSAFE="OFF" \
-                --env BUILD_TESTS="OFF" \
-                --env ENABLE_CLANG_TIDY="OFF" \
-                --env NINJA_FLAGS="-k 0" \
-                --env CXXFLAGS="-ferror-limit=0" \
-                --env ENABLE_PERF_TESTS="true" \
-                ghcr.io/microsoft/ccf/app/dev/sgx:ccf-${{ parameters.CCF_VERSION }} /bin/bash -c '\
-                  git config --global --add safe.directory "*"; \
-                  sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx/provision) sgx_prv; \
-                  sudo usermod -a -G sgx_prv $(whoami); \
-                  ./build.sh && \
-                  ./run_functional_tests.sh; \
-                  '
-            displayName: Build test sgx through a dev container
-
-    - stage: test_sgx_docker_build
-      jobs:
-      - job: test_sgx_docker_build
-        pool:
-          type: linux
-          isCustom: true
-          name: scitt-dc-pool
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
-          PLATFORM: sgx
-          CXXFLAGS: -ferror-limit=0
-          NINJA_FLAGS: -k 0
-        steps:
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            fetchTags: true
-            fetchDepth: 0
-            lfs: false
-          - script: ./docker/build.sh
-            displayName: Build sgx with Docker
-          - template: .pipelines/python.yml@self
-          - script: ./run_functional_tests.sh
-            displayName: Run Functional Tests
-            env:
-              PLATFORM: sgx
-              DOCKER: 1
-              ELEVATE_PRIVILEGES: true # needs privileged access to run did server on 443 port
 
     - stage: snp_build
       jobs:
