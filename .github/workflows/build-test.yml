@@ -13,7 +13,7 @@ jobs:
   checks:
     name: Format and License Checks
     runs-on: ubuntu-20.04
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev2
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev3
     steps:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Checkout repository
@@ -44,7 +44,7 @@ jobs:
           - platform: { name: sgx }
     runs-on: ${{ matrix.platform.nodes }}
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-dev2
+      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-dev3
       options: ${{ matrix.platform.options }}
       env:
         # Helps to distinguish between CI and local builds.
