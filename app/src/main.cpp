@@ -24,6 +24,7 @@
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/common_auth_policies.h>
 #include <ccf/crypto/base64.h>
+#include <ccf/crypto/cose.h>
 #include <ccf/ds/logger.h>
 #include <ccf/endpoint.h>
 #include <ccf/historical_queries_adapter.h>
@@ -318,10 +319,13 @@ namespace scitt
 
       // Compute the hash of the to-be-signed countersigning structure
       // and set it as CCF transaction claim for use in receipt validation.
-      SCITT_DEBUG("Add countersignature as CCF application claim for the tx");
-      auto claims_digest =
-        cose::create_countersign_tbs_hash(body, sign_protected);
-      ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
+      // SCITT_DEBUG("Add countersignature as CCF application claim for the
+      // tx"); auto claims_digest =
+      //   cose::create_countersign_tbs_hash(body, sign_protected);
+      // ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
+
+      // Claims digest is the digest of the input signed statement
+      ctx.rpc_ctx->set_claims_digest(ccf::ClaimsDigest::Digest(body));
 
       // Store the original COSE_Sign1 message in the KV.
       SCITT_DEBUG("Store submitted claim in KV store");
@@ -605,6 +609,70 @@ namespace scitt
         HTTP_GET,
         scitt::historical::adapter(
           get_entry_receipt, state_cache, is_tx_committed),
+        authn_policy)
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .install();
+
+      static constexpr auto get_entry_statement_path =
+        "/entries/{txid}/statement";
+      auto get_entry_statement = [this](
+                                   EndpointContext& ctx,
+                                   ccf::historical::StatePtr historical_state) {
+        SCITT_DEBUG("Get transaction historical state");
+        auto historical_tx = historical_state->store->create_read_only_tx();
+
+        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+        auto entry = entries->get();
+        if (!entry.has_value())
+        {
+          throw BadRequestError(
+            errors::InvalidInput,
+            fmt::format(
+              "Transaction ID {} does not correspond to a submission.",
+              historical_state->transaction_id.to_str()));
+        }
+
+        auto proof = ccf::describe_merkle_proof_v1(*historical_state->receipt);
+        if (!proof.has_value())
+        {
+          throw InternalError("Failed to get Merkle proof");
+        }
+
+        auto signature = describe_cose_signature_v1(*historical_state->receipt);
+        if (!signature.has_value())
+        {
+          throw InternalError("Failed to get COSE signature");
+        }
+
+        // See
+        // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
+        // Page 11, vdp is the label for verifiable-proods in the unprotected
+        // header of the receipt
+        int64_t vdp = 396;
+        // -1 is the label for inclusion-proofs
+        auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
+
+        auto cose_receipt = ccf::cose::edit::set_unprotected_header(
+          *signature, vdp, inclusion_proof, *proof);
+
+        // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
+        // Page 16, 394 is the label for an array of receipts in the unprotected
+        // header
+        int64_t receipts = 394;
+        auto statement = ccf::cose::edit::set_unprotected_header(
+          *entry, receipts, ccf::cose::edit::pos::InArray{}, cose_receipt);
+
+        ctx.rpc_ctx->set_response_body(statement);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::COSE);
+      };
+
+      make_endpoint(
+        get_entry_statement_path,
+        HTTP_GET,
+        scitt::historical::adapter(
+          get_entry_statement, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();
