@@ -13,7 +13,7 @@ from pycose.messages import Sign1Message
 from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.crypto import cert_pem_to_der
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_receipt, verify_transparent_statement
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
@@ -144,8 +144,8 @@ class TestNonCanonicalEncoding:
 
     def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
-        receipt = client.submit_claim_and_confirm(claim).receipt
-        verify_receipt(claim, trust_store, receipt)
+        statement = client.submit_and_confirm(claim).receipt_bytes
+        verify_transparent_statement(statement, trust_store, claim)
 
     def test_embed_receipt(self, client: Client, trust_store, claim):
         """

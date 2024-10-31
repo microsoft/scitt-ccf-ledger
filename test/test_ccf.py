@@ -7,7 +7,7 @@ import pytest
 
 from pyscitt import crypto, governance
 from pyscitt.client import Client
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_receipt, verify_transparent_statement
 
 from .infra.did_web_server import DIDWebServer
 
@@ -34,11 +34,8 @@ def test_submit_claim(client: Client, did_web, trust_store, params):
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt_bytes
-    verify_receipt(claims, trust_store, receipt)
-
-    embedded = crypto.embed_receipt_in_cose(claims, receipt)
-    verify_receipt(embedded, trust_store, None)
+    statement = client.submit_and_confirm(claims).receipt_bytes
+    verify_transparent_statement(statement, trust_store, claims)
 
 
 def test_default_did_port(client: Client, trust_store, tmp_path):

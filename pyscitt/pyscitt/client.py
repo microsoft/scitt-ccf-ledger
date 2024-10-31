@@ -577,6 +577,21 @@ class Client(BaseClient):
         receipt = self.get_receipt(tx, decode=False)
         return Submission(operation_id, tx, receipt, False)
 
+    def submit_and_confirm(
+        self,
+        claim: bytes,
+    ) -> Submission:
+        headers = {"Content-Type": "application/cose"}
+        response = self.post(
+            "/entries",
+            headers=headers,
+            content=claim,
+        ).json()
+        operation_id = response["operationId"]
+        tx = self.wait_for_operation(operation_id)
+        statement = self.get_statement(tx)
+        return Submission(operation_id, tx, statement, False)
+
     def wait_for_operation(self, operation: str) -> str:
         response = self.get(
             f"/operations/{operation}",
@@ -632,6 +647,13 @@ class Client(BaseClient):
             return Receipt.decode(response.content)
         else:
             return response.content
+
+    def get_statement(self, tx: str, *, operation: bool = False) -> bytes:
+        if operation:
+            tx = self.wait_for_operation(tx)
+
+        response = self.get_historical(f"/entries/{tx}/statement")
+        return response.content
 
     def enumerate_claims(
         self, *, start: Optional[int] = None, end: Optional[int] = None

@@ -5,11 +5,16 @@ import base64
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Dict, Optional, Union
 
 import cbor2
+import ccf.cose
 import pycose
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.x509 import load_der_x509_certificate
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
@@ -49,6 +54,11 @@ class ServiceParameters:
 
 
 class TrustStore(ABC):
+    @property
+    @abstractmethod
+    def services(self):
+        pass
+
     @abstractmethod
     def lookup(self, phdr) -> ServiceParameters:
         """
@@ -87,6 +97,33 @@ def verify_receipt(
 
     service_params = service_trust_store.lookup(decoded_receipt.phdr)
     decoded_receipt.verify(msg, service_params)
+
+
+def verify_transparent_statement(
+    statement: bytes, service_trust_store: TrustStore, input_signed_statement: bytes
+):
+    trust_store_keys = {}
+    for _, service_params in service_trust_store.services.items():
+        cert = load_der_x509_certificate(service_params.certificate, default_backend())
+        key = cert.public_key()
+        kid = sha256(
+            key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+        ).digest()
+        trust_store_keys[kid] = key
+    # Assume a single service key
+    service_key = list(trust_store_keys.values())[0]
+
+    st = Sign1Message.decode(statement)
+    for receipt in st.uhdr[crypto.SCITTReceipts]:
+        ccf.cose.verify_receipt(receipt, service_key)
+        # This needs to be done in ccf.cose.verify_receipt
+        r = cbor2.loads(receipt).value
+        p = cbor2.loads(r[1][396][-1][0])
+        uc = p[1][2]
+        if sha256(input_signed_statement).digest() != uc:
+            raise ValueError(
+                "Statement digest does not match the digest in the receipt"
+            )
 
 
 class StaticTrustStore(TrustStore):
@@ -153,6 +190,7 @@ class DIDDocumentTrustStore(TrustStore):
     """
 
     document: dict
+    services: dict
 
     def __init__(self, document: dict):
         self.document = document
@@ -187,6 +225,8 @@ class DIDResolverTrustStore(TrustStore):
     The trust store does not restrict which issuers are allowed, only that the
     receipt signature matches the identifier.
     """
+
+    services: dict
 
     def __init__(self, resolver: Optional[did.Resolver] = None):
         if resolver is not None:
