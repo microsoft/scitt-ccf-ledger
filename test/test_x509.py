@@ -13,7 +13,7 @@ from pycose.messages import Sign1Message
 
 from pyscitt import crypto, governance
 from pyscitt.client import Client
-from pyscitt.verify import TrustStore, verify_receipt
+from pyscitt.verify import TrustStore, verify_receipt, verify_transparent_statement
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
@@ -45,32 +45,8 @@ def test_submit_claim_x5c(
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt
-    # check if the header struct contains mrenclave header
-    assert "enclave_measurement" in receipt.phdr
-    env_platform = os.environ.get("PLATFORM")
-    actual_measurement = receipt.phdr["enclave_measurement"]
-    expected_virtual_measurement = (
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    )
-    if env_platform == "virtual":
-        assert actual_measurement == expected_virtual_measurement
-    elif env_platform == "sgx":
-        assert (
-            len(actual_measurement) == 64
-            and actual_measurement != expected_virtual_measurement
-        )
-    elif env_platform == "snp":
-        assert (
-            len(actual_measurement) == 96
-            and actual_measurement != expected_virtual_measurement
-        )
-    else:
-        raise Exception(
-            f"Unknown PLATFORM, should be sgx, virtual, or snp: {env_platform}"
-        )
-
-    verify_receipt(claims, trust_store, receipt)
+    statement = client.submit_and_confirm(claims).receipt_bytes
+    verify_transparent_statement(statement, trust_store, claims)
 
 
 def test_invalid_certificate_chain(
@@ -259,12 +235,5 @@ def test_submit_claim_notary_x509(
     msg.key = CoseKey.from_pem_private_key(identity.private_key)
     claim = msg.encode(tag=True)
 
-    submission = client.submit_claim_and_confirm(claim)
-    verify_receipt(claim, trust_store, submission.receipt)
-
-    # Embedding the receipt requires re-encoding the unprotected header.
-    # Notary has x5chain in the unprotected header.
-    # This checks whether x5chain is preserved after re-encoding by simply
-    # submitting the claim again.
-    claim_with_receipt = client.get_claim(submission.tx, embed_receipt=True)
-    client.submit_claim_and_confirm(claim_with_receipt)
+    statement = client.submit_and_confirm(claim).receipt_bytes
+    verify_transparent_statement(statement, trust_store, claim)

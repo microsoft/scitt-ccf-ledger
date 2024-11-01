@@ -317,14 +317,10 @@ namespace scitt
           measurement);
       }
 
-      // Compute the hash of the to-be-signed countersigning structure
-      // and set it as CCF transaction claim for use in receipt validation.
-      // SCITT_DEBUG("Add countersignature as CCF application claim for the
-      // tx"); auto claims_digest =
-      //   cose::create_countersign_tbs_hash(body, sign_protected);
-      // ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
-
-      // Claims digest is the digest of the input signed statement
+      // Claims digest is the digest of the input signed statement for now,
+      // but we should default to stripping unprotected headers, and only
+      // allow a selection to pass through, if configured. Accepting all
+      // unprotected headers blindly is unwise.
       ctx.rpc_ctx->set_claims_digest(ccf::ClaimsDigest::Digest(body));
 
       // Store the original COSE_Sign1 message in the KV.

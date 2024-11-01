@@ -131,7 +131,7 @@ class StaticTrustStore(TrustStore):
     A static trust store, based on a list of trusted service certificates.
     """
 
-    services: Dict[str, ServiceParameters]
+    services = {}
 
     def __init__(self, services: Dict[str, ServiceParameters]):
         self.services = services
