@@ -39,13 +39,13 @@ To reproduce the same measurement do a docker build locally using the expected b
 
     ```
     $ cat docker/enclave.Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=6.0.0-dev4
+    ARG CCF_VERSION=6.0.0-dev5
     ```
 
 - Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
 
     ```sh
-    $ export CCF_VERSION="6.0.0-dev4"
+    $ export CCF_VERSION="6.0.0-dev5"
     $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \

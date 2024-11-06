@@ -647,16 +647,21 @@ namespace scitt
         int64_t vdp = 396;
         // -1 is the label for inclusion-proofs
         auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
+        ccf::cose::edit::desc::Value inclusion_desc{
+          inclusion_proof, vdp, *proof};
 
-        auto cose_receipt = ccf::cose::edit::set_unprotected_header(
-          *signature, vdp, inclusion_proof, *proof);
+        auto cose_receipt =
+          ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
 
         // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
         // Page 16, 394 is the label for an array of receipts in the unprotected
         // header
         int64_t receipts = 394;
-        auto statement = ccf::cose::edit::set_unprotected_header(
-          *entry, receipts, ccf::cose::edit::pos::InArray{}, cose_receipt);
+        ccf::cose::edit::desc::Value receipts_desc{
+          ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
+
+        auto statement =
+          ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 
         ctx.rpc_ctx->set_response_body(statement);
         ctx.rpc_ctx->set_response_header(

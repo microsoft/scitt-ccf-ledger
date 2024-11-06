@@ -115,15 +115,9 @@ def verify_transparent_statement(
 
     st = Sign1Message.decode(statement)
     for receipt in st.uhdr[crypto.SCITTReceipts]:
-        ccf.cose.verify_receipt(receipt, service_key)
-        # This needs to be done in ccf.cose.verify_receipt
-        r = cbor2.loads(receipt).value
-        p = cbor2.loads(r[1][396][-1][0])
-        uc = p[1][2]
-        if sha256(input_signed_statement).digest() != uc:
-            raise ValueError(
-                "Statement digest does not match the digest in the receipt"
-            )
+        ccf.cose.verify_receipt(
+            receipt, service_key, sha256(input_signed_statement).digest()
+        )
 
 
 class StaticTrustStore(TrustStore):
@@ -131,7 +125,7 @@ class StaticTrustStore(TrustStore):
     A static trust store, based on a list of trusted service certificates.
     """
 
-    services = {}
+    services: Dict[str, ServiceParameters] = {}
 
     def __init__(self, services: Dict[str, ServiceParameters]):
         self.services = services
