@@ -138,11 +138,11 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
     second_identity = second_ca.create_identity(alg="ES256", kty="ec")
     second_claims = crypto.sign_json_claimset(second_identity, {"foo": "bar"})
 
-    first_receipt = client.submit_claim_and_confirm(first_claims).receipt
-    second_receipt = client.submit_claim_and_confirm(second_claims).receipt
+    first_statement = client.submit_and_confirm(first_claims).receipt_bytes
+    second_statement = client.submit_and_confirm(second_claims).receipt_bytes
 
-    verify_receipt(first_claims, trust_store, first_receipt)
-    verify_receipt(second_claims, trust_store, second_receipt)
+    verify_transparent_statement(first_statement, trust_store, first_claims)
+    verify_transparent_statement(second_statement, trust_store, second_claims)
 
 
 def test_self_signed_untrusted(client: Client):
