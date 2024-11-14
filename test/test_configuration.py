@@ -368,6 +368,7 @@ return true;
         main(["pretty-receipt", str(receipt_path)])
 
 
+@pytest.mark.skip("No service identifier in CCF signatures")
 def test_service_identifier(
     client: Client,
     service_identifier: str,

@@ -18,7 +18,7 @@ set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx'
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
-# Added as option to enable Azure Linux build in 6.0.0-dev5, will eventually be removed
+# Added as option to enable Azure Linux build in 6.0.0-dev6, will eventually be removed
 # once the transition to libstdc++ is complete
 set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
