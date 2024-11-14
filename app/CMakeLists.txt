@@ -22,13 +22,9 @@ option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 # once the transition to libstdc++ is complete
 set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
-set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
-set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path to the DID Web resolver script")
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-
-find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
@@ -139,7 +135,6 @@ if (BUILD_TESTS)
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
     unit-tests/did/resolver_test.cpp
-    unit-tests/did/web/syntax_test.cpp
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)

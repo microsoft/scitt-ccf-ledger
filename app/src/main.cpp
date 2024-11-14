@@ -7,7 +7,6 @@
 #include "cose.h"
 #include "did/document.h"
 #include "did/resolver.h"
-#include "did/web/method.h"
 #include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
@@ -132,7 +131,6 @@ namespace scitt
   {
   private:
     std::shared_ptr<EntrySeqnoIndexingStrategy> entry_seqno_index = nullptr;
-
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
@@ -216,17 +214,11 @@ namespace scitt
         std::tie(claim_profile, phdr, uhdr) = verifier->verify_claim(
           body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
       }
-      catch (const did::DIDMethodNotSupportedError& e)
-      {
-        SCITT_DEBUG("Unsupported DID method: {}", e.what());
-        throw BadRequestError(errors::DIDMethodNotSupported, e.what());
-      }
       catch (const verifier::VerificationError& e)
       {
         SCITT_DEBUG("Claim verification failed: {}", e.what());
         throw BadRequestError(errors::InvalidInput, e.what());
       }
-
       // Retrieve current enclave measurement of this node
       // See ccf logic in `/quotes/self`
       std::string measurement;
@@ -267,17 +259,7 @@ namespace scitt
       }
       else
       {
-        if (verifier::contains_cwt_issuer(phdr))
-        {
-          SCITT_DEBUG("No policy applied, but CWT issuer present");
-          throw BadRequestError(
-            errors::PolicyFailed,
-            "Policy was not met: CWT issuer present but no policy configured");
-        }
-        else
-        {
-          SCITT_DEBUG("No policy applied");
-        }
+        SCITT_DEBUG("No policy applied");
       }
 
       auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
@@ -341,50 +323,6 @@ namespace scitt
         "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
     }
 
-    /**
-     * Start an asynchronous claim registration, by triggering a DID resolution
-     * for the specified issuer. When the resolution completes, the claim will
-     * be registered on the ledger.
-     *
-     * This works by creating an asynchronous operation with a callback, and
-     * starting an external subprocess to do the actual resolution. When the
-     * subprocess completes, it invokes the callback URL with the result.
-     * Additionally, the subprocess carries a context bytestring which we use to
-     * carry over some data.
-     */
-    void start_asynchronous_registration(
-      EndpointContext& ctx,
-      timespec host_time,
-      const std::string& issuer,
-      const std::vector<uint8_t>& body)
-    {
-      auto nonce = ccf::ds::to_hex(ENTROPY->random(16));
-
-      DIDFetchContext callback_context{
-        .body = body,
-        .nonce = nonce,
-        .issuer = issuer,
-      };
-      std::string context_json = nlohmann::json(callback_context).dump();
-      std::vector<uint8_t> context_bytes(
-        context_json.begin(), context_json.end());
-      ccf::crypto::Sha256Hash context_digest(context_bytes);
-
-      auto trigger =
-        [this, issuer, nonce, context_bytes](const std::string& callback_url) {
-          SCITT_INFO(
-            "Triggering asynchronous DID fetch for {}, callback {}",
-            issuer,
-            callback_url);
-
-          did::web::DidWebResolver::trigger_asynchronous_resolution(
-            context, callback_url, context_bytes, issuer, nonce);
-        };
-
-      start_asynchronous_operation(
-        host_time, context, ctx, context_digest, trigger);
-    }
-
   public:
     AppEndpoints(ccf::AbstractNodeContext& context_) :
       ccf::UserEndpointRegistry(context_)
@@ -401,12 +339,6 @@ namespace scitt
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
         ENTRY_TABLE, context, 10000, 20);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
-
-      SCITT_DEBUG("Register DID:web resolver");
-      auto resolver = std::make_unique<did::UniversalResolver>();
-      resolver->register_resolver(std::make_unique<did::web::DidWebResolver>());
-
-      verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
@@ -429,15 +361,7 @@ namespace scitt
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
-        try
-        {
-          post_entry_common(ctx, host_time, body);
-        }
-        catch (const did::web::AsyncResolutionNeeded& e)
-        {
-          start_asynchronous_registration(ctx, host_time, e.did, body);
-          return;
-        }
+        post_entry_common(ctx, host_time, body);
 
         SCITT_DEBUG("Claim was submitted synchronously");
         record_synchronous_operation(host_time, ctx.tx);
@@ -456,19 +380,6 @@ namespace scitt
           {
             throw InternalError(
               fmt::format("Failed to retrieve host time: {}", result));
-          }
-
-          if (callback_result.has_value())
-          {
-            auto resolution = callback_result->get<did::AttestedResolution>();
-            SCITT_INFO(
-              "Updating DID document for {}", post_entry_context.issuer);
-            did::web::DidWebResolver::update_did_document(
-              host_time,
-              ctx.tx,
-              resolution,
-              post_entry_context.issuer,
-              post_entry_context.nonce);
           }
 
           // We intentionally don't catch AsyncResolutionNeeded this time

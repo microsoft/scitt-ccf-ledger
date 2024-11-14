@@ -18,7 +18,6 @@ from pyscitt.cli.main import main
 from pyscitt.governance import ProposalNotAccepted
 
 from .infra.assertions import service_error
-from .infra.did_web_server import DIDWebServer
 from .infra.generate_cacert import generate_ca_cert_and_key
 
 
@@ -58,106 +57,6 @@ def test_smoke_test(run, client, tmp_path: Path):
     (tmp_path / "config.json").write_text(
         json.dumps({"authentication": {"allow_unauthenticated": True}})
     )
-
-    # We could use the did_web fixture for this, but that sets up certs for us
-    # already, and we want to test the propose_ca_certs command.
-    with DIDWebServer(tmp_path) as server:
-        (tmp_path / "bundle.pem").write_text(server.cert_bundle)
-
-        run(
-            "governance",
-            "propose_configuration",
-            "--configuration",
-            tmp_path / "config.json",
-            with_service_url=True,
-            with_member_auth=True,
-        )
-
-        run(
-            "governance",
-            "propose_ca_certs",
-            "--name",
-            "did_web_tls_roots",
-            "--ca-certs",
-            tmp_path / "bundle.pem",
-            with_service_url=True,
-            with_member_auth=True,
-        )
-
-        print(server.port)
-        run(
-            "create-did-web",
-            "--url",
-            f"https://localhost:{server.port}/me",
-            "--kty",
-            "ec",
-            "--out-dir",
-            tmp_path / "me",
-        )
-
-        run(
-            "sign",
-            "--key",
-            tmp_path / "me" / "key.pem",
-            "--did-doc",
-            tmp_path / "me" / "did.json",
-            "--claims",
-            tmp_path / "claims.json",
-            "--content-type",
-            "application/json",
-            "--out",
-            tmp_path / "claims.cose",
-        )
-
-        run(
-            "split-payload",
-            tmp_path / "claims.cose",
-        )
-
-        run(
-            "submit",
-            "--skip-confirmation",
-            tmp_path / "claims.cose",
-            with_service_url=True,
-        )
-
-        run(
-            "submit",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            with_service_url=True,
-        )
-
-        run("pretty-receipt", tmp_path / "receipt.cbor")
-
-        run(
-            "validate",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            "--service-trust-store",
-            trust_store_path,
-        )
-
-        run(
-            "embed-receipt",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            "--out",
-            tmp_path / "claims.embedded.cose",
-        )
-
-        # make sure preview works for embedded receipts as well
-        run("pretty-receipt", tmp_path / "claims.embedded.cose")
-
-        run(
-            "validate",
-            tmp_path / "claims.embedded.cose",
-            "--service-trust-store",
-            trust_store_path,
-        )
 
 
 def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
@@ -358,60 +257,6 @@ def test_local_development(run, service_url, tmp_path: Path):
         "--url",
         service_url,
         with_member_auth=True,
-    )
-
-
-def test_create_ssh_did_web(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair()
-    ssh_private_key = crypto.private_key_pem_to_ssh(private_key)
-    ssh_public_key = crypto.pub_key_pem_to_ssh(public_key)
-
-    (tmp_path / "id_rsa").write_text(ssh_private_key)
-    (tmp_path / "id_rsa.pub").write_text(ssh_public_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234/me",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234/",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "sign",
-        "--key",
-        tmp_path / "id_rsa",
-        "--did-doc",
-        tmp_path / "me" / "did.json",
-        "--claims",
-        tmp_path / "claims.json",
-        "--content-type",
-        "application/json",
-        "--out",
-        tmp_path / "claims.cose",
     )
 
 

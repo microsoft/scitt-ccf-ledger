@@ -17,7 +17,6 @@ from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
-from .did_web_server import DIDWebServer
 from .proxy import Proxy
 from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
@@ -374,23 +373,6 @@ def client(base_client, configure_service):
     """
     configure_service({})
     return base_client
-
-
-@pytest.fixture(scope="class")
-def did_web(client, tmp_path_factory):
-    """
-    Create a DIDWebServer and add its TLS root to the SCITT service.
-
-    The server is shared across all tests of the same class.
-    """
-    with DIDWebServer(data_dir=tmp_path_factory.mktemp("did_web")) as did_web_server:
-        cert_bundle = did_web_server.cert_bundle
-        client.governance.propose(
-            governance.set_ca_bundle_proposal("did_web_tls_roots", cert_bundle),
-            must_pass=True,
-        )
-
-        yield did_web_server
 
 
 @pytest.fixture(scope="class")

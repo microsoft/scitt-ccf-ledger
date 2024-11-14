@@ -19,9 +19,9 @@ LOCUST_RUNTIME_SEC = 60
 @pytest.mark.perf
 @pytest.mark.disable_proxy
 class TestLoad:
-    def test_load(self, client: Client, did_web, tmp_path: Path):
+    def test_load(self, client: Client, trusted_ca, tmp_path: Path):
         for i in range(NUM_CLAIMS):
-            identity = did_web.create_identity()
+            identity = trusted_ca.create_identity(alg="ES256")
             claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
             (tmp_path / f"claim{i}.cose").write_bytes(claim)
 

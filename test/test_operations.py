@@ -9,19 +9,23 @@ from pyscitt.client import Client
 from . import constants
 from .infra.assertions import service_error
 from .infra.cchost import CCHost
-from .infra.did_web_server import DIDWebServer
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 @pytest.mark.isolated_test(enable_faketime=True)
-def test_purge_old_operations(
-    did_web: DIDWebServer,
+def test_purge_old_operations(    
     client: Client,
     cchost: CCHost,
+    trusted_ca: X5ChainCertificateAuthority,
+    length: int,
+    algorithm: str,
+    params: dict,
 ):
     """
     Operations are purged from the service's memory after a while.
     """
-    identity = did_web.create_identity()
+    identity = trusted_ca.create_identity(length=length, alg=algorithm, **params)
+
     claim = crypto.sign_json_claimset(identity, "Payload")
 
     # Create two operations, such that one will be old enough to be purged but

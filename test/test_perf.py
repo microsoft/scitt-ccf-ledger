@@ -41,30 +41,6 @@ class TestPerf:
 
         client = client.replace(wait_time=CLIENT_WAIT_TIME)
 
-        # Test did:web performance (uncached resolution).
-        latency_did_web_uncached_submit_s = measure_latency(
-            lambda claim: client.submit_claim(claim),
-            lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-        )
-        latency_did_web_uncached_submit_and_receipt_s = measure_latency(
-            lambda claim: client.submit_claim_and_confirm(claim),
-            lambda: crypto.sign_json_claimset(did_web.create_identity(), payload),
-        )
-
-        # Test did:web performance (cached resolution).
-        identity = did_web.create_identity()
-        claim = crypto.sign_json_claimset(identity, payload)
-
-        # Make sure DID document is cached.
-        client.submit_claim_and_confirm(claim)
-
-        latency_did_web_cached_submit_s = measure_latency(
-            lambda _: client.submit_claim(claim)
-        )
-        latency_did_web_cached_submit_and_receipt_s = measure_latency(
-            lambda _: client.submit_claim_and_confirm(claim)
-        )
-
         # Test x5c performance.
         identity = trusted_ca.create_identity(
             length=1, alg="ES256", kty="ec", ec_curve="P-256"
@@ -81,11 +57,7 @@ class TestPerf:
         # Uncached did:web resolution uses a local server and is therefore
         # faster than in a real-world scenario.
         stats = {
-            "latency_did_web_uncached_submit_s": latency_did_web_uncached_submit_s,
-            "latency_did_web_uncached_submit_and_receipt_s": latency_did_web_uncached_submit_and_receipt_s,
-            "latency_did_web_cached_submit_s": latency_did_web_cached_submit_s,
-            "latency_did_web_cached_submit_and_receipt_s": latency_did_web_cached_submit_and_receipt_s,
-            "latency_x5c_submit_s": latency_x5c_submit_s,
+    	    "latency_x5c_submit_s": latency_x5c_submit_s,
             "latency_x5c_submit_and_receipt_s": latency_x5c_submit_and_receipt_s,
         }
 

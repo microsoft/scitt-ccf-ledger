@@ -14,16 +14,15 @@ from pyscitt.did import Resolver, did_web_document_url
 from pyscitt.verify import DIDResolverTrustStore, verify_receipt
 
 from .infra.assertions import service_error
-from .infra.did_web_server import DIDWebServer
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class TestAcceptedAlgorithms:
     @pytest.fixture
-    def submit(self, client: Client, did_web: DIDWebServer):
+    def submit(self, client: Client, trusted_ca):
         def f(**kwargs):
             """Sign and submit the claims with a new identity"""
-            identity = did_web.create_identity(**kwargs)
+            identity = trusted_ca.create_identity(alg="ES256")
             claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
             client.submit_claim_and_confirm(claims)
 
@@ -67,7 +66,7 @@ class TestAcceptedAlgorithms:
 class TestAcceptedDIDIssuers:
     @pytest.fixture(scope="class")
     def identity(self, did_web):
-        return did_web.create_identity()
+        return did_web.create_identity(alg="ES256")
 
     @pytest.fixture(scope="class")
     def claims(self, identity):
@@ -124,7 +123,6 @@ class TestPolicyEngine:
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
         example_eku = "2.999"
 
@@ -219,7 +217,6 @@ export function apply(profile, phdr) {{
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
         example_eku = "2.999"
 
@@ -371,9 +368,10 @@ return true;
 def test_service_identifier(
     client: Client,
     service_identifier: str,
-    did_web: DIDWebServer,
+    trusted_ca: X5ChainCertificateAuthority,
 ):
-    identity = did_web.create_identity()
+    identity = trusted_ca.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256")
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # Receipts include an issuer and kid.
@@ -389,9 +387,11 @@ def test_without_service_identifier(
     client: Client,
     configure_service,
     service_identifier: str,
-    did_web: DIDWebServer,
+    trusted_ca: X5ChainCertificateAuthority,
 ):
-    identity = did_web.create_identity()
+    identity = trusted_ca.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256")
+    
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # The test framework automatically configures the service with a DID.
@@ -407,7 +407,7 @@ def test_without_service_identifier(
     assert pycose.headers.KID not in receipt.phdr
 
 
-def test_consistent_jwk(client, service_identifier):
+def test_consistent_jwk(service_identifier):
     doc = Resolver(verify=False).resolve(service_identifier)
     assert len(doc["assertionMethod"]) > 0
 
@@ -423,41 +423,3 @@ def test_consistent_jwk(client, service_identifier):
         cert_key = crypto.get_cert_public_key(certificate)
 
         assert crypto.pub_key_pem_to_der(key) == crypto.pub_key_pem_to_der(cert_key)
-
-
-@pytest.mark.isolated_test
-def test_did_multiple_service_keys(
-    client: Client,
-    did_web: DIDWebServer,
-    restart_service,
-    service_identifier: str,
-):
-    resolver = Resolver(verify=False)
-    trust_store = DIDResolverTrustStore(resolver)
-
-    # Initially the DID document only has a single assertion method
-    did_doc = resolver.resolve(service_identifier)
-    assert len(did_doc["assertionMethod"]) == 1
-    old_assertion_method = did_doc["assertionMethod"][0]
-
-    # Create a claim and get a receipt before the service is restarted.
-    identity = did_web.create_identity()
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt
-    verify_receipt(claims, trust_store, receipt)
-
-    restart_service()
-
-    did_doc = resolver.resolve(service_identifier)
-    assert len(did_doc["assertionMethod"]) == 2
-    assert old_assertion_method in did_doc["assertionMethod"]
-
-    # Thanks to the DID document containing all past service identities, the
-    # old receipt can still be verified even though the current identity has
-    # changed.
-    verify_receipt(claims, trust_store, receipt)
-
-    # We can also get new receipts, which will use the new identity, and these
-    # can also be verified.
-    new_receipt = client.submit_claim_and_confirm(claims).receipt
-    verify_receipt(claims, trust_store, new_receipt)
