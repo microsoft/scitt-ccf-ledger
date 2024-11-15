@@ -14,42 +14,24 @@ NINJA_FLAGS=${NINJA_FLAGS:-}
 if [ "$PLATFORM" = "sgx" ]; then
     CC=${CC:-clang-11}
     CXX=${CXX:-clang++-11}
-    ATTESTED_FETCH_PLATFORM="sgx"
 elif [ "$PLATFORM" = "virtual" ] || [ "$PLATFORM" = "snp" ]; then
     CC=${CC:-clang-15}
     CXX=${CXX:-clang++-15}
-    # Use virtual platform for attested fetch
-    # even in SNP since it is fine to call curl directly
-    # on SNP-capable platforms
-    ATTESTED_FETCH_PLATFORM="virtual"
 else
     echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
     exit 1
 fi
-
-git submodule sync
-git submodule update --init --recursive
 
 root_dir=$(pwd)
 install_dir=/tmp/scitt
 
 mkdir -p $install_dir
 
-if [ "$PLATFORM" = "sgx" ]; then
-    ATTESTED_FETCH_MRENCLAVE_HEX=$(/opt/openenclave/bin/oesign dump -e $install_dir/libafetch.enclave.so.signed | sed -n "s/mrenclave=//p")
-elif [ "$PLATFORM" = "virtual" ] || [ "$PLATFORM" = "snp" ]; then
-    ATTESTED_FETCH_MRENCLAVE_HEX=""
-else
-    echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
-    exit 1
-fi
-
 # Note: LVI mitigations are disabled as this is a development build.
 # See docker/ for a non-development build.
 CC="$CC" CXX="$CXX" \
     cmake -GNinja -B build/app \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
-    -DATTESTED_FETCH_MRENCLAVE_HEX="${ATTESTED_FETCH_MRENCLAVE_HEX}" \
     -DCOMPILE_TARGET="${PLATFORM}" \
     -DCCF_UNSAFE="${CCF_UNSAFE}" \
     -DBUILD_TESTS="${BUILD_TESTS}" \

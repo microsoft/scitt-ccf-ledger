@@ -22,7 +22,7 @@ class TestAcceptedAlgorithms:
     def submit(self, client: Client, trusted_ca):
         def f(**kwargs):
             """Sign and submit the claims with a new identity"""
-            identity = trusted_ca.create_identity(alg="ES256")
+            identity = trusted_ca.create_identity(alg="ES256", kty="ec")
             claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
             client.submit_claim_and_confirm(claims)
 
@@ -65,8 +65,8 @@ class TestAcceptedAlgorithms:
 
 class TestAcceptedDIDIssuers:
     @pytest.fixture(scope="class")
-    def identity(self, did_web):
-        return did_web.create_identity(alg="ES256")
+    def identity(self, trusted_ca):
+        return trusted_ca.create_identity(alg="ES256", kty="ec")
 
     @pytest.fixture(scope="class")
     def claims(self, identity):
@@ -334,7 +334,6 @@ export function apply(profile, phdr) {{
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
 
         policy_script = f"""

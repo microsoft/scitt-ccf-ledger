@@ -569,31 +569,13 @@ class Client(BaseClient):
             content=claim,
         ).json()
         operation_id = response["operationId"]
-        tx = self.wait_for_operation(operation_id)
+
         if receipt_type == ReceiptType.EMBEDDED:
-            receipt = self.get_claim(tx, embed_receipt=True)
-            return Submission(operation_id, tx, receipt, True)
+            receipt = self.get_claim(operation_id, embed_receipt=True)
+            return Submission(operation_id, receipt, True)
 
-        receipt = self.get_receipt(tx, decode=False)
-        return Submission(operation_id, tx, receipt, False)
-
-    def wait_for_operation(self, operation: str) -> str:
-        response = self.get(
-            f"/operations/{operation}",
-            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
-        )
-        payload = response.json()
-
-        if payload["status"] == "succeeded":
-            return payload["entryId"]
-        elif payload["status"] == "failed":
-            error = payload["error"]
-            raise ServiceError(response.headers, error["code"], error["message"])
-        else:
-            raise ValueError("Invalid status {}".format(payload["status"]))
-
-    def get_operations(self):
-        return self.get("/operations").json()["operations"]
+        receipt = self.get_receipt(operation_id, decode=False)
+        return Submission(operation_id, receipt, False)
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(

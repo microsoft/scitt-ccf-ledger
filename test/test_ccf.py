@@ -27,7 +27,7 @@ def test_submit_claim(client: Client, trusted_ca, trust_store,params):
 
     Test is parametrized over different signing parameters.
     """
-    identity = trusted_ca.create_identity(params)
+    identity = trusted_ca.create_identity(**params)
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_claimset(identity, {"foo": "bar"})

@@ -139,7 +139,7 @@ class TestNonCanonicalEncoding:
     def claim(self, trusted_ca):
         """Create a signed claim, with protected headers encoded non-canonically."""
 
-        identity = trusted_ca.create_identity(alg="ES256")
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
     def test_submit_claim(self, client: Client, trust_store, claim):
@@ -172,7 +172,7 @@ class TestNonCanonicalEncoding:
         The receipt should be embedded in the claim without any issues.
         """
 
-        identity = trusted_ca.create_identity(alg="ES256")
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
 
         # Create a claim of 500KB in size
         size = int(1024 * 1024 * 0.5)

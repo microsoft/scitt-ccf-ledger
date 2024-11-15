@@ -14,7 +14,7 @@ class TestHistorical:
     @pytest.fixture(scope="class")
     def submissions(self, client: Client, trusted_ca):
         COUNT = 5
-        identity = trusted_ca.create_identity(alg="PS384",kty="rsa")
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         result = []
         for i in range(COUNT):
             claim = crypto.sign_json_claimset(identity, {"value": i})

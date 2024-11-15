@@ -21,7 +21,7 @@ LOCUST_RUNTIME_SEC = 60
 class TestLoad:
     def test_load(self, client: Client, trusted_ca, tmp_path: Path):
         for i in range(NUM_CLAIMS):
-            identity = trusted_ca.create_identity(alg="ES256")
+            identity = trusted_ca.create_identity(alg="ES256", kty="ec")
             claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
             (tmp_path / f"claim{i}.cose").write_bytes(claim)
 

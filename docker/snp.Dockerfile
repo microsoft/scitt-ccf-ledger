@@ -3,9 +3,6 @@ FROM ghcr.io/microsoft/ccf/app/dev/snp:ccf-${CCF_VERSION}  as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 
-# Component specific to the CCF app
-RUN apt-get update && apt-get install -y libcurl4-openssl-dev
-
 # Build CCF app
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \

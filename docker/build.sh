@@ -19,9 +19,6 @@ else
     exit 1
 fi
 
-git submodule sync
-git submodule update --init --recursive
-
 SCITT_VERSION_OVERRIDE=$(git describe --tags --match="*.*.*")
 
 DOCKER_BUILDKIT=1 docker build \
