@@ -57,7 +57,7 @@ class TestPerf:
         # Uncached did:web resolution uses a local server and is therefore
         # faster than in a real-world scenario.
         stats = {
-    	    "latency_x5c_submit_s": latency_x5c_submit_s,
+            "latency_x5c_submit_s": latency_x5c_submit_s,
             "latency_x5c_submit_and_receipt_s": latency_x5c_submit_and_receipt_s,
         }
 

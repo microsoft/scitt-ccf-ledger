@@ -1,13 +1,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-
-import os
-
 import pytest
 
-from pyscitt import crypto, governance
+from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.verify import verify_receipt
+
 
 @pytest.mark.parametrize(
     "params",
@@ -21,7 +19,7 @@ from pyscitt.verify import verify_receipt
         {"alg": "EdDSA", "kty": "ed25519"},
     ],
 )
-def test_submit_claim(client: Client, trusted_ca, trust_store,params):
+def test_submit_claim(client: Client, trusted_ca, trust_store, params):
     """
     Submit claims to the SCITT CCF ledger and verify the resulting receipts.
 
@@ -37,9 +35,10 @@ def test_submit_claim(client: Client, trusted_ca, trust_store,params):
     embedded = crypto.embed_receipt_in_cose(claims, receipt)
     verify_receipt(embedded, trust_store, None)
 
+
 @pytest.mark.isolated_test
 def test_recovery(client, trusted_ca, restart_service):
-    identity = trusted_ca.create_identity(alg="PS384",kty="rsa")
+    identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
     client.submit_claim_and_confirm(crypto.sign_json_claimset(identity, {"foo": "bar"}))
 
     old_network = client.get("/node/network").json()

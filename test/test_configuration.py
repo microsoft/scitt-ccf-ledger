@@ -370,7 +370,8 @@ def test_service_identifier(
     trusted_ca: X5ChainCertificateAuthority,
 ):
     identity = trusted_ca.create_identity(
-            length=1, alg="ES256", kty="ec", ec_curve="P-256")
+        length=1, alg="ES256", kty="ec", ec_curve="P-256"
+    )
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # Receipts include an issuer and kid.
@@ -389,8 +390,9 @@ def test_without_service_identifier(
     trusted_ca: X5ChainCertificateAuthority,
 ):
     identity = trusted_ca.create_identity(
-            length=1, alg="ES256", kty="ec", ec_curve="P-256")
-    
+        length=1, alg="ES256", kty="ec", ec_curve="P-256"
+    )
+
     claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     # The test framework automatically configures the service with a DID.

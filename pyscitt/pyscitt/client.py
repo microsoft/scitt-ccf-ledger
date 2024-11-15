@@ -486,16 +486,7 @@ class BaseClient:
 
 
 @dataclass
-class PendingSubmission:
-    """
-    The pending result of submitting a claim to the service.
-    """
-
-    operation_tx: str
-
-
-@dataclass
-class Submission(PendingSubmission):
+class Submission:
     """
     The result of submitting a claim to the service.
     """
@@ -546,7 +537,7 @@ class Client(BaseClient):
     def submit_claim(
         self,
         claim: bytes,
-    ) -> PendingSubmission:
+    ) -> Submission:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
@@ -554,7 +545,7 @@ class Client(BaseClient):
             content=claim,
         ).json()
         operation_id = response["operationId"]
-        return PendingSubmission(operation_id)
+        return Submission(operation_id, claim, is_receipt_embedded=False)
 
     def submit_claim_and_confirm(
         self,
@@ -588,27 +579,16 @@ class Client(BaseClient):
         self,
         tx: str,
         *,
-        operation: bool = False,
         decode: Literal[True] = True,
     ) -> Receipt: ...
 
     @overload
-    def get_receipt(
-        self, tx: str, *, operation: bool = False, decode: Literal[False]
-    ) -> bytes: ...
+    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes: ...
 
-    def get_receipt(
-        self, tx: str, *, operation: bool = False, decode: bool = True
-    ) -> Union[bytes, Receipt]:
+    def get_receipt(self, tx: str, *, decode: bool = True) -> Union[bytes, Receipt]:
         """
         Get a receipt from the ledger.
-
-        If `operation` is true, the tx is treated as an operation ID and is
-        first waited on in order to obtain the actual entry ID.
         """
-        if operation:
-            tx = self.wait_for_operation(tx)
-
         response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)
