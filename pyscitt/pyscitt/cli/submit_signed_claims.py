@@ -15,6 +15,7 @@ def submit_signed_claimset(
     path: Path,
     receipt_path: Optional[Path],
     receipt_type: str,
+    skip_confirmation: bool,
 ):
     if path.suffix != ".cose":
         raise ValueError("unsupported file extension, must end with .cose")
@@ -29,6 +30,19 @@ def submit_signed_claimset(
     with open(path, "rb") as f:
         signed_claimset = f.read()
 
+    with open(path, "rb") as f:
+        signed_claimset = f.read()
+
+    if skip_confirmation:
+        pending = client.submit_claim(signed_claimset)
+        print(f"Submitted {path} as operation {pending.operation_tx}")
+        print(
+            """Confirmation of submission was skipped!
+              There is a small chance the claim may not be registered. 
+              Receipt will not be downloaded and saved."""
+        )
+        return
+    
     submission = client.submit_claim_and_confirm(signed_claimset, receipt_type=r_type)
     print(f"Submitted {path} as transaction {submission.tx}")
 

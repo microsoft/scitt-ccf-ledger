@@ -486,7 +486,16 @@ class BaseClient:
 
 
 @dataclass
-class Submission:
+class PendingSubmission:
+    """
+    The pending result of submitting a claim to the service.
+    """
+
+    operation_tx: str
+
+
+@dataclass
+class Submission(PendingSubmission):
     """
     The result of submitting a claim to the service.
     """
@@ -537,7 +546,7 @@ class Client(BaseClient):
     def submit_claim(
         self,
         claim: bytes,
-    ) -> Submission:
+    ) -> PendingSubmission:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
@@ -545,7 +554,7 @@ class Client(BaseClient):
             content=claim,
         ).json()
         operation_id = response["operationId"]
-        return Submission(operation_id, claim, is_receipt_embedded=False)
+        return PendingSubmission(operation_id)
 
     def submit_claim_and_confirm(
         self,
@@ -560,13 +569,31 @@ class Client(BaseClient):
             content=claim,
         ).json()
         operation_id = response["operationId"]
-
+        tx = self.wait_for_operation(operation_id)
         if receipt_type == ReceiptType.EMBEDDED:
-            receipt = self.get_claim(operation_id, embed_receipt=True)
-            return Submission(operation_id, receipt, True)
+            receipt = self.get_claim(tx, embed_receipt=True)
+            return Submission(operation_id, tx, receipt, True)
 
-        receipt = self.get_receipt(operation_id, decode=False)
-        return Submission(operation_id, receipt, False)
+        receipt = self.get_receipt(tx, decode=False)
+        return Submission(operation_id, tx, receipt, False)
+
+    def wait_for_operation(self, operation: str) -> str:
+        response = self.get(
+            f"/operations/{operation}",
+            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
+        )
+        payload = response.json()
+
+        if payload["status"] == "succeeded":
+            return payload["entryId"]
+        elif payload["status"] == "failed":
+            error = payload["error"]
+            raise ServiceError(response.headers, error["code"], error["message"])
+        else:
+            raise ValueError("Invalid status {}".format(payload["status"]))
+
+    def get_operations(self):
+        return self.get("/operations").json()["operations"]
 
     def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
         response = self.get_historical(
@@ -579,16 +606,27 @@ class Client(BaseClient):
         self,
         tx: str,
         *,
+        operation: bool = False,
         decode: Literal[True] = True,
     ) -> Receipt: ...
 
     @overload
-    def get_receipt(self, tx: str, *, decode: Literal[False]) -> bytes: ...
+    def get_receipt(
+        self, tx: str, *, operation: bool = False, decode: Literal[False]
+    ) -> bytes: ...
 
-    def get_receipt(self, tx: str, *, decode: bool = True) -> Union[bytes, Receipt]:
+    def get_receipt(
+        self, tx: str, *, operation: bool = False, decode: bool = True
+    ) -> Union[bytes, Receipt]:
         """
         Get a receipt from the ledger.
+
+        If `operation` is true, the tx is treated as an operation ID and is
+        first waited on in order to obtain the actual entry ID.
         """
+        if operation:
+            tx = self.wait_for_operation(tx)
+
         response = self.get_historical(f"/entries/{tx}/receipt")
         if decode:
             return Receipt.decode(response.content)

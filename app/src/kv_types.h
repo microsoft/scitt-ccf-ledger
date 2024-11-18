@@ -51,6 +51,36 @@ namespace scitt
   DECLARE_JSON_TYPE(EntryInfo);
   DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected);
 
+  enum class OperationStatus
+  {
+    Running,
+    Failed,
+    Succeeded,
+  };
+  DECLARE_JSON_ENUM(
+    OperationStatus,
+    {{OperationStatus::Running, "running"},
+     {OperationStatus::Failed, "failed"},
+     {OperationStatus::Succeeded, "succeeded"}});
+
+  struct OperationLog
+  {
+    OperationStatus status;
+
+    // This is populated for entries that update an existing operation. When
+    // creating a new one, the transaction ID of the entry is used as the new
+    // operation's ID.
+    std::optional<ccf::TxID> operation_id;
+
+    std::optional<time_t> created_at;
+    std::optional<ccf::crypto::Sha256Hash> context_digest;
+    std::optional<nlohmann::json> error;
+  };
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(OperationLog);
+  DECLARE_JSON_REQUIRED_FIELDS(OperationLog, status);
+  DECLARE_JSON_OPTIONAL_FIELDS(
+    OperationLog, operation_id, created_at, context_digest, error);
+
   /**
    * SCITT Service configuration. This is stored in the KV and updated
    * through a custom governance action.
@@ -165,6 +195,9 @@ namespace scitt
   static constexpr auto ISSUERS_TABLE = "public:scitt.issuers";
   using IssuersTable = ccf::kv::Map<Issuer, IssuerInfo>;
 
+  static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
+  using OperationsTable = ccf::kv::Value<OperationLog>;
+  
   // The `ccf.gov` prefix is necessary to make the table writable
   // through governance.
   static constexpr auto CONFIGURATION_TABLE =

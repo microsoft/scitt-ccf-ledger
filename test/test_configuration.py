@@ -22,7 +22,7 @@ class TestAcceptedAlgorithms:
     def submit(self, client: Client, trusted_ca):
         def f(**kwargs):
             """Sign and submit the claims with a new identity"""
-            identity = trusted_ca.create_identity(alg="ES256", kty="ec")
+            identity = trusted_ca.create_identity(**kwargs)
             claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
             client.submit_claim_and_confirm(claims)
 

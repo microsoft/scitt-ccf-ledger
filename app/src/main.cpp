@@ -11,6 +11,7 @@
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
 #include "kv_types.h"
+#include "operations_endpoints.h"
 #include "policy_engine.h"
 #include "receipt.h"
 #include "service_endpoints.h"
@@ -153,6 +154,35 @@ namespace scitt
       SCITT_FAIL("Transaction status could not be retrieved");
 
       return std::nullopt;
+    }
+
+    ccf::endpoints::Endpoint make_endpoint(
+      const std::string& method,
+      ccf::RESTVerb verb,
+      const ccf::endpoints::EndpointFunction& f,
+      const ccf::AuthnPolicies& ap) override
+    {
+      return make_endpoint_with_local_commit_handler(
+        method, verb, f, ccf::endpoints::default_locally_committed_func, ap);
+    }
+
+    ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
+      const std::string& method,
+      ccf::RESTVerb verb,
+      const ccf::endpoints::EndpointFunction& f,
+      const ccf::endpoints::LocallyCommittedEndpointFunction& l,
+      const ccf::AuthnPolicies& ap) override
+    {
+      std::function<ccf::ApiResult(timespec & time)> get_time =
+        [this](timespec& time) {
+          return this->get_untrusted_host_time_v1(time);
+        };
+
+      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
+        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
+      endpoint.locally_committed_func =
+        tracing_local_commit_adapter(l, method, get_time);
+      return endpoint;
     }
 
   public:
@@ -327,9 +357,17 @@ namespace scitt
           "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
 
         SCITT_DEBUG("Claim was submitted synchronously");
+
+        record_synchronous_operation(host_time, ctx.tx);
       };
 
-      make_endpoint("/entries", HTTP_POST, post_entry, authn_policy).install();
+      make_endpoint_with_local_commit_handler(
+        "/entries", 
+        HTTP_POST,
+        post_entry,
+        operation_locally_committed_func,
+        authn_policy)
+        .install();
 
       auto is_tx_committed =
         [this](ccf::View view, ccf::SeqNo seqno, std::string& error_reason) {
@@ -632,6 +670,9 @@ namespace scitt
         .install();
 
       register_service_endpoints(context, *this);
+
+      register_operations_endpoints(
+       context, *this, authn_policy);
     }
   };
 } // namespace scitt
