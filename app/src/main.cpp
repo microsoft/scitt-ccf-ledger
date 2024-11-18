@@ -202,6 +202,9 @@ namespace scitt
         ENTRY_TABLE, context, 10000, 20);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
+      auto resolver = std::make_unique<did::UniversalResolver>();
+      verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
+
       auto post_entry = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG("Entry body size: {} bytes", body.size());

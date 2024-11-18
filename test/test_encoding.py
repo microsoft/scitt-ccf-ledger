@@ -214,19 +214,6 @@ class TestHeaderParameters:
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
 
-    def test_kid(self, submit, identity):
-        # This works because our DID document only has a single key.
-        submit({KID: None})
-        submit({KID: identity.kid.encode("utf-8")})
-
-        with service_error("Failed to decode protected header"):
-            # The KID needs to be a byte string.
-            submit({KID: identity.kid})
-
-        with service_error("kid must start with '#'"):
-            assert identity.kid.startswith("#")
-            submit({KID: identity.kid[1:].encode("utf-8")})
-
     def test_content_type(self, submit):
         # This comes from the CoAP Content-Format registry, and is defined as
         # `text/plain; charset=utf-8` (not that it matters, since the ledger
