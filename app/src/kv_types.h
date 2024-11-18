@@ -197,7 +197,7 @@ namespace scitt
 
   static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
   using OperationsTable = ccf::kv::Value<OperationLog>;
-  
+
   // The `ccf.gov` prefix is necessary to make the table writable
   // through governance.
   static constexpr auto CONFIGURATION_TABLE =
