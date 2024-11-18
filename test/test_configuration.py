@@ -57,6 +57,7 @@ class TestAcceptedAlgorithms:
         submit(alg="ES384", kty="ec", ec_curve="P-384")
         submit(alg="PS256", kty="rsa")
 
+
 class TestPolicyEngine:
     @pytest.fixture(scope="class")
     def signed_claimset(self, trusted_ca: X5ChainCertificateAuthority):
@@ -308,6 +309,7 @@ return true;
         receipt_path.write_bytes(submission.receipt_bytes)
         # print to preview what was accepted and to check if pretty-receipt understands the given receipt
         main(["pretty-receipt", str(receipt_path)])
+
 
 def test_without_service_identifier(
     client: Client,

@@ -365,7 +365,7 @@ namespace scitt
       };
 
       make_endpoint_with_local_commit_handler(
-        "/entries", 
+        "/entries",
         HTTP_POST,
         post_entry,
         operation_locally_committed_func,
@@ -674,8 +674,7 @@ namespace scitt
 
       register_service_endpoints(context, *this);
 
-      register_operations_endpoints(
-       context, *this, authn_policy);
+      register_operations_endpoints(context, *this, authn_policy);
     }
   };
 } // namespace scitt

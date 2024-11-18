@@ -42,7 +42,7 @@ def submit_signed_claimset(
               Receipt will not be downloaded and saved."""
         )
         return
-    
+
     submission = client.submit_claim_and_confirm(signed_claimset, receipt_type=r_type)
     print(f"Submitted {path} as transaction {submission.tx}")
 

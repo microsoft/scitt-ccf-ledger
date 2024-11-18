@@ -143,3 +143,6 @@ def create_document(
 class Resolver:
     def __init__(self, *, verify: bool = True):
         self.verify = verify
+
+    def resolve(self, did: str) -> dict:
+        raise NotImplementedError("Resolver is not implemented yet")
