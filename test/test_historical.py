@@ -12,9 +12,9 @@ from pyscitt.verify import verify_receipt
 
 class TestHistorical:
     @pytest.fixture(scope="class")
-    def submissions(self, client: Client, did_web):
+    def submissions(self, client: Client, trusted_ca):
         COUNT = 5
-        identity = did_web.create_identity()
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         result = []
         for i in range(COUNT):
             claim = crypto.sign_json_claimset(identity, {"value": i})

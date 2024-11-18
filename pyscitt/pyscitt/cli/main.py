@@ -4,7 +4,6 @@
 import argparse
 
 from . import (
-    create_did_web,
     embed_receipt_in_cose,
     governance,
     pretty_receipt,
@@ -17,7 +16,6 @@ from . import (
 )
 
 COMMANDS = [
-    ("create-did-web", create_did_web),
     ("upload-did-web-github", upload_did_web_doc_to_github),
     ("sign", sign_claims),
     ("submit", submit_signed_claims),

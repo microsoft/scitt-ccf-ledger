@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 #pragma once
-#include "did/web/method.h"
 #include "kv_types.h"
 
 #include <ccf/ds/json.h>

@@ -30,6 +30,9 @@ def submit_signed_claimset(
     with open(path, "rb") as f:
         signed_claimset = f.read()
 
+    with open(path, "rb") as f:
+        signed_claimset = f.read()
+
     if skip_confirmation:
         pending = client.submit_claim(signed_claimset)
         print(f"Submitted {path} as operation {pending.operation_tx}")

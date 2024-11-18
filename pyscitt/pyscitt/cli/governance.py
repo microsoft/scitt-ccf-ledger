@@ -12,8 +12,6 @@ from urllib.parse import urlparse
 
 import certifi
 
-from pyscitt.did import format_did_web
-
 from .. import governance
 from ..client import Client
 from .client_arguments import add_client_arguments, create_client
@@ -202,14 +200,10 @@ def setup_local_development(
     print("Activating member credentials...")
     client.governance.activate_member()
 
-    print("Configuring DID Web root CA bundle...")
-    if did_web_ca_certs:
-        bundle = did_web_ca_certs.read_text()
-    else:
-        # This uses the Mozilla root program. certifi is the same package that
-        # provides roots for eg. the requests and httpx modules.
-        cacert_pem_file = certifi.contents()
-        bundle = clean_pem_file(cacert_pem_file)
+    # This uses the Mozilla root program. certifi is the same package that
+    # provides roots for eg. the requests and httpx modules.
+    cacert_pem_file = certifi.contents()
+    bundle = clean_pem_file(cacert_pem_file)
 
     proposal = governance.set_ca_bundle_proposal("did_web_tls_roots", bundle)
     client.governance.propose(proposal, must_pass=True)
@@ -220,7 +214,6 @@ def setup_local_development(
 
     config = {
         "authentication": {"allow_unauthenticated": True},
-        "service_identifier": format_did_web(url.hostname, url.port),
     }
     proposal = governance.set_scitt_configuration_proposal(config)
     client.governance.propose(proposal, must_pass=True)

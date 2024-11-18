@@ -1,3 +1,0 @@
-[submodule "3rdparty/attested-fetch"]
-	path = 3rdparty/attested-fetch
-	url = https://github.com/microsoft/attested-fetch.git

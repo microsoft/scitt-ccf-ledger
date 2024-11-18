@@ -136,10 +136,10 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def claim(self, did_web):
+    def claim(self, trusted_ca):
         """Create a signed claim, with protected headers encoded non-canonically."""
 
-        identity = did_web.create_identity()
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
     def test_submit_claim(self, client: Client, trust_store, claim):
@@ -164,7 +164,9 @@ class TestNonCanonicalEncoding:
         assert original_pieces[2] == updated_pieces[2]
         assert original_pieces[3] == updated_pieces[3]
 
-    def test_no_buffer_overflow_when_embedding_receipt(self, client: Client, did_web):
+    def test_no_buffer_overflow_when_embedding_receipt(
+        self, client: Client, trusted_ca
+    ):
         """
         When embedding a receipt in a claim, we should have a sufficiently large buffer
         to accommodate the claim and the receipt. This test creates a claim that is
@@ -172,7 +174,7 @@ class TestNonCanonicalEncoding:
         The receipt should be embedded in the claim without any issues.
         """
 
-        identity = did_web.create_identity()
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
 
         # Create a claim of 500KB in size
         size = int(1024 * 1024 * 0.5)
@@ -192,8 +194,10 @@ class TestNonCanonicalEncoding:
 
 class TestHeaderParameters:
     @pytest.fixture(scope="class")
-    def identity(self, did_web):
-        return did_web.create_identity()
+    def identity(self, trusted_ca):
+        return trusted_ca.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256"
+        )
 
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
@@ -209,19 +213,6 @@ class TestHeaderParameters:
 
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
-
-    def test_kid(self, submit, identity):
-        # This works because our DID document only has a single key.
-        submit({KID: None})
-        submit({KID: identity.kid.encode("utf-8")})
-
-        with service_error("Failed to decode protected header"):
-            # The KID needs to be a byte string.
-            submit({KID: identity.kid})
-
-        with service_error("kid must start with '#'"):
-            assert identity.kid.startswith("#")
-            submit({KID: identity.kid[1:].encode("utf-8")})
 
     def test_content_type(self, submit):
         # This comes from the CoAP Content-Format registry, and is defined as
