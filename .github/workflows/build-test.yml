@@ -13,7 +13,7 @@ jobs:
   checks:
     name: Format and License Checks
     runs-on: ubuntu-20.04
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev6
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev7
     steps:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Checkout repository
@@ -44,7 +44,7 @@ jobs:
           - platform: { name: sgx }
     runs-on: ${{ matrix.platform.nodes }}
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-dev6
+      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-dev7
       options: ${{ matrix.platform.options }}
       env:
         # Helps to distinguish between CI and local builds.
@@ -74,7 +74,7 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
-      - run: apt-get update && apt-get install -y libcurl4-openssl-dev faketime clang-tidy-10
+      - run: apt-get update && apt-get install -y faketime clang-tidy-10
       - run: ./build.sh
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"

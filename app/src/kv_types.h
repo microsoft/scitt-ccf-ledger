@@ -22,24 +22,13 @@ namespace scitt
   using Issuer = std::string; // DID of the issuer
   using Pem = std::string; // PEM-encoded certificate
 
-  struct DidWebResolutionMetadata
-  {
-    std::vector<Pem> tls_certs;
-
-    bool operator==(const DidWebResolutionMetadata&) const = default;
-  };
-  DECLARE_JSON_TYPE(DidWebResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidWebResolutionMetadata, tls_certs);
-
   struct DidResolutionMetadata
   {
     Timestamp updated;
-    std::optional<DidWebResolutionMetadata> web;
-
     bool operator==(const DidResolutionMetadata&) const = default;
   };
   DECLARE_JSON_TYPE(DidResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated, web);
+  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated);
 
   struct IssuerInfo
   {

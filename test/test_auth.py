@@ -8,12 +8,13 @@ from pyscitt.client import Client
 
 from .infra.assertions import service_error
 from .infra.jwt_issuer import JwtIssuer
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class TestAuthentication:
     @pytest.fixture(scope="class")
-    def claim(self, did_web):
-        identity = did_web.create_identity()
+    def claim(self, trusted_ca):
+        identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
         return crypto.sign_json_claimset(identity, {"foo": "bar"})
 
     @pytest.fixture(scope="class")

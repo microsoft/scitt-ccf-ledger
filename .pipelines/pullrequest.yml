@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 6.0.0-dev6
+  default: 6.0.0-dev7
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -95,7 +95,7 @@ extends:
           Environment:
             CMAKE_BUILD_TYPE: Debug
             ENABLE_CLANG_TIDY: ON
-          InstallPackages: [ libcurl4-openssl-dev, clang-tidy-10 ]
+          InstallPackages: [ clang-tidy-10 ]
 
       - template: .pipelines/local_virtual_build.yml@self
         parameters:
@@ -104,7 +104,7 @@ extends:
           FunctionalTestArguments: '--enable-faketime'
           Environment:
             CMAKE_BUILD_TYPE: Debug
-          InstallPackages: [ libcurl4-openssl-dev, faketime ]
+          InstallPackages: [ faketime ]
 
     - stage: test_virtual_docker_build
       jobs:
@@ -165,10 +165,6 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
-          - script: |
-              sudo apt-get update
-              sudo apt-get install -y libcurl4-openssl-dev
-            displayName: Install additional packages
           - script: ./build.sh
             displayName: Build snp
             env:

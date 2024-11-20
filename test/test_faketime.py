@@ -10,15 +10,12 @@ from pyscitt.client import Client
 from pyscitt.verify import TrustStore, verify_receipt
 
 from .infra.cchost import CCHost
-from .infra.did_web_server import DIDWebServer
 
 
 @pytest.mark.isolated_test(enable_faketime=True)
 def test_faketime(
     client: Client,
     cchost: CCHost,
-    did_web: DIDWebServer,
-    trust_store: TrustStore,
 ):
     """
     Check that we are able to manipulate the service's clock.
@@ -34,10 +31,3 @@ def test_faketime(
     # Make sure we're in the right ball-park. This assumes the test takes less
     # than 60 seconds to execute, which seems reasonable.
     assert after - before < 3660
-
-    # Check that faketime doesn't break DID resolution, by eg. preventing
-    # attested-fetch from starting up.
-    identity = did_web.create_identity()
-    claim = crypto.sign_json_claimset(identity, "Payload")
-    receipt = client.submit_claim_and_confirm(claim).receipt
-    verify_receipt(claim, trust_store, receipt)

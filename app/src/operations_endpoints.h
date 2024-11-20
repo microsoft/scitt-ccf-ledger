@@ -587,8 +587,7 @@ namespace scitt
   static void register_operations_endpoints(
     ccf::AbstractNodeContext& context,
     ccf::BaseEndpointRegistry& registry,
-    const ccf::AuthnPolicies& authn_policy,
-    OperationCallback callback)
+    const ccf::AuthnPolicies& authn_policy)
   {
     using namespace std::placeholders;
 
@@ -616,23 +615,6 @@ namespace scitt
         authn_policy)
       .set_auto_schema<void, GetOperation::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-      .install();
-
-    // The callback endpoint is specifically left open because it is called by
-    // the attested fetch script. The use of a nonce and checking the
-    // attestation on the payload make this ok.
-    const ccf::AuthnPolicies no_authn_policy = {ccf::empty_auth_policy};
-    registry
-      .make_endpoint(
-        "/operations/{txid}/callback",
-        HTTP_POST,
-        ccf::json_adapter(std::bind(
-          endpoints::post_operation_callback,
-          operations_index,
-          callback,
-          _1,
-          _2)),
-        no_authn_policy)
       .install();
   }
 
