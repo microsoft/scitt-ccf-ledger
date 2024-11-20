@@ -58,15 +58,6 @@ namespace scitt
   using EntrySeqnoIndexingStrategy =
     ccf::indexing::strategies::SeqnosForValue_Bucketed<EntryTable>;
 
-  struct DIDFetchContext
-  {
-    std::vector<uint8_t> body;
-    std::string nonce;
-    std::string issuer;
-  };
-  DECLARE_JSON_TYPE(DIDFetchContext);
-  DECLARE_JSON_REQUIRED_FIELDS(DIDFetchContext, body, nonce, issuer);
-
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
    * BadRequestError if the query parameter cannot be parsed. Also supports
@@ -246,25 +237,6 @@ namespace scitt
           SCITT_DEBUG("Claim verification failed: {}", e.what());
           throw BadRequestError(errors::InvalidInput, e.what());
         }
-        // Retrieve current enclave measurement of this node
-        // See ccf logic in `/quotes/self`
-        std::string measurement;
-        auto nodes = ctx.tx.ro<ccf::Nodes>(ccf::Tables::NODES);
-        auto node_info = nodes->get(context.get_node_id());
-        if (node_info.has_value() && node_info->code_digest.has_value())
-        {
-          measurement = node_info->code_digest.value();
-        }
-        else
-        {
-#if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
-          // Node should always get a valid cached measurement on startup
-          throw InternalError("Unexpected state - node has no code id");
-#else
-          measurement =
-            "0000000000000000000000000000000000000000000000000000000000000000";
-#endif
-        }
 
         if (cfg.policy.policy_script.has_value())
         {
@@ -300,62 +272,16 @@ namespace scitt
           }
         }
 
-        auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
-        auto service_info = service->get().value();
-        auto service_cert = service_info.cert;
-        auto service_cert_der = ccf::crypto::cert_pem_to_der(service_cert);
-        auto service_cert_digest =
-          ccf::crypto::Sha256Hash(service_cert_der).hex_str();
+        const auto signed_statement = ccf::cose::edit::set_unprotected_header(
+          body, ccf::cose::edit::desc::Empty{});
 
-        // Take the service's DID from the configuration, if present.
-        SCITT_DEBUG("Create protected header with countersignature");
-        std::vector<uint8_t> sign_protected;
-        if (cfg.service_identifier.has_value())
-        {
-          // The kid is the same as the service certificate hash (prefixed with
-          // a # to make it a relative DID-url). Eventually, this may change to
-          // become eg. an RFC7638 JWK thumbprint.
-          std::string kid = fmt::format("#{}", service_cert_digest);
-          std::span<const uint8_t> kid_bytes(
-            reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
-
-          sign_protected = create_countersign_protected_header(
-            host_time,
-            *cfg.service_identifier,
-            kid_bytes,
-            service_cert_digest,
-            measurement);
-        }
-        else
-        {
-          sign_protected = create_countersign_protected_header(
-            host_time,
-            std::nullopt,
-            std::nullopt,
-            service_cert_digest,
-            measurement);
-        }
-
-        // Compute the hash of the to-be-signed countersigning structure
-        // and set it as CCF transaction claim for use in receipt validation.
-        SCITT_DEBUG("Add countersignature as CCF application claim for the tx");
-        auto claims_digest =
-          cose::create_countersign_tbs_hash(body, sign_protected);
-        ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
+        ctx.rpc_ctx->set_claims_digest(
+          ccf::ClaimsDigest::Digest(signed_statement));
 
         // Store the original COSE_Sign1 message in the KV.
         SCITT_DEBUG("Store submitted claim in KV store");
         auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(body);
-
-        // Store the protected headers in a separate table, so the
-        // receipt can be reconstructed.
-        SCITT_DEBUG("Store claim protected headers in KV store");
-        auto entry_info_table =
-          ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
-        entry_info_table->put(EntryInfo{
-          .sign_protected = sign_protected,
-        });
 
         SCITT_INFO(
           "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);

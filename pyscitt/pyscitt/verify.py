@@ -165,6 +165,7 @@ class StaticTrustStore(TrustStore):
         return StaticTrustStore(store)
 
     def lookup(self, phdr) -> ServiceParameters:
+        breakpoint()
         if "service_id" not in phdr:
             raise ValueError("Receipt does not have a service identity.")
 
