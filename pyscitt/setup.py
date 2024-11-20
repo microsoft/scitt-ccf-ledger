@@ -25,7 +25,7 @@ setup(
     },
     python_requires=">=3.8",
     install_requires=[
-        "ccf==5.0.7",
+        "ccf==5.0.10",
         "cryptography==43.*",  # needs to match ccf
         "httpx",
         "cbor2==5.4.*",
