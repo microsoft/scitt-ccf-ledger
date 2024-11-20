@@ -24,16 +24,6 @@ from .verify import ServiceParameters
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 
 
-class SigningType(Enum):
-    """Types of signatures supported by CCF.
-
-    https://microsoft.github.io/CCF/main/governance/hsm_keys.html#signing-governance-requests
-    """
-
-    COSE = "COSE"
-    HTTP = "HTTP"
-
-
 class ReceiptType(Enum):
     """Receipt types supported by the ledger."""
 
@@ -217,7 +207,6 @@ class BaseClient:
     url: str
     auth_token: Optional[str]
     member_auth: Optional[MemberAuthenticationMethod]
-    member_signing_type: SigningType
     wait_time: Optional[float]
     development: bool
     cacert: Optional[str]
@@ -231,7 +220,6 @@ class BaseClient:
         *,
         auth_token: Optional[str] = None,
         member_auth: Optional[MemberAuthenticationMethod] = None,
-        member_signing_type: SigningType = SigningType.COSE,
         wait_time: Optional[float] = None,
         development: bool = False,
         cacert: Optional[str] = None,
@@ -249,9 +237,6 @@ class BaseClient:
         wait_time:
             The time to wait between retries. If None, the default wait time is used.
 
-        member_signing_type:
-            The type of signing to use for member authentication. Currently, only COSE and HTTP signing are supported.
-
         development:
             If true, the TLS certificate of the server will not be verified.
 
@@ -265,7 +250,6 @@ class BaseClient:
         self.url = url
         self.auth_token = auth_token
         self.member_auth = member_auth
-        self.member_signing_type = member_signing_type
         self.wait_time = wait_time
         self.development = development
         self.cacert = cacert
@@ -273,14 +257,6 @@ class BaseClient:
         headers = {}
         if auth_token:
             headers["Authorization"] = "Bearer " + auth_token
-
-        # We only create a custom HTTPX authentication instance for HTTP signing
-        # because COSE signing cannot be handled that way and requires re-writing
-        # the response payload.
-        if member_auth and member_signing_type == SigningType.HTTP:
-            self.member_http_sig = HttpSig(member_auth)
-        else:
-            self.member_http_sig = None
 
         tls_verification: Union[str, bool] = (
             cacert if cacert is not None else not development
@@ -301,7 +277,6 @@ class BaseClient:
             "url": self.url,
             "auth_token": self.auth_token,
             "member_auth": self.member_auth,
-            "member_signing_type": self.member_signing_type,
             "wait_time": self.wait_time,
             "development": self.development,
             "cacert": self.cacert,
@@ -345,7 +320,7 @@ class BaseClient:
                 raise ValueError("Cannot use `auth` with `sign_request`")
 
             # Sign with COSE
-            if self.member_signing_type == SigningType.COSE and self.member_auth:
+            if self.member_auth:
                 # Advance the clock to avoid ProposalReplay protection errors
                 if self.development:
                     CLOCK.advance()
@@ -383,17 +358,8 @@ class BaseClient:
                 # Set the request data and the content-type header
                 kwargs["content"] = payload
                 kwargs.setdefault("headers", {})["content-type"] = "application/cose"
-
-            # Sign with HTTP signing
-            elif self.member_signing_type == SigningType.HTTP and self.member_http_sig:
-                kwargs["auth"] = self.member_http_sig
-
-                if method == "GET":
-                    # Content-length is necessary for signing, even on GET requests.
-                    kwargs.setdefault("headers", {}).setdefault("Content-Length", "0")
-
             else:
-                raise ValueError(f"Cannot sign request with {self.member_signing_type}")
+                raise ValueError(f"Cannot sign request")
 
         default_wait_time = 2
         timeout = 30
