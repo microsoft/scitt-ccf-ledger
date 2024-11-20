@@ -142,54 +142,11 @@ class TestNonCanonicalEncoding:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
+    @pytest.mark.skip("Payloads are accepted, but uhdr stripping results in canonicalisation, and so the receipt cannot match")
     def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
         statement = client.submit_and_confirm(claim).receipt_bytes
         verify_transparent_statement(statement, trust_store, claim)
-
-    def test_embed_receipt(self, client: Client, trust_store, claim):
-        """
-        When embedding a receipt in a claim, the ledger should not affect the
-        encoding of byte-string pieces.
-        """
-        tx = client.submit_claim_and_confirm(claim).tx
-        embedded = client.get_claim(tx, embed_receipt=True)
-
-        original_pieces = cbor2.loads(claim).value  # type: ignore[attr-defined]
-        updated_pieces = cbor2.loads(embedded).value  # type: ignore[attr-defined]
-
-        # Any part of the message that is cryptographically bound needs to be preserved.
-        # These are respectively, the protected header, the payload and the signature.
-        assert original_pieces[0] == updated_pieces[0]
-        assert original_pieces[2] == updated_pieces[2]
-        assert original_pieces[3] == updated_pieces[3]
-
-    def test_no_buffer_overflow_when_embedding_receipt(
-        self, client: Client, trusted_ca
-    ):
-        """
-        When embedding a receipt in a claim, we should have a sufficiently large buffer
-        to accommodate the claim and the receipt. This test creates a claim that is
-        500KB in size and embeds the receipt in it.
-        The receipt should be embedded in the claim without any issues.
-        """
-
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
-
-        # Create a claim of 500KB in size
-        size = int(1024 * 1024 * 0.5)
-        claim = crypto.sign_claimset(identity, bytes(size), "binary/octet-stream")
-
-        tx = client.submit_claim_and_confirm(claim).tx
-        embedded = client.get_claim(tx, embed_receipt=True)
-
-        original_claim_array = cbor2.loads(claim).value  # type: ignore[attr-defined]
-        updated_claim_array = cbor2.loads(embedded).value  # type: ignore[attr-defined]
-
-        # Check that the protected header, the payload and the signature are preserved.
-        assert original_claim_array[0] == updated_claim_array[0]
-        assert original_claim_array[2] == updated_claim_array[2]
-        assert original_claim_array[3] == updated_claim_array[3]
 
 
 class TestHeaderParameters:

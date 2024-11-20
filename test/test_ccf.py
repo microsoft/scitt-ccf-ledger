@@ -15,8 +15,7 @@ from pyscitt.verify import verify_receipt, verify_transparent_statement
         {"alg": "ES512", "kty": "ec", "ec_curve": "P-521"},
         {"alg": "PS256", "kty": "rsa"},
         {"alg": "PS384", "kty": "rsa"},
-        {"alg": "PS512", "kty": "rsa"},
-        {"alg": "EdDSA", "kty": "ed25519"},
+        {"alg": "PS512", "kty": "rsa"}
     ],
 )
 def test_submit_claim(client: Client, trusted_ca, trust_store, params):

@@ -7,7 +7,7 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_receipt, verify_transparent_statement
 
 
 class TestHistorical:
@@ -18,13 +18,13 @@ class TestHistorical:
         result = []
         for i in range(COUNT):
             claim = crypto.sign_json_claimset(identity, {"value": i})
-            submission = client.submit_claim_and_confirm(claim)
+            submission = client.submit_and_confirm(claim)
             result.append(
                 SimpleNamespace(
                     claim=claim,
                     tx=submission.tx,
                     seqno=submission.seqno,
-                    receipt=submission.receipt,
+                    receipt=submission.receipt_bytes,
                 )
             )
         return result
@@ -43,20 +43,10 @@ class TestHistorical:
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
             receipt = client.get_receipt(s.tx, decode=False)
-            verify_receipt(s.claim, trust_store, receipt)
+            breakpoint()
+            verify_transparent_statement(receipt, trust_store, s.claim)
 
     def test_get_claim(self, client: Client, trust_store, submissions):
         for s in submissions:
             claim = client.get_claim(s.tx)
-            verify_receipt(claim, trust_store, s.receipt)
-
-    def test_get_claim_with_embedded_receipt(
-        self, client: Client, trust_store, submissions
-    ):
-        for s in submissions:
-            claim = client.get_claim(s.tx, embed_receipt=True)
-            verify_receipt(claim, trust_store)
-
-            # The original receipt can still be used on the claim, even after
-            # the ledger has embedded a new copy of it.
-            verify_receipt(claim, trust_store, s.receipt)
+            verify_transparent_statement(s.receipt, trust_store, claim)

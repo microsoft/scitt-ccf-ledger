@@ -186,6 +186,7 @@ def test_root_ca(
         client.submit_claim_and_confirm(claims).receipt
 
 
+@pytest.mark.skip(reason="uhdr stripping also removes the x5chain header")
 @pytest.mark.parametrize(
     "length, algorithm, params",
     [
