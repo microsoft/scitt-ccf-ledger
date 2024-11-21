@@ -273,6 +273,8 @@ namespace scitt
           }
         }
 
+        // Remove un-authenticated content from payload, and only keep the
+        // actual signed statement, i.e. the bytes that are in fact signed.
         const auto signed_statement = ccf::cose::edit::set_unprotected_header(
           body, ccf::cose::edit::desc::Empty{});
 

@@ -186,7 +186,14 @@ def test_root_ca(
         client.submit_claim_and_confirm(claims).receipt
 
 
-@pytest.mark.skip(reason="uhdr stripping also removes the x5chain header")
+def strip_uhdr(cose: bytes) -> bytes:
+    """
+    Strip the uhdr from a COSE message.
+    """
+    msg = Sign1Message.decode(cose)
+    msg.uhdr = {}
+    return msg.encode(tag=True, sign=False)
+
 @pytest.mark.parametrize(
     "length, algorithm, params",
     [
@@ -237,4 +244,4 @@ def test_submit_claim_notary_x509(
     claim = msg.encode(tag=True)
 
     statement = client.submit_and_confirm(claim).receipt_bytes
-    verify_transparent_statement(statement, trust_store, claim)
+    verify_transparent_statement(statement, trust_store, strip_uhdr(claim))
