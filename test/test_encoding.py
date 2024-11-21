@@ -142,7 +142,9 @@ class TestNonCanonicalEncoding:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
-    @pytest.mark.skip("Payloads are accepted, but uhdr stripping results in canonicalisation, and so the receipt cannot match")
+    @pytest.mark.skip(
+        "Payloads are accepted, but uhdr stripping results in canonicalisation, and so the receipt cannot match"
+    )
     def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
         statement = client.submit_and_confirm(claim).receipt_bytes

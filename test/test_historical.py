@@ -42,8 +42,7 @@ class TestHistorical:
 
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
-            receipt = client.get_receipt(s.tx, decode=False)
-            breakpoint()
+            receipt = client.get_statement(s.tx)
             verify_transparent_statement(receipt, trust_store, s.claim)
 
     def test_get_claim(self, client: Client, trust_store, submissions):
