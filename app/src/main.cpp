@@ -223,18 +223,19 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
-        ClaimProfile claim_profile;
+        ClaimProfile signed_statement_profile;
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;
         try
         {
-          SCITT_DEBUG("Verify submitted claim");
-          std::tie(claim_profile, phdr, uhdr) = verifier->verify_claim(
-            body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
+          SCITT_DEBUG("Verify submitted signed statement");
+          std::tie(signed_statement_profile, phdr, uhdr) =
+            verifier->verify_claim(
+              body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
         }
         catch (const verifier::VerificationError& e)
         {
-          SCITT_DEBUG("Claim verification failed: {}", e.what());
+          SCITT_DEBUG("Signed statement verification failed: {}", e.what());
           throw BadRequestError(errors::InvalidInput, e.what());
         }
 
@@ -243,7 +244,7 @@ namespace scitt
           const auto policy_violation_reason = check_for_policy_violations(
             cfg.policy.policy_script.value(),
             "configured_policy",
-            claim_profile,
+            signed_statement_profile,
             phdr);
           if (policy_violation_reason.has_value())
           {
@@ -278,15 +279,18 @@ namespace scitt
         ctx.rpc_ctx->set_claims_digest(
           ccf::ClaimsDigest::Digest(signed_statement));
 
-        // Store the original COSE_Sign1 message in the KV.
-        SCITT_DEBUG("Store submitted claim in KV store");
+        // Store the original COSE_Sign1 message in the KV, and bind it to the
+        // Merkle Tree
+        SCITT_DEBUG("Signed statement stored in the ledger");
         auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
-        entry_table->put(body);
+        entry_table->put(signed_statement);
 
         SCITT_INFO(
-          "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
+          "SignedStatementProfile={} SignedStatementSizeKb={}",
+          signed_statement_profile,
+          body.size() / 1024);
 
-        SCITT_DEBUG("Claim was submitted synchronously");
+        SCITT_DEBUG("SignedStatement was submitted synchronously");
 
         record_synchronous_operation(host_time, ctx.tx);
       };
