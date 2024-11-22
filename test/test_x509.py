@@ -194,6 +194,7 @@ def strip_uhdr(cose: bytes) -> bytes:
     msg.uhdr = {}
     return msg.encode(tag=True, sign=False)
 
+
 @pytest.mark.parametrize(
     "length, algorithm, params",
     [
