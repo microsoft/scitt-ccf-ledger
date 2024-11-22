@@ -24,7 +24,7 @@ set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(ccf_${COMPILE_TARGET} REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
