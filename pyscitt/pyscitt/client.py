@@ -497,11 +497,11 @@ class PendingSubmission:
 @dataclass
 class Submission(PendingSubmission):
     """
-    The result of submitting a claim to the service.
+    The result of submitting a statement to the service.
     """
 
     tx: str
-    receipt_bytes: bytes
+    response_bytes: bytes
     is_receipt_embedded: bool
 
     @property
@@ -515,12 +515,12 @@ class Submission(PendingSubmission):
         """Parse the receipt bytes and return a Receipt object."""
         if self.is_receipt_embedded:
             embedded_receipt = crypto.get_last_embedded_receipt_from_cose(
-                self.receipt_bytes
+                self.response_bytes
             )
             if embedded_receipt:
                 return Receipt.decode(embedded_receipt)
             raise ValueError("No embedded receipt found in COSE message header")
-        return Receipt.decode(self.receipt_bytes)
+        return Receipt.decode(self.response_bytes)
 
 
 class Client(BaseClient):
@@ -574,7 +574,7 @@ class Client(BaseClient):
             receipt = self.get_claim(tx, embed_receipt=True)
             return Submission(operation_id, tx, receipt, True)
 
-        receipt = self.get_receipt(tx, decode=False)
+        receipt = self.get_receipt(tx)
         return Submission(operation_id, tx, receipt, False)
 
     def submit_and_confirm(
@@ -589,7 +589,22 @@ class Client(BaseClient):
         ).json()
         operation_id = response["operationId"]
         tx = self.wait_for_operation(operation_id)
-        statement = self.get_statement(tx)
+        statement = self.get_transparent_statement(tx)
+        return Submission(operation_id, tx, statement, False)
+
+    def register_signed_statement(
+        self,
+        signed_statement: bytes,
+    ) -> Submission:
+        headers = {"Content-Type": "application/cose"}
+        response = self.post(
+            "/entries",
+            headers=headers,
+            content=signed_statement,
+        ).json()
+        operation_id = response["operationId"]
+        tx = self.wait_for_operation(operation_id)
+        statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
     def wait_for_operation(self, operation: str) -> str:
@@ -616,23 +631,7 @@ class Client(BaseClient):
         )
         return response.content
 
-    @overload
-    def get_receipt(
-        self,
-        tx: str,
-        *,
-        operation: bool = False,
-        decode: Literal[True] = True,
-    ) -> Receipt: ...
-
-    @overload
-    def get_receipt(
-        self, tx: str, *, operation: bool = False, decode: Literal[False]
-    ) -> bytes: ...
-
-    def get_receipt(
-        self, tx: str, *, operation: bool = False, decode: bool = True
-    ) -> Union[bytes, Receipt]:
+    def get_receipt(self, tx: str, *, operation: bool = False) -> bytes:
         """
         Get a receipt from the ledger.
 
@@ -643,12 +642,15 @@ class Client(BaseClient):
             tx = self.wait_for_operation(tx)
 
         response = self.get_historical(f"/entries/{tx}/receipt")
-        if decode:
-            return Receipt.decode(response.content)
-        else:
-            return response.content
+        return response.content
 
-    def get_statement(self, tx: str, *, operation: bool = False) -> bytes:
+    def get_transparent_statement(self, tx: str, *, operation: bool = False) -> bytes:
+        """
+        Get a transparent statement from the ledger.
+
+        If `operation` is true, the tx is treated as an operation ID and is
+        first waited on in order to obtain the actual entry ID.
+        """
         if operation:
             tx = self.wait_for_operation(tx)
 

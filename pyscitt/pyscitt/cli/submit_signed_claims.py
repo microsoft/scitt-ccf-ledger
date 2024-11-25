@@ -47,7 +47,7 @@ def submit_signed_claimset(
 
     if receipt_path:
         with open(receipt_path, "wb") as f:
-            f.write(submission.receipt_bytes)
+            f.write(submission.response_bytes)
         print(f"Received {receipt_path}")
 
 

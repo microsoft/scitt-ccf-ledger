@@ -18,24 +18,27 @@ from pyscitt.verify import verify_transparent_statement
         {"alg": "PS512", "kty": "rsa"},
     ],
 )
-def test_submit_claim(client: Client, trusted_ca, trust_store, params):
+def test_make_signed_statement_transparent(
+    client: Client, trusted_ca, trust_store, params
+):
     """
-    Submit claims to the SCITT CCF ledger and verify the resulting receipts.
-
-    Test is parametrized over different signing parameters.
+    Register a signed statement in the SCITT CCF ledger and verify the resulting transparent statement.
     """
     identity = trusted_ca.create_identity(**params)
 
     # Sign and submit a dummy claim using our new identity
-    claims = crypto.sign_json_statement(identity, {"foo": "bar"})
-    statement = client.submit_and_confirm(claims).receipt_bytes
-    verify_transparent_statement(statement, trust_store, claims)
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    transparent_statement = client.register_signed_statement(
+        signed_statement
+    ).response_bytes
+    verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
 
 @pytest.mark.isolated_test
 def test_recovery(client, trusted_ca, restart_service):
     identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
-    client.submit_claim_and_confirm(
+
+    client.register_signed_statement(
         crypto.sign_json_statement(identity, {"foo": "bar"})
     )
 
@@ -49,6 +52,6 @@ def test_recovery(client, trusted_ca, restart_service):
     assert new_network["service_certificate"] != old_network["service_certificate"]
 
     # Check that the service is still operating correctly
-    client.submit_claim_and_confirm(
+    client.register_signed_statement(
         crypto.sign_json_statement(identity, {"foo": "hello"})
     )

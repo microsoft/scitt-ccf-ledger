@@ -24,7 +24,7 @@ class TestHistorical:
                     claim=claim,
                     tx=submission.tx,
                     seqno=submission.seqno,
-                    receipt=submission.receipt_bytes,
+                    receipt=submission.response_bytes,
                 )
             )
         return result
@@ -42,7 +42,7 @@ class TestHistorical:
 
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
-            receipt = client.get_statement(s.tx)
+            receipt = client.get_transparent_statement(s.tx)
             verify_transparent_statement(receipt, trust_store, s.claim)
 
     def test_get_claim(self, client: Client, trust_store, submissions):

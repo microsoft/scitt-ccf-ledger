@@ -45,7 +45,7 @@ def test_submit_claim_x5c(
 
     # Sign and submit a dummy claim using our new identity
     claims = crypto.sign_json_statement(identity, {"foo": "bar"})
-    statement = client.submit_and_confirm(claims).receipt_bytes
+    statement = client.submit_and_confirm(claims).response_bytes
     verify_transparent_statement(statement, trust_store, claims)
 
 
@@ -138,8 +138,8 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
     second_identity = second_ca.create_identity(alg="ES256", kty="ec")
     second_claims = crypto.sign_json_statement(second_identity, {"foo": "bar"})
 
-    first_statement = client.submit_and_confirm(first_claims).receipt_bytes
-    second_statement = client.submit_and_confirm(second_claims).receipt_bytes
+    first_statement = client.submit_and_confirm(first_claims).response_bytes
+    second_statement = client.submit_and_confirm(second_claims).response_bytes
 
     verify_transparent_statement(first_statement, trust_store, first_claims)
     verify_transparent_statement(second_statement, trust_store, second_claims)
@@ -244,5 +244,5 @@ def test_submit_claim_notary_x509(
     msg.key = CoseKey.from_pem_private_key(identity.private_key)
     claim = msg.encode(tag=True)
 
-    statement = client.submit_and_confirm(claim).receipt_bytes
+    statement = client.submit_and_confirm(claim).response_bytes
     verify_transparent_statement(statement, trust_store, strip_uhdr(claim))

@@ -147,7 +147,7 @@ class TestNonCanonicalEncoding:
     )
     def test_submit_claim(self, client: Client, trust_store, claim):
         """The ledger should accept claims even if not canonically encoded."""
-        statement = client.submit_and_confirm(claim).receipt_bytes
+        statement = client.submit_and_confirm(claim).response_bytes
         verify_transparent_statement(statement, trust_store, claim)
 
 

@@ -100,7 +100,9 @@ def verify_receipt(
 
 
 def verify_transparent_statement(
-    statement: bytes, service_trust_store: TrustStore, input_signed_statement: bytes
+    transparent_statement: bytes,
+    service_trust_store: TrustStore,
+    input_signed_statement: bytes,
 ):
     trust_store_keys = {}
     for _, service_params in service_trust_store.services.items():
@@ -113,7 +115,7 @@ def verify_transparent_statement(
     # Assume a single service key
     service_key = list(trust_store_keys.values())[0]
 
-    st = Sign1Message.decode(statement)
+    st = Sign1Message.decode(transparent_statement)
     for receipt in st.uhdr[crypto.SCITTReceipts]:
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
