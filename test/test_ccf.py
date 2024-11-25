@@ -35,7 +35,9 @@ def test_submit_claim(client: Client, trusted_ca, trust_store, params):
 @pytest.mark.isolated_test
 def test_recovery(client, trusted_ca, restart_service):
     identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
-    client.submit_claim_and_confirm(crypto.sign_json_statement(identity, {"foo": "bar"}))
+    client.submit_claim_and_confirm(
+        crypto.sign_json_statement(identity, {"foo": "bar"})
+    )
 
     old_network = client.get("/node/network").json()
     assert old_network["recovery_count"] == 0
