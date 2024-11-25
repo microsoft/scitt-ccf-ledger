@@ -4,7 +4,7 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import verify_receipt, verify_transparent_statement
+from pyscitt.verify import verify_transparent_statement
 
 
 @pytest.mark.parametrize(

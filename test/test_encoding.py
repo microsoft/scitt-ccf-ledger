@@ -13,7 +13,7 @@ from pycose.messages import Sign1Message
 from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.crypto import cert_pem_to_der
-from pyscitt.verify import verify_receipt, verify_transparent_statement
+from pyscitt.verify import verify_transparent_statement
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority

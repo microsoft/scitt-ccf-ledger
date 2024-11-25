@@ -7,7 +7,6 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import TrustStore, verify_receipt
 
 from .infra.cchost import CCHost
 

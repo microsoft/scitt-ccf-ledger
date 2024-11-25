@@ -45,7 +45,6 @@ def run(request):
     return f
 
 
-@pytest.mark.skip(reason="CLI tests needs fixing")
 def test_smoke_test(run, client, tmp_path: Path):
     trust_store_path = tmp_path / "store"
     trust_store_path.mkdir()
