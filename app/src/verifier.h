@@ -361,15 +361,18 @@ namespace scitt::verifier
       return PublicKey(cert, std::nullopt);
     }
 
-    std::tuple<ClaimProfile, cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_claim(
+    std::tuple<
+      SignedStatementProfile,
+      cose::ProtectedHeader,
+      cose::UnprotectedHeader>
+    verify_signed_statement(
       const std::vector<uint8_t>& data,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
     {
-      ClaimProfile profile;
+      SignedStatementProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       try
@@ -398,7 +401,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          profile = ClaimProfile::Notary;
+          profile = SignedStatementProfile::Notary;
         }
         else if (contains_cwt_issuer(phdr))
         {
@@ -415,7 +418,7 @@ namespace scitt::verifier
               "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
           }
 
-          profile = ClaimProfile::IETF;
+          profile = SignedStatementProfile::IETF;
         }
         else if (phdr.x5chain.has_value())
         {
@@ -431,7 +434,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          profile = ClaimProfile::X509;
+          profile = SignedStatementProfile::X509;
         }
         else
         {

@@ -119,6 +119,13 @@ namespace scitt
     }
   }
 
+  /**
+   * Obtain COSE receipt in the format described in
+   * https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
+   * from a CCF TxReceiptImplPtr obtained through a historical query.
+   * The proof format is described in
+   * https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/
+   */
   std::vector<uint8_t> get_cose_receipt(ccf::TxReceiptImplPtr receipt_ptr)
   {
     auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
@@ -225,9 +232,10 @@ namespace scitt
       auto resolver = std::make_unique<did::UniversalResolver>();
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
-      auto post_entry = [this](EndpointContext& ctx) {
+      auto register_signed_statement = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
-        SCITT_DEBUG("Entry body size: {} bytes", body.size());
+        SCITT_DEBUG(
+          "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
         {
           throw BadRequestError(
@@ -246,19 +254,19 @@ namespace scitt
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
-        SCITT_DEBUG("Get SCITT configuration from KV store");
+        SCITT_DEBUG("Get service configuration from KV store");
         auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
                      ->get()
                      .value_or(Configuration{});
 
-        ClaimProfile signed_statement_profile;
+        SignedStatementProfile signed_statement_profile;
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;
         try
         {
           SCITT_DEBUG("Verify submitted signed statement");
           std::tie(signed_statement_profile, phdr, uhdr) =
-            verifier->verify_claim(
+            verifier->verify_signed_statement(
               body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
         }
         catch (const verifier::VerificationError& e)
@@ -306,11 +314,14 @@ namespace scitt
         const auto signed_statement = ccf::cose::edit::set_unprotected_header(
           body, ccf::cose::edit::desc::Empty{});
 
+        // Bind the digest of the signed statement in the Merkle Tree as a
+        // claims digest for this transaction
         ctx.rpc_ctx->set_claims_digest(
           ccf::ClaimsDigest::Digest(signed_statement));
 
-        // Store the original COSE_Sign1 message in the KV, and bind it to the
-        // Merkle Tree
+        // Store the original COSE_Sign1 message in the KV, so we can retrieve
+        // it later, inject the receipt in it, and serve a transparent
+        // statement.
         SCITT_DEBUG("Signed statement stored in the ledger");
         auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
@@ -324,11 +335,14 @@ namespace scitt
 
         record_synchronous_operation(host_time, ctx.tx);
       };
-
+      /**
+       * Signed Statement Registration, 2.1.2 in
+       * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       */
       make_endpoint_with_local_commit_handler(
         "/entries",
         HTTP_POST,
-        post_entry,
+        register_signed_statement,
         operation_locally_committed_func,
         authn_policy)
         .install();
