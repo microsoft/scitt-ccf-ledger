@@ -152,7 +152,7 @@ def sign_claims(
         claims = claims_path.read_bytes()
         registration_info = {arg.name: arg.value() for arg in registration_info_args}
 
-        signed_claims = crypto.sign_claimset(
+        signed_claims = crypto.sign_statement(
             signer, claims, content_type, feed, registration_info
         )
 

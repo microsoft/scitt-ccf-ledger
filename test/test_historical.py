@@ -17,7 +17,7 @@ class TestHistorical:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         result = []
         for i in range(COUNT):
-            claim = crypto.sign_json_claimset(identity, {"value": i})
+            claim = crypto.sign_json_statement(identity, {"value": i})
             submission = client.submit_and_confirm(claim)
             result.append(
                 SimpleNamespace(

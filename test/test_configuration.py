@@ -18,7 +18,7 @@ class TestAcceptedAlgorithms:
         def f(**kwargs):
             """Sign and submit the claims with a new identity"""
             identity = trusted_ca.create_identity(**kwargs)
-            claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+            claims = crypto.sign_json_statement(identity, {"foo": "bar"})
             client.submit_claim_and_confirm(claims)
 
         return f
@@ -62,7 +62,7 @@ class TestPolicyEngine:
     @pytest.fixture(scope="class")
     def signed_claimset(self, trusted_ca: X5ChainCertificateAuthority):
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
-        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+        return crypto.sign_json_statement(identity, {"foo": "bar"})
 
     def test_ietf_didx509_policy(
         self,
@@ -108,7 +108,7 @@ class TestPolicyEngine:
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
-            crypto.sign_json_claimset(identities[1], claims, feed=feed, cwt=True),
+            crypto.sign_json_statement(identities[1], claims, feed=feed, cwt=True),
         ]
 
         profile_error = "This policy only accepts IETF did:x509 claims"
@@ -122,20 +122,20 @@ class TestPolicyEngine:
         refused_signed_claims = {
             # Well-constructed, but not a valid issuer
             invalid_issuer: [
-                crypto.sign_json_claimset(identities[0], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[0], claims, feed=feed, cwt=True),
             ],
             eku_not_found: [
-                crypto.sign_json_claimset(identities[2], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[2], claims, feed=feed, cwt=True),
             ],
             openssl_error: [
-                crypto.sign_json_claimset(identities[3], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[3], claims, feed=feed, cwt=True),
             ],
             invalid_did: [
-                crypto.sign_json_claimset(identities[4], claims, feed=feed, cwt=True),
-                crypto.sign_json_claimset(identities[5], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[4], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[5], claims, feed=feed, cwt=True),
             ],
             not_supported: [
-                crypto.sign_json_claimset(identities[6], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(identities[6], claims, feed=feed, cwt=True),
             ],
         }
 
@@ -182,7 +182,7 @@ export function apply(profile, phdr) {{
         claims = {"foo": "bar"}
 
         permitted_signed_claims = [
-            crypto.sign_json_claimset(identity, claims, feed=feed, svn=1, cwt=True),
+            crypto.sign_json_statement(identity, claims, feed=feed, svn=1, cwt=True),
         ]
 
         profile_error = "This policy only accepts IETF did:x509 claims"
@@ -192,8 +192,8 @@ export function apply(profile, phdr) {{
         refused_signed_claims = {
             # Well-constructed, but not a valid issuer
             invalid_svn: [
-                crypto.sign_json_claimset(identity, claims, feed=feed, cwt=True),
-                crypto.sign_json_claimset(
+                crypto.sign_json_statement(identity, claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
                     identity, claims, feed=feed, svn=-11, cwt=True
                 ),
             ],

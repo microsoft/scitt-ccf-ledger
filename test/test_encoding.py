@@ -94,7 +94,7 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
     """
     Sign a COSE Sign1 envelope.
 
-    This function is similar to `crypto.sign_claimset`, but it bypasses pycose
+    This function is similar to `crypto.sign_statement`, but it bypasses pycose
     allowing us to encode invalid messages that pycose would refuse to encode.
 
     Default values for common parameters will be added automatically if not
