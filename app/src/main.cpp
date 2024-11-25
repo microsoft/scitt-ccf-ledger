@@ -476,9 +476,10 @@ namespace scitt
         auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
         // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
-        // Page 16, 394 is the label for an array of receipts in the unprotected
-        // header
-        int64_t receipts = 394;
+        // Section 4.4, 394 is the label for an array of receipts in the
+        // unprotected header (scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS
+        // here)
+        int64_t receipts = scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
         ccf::cose::edit::desc::Value receipts_desc{
           ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
