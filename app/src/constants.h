@@ -15,8 +15,6 @@ namespace scitt
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
-  const std::chrono::seconds DID_RESOLUTION_CACHE_EXPIRY{60 * 30};
-
   namespace errors
   {
     const std::string DIDMethodNotSupported = "DIDMethodNotSupported";

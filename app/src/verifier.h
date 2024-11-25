@@ -369,7 +369,6 @@ namespace scitt::verifier
       const std::vector<uint8_t>& data,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
-      std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
     {
       SignedStatementProfile profile;

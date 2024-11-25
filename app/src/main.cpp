@@ -266,8 +266,7 @@ namespace scitt
         {
           SCITT_DEBUG("Verify submitted signed statement");
           std::tie(signed_statement_profile, phdr, uhdr) =
-            verifier->verify_signed_statement(
-              body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
+            verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
         {

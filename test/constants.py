@@ -5,4 +5,3 @@
 # Make sure to keep them in sync.
 
 OPERATION_EXPIRY_SECONDS = 60 * 60
-DID_RESOLUTION_CACHE_EXPIRY_SECONDS = 60 * 30
