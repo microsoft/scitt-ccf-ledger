@@ -119,6 +119,34 @@ namespace scitt
     }
   }
 
+  std::vector<uint8_t> get_cose_receipt(ccf::TxReceiptImplPtr receipt_ptr)
+  {
+    auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
+    if (!proof.has_value())
+    {
+      throw InternalError("Failed to get Merkle proof");
+    }
+
+    auto signature = describe_cose_signature_v1(*receipt_ptr);
+    if (!signature.has_value())
+    {
+      throw InternalError("Failed to get COSE signature");
+    }
+
+    // See
+    // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
+    // Page 11, vdp is the label for verifiable-proods in the unprotected
+    // header of the receipt
+    int64_t vdp = 396;
+    // -1 is the label for inclusion-proofs
+    auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
+    ccf::cose::edit::desc::Value inclusion_desc{inclusion_proof, vdp, *proof};
+
+    auto cose_receipt =
+      ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
+    return cose_receipt;
+  }
+
   class AppEndpoints : public ccf::UserEndpointRegistry
   {
   private:
@@ -396,30 +424,7 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
-        auto proof = ccf::describe_merkle_proof_v1(*historical_state->receipt);
-        if (!proof.has_value())
-        {
-          throw InternalError("Failed to get Merkle proof");
-        }
-
-        auto signature = describe_cose_signature_v1(*historical_state->receipt);
-        if (!signature.has_value())
-        {
-          throw InternalError("Failed to get COSE signature");
-        }
-
-        // See
-        // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
-        // Page 11, vdp is the label for verifiable-proods in the unprotected
-        // header of the receipt
-        int64_t vdp = 396;
-        // -1 is the label for inclusion-proofs
-        auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
-        ccf::cose::edit::desc::Value inclusion_desc{
-          inclusion_proof, vdp, *proof};
-
-        auto cose_receipt =
-          ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
+        auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
         ctx.rpc_ctx->set_response_body(cose_receipt);
         ctx.rpc_ctx->set_response_header(
@@ -455,30 +460,7 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
-        auto proof = ccf::describe_merkle_proof_v1(*historical_state->receipt);
-        if (!proof.has_value())
-        {
-          throw InternalError("Failed to get Merkle proof");
-        }
-
-        auto signature = describe_cose_signature_v1(*historical_state->receipt);
-        if (!signature.has_value())
-        {
-          throw InternalError("Failed to get COSE signature");
-        }
-
-        // See
-        // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
-        // Page 11, vdp is the label for verifiable-proods in the unprotected
-        // header of the receipt
-        int64_t vdp = 396;
-        // -1 is the label for inclusion-proofs
-        auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
-        ccf::cose::edit::desc::Value inclusion_desc{
-          inclusion_proof, vdp, *proof};
-
-        auto cose_receipt =
-          ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
+        auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
         // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
         // Page 16, 394 is the label for an array of receipts in the unprotected
