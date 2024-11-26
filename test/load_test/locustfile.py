@@ -13,10 +13,10 @@ CLIENT_WAIT_TIME = 0.01
 
 @events.init_command_line_parser.add_listener
 def init_parser(parser):
-    parser.add_argument("--scitt-claims", help="Path to claims directory")
+    parser.add_argument("--scitt-statements", help="Path to statements directory")
     parser.add_argument(
         "--skip-confirmation",
-        help="Whether to skip claim submission confirmation or not",
+        help="Whether to skip statements submission confirmation or not",
         action="store_true",
         default=False,
     )
@@ -48,20 +48,22 @@ class ScittUser(FastHttpUser):
 
 class Submitter(ScittUser):
     def on_start(self):
-        claims_dir = self.environment.parsed_options.scitt_claims
+        claims_dir = self.environment.parsed_options.scitt_statements
         self.skip_confirmation = self.environment.parsed_options.skip_confirmation
-        self._claims = []
+        self._signed_statements = []
         for path in Path(claims_dir).glob("*.cose"):
-            self._claims.append(path.read_bytes())
+            self._signed_statements.append(path.read_bytes())
 
     @task
-    def submit_claim(self):
-        claim = self._claims[random.randrange(len(self._claims))]
+    def submit_signed_statement(self):
+        signed_statement = self._signed_statements[
+            random.randrange(len(self._signed_statements))
+        ]
         self.trace(
-            "submit_claim",
+            "submit_signed_statement",
             lambda: (
-                self.client.submit_claim(claim)
+                self.client.submit_signed_statement(signed_statement)
                 if self.skip_confirmation
-                else self.client.submit_claim_and_confirm(claim)
+                else self.client.register_signed_statement(signed_statement)
             ),
         )

@@ -34,13 +34,6 @@ class SigningType(Enum):
     HTTP = "HTTP"
 
 
-class ReceiptType(Enum):
-    """Receipt types supported by the ledger."""
-
-    EMBEDDED = "embedded"
-    RAW = "raw"
-
-
 class MemberAuthenticationMethod(ABC):
     cert: str
 
@@ -488,7 +481,7 @@ class BaseClient:
 @dataclass
 class PendingSubmission:
     """
-    The pending result of submitting a claim to the service.
+    The pending result of submitting a statement to the service.
     """
 
     operation_tx: str
@@ -543,54 +536,18 @@ class Client(BaseClient):
         # Note: This endpoint only returns data for did:web DIDs.
         return self.get(f"/did/{did}").json()["did_document"]
 
-    def submit_claim(
+    def submit_signed_statement(
         self,
-        claim: bytes,
+        signed_statement: bytes,
     ) -> PendingSubmission:
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
             headers=headers,
-            content=claim,
+            content=signed_statement,
         ).json()
         operation_id = response["operationId"]
         return PendingSubmission(operation_id)
-
-    def submit_claim_and_confirm(
-        self,
-        claim: bytes,
-        *,
-        receipt_type: ReceiptType = ReceiptType.RAW,
-    ) -> Submission:
-        headers = {"Content-Type": "application/cose"}
-        response = self.post(
-            "/entries",
-            headers=headers,
-            content=claim,
-        ).json()
-        operation_id = response["operationId"]
-        tx = self.wait_for_operation(operation_id)
-        if receipt_type == ReceiptType.EMBEDDED:
-            receipt = self.get_claim(tx, embed_receipt=True)
-            return Submission(operation_id, tx, receipt, True)
-
-        receipt = self.get_receipt(tx)
-        return Submission(operation_id, tx, receipt, False)
-
-    def submit_and_confirm(
-        self,
-        claim: bytes,
-    ) -> Submission:
-        headers = {"Content-Type": "application/cose"}
-        response = self.post(
-            "/entries",
-            headers=headers,
-            content=claim,
-        ).json()
-        operation_id = response["operationId"]
-        tx = self.wait_for_operation(operation_id)
-        statement = self.get_transparent_statement(tx)
-        return Submission(operation_id, tx, statement, False)
 
     def register_signed_statement(
         self,
