@@ -9,10 +9,10 @@ from ..client import Client
 from .client_arguments import add_client_arguments, create_client
 
 
-def submit_signed_statement(
+def register_signed_statement(
     client: Client,
     path: Path,
-    receipt_path: Optional[Path],
+    transparent_statement_path: Optional[Path],
     skip_confirmation: bool,
 ):
     if path.suffix != ".cose":
@@ -32,17 +32,17 @@ def submit_signed_statement(
         return
 
     submission = client.register_signed_statement(signed_statement)
-    print(f"Submitted {path} as transaction {submission.tx}")
+    print(f"Registered {path} as transaction {submission.tx}")
 
-    if receipt_path:
-        with open(receipt_path, "wb") as f:
+    if transparent_statement_path:
+        with open(transparent_statement_path, "wb") as f:
             f.write(submission.response_bytes)
-        print(f"Received {receipt_path}")
+        print(f"Received {transparent_statement_path}")
 
 
 def cli(fn):
     parser = fn(
-        description="Submit signed statement (COSE) to a SCITT CCF Ledger and retrieve transparent statement"
+        description="Register signed statement (COSE) to a SCITT CCF Ledger and retrieve transparent statement"
     )
     add_client_arguments(parser, with_auth_token=True)
     parser.add_argument("path", type=Path, help="Path to signed statement file (COSE)")
@@ -58,7 +58,7 @@ def cli(fn):
 
     def cmd(args):
         client = create_client(args)
-        submit_signed_statement(
+        register_signed_statement(
             client,
             args.path,
             args.transparent_statement,
