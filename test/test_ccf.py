@@ -26,7 +26,6 @@ def test_make_signed_statement_transparent(
     """
     identity = trusted_ca.create_identity(**params)
 
-    # Sign and submit a dummy claim using our new identity
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     transparent_statement = client.register_signed_statement(
         signed_statement

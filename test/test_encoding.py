@@ -136,8 +136,8 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def claim(self, trusted_ca):
-        """Create a signed claim, with protected headers encoded non-canonically."""
+    def signed_statement(self, trusted_ca):
+        """Create a signed statement, with protected headers encoded non-canonically."""
 
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
@@ -145,10 +145,16 @@ class TestNonCanonicalEncoding:
     @pytest.mark.skip(
         "Payloads are accepted, but uhdr stripping results in canonicalisation, and so the receipt cannot match"
     )
-    def test_submit_claim(self, client: Client, trust_store, claim):
-        """The ledger should accept claims even if not canonically encoded."""
-        statement = client.submit_and_confirm(claim).response_bytes
-        verify_transparent_statement(statement, trust_store, claim)
+    def test_submit_signed_statement(
+        self, client: Client, trust_store, signed_statement
+    ):
+        """The ledger should accept signed statements even if not canonically encoded."""
+        transparent_statement = client.register_signed_statement(
+            signed_statement
+        ).response_bytes
+        verify_transparent_statement(
+            transparent_statement, trust_store, signed_statement
+        )
 
 
 class TestHeaderParameters:
@@ -161,7 +167,7 @@ class TestHeaderParameters:
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
         def f(parameters, *, signer=identity):
-            return client.submit_claim_and_confirm(sign(signer, b"Hello", parameters))
+            return client.register_signed_statement(sign(signer, b"Hello", parameters))
 
         return f
 

@@ -631,6 +631,10 @@ class Client(BaseClient):
         )
         return response.content
 
+    def get_signed_statement(self, tx: str) -> bytes:
+        response = self.get_historical(f"/entries/{tx}")
+        return response.content
+
     def get_receipt(self, tx: str, *, operation: bool = False) -> bytes:
         """
         Get a receipt from the ledger.
@@ -657,11 +661,11 @@ class Client(BaseClient):
         response = self.get_historical(f"/entries/{tx}/statement")
         return response.content
 
-    def enumerate_claims(
+    def enumerate_statements(
         self, *, start: Optional[int] = None, end: Optional[int] = None
     ) -> Iterable[str]:
         """
-        Enumerate all claims on the ledger, with an optional start and end range.
+        Enumerate all statements on the ledger, with an optional start and end range.
 
         Yields a sequence of transaction numbers. The contents and/or receipt for a given claim can
         be fetched using the `get_claim` and `get_receipt` methods.

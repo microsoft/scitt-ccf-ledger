@@ -380,7 +380,7 @@ def trusted_ca(client) -> X5ChainCertificateAuthority:
     """
     Create a X5ChainCertificateAuthority and add its root to the SCITT service.
 
-    The service will accept claims signed using certificates issued by the CA.
+    The service will accept statements signed using certificates issued by the CA.
     """
     ca = X5ChainCertificateAuthority(kty="ec")
     proposal = governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle)
@@ -393,7 +393,7 @@ def untrusted_ca(client) -> X5ChainCertificateAuthority:
     """
     Create a X5ChainCertificateAuthority but do not add its root to the SCITT service.
 
-    The service will reject claims signed using certificates issued by the CA.
+    The service will reject statements signed using certificates issued by the CA.
     """
     return X5ChainCertificateAuthority(kty="ec")
 

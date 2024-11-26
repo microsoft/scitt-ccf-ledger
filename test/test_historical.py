@@ -17,11 +17,11 @@ class TestHistorical:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         result = []
         for i in range(COUNT):
-            claim = crypto.sign_json_statement(identity, {"value": i})
-            submission = client.submit_and_confirm(claim)
+            signed_statement = crypto.sign_json_statement(identity, {"value": i})
+            submission = client.submit_and_confirm(signed_statement)
             result.append(
                 SimpleNamespace(
-                    claim=claim,
+                    signed_statement=signed_statement,
                     tx=submission.tx,
                     seqno=submission.seqno,
                     receipt=submission.response_bytes,
@@ -29,9 +29,9 @@ class TestHistorical:
             )
         return result
 
-    def test_enumerate_claims(self, client: Client, submissions):
+    def test_enumerate_statements(self, client: Client, submissions):
         seqnos = list(
-            client.enumerate_claims(
+            client.enumerate_statements(
                 start=submissions[0].seqno, end=submissions[-1].seqno
             )
         )
@@ -43,9 +43,9 @@ class TestHistorical:
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
             receipt = client.get_transparent_statement(s.tx)
-            verify_transparent_statement(receipt, trust_store, s.claim)
+            verify_transparent_statement(receipt, trust_store, s.signed_statement)
 
-    def test_get_claim(self, client: Client, trust_store, submissions):
+    def test_get_signed_statement(self, client: Client, trust_store, submissions):
         for s in submissions:
-            claim = client.get_claim(s.tx)
-            verify_transparent_statement(s.receipt, trust_store, claim)
+            signed_statement = client.get_signed_statement(s.tx)
+            verify_transparent_statement(s.receipt, trust_store, signed_statement)
