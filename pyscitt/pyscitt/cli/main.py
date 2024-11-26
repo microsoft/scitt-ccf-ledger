@@ -8,17 +8,17 @@ from . import (
     governance,
     pretty_receipt,
     retrieve_signed_claims,
-    sign_claims,
+    sign,
     split_payload,
-    submit_signed_claims,
+    register,
     upload_did_web_doc_to_github,
     validate_cose,
 )
 
 COMMANDS = [
     ("upload-did-web-github", upload_did_web_doc_to_github),
-    ("sign", sign_claims),
-    ("submit", submit_signed_claims),
+    ("sign", sign),
+    ("submit", register),
     ("retrieve", retrieve_signed_claims),
     ("split-payload", split_payload),
     ("pretty-receipt", pretty_receipt),
