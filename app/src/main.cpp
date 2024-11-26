@@ -437,6 +437,7 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
+        SCITT_DEBUG("Get signed statement from the ledger");
         auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
         ctx.rpc_ctx->set_response_body(cose_receipt);
