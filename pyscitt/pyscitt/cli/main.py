@@ -7,10 +7,10 @@ from . import (
     embed_receipt_in_cose,
     governance,
     pretty_receipt,
+    register,
     retrieve_signed_claims,
     sign,
     split_payload,
-    register,
     upload_did_web_doc_to_github,
     validate_cose,
 )
