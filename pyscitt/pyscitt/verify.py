@@ -15,6 +15,7 @@ import pycose
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509 import load_der_x509_certificate
+from cryptography.x509.base import CertificatePublicKeyTypes
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
@@ -54,16 +55,18 @@ class ServiceParameters:
 
 
 class TrustStore(ABC):
-    @property
-    @abstractmethod
-    def services(self):
-        pass
-
     @abstractmethod
     def lookup(self, phdr) -> ServiceParameters:
         """
         Look up a service's parameters based on the protected headers from a
         receipt. Raises an exception if not matching service is found.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def key(self, kid) -> CertificatePublicKeyTypes:
+        """
+        Look up a public key based on a key identifier.
         """
         raise NotImplementedError()
 
@@ -104,22 +107,16 @@ def verify_transparent_statement(
     service_trust_store: TrustStore,
     input_signed_statement: bytes,
 ):
-    trust_store_keys = {}
-    for _, service_params in service_trust_store.services.items():
-        cert = load_der_x509_certificate(service_params.certificate, default_backend())
-        key = cert.public_key()
-        kid = sha256(
-            key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-        ).digest()
-        trust_store_keys[kid] = key
-    # Assume a single service key
-    service_key = list(trust_store_keys.values())[0]
+    statement = Sign1Message.decode(transparent_statement)
 
-    st = Sign1Message.decode(transparent_statement)
-    for receipt in st.uhdr[crypto.SCITTReceipts]:
-        ccf.cose.verify_receipt(
-            receipt, service_key, sha256(input_signed_statement).digest()
-        )
+    assert statement.uhdr[crypto.SCITTReceipts]
+
+    for receipt in statement.uhdr[crypto.SCITTReceipts]:
+        r = Sign1Message.decode(receipt)
+        kid = r.phdr.get(pycose.headers.KID)
+        key = service_trust_store.key(kid)
+
+        ccf.cose.verify_receipt(receipt, key, sha256(input_signed_statement).digest())
 
 
 class StaticTrustStore(TrustStore):
@@ -176,6 +173,19 @@ class StaticTrustStore(TrustStore):
         else:
             raise ValueError(f"Unknown service identity {service_id!r}")
 
+    def key(self, kid):
+        trust_store_keys = {}
+        for _, service_params in self.services.items():
+            cert = load_der_x509_certificate(
+                service_params.certificate, default_backend()
+            )
+            key = cert.public_key()
+            kid = sha256(
+                key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+            ).digest()
+            trust_store_keys[kid] = key
+        return trust_store_keys[kid]
+
 
 class DIDDocumentTrustStore(TrustStore):
     """
@@ -186,7 +196,6 @@ class DIDDocumentTrustStore(TrustStore):
     """
 
     document: dict
-    services: dict
 
     def __init__(self, document: dict):
         self.document = document
@@ -212,29 +221,8 @@ class DIDDocumentTrustStore(TrustStore):
 
         return ServiceParameters("CCF", "ES256", certificate)
 
-
-class DIDResolverTrustStore(TrustStore):
-    """
-    A trust store which uses the issuer found in receipts to dynamically
-    resolve the service parameters.
-
-    The trust store does not restrict which issuers are allowed, only that the
-    receipt signature matches the identifier.
-    """
-
-    services: dict
-
-    def __init__(self, resolver: Optional[did.Resolver] = None):
-        if resolver is not None:
-            self.resolver = resolver
-        else:
-            self.resolver = did.Resolver()
-
-    def lookup(self, phdr) -> ServiceParameters:
-        if SCITTIssuer not in phdr:
-            raise ValueError("Receipt does not have an issuer")
-
-        issuer = phdr[SCITTIssuer]
-        document = self.resolver.resolve(issuer)
-
-        return DIDDocumentTrustStore(document).lookup(phdr)
+    def key(self, kid) -> CertificatePublicKeyTypes:
+        """
+        Look up a public key based on a key identifier.
+        """
+        raise NotImplementedError()
