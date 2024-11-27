@@ -144,7 +144,6 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
     )
 
 
-@pytest.mark.skip(reason="CLI tests needs fixing")
 def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     # Add basic service config
     (tmp_path / "config.json").write_text(
@@ -190,19 +189,19 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     )
 
     # Prepare an x509 cose file to submit to the service
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
     run(
         "sign",
         "--key",
         tmp_path / "signerkey.pem",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--x5c",
         tmp_path / "signerca.pem",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     # Submit cose and make sure TLS verification is enabled
@@ -211,14 +210,12 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
         "submit",
         "--cacert",
         tmp_path / "tlscacert.pem",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
         "--url",
         # TLS cert SAN entries come from config node_certificate.subject_alt_names
         client.url,
-        "--receipt",
-        tmp_path / "claims.embedded.cose",
-        "--receipt-type",
-        "embedded",
+        "--transparent-statement",
+        tmp_path / "transparent_statement.cose",
     )
 
     trust_store_path = tmp_path / "store"
@@ -226,7 +223,7 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     (trust_store_path / "service.json").write_text(json.dumps(service_params))
     run(
         "validate",
-        tmp_path / "claims.embedded.cose",
+        tmp_path / "transparent_statement.cose",
         "--service-trust-store",
         trust_store_path,
     )
