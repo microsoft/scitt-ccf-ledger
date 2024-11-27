@@ -59,7 +59,6 @@ def test_smoke_test(run, client, tmp_path: Path):
     )
 
 
-@pytest.mark.skip(reason="CLI tests needs fixing")
 def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
     # Add basic service config
     (tmp_path / "config.json").write_text(
@@ -255,7 +254,7 @@ def test_adhoc_signer(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "key_pub.pem").write_text(public_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     # Sign without even an issuer.
     # Note that the ledger wouldn't accept such a claim, we'd need to embed an x509 chain for it to
@@ -264,12 +263,12 @@ def test_adhoc_signer(run, tmp_path: Path):
         "sign",
         "--key",
         tmp_path / "key.pem",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     # Sign with a DID issuer, but without creating an on-disk DID document first.
@@ -280,21 +279,21 @@ def test_adhoc_signer(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--issuer",
         "did:web:example.com",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--alg",
         "PS384",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
 
 def test_registration_info(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     binary_data = b"\xde\xad\xbe\xef"
     binary_path = tmp_path / "binary.txt"
@@ -317,13 +316,13 @@ def test_registration_info(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--content-type",
         "application/json",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
-    data = (tmp_path / "claims.cose").read_bytes()
+    data = (tmp_path / "signed_statement.cose").read_bytes()
     msg = CoseMessage.decode(data)
     info = msg.get_attr(crypto.SCITTRegistrationInfo)
     assert info == {
@@ -339,7 +338,7 @@ def test_registration_info(run, tmp_path: Path):
 def test_extract_payload_from_cose(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     run(
         "sign",
@@ -347,15 +346,15 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--content-type",
         "application/json",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     run(
         "split-payload",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
         "--out",
         tmp_path / "payload.json",
     )

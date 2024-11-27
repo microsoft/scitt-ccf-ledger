@@ -12,7 +12,7 @@ from . import (
     sign,
     split_payload,
     upload_did_web_doc_to_github,
-    validate_cose,
+    validate,
 )
 
 COMMANDS = [
@@ -23,7 +23,7 @@ COMMANDS = [
     ("split-payload", split_payload),
     ("pretty-receipt", pretty_receipt),
     ("embed-receipt", embed_receipt_in_cose),
-    ("validate", validate_cose),
+    ("validate", validate),
     ("governance", governance),
 ]
 
