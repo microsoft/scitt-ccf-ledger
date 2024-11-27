@@ -7,7 +7,7 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_transparent_statement
 
 
 class TestHistorical:
@@ -17,21 +17,21 @@ class TestHistorical:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         result = []
         for i in range(COUNT):
-            claim = crypto.sign_json_claimset(identity, {"value": i})
-            submission = client.submit_claim_and_confirm(claim)
+            signed_statement = crypto.sign_json_statement(identity, {"value": i})
+            submission = client.register_signed_statement(signed_statement)
             result.append(
                 SimpleNamespace(
-                    claim=claim,
+                    signed_statement=signed_statement,
                     tx=submission.tx,
                     seqno=submission.seqno,
-                    receipt=submission.receipt,
+                    receipt=submission.response_bytes,
                 )
             )
         return result
 
-    def test_enumerate_claims(self, client: Client, submissions):
+    def test_enumerate_statements(self, client: Client, submissions):
         seqnos = list(
-            client.enumerate_claims(
+            client.enumerate_statements(
                 start=submissions[0].seqno, end=submissions[-1].seqno
             )
         )
@@ -42,21 +42,10 @@ class TestHistorical:
 
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
-            receipt = client.get_receipt(s.tx, decode=False)
-            verify_receipt(s.claim, trust_store, receipt)
+            receipt = client.get_transparent_statement(s.tx)
+            verify_transparent_statement(receipt, trust_store, s.signed_statement)
 
-    def test_get_claim(self, client: Client, trust_store, submissions):
+    def test_get_signed_statement(self, client: Client, trust_store, submissions):
         for s in submissions:
-            claim = client.get_claim(s.tx)
-            verify_receipt(claim, trust_store, s.receipt)
-
-    def test_get_claim_with_embedded_receipt(
-        self, client: Client, trust_store, submissions
-    ):
-        for s in submissions:
-            claim = client.get_claim(s.tx, embed_receipt=True)
-            verify_receipt(claim, trust_store)
-
-            # The original receipt can still be used on the claim, even after
-            # the ledger has embedded a new copy of it.
-            verify_receipt(claim, trust_store, s.receipt)
+            signed_statement = client.get_signed_statement(s.tx)
+            verify_transparent_statement(s.receipt, trust_store, signed_statement)

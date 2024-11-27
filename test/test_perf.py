@@ -45,11 +45,13 @@ class TestPerf:
         identity = trusted_ca.create_identity(
             length=1, alg="ES256", kty="ec", ec_curve="P-256"
         )
-        claim = crypto.sign_json_claimset(identity, payload)
+        signed_statemtent = crypto.sign_json_statement(identity, payload)
 
-        latency_x5c_submit_s = measure_latency(lambda _: client.submit_claim(claim))
+        latency_x5c_submit_s = measure_latency(
+            lambda _: client.register_signed_statement(signed_statemtent)
+        )
         latency_x5c_submit_and_receipt_s = measure_latency(
-            lambda _: client.submit_claim_and_confirm(claim)
+            lambda _: client.register_signed_statement(signed_statemtent)
         )
 
         # Time-to-receipt depends on the configured signature interval of

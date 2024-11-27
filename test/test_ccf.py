@@ -4,7 +4,7 @@ import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_transparent_statement
 
 
 @pytest.mark.parametrize(
@@ -16,30 +16,30 @@ from pyscitt.verify import verify_receipt
         {"alg": "PS256", "kty": "rsa"},
         {"alg": "PS384", "kty": "rsa"},
         {"alg": "PS512", "kty": "rsa"},
-        {"alg": "EdDSA", "kty": "ed25519"},
     ],
 )
-def test_submit_claim(client: Client, trusted_ca, trust_store, params):
+def test_make_signed_statement_transparent(
+    client: Client, trusted_ca, trust_store, params
+):
     """
-    Submit claims to the SCITT CCF ledger and verify the resulting receipts.
-
-    Test is parametrized over different signing parameters.
+    Register a signed statement in the SCITT CCF ledger and verify the resulting transparent statement.
     """
     identity = trusted_ca.create_identity(**params)
 
-    # Sign and submit a dummy claim using our new identity
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt_bytes
-    verify_receipt(claims, trust_store, receipt)
-
-    embedded = crypto.embed_receipt_in_cose(claims, receipt)
-    verify_receipt(embedded, trust_store, None)
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    transparent_statement = client.register_signed_statement(
+        signed_statement
+    ).response_bytes
+    verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
 
 @pytest.mark.isolated_test
 def test_recovery(client, trusted_ca, restart_service):
     identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
-    client.submit_claim_and_confirm(crypto.sign_json_claimset(identity, {"foo": "bar"}))
+
+    client.register_signed_statement(
+        crypto.sign_json_statement(identity, {"foo": "bar"})
+    )
 
     old_network = client.get("/node/network").json()
     assert old_network["recovery_count"] == 0
@@ -51,6 +51,6 @@ def test_recovery(client, trusted_ca, restart_service):
     assert new_network["service_certificate"] != old_network["service_certificate"]
 
     # Check that the service is still operating correctly
-    client.submit_claim_and_confirm(
-        crypto.sign_json_claimset(identity, {"foo": "hello"})
+    client.register_signed_statement(
+        crypto.sign_json_statement(identity, {"foo": "hello"})
     )

@@ -575,9 +575,9 @@ class Signer:
 
 
 # TODO: merge with Key Vault signer implementation
-def sign_claimset(
+def sign_statement(
     signer: Signer,
-    claims: bytes,
+    statement: bytes,
     content_type: str,
     feed: Optional[str] = None,
     registration_info: Optional[RegistrationInfo] = None,
@@ -612,22 +612,22 @@ def sign_claimset(
     if registration_info:
         headers[SCITTRegistrationInfo] = registration_info
 
-    msg = Sign1Message(phdr=headers, payload=claims)
+    msg = Sign1Message(phdr=headers, payload=statement)
     msg.key = CoseKey.from_pem_private_key(signer.private_key)
     return msg.encode(tag=True)
 
 
-def sign_json_claimset(
+def sign_json_statement(
     signer: Signer,
-    claims: Any,
+    statement: Any,
     content_type: str = "application/vnd.dummy+json",
     feed: Optional[str] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
 ) -> bytes:
-    return sign_claimset(
+    return sign_statement(
         signer,
-        json.dumps(claims).encode("ascii"),
+        json.dumps(statement).encode("ascii"),
         content_type=content_type,
         feed=feed,
         svn=svn,

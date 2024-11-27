@@ -110,8 +110,8 @@ def create_signer_from_arguments(
         return crypto.Signer(key, issuer, kid, algorithm)
 
 
-def sign_claims(
-    claims_path: Path,
+def sign_statement(
+    statement_path: Path,
     key_path: Path,
     out_path: Path,
     did_doc_path: Optional[Path],
@@ -138,8 +138,8 @@ def sign_claims(
         ca_certs = _parse_x5c_file(x5c_path)
 
         kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
-        signed_claims = kv_client.cose_sign(
-            claims_path.read_bytes(),
+        signed_statement = kv_client.cose_sign(
+            statement_path.read_bytes(),
             {
                 pycose.headers.ContentType: content_type,
                 pycose.headers.X5chain: [crypto.cert_pem_to_der(x5) for x5 in ca_certs],
@@ -149,21 +149,21 @@ def sign_claims(
         signer = create_signer_from_arguments(
             key_path, did_doc_path, kid, issuer, algorithm, x5c_path
         )
-        claims = claims_path.read_bytes()
+        statement = statement_path.read_bytes()
         registration_info = {arg.name: arg.value() for arg in registration_info_args}
 
-        signed_claims = crypto.sign_claimset(
-            signer, claims, content_type, feed, registration_info
+        signed_statement = crypto.sign_statement(
+            signer, statement, content_type, feed, registration_info
         )
 
     print(f"Writing {out_path}")
-    out_path.write_bytes(signed_claims)
+    out_path.write_bytes(signed_statement)
 
 
 def cli(fn):
-    parser = fn(description="Sign a claimset")
+    parser = fn(description="Sign a statement")
     parser.add_argument(
-        "--claims", type=Path, required=True, help="Path to claims file"
+        "--statement", type=Path, required=True, help="Path to statement file"
     )
     parser.add_argument(
         "--key", type=Path, required=False, help="Path to PEM-encoded private key"
@@ -172,7 +172,7 @@ def cli(fn):
         "--out",
         type=Path,
         required=True,
-        help="Output path for signed claimset (must end in .cose)",
+        help="Output path for signed statement (must end in .cose)",
     )
 
     # Signing with a Key Vault certificate
@@ -190,7 +190,9 @@ def cli(fn):
     parser.add_argument("--alg", help="Signing algorithm to use.")
     parser.add_argument("--x5c", help="Path to PEM-encoded certificate authority")
 
-    parser.add_argument("--content-type", required=True, help="Content type of claims")
+    parser.add_argument(
+        "--content-type", required=True, help="Content type of statement"
+    )
     parser.add_argument("--kid", help='Key ID ("kid" field) to use if multiple')
     parser.add_argument("--feed", help='Optional "feed" stored in envelope header')
     parser.add_argument(
@@ -208,8 +210,8 @@ def cli(fn):
     )
 
     parser.set_defaults(
-        func=lambda args: sign_claims(
-            args.claims,
+        func=lambda args: sign_statement(
+            args.statement,
             args.key,
             args.out,
             args.did_doc,

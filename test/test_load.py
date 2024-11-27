@@ -10,7 +10,7 @@ import pytest
 from pyscitt import crypto
 from pyscitt.client import Client
 
-NUM_CLAIMS = 100
+NUM_STATEMENTS = 100
 LOCUST_PEAK_USERS = 100
 LOCUST_USERS_SPAWN_RATE = 5
 LOCUST_RUNTIME_SEC = 60
@@ -20,10 +20,10 @@ LOCUST_RUNTIME_SEC = 60
 @pytest.mark.disable_proxy
 class TestLoad:
     def test_load(self, client: Client, trusted_ca, tmp_path: Path):
-        for i in range(NUM_CLAIMS):
+        for i in range(NUM_STATEMENTS):
             identity = trusted_ca.create_identity(alg="ES256", kty="ec")
-            claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
-            (tmp_path / f"claim{i}.cose").write_bytes(claim)
+            signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+            (tmp_path / f"signed_statement{i}.cose").write_bytes(signed_statement)
 
         try:
             result = subprocess.run(
@@ -42,7 +42,7 @@ class TestLoad:
                     str(LOCUST_USERS_SPAWN_RATE),
                     "--run-time",
                     str(LOCUST_RUNTIME_SEC) + "s",
-                    "--scitt-claims",
+                    "--scitt-statements",
                     str(tmp_path),
                 ],
                 check=True,

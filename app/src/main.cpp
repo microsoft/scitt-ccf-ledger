@@ -23,6 +23,7 @@
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/common_auth_policies.h>
 #include <ccf/crypto/base64.h>
+#include <ccf/crypto/cose.h>
 #include <ccf/ds/logger.h>
 #include <ccf/endpoint.h>
 #include <ccf/historical_queries_adapter.h>
@@ -56,15 +57,6 @@ namespace scitt
 
   using EntrySeqnoIndexingStrategy =
     ccf::indexing::strategies::SeqnosForValue_Bucketed<EntryTable>;
-
-  struct DIDFetchContext
-  {
-    std::vector<uint8_t> body;
-    std::string nonce;
-    std::string issuer;
-  };
-  DECLARE_JSON_TYPE(DIDFetchContext);
-  DECLARE_JSON_REQUIRED_FIELDS(DIDFetchContext, body, nonce, issuer);
 
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
@@ -125,6 +117,41 @@ namespace scitt
       static_assert(ccf::nonstd::dependent_false<T>::value, "Unsupported type");
       return std::nullopt;
     }
+  }
+
+  /**
+   * Obtain COSE receipt in the format described in
+   * https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
+   * from a CCF TxReceiptImplPtr obtained through a historical query.
+   * The proof format is described in
+   * https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/
+   */
+  std::vector<uint8_t> get_cose_receipt(ccf::TxReceiptImplPtr receipt_ptr)
+  {
+    auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
+    if (!proof.has_value())
+    {
+      throw InternalError("Failed to get Merkle proof");
+    }
+
+    auto signature = describe_cose_signature_v1(*receipt_ptr);
+    if (!signature.has_value())
+    {
+      throw InternalError("Failed to get COSE signature");
+    }
+
+    // See
+    // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
+    // Page 11, vdp is the label for verifiable-proods in the unprotected
+    // header of the receipt
+    int64_t vdp = 396;
+    // -1 is the label for inclusion-proofs
+    auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
+    ccf::cose::edit::desc::Value inclusion_desc{inclusion_proof, vdp, *proof};
+
+    auto cose_receipt =
+      ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
+    return cose_receipt;
   }
 
   class AppEndpoints : public ccf::UserEndpointRegistry
@@ -205,9 +232,10 @@ namespace scitt
       auto resolver = std::make_unique<did::UniversalResolver>();
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
-      auto post_entry = [this](EndpointContext& ctx) {
+      auto register_signed_statement = [this](EndpointContext& ctx) {
         auto& body = ctx.rpc_ctx->get_request_body();
-        SCITT_DEBUG("Entry body size: {} bytes", body.size());
+        SCITT_DEBUG(
+          "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
         {
           throw BadRequestError(
@@ -226,43 +254,24 @@ namespace scitt
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
-        SCITT_DEBUG("Get SCITT configuration from KV store");
+        SCITT_DEBUG("Get service configuration from KV store");
         auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
                      ->get()
                      .value_or(Configuration{});
 
-        ClaimProfile claim_profile;
+        SignedStatementProfile signed_statement_profile;
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;
         try
         {
-          SCITT_DEBUG("Verify submitted claim");
-          std::tie(claim_profile, phdr, uhdr) = verifier->verify_claim(
-            body, ctx.tx, host_time, DID_RESOLUTION_CACHE_EXPIRY, cfg);
+          SCITT_DEBUG("Verify submitted signed statement");
+          std::tie(signed_statement_profile, phdr, uhdr) =
+            verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
         {
-          SCITT_DEBUG("Claim verification failed: {}", e.what());
+          SCITT_DEBUG("Signed statement verification failed: {}", e.what());
           throw BadRequestError(errors::InvalidInput, e.what());
-        }
-        // Retrieve current enclave measurement of this node
-        // See ccf logic in `/quotes/self`
-        std::string measurement;
-        auto nodes = ctx.tx.ro<ccf::Nodes>(ccf::Tables::NODES);
-        auto node_info = nodes->get(context.get_node_id());
-        if (node_info.has_value() && node_info->code_digest.has_value())
-        {
-          measurement = node_info->code_digest.value();
-        }
-        else
-        {
-#if defined(INSIDE_ENCLAVE) && !defined(VIRTUAL_ENCLAVE)
-          // Node should always get a valid cached measurement on startup
-          throw InternalError("Unexpected state - node has no code id");
-#else
-          measurement =
-            "0000000000000000000000000000000000000000000000000000000000000000";
-#endif
         }
 
         if (cfg.policy.policy_script.has_value())
@@ -270,7 +279,7 @@ namespace scitt
           const auto policy_violation_reason = check_for_policy_violations(
             cfg.policy.policy_script.value(),
             "configured_policy",
-            claim_profile,
+            signed_statement_profile,
             phdr);
           if (policy_violation_reason.has_value())
           {
@@ -299,75 +308,40 @@ namespace scitt
           }
         }
 
-        auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
-        auto service_info = service->get().value();
-        auto service_cert = service_info.cert;
-        auto service_cert_der = ccf::crypto::cert_pem_to_der(service_cert);
-        auto service_cert_digest =
-          ccf::crypto::Sha256Hash(service_cert_der).hex_str();
+        // Remove un-authenticated content from payload, and only keep the
+        // actual signed statement, i.e. the bytes that are in fact signed.
+        const auto signed_statement = ccf::cose::edit::set_unprotected_header(
+          body, ccf::cose::edit::desc::Empty{});
 
-        // Take the service's DID from the configuration, if present.
-        SCITT_DEBUG("Create protected header with countersignature");
-        std::vector<uint8_t> sign_protected;
-        if (cfg.service_identifier.has_value())
-        {
-          // The kid is the same as the service certificate hash (prefixed with
-          // a # to make it a relative DID-url). Eventually, this may change to
-          // become eg. an RFC7638 JWK thumbprint.
-          std::string kid = fmt::format("#{}", service_cert_digest);
-          std::span<const uint8_t> kid_bytes(
-            reinterpret_cast<const uint8_t*>(kid.data()), kid.size());
+        // Bind the digest of the signed statement in the Merkle Tree as a
+        // claims digest for this transaction
+        ctx.rpc_ctx->set_claims_digest(
+          ccf::ClaimsDigest::Digest(signed_statement));
 
-          sign_protected = create_countersign_protected_header(
-            host_time,
-            *cfg.service_identifier,
-            kid_bytes,
-            service_cert_digest,
-            measurement);
-        }
-        else
-        {
-          sign_protected = create_countersign_protected_header(
-            host_time,
-            std::nullopt,
-            std::nullopt,
-            service_cert_digest,
-            measurement);
-        }
-
-        // Compute the hash of the to-be-signed countersigning structure
-        // and set it as CCF transaction claim for use in receipt validation.
-        SCITT_DEBUG("Add countersignature as CCF application claim for the tx");
-        auto claims_digest =
-          cose::create_countersign_tbs_hash(body, sign_protected);
-        ctx.rpc_ctx->set_claims_digest(std::move(claims_digest));
-
-        // Store the original COSE_Sign1 message in the KV.
-        SCITT_DEBUG("Store submitted claim in KV store");
+        // Store the original COSE_Sign1 message in the KV, so we can retrieve
+        // it later, inject the receipt in it, and serve a transparent
+        // statement.
+        SCITT_DEBUG("Signed statement stored in the ledger");
         auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
-        entry_table->put(body);
-
-        // Store the protected headers in a separate table, so the
-        // receipt can be reconstructed.
-        SCITT_DEBUG("Store claim protected headers in KV store");
-        auto entry_info_table =
-          ctx.tx.template rw<EntryInfoTable>(ENTRY_INFO_TABLE);
-        entry_info_table->put(EntryInfo{
-          .sign_protected = sign_protected,
-        });
+        entry_table->put(signed_statement);
 
         SCITT_INFO(
-          "ClaimProfile={} ClaimSizeKb={}", claim_profile, body.size() / 1024);
+          "SignedStatementProfile={} SignedStatementSizeKb={}",
+          signed_statement_profile,
+          body.size() / 1024);
 
-        SCITT_DEBUG("Claim was submitted synchronously");
+        SCITT_DEBUG("SignedStatement was submitted synchronously");
 
         record_synchronous_operation(host_time, ctx.tx);
       };
-
+      /**
+       * Signed Statement Registration, 2.1.2 in
+       * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       */
       make_endpoint_with_local_commit_handler(
         "/entries",
         HTTP_POST,
-        post_entry,
+        register_signed_statement,
         operation_locally_committed_func,
         authn_policy)
         .install();
@@ -463,27 +437,13 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
-        SCITT_DEBUG("Get saved SCITT entry");
-        auto entry_info_table =
-          historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
-        auto entry_info = entry_info_table->get().value();
+        SCITT_DEBUG("Get signed statement from the ledger");
+        auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
-        SCITT_DEBUG("Get CCF receipt");
-        auto ccf_receipt_ptr =
-          ccf::describe_receipt_v2(*historical_state->receipt);
-        std::vector<uint8_t> receipt;
-        try
-        {
-          SCITT_DEBUG("Build SCITT receipt");
-          receipt = serialize_receipt(entry_info, ccf_receipt_ptr);
-        }
-        catch (const ReceiptProcessingError& e)
-        {
-          throw InternalError(e.what());
-        }
-        ctx.rpc_ctx->set_response_body(receipt);
+        ctx.rpc_ctx->set_response_body(cose_receipt);
         ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE, "application/cbor");
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::COSE);
       };
 
       make_endpoint(
@@ -491,6 +451,53 @@ namespace scitt
         HTTP_GET,
         scitt::historical::adapter(
           get_entry_receipt, state_cache, is_tx_committed),
+        authn_policy)
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .install();
+
+      static constexpr auto get_entry_statement_path =
+        "/entries/{txid}/statement";
+      auto get_entry_statement = [this](
+                                   EndpointContext& ctx,
+                                   ccf::historical::StatePtr historical_state) {
+        SCITT_DEBUG("Get transaction historical state");
+        auto historical_tx = historical_state->store->create_read_only_tx();
+
+        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+        auto entry = entries->get();
+        if (!entry.has_value())
+        {
+          throw BadRequestError(
+            errors::InvalidInput,
+            fmt::format(
+              "Transaction ID {} does not correspond to a submission.",
+              historical_state->transaction_id.to_str()));
+        }
+
+        auto cose_receipt = get_cose_receipt(historical_state->receipt);
+
+        // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
+        // Section 4.4, 394 is the label for an array of receipts in the
+        // unprotected header (scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS
+        // here)
+        int64_t receipts = scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
+        ccf::cose::edit::desc::Value receipts_desc{
+          ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
+
+        auto statement =
+          ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
+
+        ctx.rpc_ctx->set_response_body(statement);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::COSE);
+      };
+
+      make_endpoint(
+        get_entry_statement_path,
+        HTTP_GET,
+        scitt::historical::adapter(
+          get_entry_statement, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .install();

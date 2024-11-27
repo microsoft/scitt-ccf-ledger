@@ -396,6 +396,10 @@ class CCHost(EventLoopThread):
                             ),
                         }
                     ],
+                    "cose_signatures": {
+                        "issuer": f"127.0.0.1:{self.listen_rpc_port}",
+                        "subject": "scitt.ccf.signature.v1",
+                    },
                 },
             }
         else:

@@ -13,7 +13,7 @@ from pycose.messages import Sign1Message
 
 from pyscitt import crypto, governance
 from pyscitt.client import Client
-from pyscitt.verify import TrustStore, verify_receipt
+from pyscitt.verify import TrustStore, verify_transparent_statement
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
@@ -28,7 +28,7 @@ from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
         (1, "ES256", {"kty": "ec", "ec_curve": "P-256"}),
     ],
 )
-def test_submit_claim_x5c(
+def test_register_statement_x5c(
     client: Client,
     trust_store: TrustStore,
     trusted_ca: X5ChainCertificateAuthority,
@@ -37,40 +37,17 @@ def test_submit_claim_x5c(
     params: dict,
 ):
     """
-    Submit claims to the SCITT CCF ledger and verify the resulting receipts for x5c.
+    Submit signed statements to the SCITT CCF ledger and verify the resulting transparent for x5c.
 
     Test is parametrized over different signing parameters.
     """
     identity = trusted_ca.create_identity(length=length, alg=algorithm, **params)
 
-    # Sign and submit a dummy claim using our new identity
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt
-    # check if the header struct contains mrenclave header
-    assert "enclave_measurement" in receipt.phdr
-    env_platform = os.environ.get("PLATFORM")
-    actual_measurement = receipt.phdr["enclave_measurement"]
-    expected_virtual_measurement = (
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    )
-    if env_platform == "virtual":
-        assert actual_measurement == expected_virtual_measurement
-    elif env_platform == "sgx":
-        assert (
-            len(actual_measurement) == 64
-            and actual_measurement != expected_virtual_measurement
-        )
-    elif env_platform == "snp":
-        assert (
-            len(actual_measurement) == 96
-            and actual_measurement != expected_virtual_measurement
-        )
-    else:
-        raise Exception(
-            f"Unknown PLATFORM, should be sgx, virtual, or snp: {env_platform}"
-        )
-
-    verify_receipt(claims, trust_store, receipt)
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    transparent_statement = client.register_signed_statement(
+        signed_statement
+    ).response_bytes
+    verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
 
 def test_invalid_certificate_chain(
@@ -82,10 +59,10 @@ def test_invalid_certificate_chain(
     del x5c[1]
 
     identity = crypto.Signer(private_key, x5c=x5c)
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim_and_confirm(claims)
+        client.register_signed_statement(signed_statement)
 
 
 def test_wrong_certificate(
@@ -93,7 +70,7 @@ def test_wrong_certificate(
     trusted_ca: X5ChainCertificateAuthority,
 ):
     """
-    Submit a claim that embeds a x509 certificate chain for a different key pair.
+    Submit a signed statement that embeds a x509 certificate chain for a different key pair.
     """
 
     # Create two different certificates from the CA, but use the private key of
@@ -102,22 +79,22 @@ def test_wrong_certificate(
     x5c, _ = trusted_ca.create_chain(kty="ec")
     identity = crypto.Signer(private_key, x5c=x5c)
 
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Signature verification failed"):
-        client.submit_claim_and_confirm(claims)
+        client.register_signed_statement(signed_statement)
 
 
 def test_untrusted_ca(client: Client):
     """
-    Submit a claim signed by a certificate issued by an untrusted CA.
+    Submit a signed statement by a certificate issued by an untrusted CA.
     """
     untrusted_ca = X5ChainCertificateAuthority(kty="ec")
     identity = untrusted_ca.create_identity(alg="ES256", kty="ec")
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signged_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim_and_confirm(claims)
+        client.register_signed_statement(signged_statement)
 
 
 def test_self_signed_trusted(
@@ -125,7 +102,7 @@ def test_self_signed_trusted(
     trust_store: TrustStore,
 ):
     """
-    Submit a claim signed by a trusted self-signed certificate.
+    Submit a signed statement by a trusted self-signed certificate.
     """
 
     private_key, _ = crypto.generate_keypair(kty="ec")
@@ -135,14 +112,14 @@ def test_self_signed_trusted(
     client.governance.propose(proposal, must_pass=True)
 
     identity = crypto.Signer(private_key, x5c=[cert_pem])
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     # See verifier.h's check_certificate_policy for a discussion of why we
     # choose to reject this.
     # We're pretty flexible about the error message here, because the exact
     # behaviour depends on the OpenSSL version.
     with service_error("Certificate chain"):
-        client.submit_claim_and_confirm(claims)
+        client.register_signed_statement(signed_statement)
 
 
 def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
@@ -157,30 +134,40 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
     client.governance.propose(proposal, must_pass=True)
 
     first_identity = first_ca.create_identity(alg="ES256", kty="ec")
-    first_claims = crypto.sign_json_claimset(first_identity, {"foo": "bar"})
+    first_signed_statement = crypto.sign_json_statement(first_identity, {"foo": "bar"})
 
     second_identity = second_ca.create_identity(alg="ES256", kty="ec")
-    second_claims = crypto.sign_json_claimset(second_identity, {"foo": "bar"})
+    second_signed_statement = crypto.sign_json_statement(
+        second_identity, {"foo": "bar"}
+    )
 
-    first_receipt = client.submit_claim_and_confirm(first_claims).receipt
-    second_receipt = client.submit_claim_and_confirm(second_claims).receipt
+    first_transparent_statement = client.register_signed_statement(
+        first_signed_statement
+    ).response_bytes
+    second_transparent_statement = client.register_signed_statement(
+        second_signed_statement
+    ).response_bytes
 
-    verify_receipt(first_claims, trust_store, first_receipt)
-    verify_receipt(second_claims, trust_store, second_receipt)
+    verify_transparent_statement(
+        first_transparent_statement, trust_store, first_signed_statement
+    )
+    verify_transparent_statement(
+        second_transparent_statement, trust_store, second_signed_statement
+    )
 
 
 def test_self_signed_untrusted(client: Client):
     """
-    Submit a claim signed by a untrusted self-signed certificate.
+    Submit a signed statement by a untrusted self-signed certificate.
     """
     private_key, _ = crypto.generate_keypair(kty="ec")
     cert_pem = crypto.generate_cert(private_key, ca=False)
 
     identity = crypto.Signer(private_key, x5c=[cert_pem])
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.submit_claim_and_confirm(claims)
+        client.register_signed_statement(signed_statement)
 
 
 def test_leaf_ca(
@@ -188,12 +175,12 @@ def test_leaf_ca(
     trusted_ca: X5ChainCertificateAuthority,
 ):
     """
-    Submit claims signed by a leaf certificate with the CA flag set.
+    Submit signed statement by a leaf certificate with the CA flag set.
     """
     identity = trusted_ca.create_identity(alg="ES256", kty="ec", ca=True)
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Signing certificate is CA"):
-        client.submit_claim_and_confirm(claims).receipt
+        client.register_signed_statement(signed_statement).receipt
 
 
 def test_root_ca(
@@ -201,13 +188,22 @@ def test_root_ca(
     trusted_ca: X5ChainCertificateAuthority,
 ):
     """
-    Submit claims signed by the trusted root CA.
+    Submit signed statement by the trusted root CA.
     """
 
     identity = crypto.Signer(trusted_ca.root_key_pem, x5c=[trusted_ca.root_cert_pem])
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Certificate chain must include at least one CA certificate"):
-        client.submit_claim_and_confirm(claims).receipt
+        client.register_signed_statement(signed_statement).receipt
+
+
+def strip_uhdr(cose: bytes) -> bytes:
+    """
+    Strip the uhdr from a COSE message.
+    """
+    msg = Sign1Message.decode(cose)
+    msg.uhdr = {}
+    return msg.encode(tag=True, sign=False)
 
 
 @pytest.mark.parametrize(
@@ -218,7 +214,7 @@ def test_root_ca(
         (1, "ES256", {"kty": "ec", "ec_curve": "P-256"}),
     ],
 )
-def test_submit_claim_notary_x509(
+def test_submit_signed_statement_notary_x509(
     client: Client,
     trust_store: TrustStore,
     trusted_ca: X5ChainCertificateAuthority,
@@ -227,7 +223,7 @@ def test_submit_claim_notary_x509(
     params: dict,
 ):
     """
-    Submit claims to the SCITT CCF ledger and verify the resulting receipts for x5c.
+    Submit signed statement to the SCITT CCF ledger and verify the resulting receipts for x5c.
 
     Test is parametrized over different signing parameters.
     """
@@ -257,14 +253,7 @@ def test_submit_claim_notary_x509(
 
     msg = Sign1Message(phdr=phdr, uhdr=uhdr, payload=payload)
     msg.key = CoseKey.from_pem_private_key(identity.private_key)
-    claim = msg.encode(tag=True)
+    signed_statement = msg.encode(tag=True)
 
-    submission = client.submit_claim_and_confirm(claim)
-    verify_receipt(claim, trust_store, submission.receipt)
-
-    # Embedding the receipt requires re-encoding the unprotected header.
-    # Notary has x5chain in the unprotected header.
-    # This checks whether x5chain is preserved after re-encoding by simply
-    # submitting the claim again.
-    claim_with_receipt = client.get_claim(submission.tx, embed_receipt=True)
-    client.submit_claim_and_confirm(claim_with_receipt)
+    statement = client.register_signed_statement(signed_statement).response_bytes
+    verify_transparent_statement(statement, trust_store, strip_uhdr(signed_statement))

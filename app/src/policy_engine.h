@@ -18,25 +18,25 @@ namespace scitt
   namespace js
   {
     static inline ccf::js::core::JSWrappedValue claim_profile_to_js_val(
-      ccf::js::core::Context& ctx, ClaimProfile claim_profile)
+      ccf::js::core::Context& ctx, SignedStatementProfile claim_profile)
     {
       switch (claim_profile)
       {
-        case ClaimProfile::IETF:
+        case SignedStatementProfile::IETF:
         {
           return ctx.new_string("IETF");
         }
-        case ClaimProfile::X509:
+        case SignedStatementProfile::X509:
         {
           return ctx.new_string("X509");
         }
-        case ClaimProfile::Notary:
+        case SignedStatementProfile::Notary:
         {
           return ctx.new_string("Notary");
         }
         default:
         {
-          throw std::logic_error("Unhandled ClaimProfile value");
+          throw std::logic_error("Unhandled SignedStatementProfile value");
         }
       }
     }
@@ -183,7 +183,7 @@ namespace scitt
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
-      ClaimProfile claim_profile,
+      SignedStatementProfile claim_profile,
       const scitt::cose::ProtectedHeader& phdr)
     {
       // Allow the policy to access common globals (including shims for
@@ -258,7 +258,7 @@ namespace scitt
   static inline std::optional<std::string> check_for_policy_violations(
     const PolicyScript& script,
     const std::string& policy_name,
-    ClaimProfile claim_profile,
+    SignedStatementProfile claim_profile,
     const cose::ProtectedHeader& phdr)
   {
     return js::apply_js_policy(script, policy_name, claim_profile, phdr);

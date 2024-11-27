@@ -3,5 +3,5 @@ httpx
 pytest
 loguru
 aiotools
-ccf==6.0.0-dev2
+ccf==6.0.0-dev7
 cryptography==43.*
