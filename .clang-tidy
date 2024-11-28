@@ -1,5 +1,4 @@
 # Some of these we should fix:
-# - performance-move-const-arg
 # - performance-unnecessary-value-param
 # - readability-braces-around-statements
 # - readability-implicit-bool-conversion
@@ -26,7 +25,6 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-use-using,
   performance-*,
-  -performance-move-const-arg,
   -performance-unnecessary-value-param,
   portability-*,
   readability-*,
