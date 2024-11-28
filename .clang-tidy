@@ -1,5 +1,4 @@
 # Some of these we should fix:
-# - performance-unnecessary-value-param
 # - readability-braces-around-statements
 # - readability-implicit-bool-conversion
 # - readability-qualified-auto
@@ -25,7 +24,6 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-use-using,
   performance-*,
-  -performance-unnecessary-value-param,
   portability-*,
   readability-*,
   -readability-convert-member-functions-to-static,
