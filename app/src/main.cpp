@@ -234,7 +234,7 @@ namespace scitt
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
       auto register_signed_statement = [this](EndpointContext& ctx) {
-        auto& body = ctx.rpc_ctx->get_request_body();
+        const auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
@@ -323,7 +323,7 @@ namespace scitt
         // it later, inject the receipt in it, and serve a transparent
         // statement.
         SCITT_DEBUG("Signed statement stored in the ledger");
-        auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
+        auto * entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
 
         SCITT_INFO(
@@ -366,7 +366,7 @@ namespace scitt
         SCITT_DEBUG("Get transaction historical state");
         auto historical_tx = historical_state->store->create_read_only_tx();
 
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+        auto * entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
         auto entry = entries->get();
         if (!entry.has_value())
         {
@@ -381,7 +381,7 @@ namespace scitt
         if (embed_receipt)
         {
           SCITT_DEBUG("Get saved SCITT entry");
-          auto entry_info_table =
+          auto * entry_info_table =
             historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
           auto entry_info = entry_info_table->get().value();
 
@@ -428,7 +428,7 @@ namespace scitt
           SCITT_DEBUG("Get transaction historical state");
           auto historical_tx = historical_state->store->create_read_only_tx();
 
-          auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+          auto * entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
           auto entry = entries->get();
           if (!entry.has_value())
           {
@@ -466,7 +466,7 @@ namespace scitt
           SCITT_DEBUG("Get transaction historical state");
           auto historical_tx = historical_state->store->create_read_only_tx();
 
-          auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+          auto * entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
           auto entry = entries->get();
           if (!entry.has_value())
           {
@@ -639,7 +639,7 @@ namespace scitt
 
       static constexpr auto get_issuers_path = "/did";
       auto get_issuers = [this](EndpointContext& ctx, nlohmann::json&& params) {
-        auto issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
+        auto * issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
 
         GetIssuers::Out out;
 
@@ -660,7 +660,7 @@ namespace scitt
       static constexpr auto get_issuer_info_path = "/did/{did}";
       auto get_issuer_info =
         [this](EndpointContext& ctx, nlohmann::json&& params) {
-          auto issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
+          auto * issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
 
           auto issuer = ctx.rpc_ctx->get_request_path_params().at("did");
 

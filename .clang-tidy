@@ -1,7 +1,6 @@
 # Some of these we should fix:
 # - readability-braces-around-statements
 # - readability-implicit-bool-conversion
-# - readability-qualified-auto
 #
 # The others are a bit more subjective and not really worth doing anything about.
 Checks: >
@@ -30,7 +29,6 @@ Checks: >
   -readability-else-after-return,
   -readability-implicit-bool-conversion,
   -readability-magic-numbers,
-  -readability-qualified-auto,
   -readability-identifier-length,
   -cert-dcl58-cpp,
   -bugprone-easily-swappable-parameters,
