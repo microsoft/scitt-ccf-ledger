@@ -43,8 +43,7 @@ jobs:
         with:
           name: logs-asan
           path: |
-            build/workspace/*/*.config.json
-            build/workspace/*/out
-            build/workspace/*/err
-            build/workspace/*.ledger/*
+            workspace/config.json
+            workspace/std.out
+            workspace/std.err
           if-no-files-found: ignore
