@@ -9,13 +9,14 @@
 #include <gtest/gtest.h>
 
 using namespace scitt::did;
+// NOLINTNEXTLINE
 using ::testing::_;
 
 namespace
 {
   TEST(UniversalResolverTest, EmptyResolver)
   {
-    UniversalResolver resolver;
+    const UniversalResolver resolver;
     EXPECT_THROW(
       { resolver.resolve("did:web:example.com", {}); },
       DIDMethodNotSupportedError);

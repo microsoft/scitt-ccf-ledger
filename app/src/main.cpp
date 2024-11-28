@@ -144,7 +144,7 @@ namespace scitt
     // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
     // Page 11, vdp is the label for verifiable-proods in the unprotected
     // header of the receipt
-    int64_t vdp = 396;
+    const int64_t vdp = 396;
     // -1 is the label for inclusion-proofs
     auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
     ccf::cose::edit::desc::Value inclusion_desc{inclusion_proof, vdp, *proof};
@@ -200,7 +200,7 @@ namespace scitt
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
       const ccf::AuthnPolicies& ap) override
     {
-      std::function<ccf::ApiResult(timespec & time)> get_time =
+      const std::function<ccf::ApiResult(timespec & time)> get_time =
         [this](timespec& time) {
           return this->get_untrusted_host_time_v1(time);
         };
@@ -359,7 +359,7 @@ namespace scitt
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
-        bool embed_receipt =
+        const bool embed_receipt =
           get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
 
         SCITT_DEBUG("Get transaction historical state");
@@ -480,7 +480,7 @@ namespace scitt
         // Section 4.4, 394 is the label for an array of receipts in the
         // unprotected header (scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS
         // here)
-        int64_t receipts = scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
+        const int64_t receipts = scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
         ccf::cose::edit::desc::Value receipts_desc{
           ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 

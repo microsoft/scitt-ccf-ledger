@@ -37,6 +37,10 @@ Checks: >
   -readability-implicit-bool-conversion,
   -readability-magic-numbers,
   -readability-qualified-auto,
+  -readability-identifier-length,
+  -cert-dcl58-cpp,
+  -bugprone-easily-swappable-parameters,
+  -readability-function-cognitive-complexity,
 
 WarningsAsErrors: '*'
 # Include current directory files and exclude ccf imported code
