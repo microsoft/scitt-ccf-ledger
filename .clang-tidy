@@ -1,5 +1,4 @@
 # Some of these we should fix:
-# - misc-non-private-member-variables-in-classes
 # - performance-move-const-arg
 # - performance-unnecessary-value-param
 # - readability-braces-around-statements
@@ -15,7 +14,6 @@ Checks: >
   clang-analyzer-*,
   concurrency-*,
   misc-*,
-  -misc-non-private-member-variables-in-classes,
   -misc-unused-parameters,
   modernize-*,
   -modernize-avoid-bind,
