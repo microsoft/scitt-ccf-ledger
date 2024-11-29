@@ -1,8 +1,3 @@
-# Some of these we should fix:
-# - readability-braces-around-statements
-# - readability-implicit-bool-conversion
-#
-# The others are a bit more subjective and not really worth doing anything about.
 Checks: >
   -*,
   bugprone-*,
@@ -27,7 +22,6 @@ Checks: >
   readability-*,
   -readability-convert-member-functions-to-static,
   -readability-else-after-return,
-  -readability-implicit-bool-conversion,
   -readability-magic-numbers,
   -readability-identifier-length,
   -cert-dcl58-cpp,
