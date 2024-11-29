@@ -227,7 +227,10 @@ namespace scitt
 
       SCITT_DEBUG("Install custom indexing strategy");
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
-        ENTRY_TABLE, context, 10000, 20);
+        ENTRY_TABLE,
+        context,
+        indexing::SEQNOS_PER_BUCKET,
+        indexing::MAX_BUCKETS);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
       auto resolver = std::make_unique<did::UniversalResolver>();
