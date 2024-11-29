@@ -509,6 +509,8 @@ namespace scitt
       static constexpr auto get_entries_tx_ids_path = "/entries/txIds";
       auto get_entries_tx_ids =
         [this](EndpointContext& ctx, nlohmann::json&& params) {
+          std::ignore = params;
+
           const auto parsed_query =
             ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
@@ -639,6 +641,8 @@ namespace scitt
 
       static constexpr auto get_issuers_path = "/did";
       auto get_issuers = [this](EndpointContext& ctx, nlohmann::json&& params) {
+        std::ignore = params;
+
         auto* issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
 
         GetIssuers::Out out;
@@ -660,6 +664,8 @@ namespace scitt
       static constexpr auto get_issuer_info_path = "/did/{did}";
       auto get_issuer_info =
         [this](EndpointContext& ctx, nlohmann::json&& params) {
+          std::ignore = params;
+
           auto* issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
 
           auto issuer = ctx.rpc_ctx->get_request_path_params().at("did");

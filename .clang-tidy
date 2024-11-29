@@ -6,7 +6,6 @@ Checks: >
   clang-analyzer-*,
   concurrency-*,
   misc-*,
-  -misc-unused-parameters,
   modernize-*,
   -modernize-avoid-bind,
   -modernize-avoid-c-arrays,
