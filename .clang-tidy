@@ -17,7 +17,6 @@ Checks: >
   performance-*,
   portability-*,
   readability-*,
-  -readability-convert-member-functions-to-static,
   -readability-else-after-return,
   -readability-magic-numbers,
   -readability-identifier-length,
