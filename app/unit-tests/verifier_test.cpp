@@ -25,7 +25,7 @@ namespace
     const std::string valid_to = "20991231000000Z";
 
     auto kp = ccf::crypto::make_key_pair();
-    if (parent)
+    if (parent != nullptr)
     {
       auto csr = kp->create_csr(subject_name);
       auto cert =
