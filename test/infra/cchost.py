@@ -54,8 +54,6 @@ class CCHost(EventLoopThread):
 
     restart_request: asyncio.Event
 
-    faketime_file: Optional[Path]
-    faketime_lib: Optional[Path]
     clock_offset: int
 
     snp_attestation_config: dict
@@ -69,7 +67,6 @@ class CCHost(EventLoopThread):
         constitution: List[Path],
         rpc_port: int = 0,
         node_port: int = 0,
-        enable_faketime: bool = False,
         snp_attestation_config: Optional[Path] = None,
     ):
         super().__init__()
@@ -104,26 +101,7 @@ class CCHost(EventLoopThread):
         )
 
         self.restart_request = self._create_event()
-
-        self.faketime_file = None
         self.clock_offset = 0
-        if enable_faketime:
-            # Unfortunately there isn't really a portable way of finding this path.
-            # Hardcode what works on the CI images we use, and allow it to be overridden.
-            faketime_lib = Path(
-                os.getenv(
-                    "LIBFAKETIME",
-                    "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
-                )
-            )
-
-            if faketime_lib.exists():
-                self.faketime_lib = faketime_lib
-                self.faketime_file = self.workspace.joinpath("faketime")
-                self.faketime_file.write_text("+0")
-                LOG.info("Using faketime library at {}", self.faketime_lib)
-            else:
-                LOG.warning("Could not find faketime library")
 
         if platform == "snp":
             if not snp_attestation_config or not snp_attestation_config.exists():
@@ -170,13 +148,6 @@ class CCHost(EventLoopThread):
                 self._start_process(),
             )
 
-    def advance_time(self, *, seconds: int) -> None:
-        if self.faketime_file is None:
-            raise RuntimeError("faketime was not enabled")
-
-        self.clock_offset += seconds
-        self.faketime_file.write_text(f"+{self.clock_offset}")
-
     async def _start_process(self) -> None:
         """
         Start and monitor a cchost process.
@@ -189,11 +160,6 @@ class CCHost(EventLoopThread):
         # Ensure SGX_AESM_ADDR is not set when starting cchost.
         cchost_env = os.environ.copy()
         cchost_env.pop("SGX_AESM_ADDR", None)
-
-        if self.faketime_file is not None:
-            cchost_env["LD_PRELOAD"] = str(self.faketime_lib)
-            cchost_env["FAKETIME_TIMESTAMP_FILE"] = str(self.faketime_file)
-            cchost_env["FAKETIME_NO_CACHE"] = "1"
 
         LOG.debug("Starting cchost process...")
         stdout_file = open(f"{self.workspace}/std.out", "w")
@@ -469,11 +435,7 @@ def main():
         default="workspace",
         help="Path to a workspace directory",
     )
-    parser.add_argument(
-        "--enable-faketime",
-        help="Enable faketime support. The `faketime` file in the workspace can be used to adjust the time as seen by cchost",
-        action="store_true",
-    )
+
     parser.add_argument(
         "--snp-attestation-config",
         type=Path,
@@ -496,7 +458,6 @@ def main():
         constitution=args.constitution_file,
         rpc_port=args.port,
         node_port=args.node_port,
-        enable_faketime=args.enable_faketime,
         snp_attestation_config=args.snp_attestation_config,
     ) as cchost:
         while True:

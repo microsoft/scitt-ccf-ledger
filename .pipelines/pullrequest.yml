@@ -101,10 +101,8 @@ extends:
         parameters:
           Name: test_virtual
           DisplayName: Build and test (Virtual)
-          FunctionalTestArguments: '--enable-faketime'
           Environment:
             CMAKE_BUILD_TYPE: Debug
-          InstallPackages: [ faketime ]
 
     - stage: test_virtual_docker_build
       jobs:
