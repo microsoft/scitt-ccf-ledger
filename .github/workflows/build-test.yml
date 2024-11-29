@@ -74,11 +74,11 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
-      - run: apt-get update && apt-get install -y faketime clang-tidy-15
+      - run: apt-get update && apt-get install -y clang-tidy-15
       - run: ./build.sh
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"
-      - run: ./run_functional_tests.sh --enable-faketime
+      - run: ./run_functional_tests.sh
         if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform for the moment
       - name: "Upload logs for ${{ matrix.platform.name }}"
         uses: actions/upload-artifact@v4

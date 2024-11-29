@@ -35,19 +35,15 @@ class ManagedCCHostFixtures:
         platform,
         enclave_file,
         constitution,
-        enable_faketime,
         snp_attestation_config,
     ):
         self.binary = binary
         self.platform = platform
         self.enclave_file = enclave_file
         self.constitution = constitution
-        self.enable_faketime = enable_faketime
         self.snp_attestation_config = snp_attestation_config
 
     def pytest_collection_modifyitems(self, config, items):
-        faketime_skip = pytest.mark.skip(reason="faketime support was not enabled")
-
         for item in items:
             for m in item.own_markers:
                 if m.name == "isolated_test":
@@ -62,9 +58,6 @@ class ManagedCCHostFixtures:
                         raise pytest.UsageError(
                             f"'isolated_test' marker may not be used on class method {item.nodeid!r}"
                         )
-
-                    if m.kwargs.get("enable_faketime") and not self.enable_faketime:
-                        item.add_marker(faketime_skip)
 
     @pytest.fixture(scope="session")
     def start_cchost(self, tmp_path_factory):
@@ -263,10 +256,6 @@ def pytest_addoption(parser):
         help="Path to the directory containing the constitution. Requires --start-cchost.",
     )
     parser.addoption(
-        "--enable-faketime",
-        action="store_true",
-    )
-    parser.addoption(
         "--snp-attestation-config",
         type=Path,
         default=None,
@@ -292,7 +281,6 @@ def pytest_configure(config):
         )
         constitution = config.getoption("--constitution")
         enclave_file = get_enclave_path(platform, enclave_package)
-        enable_faketime = config.getoption("--enable-faketime")
         snp_attestation_config = config.getoption("--snp-attestation-config")
         config.pluginmanager.register(
             ManagedCCHostFixtures(
@@ -300,7 +288,6 @@ def pytest_configure(config):
                 platform,
                 enclave_file,
                 constitution,
-                enable_faketime,
                 snp_attestation_config,
             )
         )
