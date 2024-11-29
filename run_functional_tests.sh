@@ -64,9 +64,6 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
     echo "Performance tests enabled"
 fi
 
-mkdir -p out
-TEST_ARGS="$TEST_ARGS --basetemp=out"
-
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
     sudo -E --preserve-env=PATH \
@@ -75,6 +72,3 @@ if [ -n "$ELEVATE_PRIVILEGES" ]; then
 else
     pytest ./test -v -rA $TEST_ARGS "$@"
 fi
-
-# OB pipeline can't copy out symlinks which are created by pytest.
-find out -maxdepth 1 -type l -delete
