@@ -29,15 +29,15 @@ else
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOUCE_VERSION="5.0.10"
+    CCF_SOURCE_VERSION="5.0.10"
     echo "Cloning CCF sources"
     rm -rf ccf-source
-    git clone --single-branch -b "ccf-${CCF_SOUCE_VERSION}" https://github.com/microsoft/CCF ccf-source
+    git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
     echo "Installing build dependencies for CCF"
     pushd ccf-source/
     pushd getting_started/setup_vm/
     apt-get -y update
-    ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOUCE_VERSION" -e platform="$PLATFORM" -e clang_version=15
+    ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOURCE_VERSION" -e platform="$PLATFORM" -e clang_version=15
     popd
     echo "Compiling CCF $PLATFORM"
     mkdir -p build
@@ -47,7 +47,7 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     echo "Packaging CCF into deb"
     cpack -G DEB
     echo "Installing CCF deb"
-    dpkg -i "ccf_virtual_${CCF_SOUCE_VERSION}_amd64.deb"
+    dpkg -i "ccf_virtual_${CCF_SOURCE_VERSION}_amd64.deb"
     popd
     popd
 fi
