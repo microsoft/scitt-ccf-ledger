@@ -136,6 +136,8 @@ class CCHost(EventLoopThread):
         else:
             self.snp_attestation_config = {}
 
+        LOG.info("Starting cchost using workspace directory {}", self.workspace)
+
     def restart(self) -> None:
         # Delete PID file to let cchost restart
         # https://github.com/microsoft/CCF/pull/5361

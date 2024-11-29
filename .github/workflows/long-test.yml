@@ -1,0 +1,55 @@
+name: Long Test
+
+on:
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+      - opened
+      - reopened
+  schedule:
+    - cron: "0 0 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  long-asan:
+    name: ASAN
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-long-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    runs-on: ubuntu-20.04
+    container:
+      image: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
+    env:
+      # Fast unwinder only gives us partial stack traces in LeakSanitzer
+      # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
+      ASAN_OPTIONS: fast_unwind_on_malloc=0:alloc_dealloc_mismatch=0
+      PLATFORM: virtual
+      CMAKE_BUILD_TYPE: Debug
+      BUILD_CCF_FROM_SOURCE: ON
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./build.sh
+
+      - name: Unit tests
+        run: |
+          set +x
+          ./run_unit_tests.sh
+      
+      - name: E2E tests
+        run: |
+          set +x
+          ./run_functional_tests.sh
+
+      - name: "Upload logs"
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-asan
+          path: |
+            /tmp/pytest-of-root/*current/*current/*.{out,err}
+            /tmp/pytest-of-root/*current/*current/config.json
+          if-no-files-found: warn
