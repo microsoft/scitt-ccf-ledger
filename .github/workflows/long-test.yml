@@ -18,6 +18,13 @@ jobs:
     runs-on: ubuntu-20.04
     container:
       image: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
+    env:
+      # Fast unwinder only gives us partial stack traces in LeakSanitzer
+      # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
+      ASAN_OPTIONS: fast_unwind_on_malloc=0:alloc_dealloc_mismatch=0
+      PLATFORM: virtual
+      CMAKE_BUILD_TYPE: Debug
+      BUILD_CCF_FROM_SOURCE: ON
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,7 +32,7 @@ jobs:
       - name: Build
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          PLATFORM=virtual CMAKE_BUILD_TYPE=Debug BUILD_CCF_FROM_SOURCE=ON ./build.sh
+          ./build.sh
 
       - name: Unit tests
         run: |
@@ -35,7 +42,7 @@ jobs:
       - name: E2E tests
         run: |
           set +x
-          PLATFORM=virtual ./run_functional_tests.sh
+          ./run_functional_tests.sh
 
       - name: "Upload logs"
         if: success() || failure()
