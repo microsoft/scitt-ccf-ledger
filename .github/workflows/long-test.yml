@@ -50,6 +50,6 @@ jobs:
         with:
           name: logs-asan
           path: |
-          /tmp/pytest-of-root/*current/*current/*.{out,err}
-          /tmp/pytest-of-root/*current/*current/config.json
+            /tmp/pytest-of-root/*current/*current/*.{out,err}
+            /tmp/pytest-of-root/*current/*current/config.json
           if-no-files-found: warn
