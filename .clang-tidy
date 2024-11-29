@@ -10,7 +10,6 @@ Checks: >
   -modernize-avoid-bind,
   -modernize-use-auto,
   -modernize-use-emplace,
-  -modernize-use-nullptr,
   -modernize-use-trailing-return-type,
   performance-*,
   portability-*,
