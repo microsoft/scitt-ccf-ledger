@@ -8,7 +8,6 @@ Checks: >
   misc-*,
   modernize-*,
   -modernize-avoid-bind,
-  -modernize-use-auto,
   -modernize-use-emplace,
   -modernize-use-trailing-return-type,
   performance-*,
