@@ -33,4 +33,10 @@ namespace scitt
     const std::string PolicyFailed = "PolicyFailed";
   } // namespace errors
 
+  namespace indexing
+  {
+    const size_t SEQNOS_PER_BUCKET = 10000;
+    const size_t MAX_BUCKETS = 20;
+  }
+
 } // namespace scitt

@@ -74,7 +74,7 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
-      - run: apt-get update && apt-get install -y clang-tidy-10
+      - run: apt-get update && apt-get install -y clang-tidy-15
       - run: ./build.sh
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"
