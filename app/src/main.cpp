@@ -642,56 +642,6 @@ namespace scitt
           "to", ccf::endpoints::QueryParamPresence::OptionalParameter)
         .install();
 
-      static constexpr auto get_issuers_path = "/did";
-      auto get_issuers = [this](EndpointContext& ctx, nlohmann::json&& params) {
-        std::ignore = params;
-
-        auto* issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
-
-        GetIssuers::Out out;
-
-        issuers->foreach_key([&out](const auto& issuer) {
-          out.issuers.push_back(issuer);
-          return true;
-        });
-
-        return out;
-      };
-      make_endpoint(
-        get_issuers_path,
-        HTTP_GET,
-        ccf::json_adapter(get_issuers),
-        authn_policy)
-        .install();
-
-      static constexpr auto get_issuer_info_path = "/did/{did}";
-      auto get_issuer_info =
-        [this](EndpointContext& ctx, nlohmann::json&& params) {
-          std::ignore = params;
-
-          auto* issuers = ctx.tx.template ro<IssuersTable>(ISSUERS_TABLE);
-
-          auto issuer = ctx.rpc_ctx->get_request_path_params().at("did");
-
-          auto issuer_info = issuers->get(issuer);
-          if (!issuer_info.has_value())
-          {
-            throw BadRequestError(
-              errors::InvalidInput,
-              fmt::format("Issuer {} does not exist.", issuer));
-          }
-
-          GetIssuerInfo::Out out;
-          out = issuer_info.value();
-          return out;
-        };
-      make_endpoint(
-        get_issuer_info_path,
-        HTTP_GET,
-        ccf::json_adapter(get_issuer_info),
-        authn_policy)
-        .install();
-
       register_service_endpoints(context, *this);
 
       register_operations_endpoints(context, *this, authn_policy);
