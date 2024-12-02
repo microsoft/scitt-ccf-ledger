@@ -548,10 +548,8 @@ class Client(BaseClient):
     def get_operations(self):
         return self.get("/operations").json()["operations"]
 
-    def get_claim(self, tx: str, *, embed_receipt=False) -> bytes:
-        response = self.get_historical(
-            f"/entries/{tx}", params={"embedReceipt": embed_receipt}
-        )
+    def get_claim(self, tx: str) -> bytes:
+        response = self.get_historical(f"/entries/{tx}")
         return response.content
 
     def get_signed_statement(self, tx: str) -> bytes:
