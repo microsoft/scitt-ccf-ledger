@@ -185,15 +185,8 @@ namespace scitt
     Configuration, policy, authentication, service_identifier);
 
   // Tables
-
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";
   using EntryTable = ccf::kv::RawCopySerialisedValue<std::vector<uint8_t>>;
-
-  static constexpr auto ENTRY_INFO_TABLE = "public:scitt.entry_info";
-  using EntryInfoTable = ccf::kv::Value<EntryInfo>;
-
-  static constexpr auto ISSUERS_TABLE = "public:scitt.issuers";
-  using IssuersTable = ccf::kv::Map<Issuer, IssuerInfo>;
 
   static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
   using OperationsTable = ccf::kv::Value<OperationLog>;

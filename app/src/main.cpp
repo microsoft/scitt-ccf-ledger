@@ -363,9 +363,6 @@ namespace scitt
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
-        const bool embed_receipt =
-          get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
-
         SCITT_DEBUG("Get transaction historical state");
         auto historical_tx = historical_state->store->create_read_only_tx();
 
@@ -380,38 +377,7 @@ namespace scitt
               historical_state->transaction_id.to_str()));
         }
 
-        std::vector<uint8_t> entry_out;
-        if (embed_receipt)
-        {
-          SCITT_DEBUG("Get saved SCITT entry");
-          auto* entry_info_table =
-            historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
-          auto entry_info = entry_info_table->get().value();
-
-          SCITT_DEBUG("Get CCF receipt");
-          auto ccf_receipt_ptr =
-            ccf::describe_receipt_v2(*historical_state->receipt);
-          std::vector<uint8_t> receipt;
-          try
-          {
-            SCITT_DEBUG("Build SCITT receipt");
-            receipt = serialize_receipt(entry_info, ccf_receipt_ptr);
-
-            SCITT_DEBUG("Embed SCITT receipt into the entry response");
-            entry_out = cose::embed_receipt(entry.value(), receipt);
-          }
-          catch (const ReceiptProcessingError& e)
-          {
-            SCITT_FAIL("Failed to embed receipt: {}", e.what());
-            throw InternalError(e.what());
-          }
-        }
-        else
-        {
-          entry_out = std::move(entry.value());
-        }
-
-        ctx.rpc_ctx->set_response_body(entry_out);
+        ctx.rpc_ctx->set_response_body(entry.value());
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE, "application/cose");
       };
