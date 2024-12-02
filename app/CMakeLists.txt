@@ -55,7 +55,7 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-10" "clang-tidy" REQUIRED)
+  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-15" "clang-tidy" REQUIRED)
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")

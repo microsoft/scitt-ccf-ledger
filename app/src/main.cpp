@@ -126,7 +126,8 @@ namespace scitt
    * The proof format is described in
    * https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/
    */
-  std::vector<uint8_t> get_cose_receipt(ccf::TxReceiptImplPtr receipt_ptr)
+  std::vector<uint8_t> get_cose_receipt(
+    const ccf::TxReceiptImplPtr& receipt_ptr)
   {
     auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
     if (!proof.has_value())
@@ -144,7 +145,7 @@ namespace scitt
     // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
     // Page 11, vdp is the label for verifiable-proods in the unprotected
     // header of the receipt
-    int64_t vdp = 396;
+    const int64_t vdp = 396;
     // -1 is the label for inclusion-proofs
     auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
     ccf::cose::edit::desc::Value inclusion_desc{inclusion_proof, vdp, *proof};
@@ -200,7 +201,7 @@ namespace scitt
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
       const ccf::AuthnPolicies& ap) override
     {
-      std::function<ccf::ApiResult(timespec & time)> get_time =
+      const std::function<ccf::ApiResult(timespec & time)> get_time =
         [this](timespec& time) {
           return this->get_untrusted_host_time_v1(time);
         };
@@ -226,14 +227,17 @@ namespace scitt
 
       SCITT_DEBUG("Install custom indexing strategy");
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
-        ENTRY_TABLE, context, 10000, 20);
+        ENTRY_TABLE,
+        context,
+        indexing::SEQNOS_PER_BUCKET,
+        indexing::MAX_BUCKETS);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
       auto resolver = std::make_unique<did::UniversalResolver>();
       verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
 
       auto register_signed_statement = [this](EndpointContext& ctx) {
-        auto& body = ctx.rpc_ctx->get_request_body();
+        const auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
@@ -322,7 +326,7 @@ namespace scitt
         // it later, inject the receipt in it, and serve a transparent
         // statement.
         SCITT_DEBUG("Signed statement stored in the ledger");
-        auto entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
+        auto* entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
 
         SCITT_INFO(
@@ -355,17 +359,17 @@ namespace scitt
       static constexpr auto get_entry_path = "/entries/{txid}";
       auto get_entry = [this](
                          EndpointContext& ctx,
-                         ccf::historical::StatePtr historical_state) {
+                         const ccf::historical::StatePtr& historical_state) {
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
-        bool embed_receipt =
+        const bool embed_receipt =
           get_query_value<bool>(parsed_query, "embedReceipt").value_or(false);
 
         SCITT_DEBUG("Get transaction historical state");
         auto historical_tx = historical_state->store->create_read_only_tx();
 
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+        auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
         auto entry = entries->get();
         if (!entry.has_value())
         {
@@ -380,7 +384,7 @@ namespace scitt
         if (embed_receipt)
         {
           SCITT_DEBUG("Get saved SCITT entry");
-          auto entry_info_table =
+          auto* entry_info_table =
             historical_tx.template ro<EntryInfoTable>(ENTRY_INFO_TABLE);
           auto entry_info = entry_info_table->get().value();
 
@@ -420,31 +424,32 @@ namespace scitt
         .install();
 
       static constexpr auto get_entry_receipt_path = "/entries/{txid}/receipt";
-      auto get_entry_receipt = [this](
-                                 EndpointContext& ctx,
-                                 ccf::historical::StatePtr historical_state) {
-        SCITT_DEBUG("Get transaction historical state");
-        auto historical_tx = historical_state->store->create_read_only_tx();
+      auto get_entry_receipt =
+        [this](
+          EndpointContext& ctx,
+          const ccf::historical::StatePtr& historical_state) {
+          SCITT_DEBUG("Get transaction historical state");
+          auto historical_tx = historical_state->store->create_read_only_tx();
 
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
+          auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+          auto entry = entries->get();
+          if (!entry.has_value())
+          {
+            throw BadRequestError(
+              errors::InvalidInput,
+              fmt::format(
+                "Transaction ID {} does not correspond to a submission.",
+                historical_state->transaction_id.to_str()));
+          }
 
-        SCITT_DEBUG("Get signed statement from the ledger");
-        auto cose_receipt = get_cose_receipt(historical_state->receipt);
+          SCITT_DEBUG("Get signed statement from the ledger");
+          auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
-        ctx.rpc_ctx->set_response_body(cose_receipt);
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE,
-          ccf::http::headervalues::contenttype::COSE);
-      };
+          ctx.rpc_ctx->set_response_body(cose_receipt);
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::CONTENT_TYPE,
+            ccf::http::headervalues::contenttype::COSE);
+        };
 
       make_endpoint(
         get_entry_receipt_path,
@@ -457,41 +462,43 @@ namespace scitt
 
       static constexpr auto get_entry_statement_path =
         "/entries/{txid}/statement";
-      auto get_entry_statement = [this](
-                                   EndpointContext& ctx,
-                                   ccf::historical::StatePtr historical_state) {
-        SCITT_DEBUG("Get transaction historical state");
-        auto historical_tx = historical_state->store->create_read_only_tx();
+      auto get_entry_statement =
+        [this](
+          EndpointContext& ctx,
+          const ccf::historical::StatePtr& historical_state) {
+          SCITT_DEBUG("Get transaction historical state");
+          auto historical_tx = historical_state->store->create_read_only_tx();
 
-        auto entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
+          auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
+          auto entry = entries->get();
+          if (!entry.has_value())
+          {
+            throw BadRequestError(
+              errors::InvalidInput,
+              fmt::format(
+                "Transaction ID {} does not correspond to a submission.",
+                historical_state->transaction_id.to_str()));
+          }
 
-        auto cose_receipt = get_cose_receipt(historical_state->receipt);
+          auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
-        // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
-        // Section 4.4, 394 is the label for an array of receipts in the
-        // unprotected header (scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS
-        // here)
-        int64_t receipts = scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
-        ccf::cose::edit::desc::Value receipts_desc{
-          ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
+          // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
+          // Section 4.4, 394 is the label for an array of receipts in the
+          // unprotected header (scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS
+          // here)
+          const int64_t receipts =
+            scitt::cose::COSE_HEADER_PARAM_SCITT_RECEIPTS;
+          ccf::cose::edit::desc::Value receipts_desc{
+            ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
-        auto statement =
-          ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
+          auto statement =
+            ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 
-        ctx.rpc_ctx->set_response_body(statement);
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE,
-          ccf::http::headervalues::contenttype::COSE);
-      };
+          ctx.rpc_ctx->set_response_body(statement);
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::CONTENT_TYPE,
+            ccf::http::headervalues::contenttype::COSE);
+        };
 
       make_endpoint(
         get_entry_statement_path,
@@ -505,6 +512,8 @@ namespace scitt
       static constexpr auto get_entries_tx_ids_path = "/entries/txIds";
       auto get_entries_tx_ids =
         [this](EndpointContext& ctx, nlohmann::json&& params) {
+          std::ignore = params;
+
           const auto parsed_query =
             ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 

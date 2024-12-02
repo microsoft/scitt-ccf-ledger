@@ -21,11 +21,11 @@ namespace
     const std::pair<ccf::crypto::Pem, ccf::crypto::KeyPairPtr>* parent =
       nullptr)
   {
-    std::string valid_from = "19700101000000Z";
-    std::string valid_to = "20991231000000Z";
+    const std::string valid_from = "19700101000000Z";
+    const std::string valid_to = "20991231000000Z";
 
     auto kp = ccf::crypto::make_key_pair();
-    if (parent)
+    if (parent != nullptr)
     {
       auto csr = kp->create_csr(subject_name);
       auto cert =
@@ -164,7 +164,7 @@ TEST(Verifier, GarbageCert)
 {
   auto root = create_cert("CN=root", true);
   auto leaf = create_cert("CN=leaf", false, &root);
-  std::vector<uint8_t> garbage = {0xde, 0xad, 0xbe, 0xef};
+  const std::vector<uint8_t> garbage = {0xde, 0xad, 0xbe, 0xef};
 
   EXPECT_THROW(
     Verifier::verify_chain(
