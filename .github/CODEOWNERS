@@ -1,0 +1,4 @@
+# https://help.github.com/en/articles/about-code-owners
+
+# Every review will request the SCITT-dev team as reviewer, unless a later match takes precedence
+* @Microsoft/scitt-dev

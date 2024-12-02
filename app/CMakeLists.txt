@@ -3,6 +3,8 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
@@ -34,6 +36,9 @@ set(CMAKE_GENERATED_COMMENT
 )
 configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
+# add CCF dependencies
+# add linking options
+# add SAN options if CCF is built with them
 add_ccf_app(scitt
   SRCS src/main.cpp
   INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private

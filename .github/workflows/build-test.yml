@@ -86,5 +86,6 @@ jobs:
         with:
           name: logs-${{ matrix.platform.name }}
           path: |
-            out
-          if-no-files-found: ignore
+            /tmp/pytest-of-root/*current/*current/*.{out,err}
+            /tmp/pytest-of-root/*current/*current/config.json
+          if-no-files-found: warn

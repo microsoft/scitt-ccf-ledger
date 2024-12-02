@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+ccf-source/
 build/
 tmp/
 out/
