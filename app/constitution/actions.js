@@ -888,22 +888,6 @@ const actions = new Map([
     ),
   ],
   [
-    "add_node_code",
-    new Action(
-      function (args) {
-        checkType(args.code_id, "string", "code_id");
-      },
-      function (args, proposalId) {
-        const codeId = ccf.strToBuf(args.code_id);
-        const ALLOWED = ccf.jsonCompatibleToBuf("AllowedToJoin");
-        ccf.kv["public:ccf.gov.nodes.code_ids"].set(codeId, ALLOWED);
-
-        // Adding a new allowed code ID changes the semantics of any other open proposals, so invalidate them to avoid confusion or malicious vote modification
-        invalidateOtherOpenProposals(proposalId);
-      }
-    ),
-  ],
-  [
     "set_node_data",
     new Action(
       function (args) {
@@ -999,18 +983,6 @@ const actions = new Map([
             );
           }
         }
-      }
-    ),
-  ],
-  [
-    "remove_node_code",
-    new Action(
-      function (args) {
-        checkType(args.code_id, "string", "code_id");
-      },
-      function (args) {
-        const codeId = ccf.strToBuf(args.code_id);
-        ccf.kv["public:ccf.gov.nodes.code_ids"].delete(codeId);
       }
     ),
   ],
