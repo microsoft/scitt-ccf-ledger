@@ -24,7 +24,7 @@ You need a couple pieces of information to begin with:
 
 ### Extract measurements
 
-The quote contains the attestation report that has the measurements. `Measurement` will have the launch measurement of the guest virtual machine (aka utility VM or UVM) which was used to run the container. `Host data` will have the security policy measurement.
+The quote contains the attestation report that has the necessary measurements. `Measurement` will have the launch measurement of the guest virtual machine (aka utility VM or UVM) which was used to run the container. `Host data` will have the security policy measurement which was used to make sure no other container was launched except the one you are inspecting. More detail on implementing relying party logic can be [found in Confidential ACI scheme documentation](https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64).
 
 - Decode the report and save it to a file:
 
