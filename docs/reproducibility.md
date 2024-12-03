@@ -24,7 +24,7 @@ You need a couple pieces of information to begin with:
 
 ### Extract measurements
 
-The quote contains the attestation report that has the necessary measurements. `Measurement` will have the launch measurement of the guest virtual machine (aka utility VM or UVM) which was used to run the container. `Host data` will have the security policy measurement which was used to make sure no other container was launched except the one you are inspecting, it will contain container image layer hashes.
+The quote contains the attestation report that has the measurements. `Measurement` will have the launch measurement of the guest virtual machine (aka utility VM or UVM) which was used to run the container. `Host data` will have the security policy measurement.
 
 - Decode the report and save it to a file:
 
@@ -42,8 +42,8 @@ The quote contains the attestation report that has the necessary measurements. `
 
 ### Guest VM
 
-The details of how to reproduce the Guest VM are not ready yet. The source code will be open sourced at some point and it will be possible to build from it to reproduce the `measurement` in the report. It will make sure that the security policy enforcement logic is as expected.
+The details of how to reproduce the Guest VM (to compare it to `measurement` in the report) are not ready yet. The source code is not open sourced.
 
 ### Security policy and container image
 
-`Host data` contains the hash of the security policy, but we do not have the steps to obtain the policy yet.
+`Host data` contains the hash of the security policy, but we do not have the steps to obtain the policy yet. Container image would be linked to the policy.
