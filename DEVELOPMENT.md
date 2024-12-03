@@ -63,7 +63,7 @@ This will expect all of the required dependencies to be set correctly.
 Build scitt-ccf-ledger by running:
 
 ```sh
-PLATFORM=<sgx|virtual|snp> ./build.sh
+PLATFORM=<virtual|snp> ./build.sh
 ```
 
 ## Running
@@ -84,7 +84,7 @@ export PLATFORM=virtual
 2. Start a single-node CCF network running the scitt-ccf-ledger application:
 
     ```sh
-    PLATFORM=<sgx|virtual|snp> ./start.sh
+    PLATFORM=<virtual|snp> ./start.sh
     ```
 
 3. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local

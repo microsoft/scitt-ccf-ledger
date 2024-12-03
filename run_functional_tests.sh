@@ -5,7 +5,7 @@
 set -ex
 
 DOCKER=${DOCKER:-0}
-PLATFORM=${PLATFORM:-sgx}
+PLATFORM=${PLATFORM:-snp}
 
 # Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}

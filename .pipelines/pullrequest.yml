@@ -133,18 +133,6 @@ extends:
               DOCKER: 1
               ELEVATE_PRIVILEGES: true
 
-    - stage: test_sgx_vm_container_build
-      jobs:
-
-      ## About SGX support on OneBranch
-      # Local sgx build is not possible without changing the vm image in the pool
-      # from ubuntu 22 to ubuntu 20 because dcap was not released to v22 and is not
-      # installable. This was because openenclave is scheduled for deprecation. 
-      # Ubuntu 20 image with sgx support does not exist in the marketplace for us to switch to.
-      # Alternatively, it was being executed through the container in azure pipelines but
-      # when using custom pool image the usual container build support is not there so it 
-      # need to be run manually through docker.
-
     - stage: snp_build
       jobs:
       - job: snp_build

@@ -313,7 +313,6 @@ class CCHost(EventLoopThread):
             service_cert.rename(previous_service_cert)
 
         PLATFORMS = {
-            "sgx": {"platform": "SGX", "type": "Release"},
             "virtual": {"platform": "Virtual", "type": "Virtual"},
             "snp": {"platform": "SNP", "type": "Release"},
         }
@@ -387,7 +386,6 @@ class CCHost(EventLoopThread):
 def get_enclave_path(platform: str, enclave_package) -> Path:
     ENCLAVE_SUFFIX = {
         "virtual": "virtual.so",
-        "sgx": "enclave.so.signed",
         "snp": "snp.so",
     }
     return Path(f"{enclave_package}.{ENCLAVE_SUFFIX[platform]}")
@@ -415,7 +413,7 @@ def main():
     parser.add_argument(
         "--platform",
         default="virtual",
-        choices=["sgx", "virtual", "snp"],
+        choices=["virtual", "snp"],
         help="Type of enclave used when starting cchost",
     )
     parser.add_argument(

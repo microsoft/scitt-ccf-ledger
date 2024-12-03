@@ -797,22 +797,6 @@ const actions = new Map([
         checkType(args.issuer, "string", "issuer");
         checkType(args.auto_refresh, "boolean?", "auto_refresh");
         checkType(args.ca_cert_bundle_name, "string?", "ca_cert_bundle_name");
-        checkEnum(args.key_filter, ["all", "sgx"], "key_filter");
-        checkType(args.key_policy, "object?", "key_policy");
-        if (args.key_policy) {
-          checkType(
-            args.key_policy.sgx_claims,
-            "object?",
-            "key_policy.sgx_claims"
-          );
-          if (args.key_policy.sgx_claims) {
-            for (const [name, value] of Object.entries(
-              args.key_policy.sgx_claims
-            )) {
-              checkType(value, "string", `key_policy.sgx_claims["${name}"]`);
-            }
-          }
-        }
         checkType(args.jwks, "object?", "jwks");
         if (args.jwks) {
           checkJwks(args.jwks, "jwks");
@@ -900,22 +884,6 @@ const actions = new Map([
           return;
         }
         ccf.removeJwtPublicSigningKeys(args.issuer);
-      }
-    ),
-  ],
-  [
-    "add_node_code",
-    new Action(
-      function (args) {
-        checkType(args.code_id, "string", "code_id");
-      },
-      function (args, proposalId) {
-        const codeId = ccf.strToBuf(args.code_id);
-        const ALLOWED = ccf.jsonCompatibleToBuf("AllowedToJoin");
-        ccf.kv["public:ccf.gov.nodes.code_ids"].set(codeId, ALLOWED);
-
-        // Adding a new allowed code ID changes the semantics of any other open proposals, so invalidate them to avoid confusion or malicious vote modification
-        invalidateOtherOpenProposals(proposalId);
       }
     ),
   ],
@@ -1015,18 +983,6 @@ const actions = new Map([
             );
           }
         }
-      }
-    ),
-  ],
-  [
-    "remove_node_code",
-    new Action(
-      function (args) {
-        checkType(args.code_id, "string", "code_id");
-      },
-      function (args) {
-        const codeId = ccf.strToBuf(args.code_id);
-        ccf.kv["public:ccf.gov.nodes.code_ids"].delete(codeId);
       }
     ),
   ],

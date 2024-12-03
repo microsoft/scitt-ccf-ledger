@@ -38,7 +38,6 @@ class JwtIssuer:
                     "args": {
                         "issuer": self.name,
                         "auto_refresh": False,
-                        "key_filter": "all",
                         "jwks": crypto.create_jwks(self.cert, self.key_id),
                     },
                 }

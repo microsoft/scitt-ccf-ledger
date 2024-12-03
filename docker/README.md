@@ -17,12 +17,3 @@ PLATFORM="virtual" ./docker/run-dev.sh
 ```
 
 Both scripts accept different variables for customization. Please refer to the corresponding scripts for the full list of available variables to use.
-
-## Build and push docker images to a container registry
-
-After building a docker image, you can push it to a container registry (e.g., Azure Container Registry). You can use the `push_image.sh` script to automatically build and push the image to ACR:
-
-```bash
-# Build docker image for SGX
-./docker/push_image.sh
-```
