@@ -30,18 +30,11 @@ jobs:
             nodes: ubuntu-20.04
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
             unit_tests_enabled: ON
-          - name: sgx
-            image: sgx
-            nodes: [self-hosted, 1ES.Pool=gha-sgx-scitt-pool]
-            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --device /dev/sgx_enclave:/dev/sgx_enclave --device /dev/sgx_provision:/dev/sgx_provision 
-            unit_tests_enabled: OFF
           - name: snp
             image: snp
             nodes: ubuntu-20.04
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
             unit_tests_enabled: OFF
-        exclude:
-          - platform: { name: sgx }
     runs-on: ${{ matrix.platform.nodes }}
     container:
       image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-dev7
@@ -62,14 +55,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: "Platform SGX"
-        run: |
-          sudo groupadd -fg $(/usr/bin/stat -Lc '%g' /dev/sgx_provision) sgx_prv;
-          sudo usermod -a -G sgx_prv $(whoami);
-          cat /proc/cpuinfo | grep flags | uniq;
-        shell: bash
-        if: "${{ matrix.platform.name == 'sgx' }}"
 
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container

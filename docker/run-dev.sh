@@ -10,7 +10,7 @@ if ! command -v python3.8 &> /dev/null; then
     exit 1
 fi
 
-PLATFORM=${PLATFORM:-sgx}
+PLATFORM=${PLATFORM:-snp}
 CCF_HOST=${CCF_HOST:-"localhost"}
 CCF_PORT=${CCF_PORT:-8000}
 CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
@@ -37,15 +37,7 @@ rm -rf "$WORKSPACE"
 mkdir -p "$WORKSPACE"
 
 cp ./docker/dev-config.tmpl.json "$WORKSPACE"/dev-config.json
-if [ "$PLATFORM" = "sgx" ]; then
-    enclave_platform="SGX"
-    enclave_type="Release"
-    enclave_file="libscitt.enclave.so.signed"
-    DOCKER_FLAGS=(
-        "--device" "/dev/sgx_enclave:/dev/sgx_enclave"
-        "--device" "/dev/sgx_provision:/dev/sgx_provision"
-    )
-elif [ "$PLATFORM" = "virtual" ]; then
+if [ "$PLATFORM" = "virtual" ]; then
     enclave_platform="Virtual"
     enclave_type="Virtual"
     enclave_file="libscitt.virtual.so"
@@ -56,7 +48,7 @@ elif [ "$PLATFORM" = "snp" ]; then
     enclave_file="libscitt.snp.so"
     DOCKER_FLAGS=()
 else 
-    echo "Unknown platform: $PLATFORM, must be 'sgx', 'virtual', or 'snp'"
+    echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
     exit 1
 fi
 sed -i "s/%ENCLAVE_PLATFORM%/$enclave_platform/g" "$WORKSPACE"/dev-config.json

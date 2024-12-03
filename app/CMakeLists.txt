@@ -16,7 +16,7 @@ project(scitt
   LANGUAGES C CXX
 )
 
-set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx', 'virtual', or 'snp'")
+set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
@@ -45,9 +45,7 @@ add_ccf_app(scitt
   INSTALL_LIBS ON
 )
 
-if (COMPILE_TARGET STREQUAL "sgx")
-  set(SCITT_TARGET scitt.enclave)
-elseif (COMPILE_TARGET STREQUAL "virtual")
+if (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
 elseif (COMPILE_TARGET STREQUAL "snp")
   set(SCITT_TARGET scitt.snp)
@@ -66,24 +64,6 @@ if (ENABLE_CLANG_TIDY)
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
 endif ()
 
-if (COMPILE_TARGET STREQUAL "sgx")
-  # Generate an ephemeral signing key
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-    COMMAND openssl genrsa -out ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem -3 3072
-  )
-  add_custom_target(
-    signing_key ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-  )
-
-  # Sign the application
-  sign_app_library(scitt.enclave
-    ${CMAKE_CURRENT_LIST_DIR}/oe_sign.conf
-    ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-    INSTALL_LIBS ON
-  )
-endif()
-
 install(
   FILES
     constitution/actions.js
@@ -94,8 +74,8 @@ install(
   DESTINATION share/scitt/constitution)
 
 if (BUILD_TESTS)
-  if (COMPILE_TARGET STREQUAL "sgx" OR COMPILE_TARGET STREQUAL "snp")
-    message(FATAL_ERROR "Unit tests are not supported on SGX or SNP builds. Set BUILD_TESTS=OFF to disable them.")
+  if (NOT COMPILE_TARGET STREQUAL "virtual")
+    message(FATAL_ERROR "Unit tests are not supported on non virtual builds. Set BUILD_TESTS=OFF to disable them.")
   endif()
 
   # Avoid Gtest files ending up in the scitt install directory

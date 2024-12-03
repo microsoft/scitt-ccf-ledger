@@ -19,11 +19,11 @@ All instructions below assume Linux as the operating system.
 
 Use the following commands to start a single-node CCF network with the scitt-ccf-ledger application setup for development purposes.
 
-> Note: `PLATFORM` should be set to `sgx`, `virtual`, or `snp` to select the type of build.
+> Note: `PLATFORM` should be set to `virtual`, or `snp` to select the type of build.
 > Note: if `PLATFORM` is set to `snp`, additional configuration is required. Refer to [this section](DEVELOPMENT.md#amd-sev-snp-platform) for more details.
 
 ```sh
-export PLATFORM=<sgx|virtual|snp>
+export PLATFORM=<virtual|snp>
 ./docker/build.sh
 ./docker/run-dev.sh
 ```

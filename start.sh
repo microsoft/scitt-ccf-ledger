@@ -7,7 +7,7 @@
 
 set -ex
 
-PLATFORM=${PLATFORM:-sgx}
+PLATFORM=${PLATFORM:-snp}
 CCF_DIR=${CCF_DIR:-/opt/ccf_$PLATFORM}
 # TODO: Don't use /tmp
 SCITT_DIR=/tmp/scitt
@@ -17,7 +17,7 @@ CONSTITUTION_DIR=$SCITT_DIR/share/scitt/constitution
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
 
-if [ "$PLATFORM" != "sgx" ] && [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
+if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Invalid platform: $PLATFORM"
     exit 1
 fi
