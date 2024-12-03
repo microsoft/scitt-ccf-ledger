@@ -46,6 +46,4 @@ The details of how to reproduce the Guest VM are not ready yet. The source code 
 
 ### Security policy and container image
 
-`Host data` contains the hash of the security policy, so we should be able to:
-- (TODO) build the docker image and create the same policy from it, or
-- (TODO) download the policy using the HTTP API, once it is available
+`Host data` contains the hash of the security policy, but we do not have the steps to obtain the policy yet.
