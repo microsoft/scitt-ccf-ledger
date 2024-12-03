@@ -42,7 +42,13 @@ The quote contains the attestation report that has the measurements. `Measuremen
 
 ### Guest VM
 
-The details of how to reproduce the Guest VM (to compare it to `measurement` in the report) are not ready yet. The source code is not open sourced.
+Guest VM measurements can be authenticated using [platform endorsements](https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64). To get platform endorsements:
+
+```sh
+cat node-quote.json | jq -r '.uvm_endorsements' | base64 -d > uvm_endorsements.cose
+```
+
+The details of how to reproduce the Guest VM (to compare it to a `measurement` in the report) are not ready yet.
 
 ### Security policy and container image
 
