@@ -15,8 +15,6 @@ namespace scitt
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
-  const std::chrono::seconds DID_RESOLUTION_CACHE_EXPIRY{60 * 30};
-
   namespace errors
   {
     const std::string DIDMethodNotSupported = "DIDMethodNotSupported";
@@ -34,5 +32,11 @@ namespace scitt
     const std::string PolicyError = "PolicyError";
     const std::string PolicyFailed = "PolicyFailed";
   } // namespace errors
+
+  namespace indexing
+  {
+    const size_t SEQNOS_PER_BUCKET = 10000;
+    const size_t MAX_BUCKETS = 20;
+  }
 
 } // namespace scitt

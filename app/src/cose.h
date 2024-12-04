@@ -783,52 +783,6 @@ namespace scitt::cose
     }
   }
 
-  /**
-   * Compute the digest of the TBS for a countersignature over a COSE Sign1.
-   *
-   *  The following structure is hashed incrementally to avoid
-   *  serializing it in full. This avoids excessive memory usage
-   *  for larger payloads.
-   *
-   * Countersign_structure = [
-   *     context: "CounterSignatureV2",
-   *     body_protected: empty_or_serialized_map,
-   *     sign_protected: empty_or_serialized_map,
-   *     external_aad: bstr,
-   *     payload: bstr,
-   *     other_fields: [
-   *         signature: bstr
-   *     ]
-   * ]
-   */
-  static ccf::crypto::Sha256Hash create_countersign_tbs_hash(
-    std::span<const uint8_t> cose_sign1,
-    std::span<const uint8_t> sign_protected)
-  {
-    auto [body_protected, payload, signature] =
-      extract_sign1_fields(cose_sign1);
-
-    // Hash the Countersign_structure incrementally.
-    cbor::hasher hash;
-    hash.open_array(6);
-    hash.add_text("CounterSignatureV2");
-
-    // body_protected: The protected header of the target message.
-    hash.add_bytes(body_protected);
-    // sign_protected: The protected header of the countersigner.
-    hash.add_bytes(sign_protected);
-    // external_aad: always empty.
-    hash.add_bytes({});
-    // payload: The payload of the target message.
-    hash.add_bytes(payload);
-
-    // other_fields: Array holding the signature of the target message.
-    hash.open_array(1);
-    hash.add_bytes(signature);
-
-    return hash.finalise();
-  }
-
   static std::vector<uint8_t> embed_receipt(
     const std::vector<uint8_t>& cose_sign1, const std::vector<uint8_t>& receipt)
   {

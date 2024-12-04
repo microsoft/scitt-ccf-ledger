@@ -4,28 +4,26 @@
 import argparse
 
 from . import (
-    create_did_web,
     embed_receipt_in_cose,
     governance,
     pretty_receipt,
+    register,
     retrieve_signed_claims,
-    sign_claims,
+    sign,
     split_payload,
-    submit_signed_claims,
     upload_did_web_doc_to_github,
-    validate_cose,
+    validate,
 )
 
 COMMANDS = [
-    ("create-did-web", create_did_web),
     ("upload-did-web-github", upload_did_web_doc_to_github),
-    ("sign", sign_claims),
-    ("submit", submit_signed_claims),
+    ("sign", sign),
+    ("submit", register),
     ("retrieve", retrieve_signed_claims),
     ("split-payload", split_payload),
     ("pretty-receipt", pretty_receipt),
     ("embed-receipt", embed_receipt_in_cose),
-    ("validate", validate_cose),
+    ("validate", validate),
     ("governance", governance),
 ]
 

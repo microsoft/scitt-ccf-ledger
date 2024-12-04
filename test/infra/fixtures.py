@@ -17,7 +17,6 @@ from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
 from .cchost import CCHost, get_default_cchost_path, get_enclave_path
-from .did_web_server import DIDWebServer
 from .proxy import Proxy
 from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
@@ -36,19 +35,15 @@ class ManagedCCHostFixtures:
         platform,
         enclave_file,
         constitution,
-        enable_faketime,
         snp_attestation_config,
     ):
         self.binary = binary
         self.platform = platform
         self.enclave_file = enclave_file
         self.constitution = constitution
-        self.enable_faketime = enable_faketime
         self.snp_attestation_config = snp_attestation_config
 
     def pytest_collection_modifyitems(self, config, items):
-        faketime_skip = pytest.mark.skip(reason="faketime support was not enabled")
-
         for item in items:
             for m in item.own_markers:
                 if m.name == "isolated_test":
@@ -63,9 +58,6 @@ class ManagedCCHostFixtures:
                         raise pytest.UsageError(
                             f"'isolated_test' marker may not be used on class method {item.nodeid!r}"
                         )
-
-                    if m.kwargs.get("enable_faketime") and not self.enable_faketime:
-                        item.add_marker(faketime_skip)
 
     @pytest.fixture(scope="session")
     def start_cchost(self, tmp_path_factory):
@@ -249,7 +241,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--platform",
         default="virtual",
-        choices=["sgx", "virtual", "snp"],
+        choices=["virtual", "snp"],
         help="Type of enclave used when starting cchost. Requires --start-cchost.",
     )
     parser.addoption(
@@ -262,10 +254,6 @@ def pytest_addoption(parser):
         type=Path,
         default="/tmp/scitt/share/scitt/constitution",
         help="Path to the directory containing the constitution. Requires --start-cchost.",
-    )
-    parser.addoption(
-        "--enable-faketime",
-        action="store_true",
     )
     parser.addoption(
         "--snp-attestation-config",
@@ -293,7 +281,6 @@ def pytest_configure(config):
         )
         constitution = config.getoption("--constitution")
         enclave_file = get_enclave_path(platform, enclave_package)
-        enable_faketime = config.getoption("--enable-faketime")
         snp_attestation_config = config.getoption("--snp-attestation-config")
         config.pluginmanager.register(
             ManagedCCHostFixtures(
@@ -301,7 +288,6 @@ def pytest_configure(config):
                 platform,
                 enclave_file,
                 constitution,
-                enable_faketime,
                 snp_attestation_config,
             )
         )
@@ -377,28 +363,11 @@ def client(base_client, configure_service):
 
 
 @pytest.fixture(scope="class")
-def did_web(client, tmp_path_factory):
-    """
-    Create a DIDWebServer and add its TLS root to the SCITT service.
-
-    The server is shared across all tests of the same class.
-    """
-    with DIDWebServer(data_dir=tmp_path_factory.mktemp("did_web")) as did_web_server:
-        cert_bundle = did_web_server.cert_bundle
-        client.governance.propose(
-            governance.set_ca_bundle_proposal("did_web_tls_roots", cert_bundle),
-            must_pass=True,
-        )
-
-        yield did_web_server
-
-
-@pytest.fixture(scope="class")
 def trusted_ca(client) -> X5ChainCertificateAuthority:
     """
     Create a X5ChainCertificateAuthority and add its root to the SCITT service.
 
-    The service will accept claims signed using certificates issued by the CA.
+    The service will accept statements signed using certificates issued by the CA.
     """
     ca = X5ChainCertificateAuthority(kty="ec")
     proposal = governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle)
@@ -411,7 +380,7 @@ def untrusted_ca(client) -> X5ChainCertificateAuthority:
     """
     Create a X5ChainCertificateAuthority but do not add its root to the SCITT service.
 
-    The service will reject claims signed using certificates issued by the CA.
+    The service will reject statements signed using certificates issued by the CA.
     """
     return X5ChainCertificateAuthority(kty="ec")
 

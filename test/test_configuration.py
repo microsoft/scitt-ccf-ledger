@@ -1,31 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import base64
-
-import httpx
 import pycose
 import pytest
 
 from pyscitt import crypto
-from pyscitt.cli.main import main
-from pyscitt.client import Client, ReceiptType
-from pyscitt.did import Resolver, did_web_document_url
-from pyscitt.verify import DIDResolverTrustStore, verify_receipt
+from pyscitt.client import Client
 
 from .infra.assertions import service_error
-from .infra.did_web_server import DIDWebServer
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
 class TestAcceptedAlgorithms:
     @pytest.fixture
-    def submit(self, client: Client, did_web: DIDWebServer):
+    def submit(self, client: Client, trusted_ca):
         def f(**kwargs):
-            """Sign and submit the claims with a new identity"""
-            identity = did_web.create_identity(**kwargs)
-            claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-            client.submit_claim_and_confirm(claims)
+            """Sign and submit the statement with a new identity"""
+            identity = trusted_ca.create_identity(**kwargs)
+            signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+            client.register_signed_statement(signed_statement)
 
         return f
 
@@ -44,7 +37,7 @@ class TestAcceptedAlgorithms:
             submit(alg="PS256", kty="rsa")
 
     def test_allow_select_algorithm(self, configure_service, submit):
-        # Add just one algorithm to the policy. Claims signed with this
+        # Add just one algorithm to the policy. Statements signed with this
         # algorithm are accepted but not the others.
         configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -64,59 +57,11 @@ class TestAcceptedAlgorithms:
         submit(alg="PS256", kty="rsa")
 
 
-class TestAcceptedDIDIssuers:
-    @pytest.fixture(scope="class")
-    def identity(self, did_web):
-        return did_web.create_identity()
-
-    @pytest.fixture(scope="class")
-    def claims(self, identity):
-        return crypto.sign_json_claimset(identity, {"foo": "bar"})
-
-    def test_reject_all_issuers(self, client: Client, configure_service, claims):
-        # Start with a configuration with no accepted issuers.
-        # The service should reject anything we submit to it.
-        configure_service({"policy": {"accepted_did_issuers": []}})
-
-        with service_error("InvalidInput: Unsupported DID issuer in protected header"):
-            client.submit_claim_and_confirm(claims)
-
-    def test_wrong_accepted_issuer(self, client: Client, configure_service, claims):
-        # Add just one issuer to the policy. Claims signed not with this
-        # issuer are rejected.
-        configure_service({"policy": {"accepted_did_issuers": ["else"]}})
-
-        with service_error("InvalidInput: Unsupported DID issuer in protected header"):
-            client.submit_claim_and_confirm(claims)
-
-    def test_allow_any_issuer(self, client: Client, configure_service, claims):
-        # If no accepted_issuers are defined in the policy, any issuers
-        # are accepted.
-        configure_service({"policy": {}})
-        client.submit_claim_and_confirm(claims)
-
-    def test_valid_issuer(self, client: Client, configure_service, identity, claims):
-        # Add just one issuer to the policy. Claims signed with this
-        # issuer are accepted.
-        configure_service({"policy": {"accepted_did_issuers": [identity.issuer]}})
-        client.submit_claim_and_confirm(claims)
-
-    def test_multiple_accepted_issuers(
-        self, client: Client, configure_service, identity, claims
-    ):
-        # Add multiple issuers to the policy. Claims signed with this
-        # issuer are accepted.
-        configure_service(
-            {"policy": {"accepted_did_issuers": [identity.issuer, "else"]}}
-        )
-        client.submit_claim_and_confirm(claims)
-
-
 class TestPolicyEngine:
     @pytest.fixture(scope="class")
-    def signed_claimset(self, trusted_ca: X5ChainCertificateAuthority):
+    def signed_statement(self, trusted_ca: X5ChainCertificateAuthority):
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
-        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+        return crypto.sign_json_statement(identity, {"foo": "bar"})
 
     def test_ietf_didx509_policy(
         self,
@@ -124,7 +69,6 @@ class TestPolicyEngine:
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
         example_eku = "2.999"
 
@@ -160,37 +104,49 @@ class TestPolicyEngine:
 
         feed = "SomeFeed"
         # SBOMs
-        claims = {"foo": "bar"}
+        statement = {"foo": "bar"}
 
-        permitted_signed_claims = [
-            crypto.sign_json_claimset(identities[1], claims, feed=feed, cwt=True),
+        permitted_signed_statements = [
+            crypto.sign_json_statement(identities[1], statement, feed=feed, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 claims"
+        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_issuer = "Invalid issuer"
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
         not_supported = "Payloads with CWT_Claims must have a did:x509 iss and x5chain"
 
-        # Keyed by expected error, values are lists of claimsets which should trigger this error
-        refused_signed_claims = {
+        # Keyed by expected error, values are lists of signed statements which should trigger this error
+        refused_signed_statements = {
             # Well-constructed, but not a valid issuer
             invalid_issuer: [
-                crypto.sign_json_claimset(identities[0], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identities[0], statement, feed=feed, cwt=True
+                ),
             ],
             eku_not_found: [
-                crypto.sign_json_claimset(identities[2], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identities[2], statement, feed=feed, cwt=True
+                ),
             ],
             openssl_error: [
-                crypto.sign_json_claimset(identities[3], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identities[3], statement, feed=feed, cwt=True
+                ),
             ],
             invalid_did: [
-                crypto.sign_json_claimset(identities[4], claims, feed=feed, cwt=True),
-                crypto.sign_json_claimset(identities[5], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identities[4], statement, feed=feed, cwt=True
+                ),
+                crypto.sign_json_statement(
+                    identities[5], statement, feed=feed, cwt=True
+                ),
             ],
             not_supported: [
-                crypto.sign_json_claimset(identities[6], claims, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identities[6], statement, feed=feed, cwt=True
+                ),
             ],
         }
 
@@ -206,20 +162,19 @@ export function apply(profile, phdr) {{
 
         configure_service({"policy": {"policy_script": policy_script}})
 
-        for signed_claimset in permitted_signed_claims:
-            client.submit_claim_and_confirm(signed_claimset)
+        for signed_statement in permitted_signed_statements:
+            client.register_signed_statement(signed_statement)
 
-        for err, signed_claimsets in refused_signed_claims.items():
-            for signed_claimset in signed_claimsets:
+        for err, signed_statements in refused_signed_statements.items():
+            for signed_statement in signed_statements:
                 with service_error(err):
-                    client.submit_claim_and_confirm(signed_claimset)
+                    client.register_signed_statement(signed_statement)
 
     def test_svn_policy(
         self,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
         example_eku = "2.999"
 
@@ -235,22 +190,22 @@ export function apply(profile, phdr) {{
         identity.issuer = didx509_issuer(trusted_ca)
         feed = "SomeFeed"
         # SBOMs
-        claims = {"foo": "bar"}
+        statement = {"foo": "bar"}
 
-        permitted_signed_claims = [
-            crypto.sign_json_claimset(identity, claims, feed=feed, svn=1, cwt=True),
+        permitted_signed_statements = [
+            crypto.sign_json_statement(identity, statement, feed=feed, svn=1, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 claims"
+        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_svn = "Invalid SVN"
 
-        # Keyed by expected error, values are lists of claimsets which should trigger this error
-        refused_signed_claims = {
+        # Keyed by expected error, values are lists of signed statements which should trigger this error
+        refused_signed_statements = {
             # Well-constructed, but not a valid issuer
             invalid_svn: [
-                crypto.sign_json_claimset(identity, claims, feed=feed, cwt=True),
-                crypto.sign_json_claimset(
-                    identity, claims, feed=feed, svn=-11, cwt=True
+                crypto.sign_json_statement(identity, statement, feed=feed, cwt=True),
+                crypto.sign_json_statement(
+                    identity, statement, feed=feed, svn=-11, cwt=True
                 ),
             ],
         }
@@ -268,25 +223,25 @@ export function apply(profile, phdr) {{
 
         configure_service({"policy": {"policy_script": policy_script}})
 
-        for signed_claimset in permitted_signed_claims:
-            client.submit_claim_and_confirm(signed_claimset)
+        for signed_statement in permitted_signed_statements:
+            client.register_signed_statement(signed_statement)
 
-        for err, signed_claimsets in refused_signed_claims.items():
-            for signed_claimset in signed_claimsets:
+        for err, signed_statements in refused_signed_statements.items():
+            for signed_statement in signed_statements:
                 with service_error(err):
-                    client.submit_claim_and_confirm(signed_claimset)
+                    client.register_signed_statement(signed_statement)
 
     def test_trivial_pass_policy(
-        self, client: Client, configure_service, signed_claimset
+        self, client: Client, configure_service, signed_statement
     ):
         configure_service(
             {"policy": {"policy_script": "export function apply() { return true }"}}
         )
 
-        client.submit_claim_and_confirm(signed_claimset)
+        client.register_signed_statement(signed_statement)
 
     def test_trivial_fail_policy(
-        self, client: Client, configure_service, signed_claimset
+        self, client: Client, configure_service, signed_statement
     ):
         configure_service(
             {
@@ -297,10 +252,10 @@ export function apply(profile, phdr) {{
         )
 
         with service_error("Policy was not met"):
-            client.submit_claim_and_confirm(signed_claimset)
+            client.register_signed_statement(signed_statement)
 
     def test_exceptional_policy(
-        self, client: Client, configure_service, signed_claimset
+        self, client: Client, configure_service, signed_statement
     ):
         configure_service(
             {
@@ -311,7 +266,7 @@ export function apply(profile, phdr) {{
         )
 
         with service_error("Error while applying policy"):
-            client.submit_claim_and_confirm(signed_claimset)
+            client.register_signed_statement(signed_statement)
 
     @pytest.mark.parametrize(
         "script",
@@ -323,12 +278,12 @@ export function apply(profile, phdr) {{
         ],
     )
     def test_invalid_policy(
-        self, client: Client, configure_service, signed_claimset, script
+        self, client: Client, configure_service, signed_statement, script
     ):
         configure_service({"policy": {"policy_script": script}})
 
         with service_error("Invalid policy module"):
-            client.submit_claim_and_confirm(signed_claimset)
+            client.register_signed_statement(signed_statement)
 
     def test_cts_hashv_cwtclaims_payload_with_policy(
         self,
@@ -337,12 +292,11 @@ export function apply(profile, phdr) {{
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
-        did_web,
     ):
 
         policy_script = f"""
 export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 claims"; }}
+if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
 
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
@@ -357,107 +311,8 @@ return true;
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
-        submission = client.submit_claim_and_confirm(
-            cts_hashv_cwtclaims, receipt_type=ReceiptType.EMBEDDED
-        )
+        statement = client.register_signed_statement(cts_hashv_cwtclaims).response_bytes
 
-        # store submission receipt in random file in tmp_path
-        receipt_path = tmp_path / "receipt.cose"
-        receipt_path.write_bytes(submission.receipt_bytes)
-        # print to preview what was accepted and to check if pretty-receipt understands the given receipt
-        main(["pretty-receipt", str(receipt_path)])
-
-
-def test_service_identifier(
-    client: Client,
-    service_identifier: str,
-    did_web: DIDWebServer,
-):
-    identity = did_web.create_identity()
-    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
-
-    # Receipts include an issuer and kid.
-    receipt = client.submit_claim_and_confirm(claim).receipt
-    assert receipt.phdr[crypto.SCITTIssuer] == service_identifier
-    assert pycose.headers.KID in receipt.phdr
-
-    trust_store = DIDResolverTrustStore(Resolver(verify=False))
-    verify_receipt(claim, trust_store, receipt)
-
-
-def test_without_service_identifier(
-    client: Client,
-    configure_service,
-    service_identifier: str,
-    did_web: DIDWebServer,
-):
-    identity = did_web.create_identity()
-    claim = crypto.sign_json_claimset(identity, {"foo": "bar"})
-
-    # The test framework automatically configures the service with a DID.
-    # Reconfigure the service to disable it.
-    configure_service({"service_identifier": None})
-
-    url = did_web_document_url(service_identifier)
-    assert httpx.get(url, verify=False).status_code == 404
-
-    # The receipts it returns have no issuer or kid.
-    receipt = client.submit_claim_and_confirm(claim).receipt
-    assert crypto.SCITTIssuer.identifier not in receipt.phdr
-    assert pycose.headers.KID not in receipt.phdr
-
-
-def test_consistent_jwk(client, service_identifier):
-    doc = Resolver(verify=False).resolve(service_identifier)
-    assert len(doc["assertionMethod"]) > 0
-
-    # Each assertionMethod contains both a bare public key, and an X509
-    # certificate, which should contain the same public key. This checks that
-    # the two keys are actually the same.
-    for method in doc["assertionMethod"]:
-        jwk = method["publicKeyJwk"]
-        key = crypto.convert_jwk_to_pem(jwk)
-
-        assert len(jwk["x5c"]) == 1
-        certificate = crypto.cert_der_to_pem(base64.b64decode(jwk["x5c"][0]))
-        cert_key = crypto.get_cert_public_key(certificate)
-
-        assert crypto.pub_key_pem_to_der(key) == crypto.pub_key_pem_to_der(cert_key)
-
-
-@pytest.mark.isolated_test
-def test_did_multiple_service_keys(
-    client: Client,
-    did_web: DIDWebServer,
-    restart_service,
-    service_identifier: str,
-):
-    resolver = Resolver(verify=False)
-    trust_store = DIDResolverTrustStore(resolver)
-
-    # Initially the DID document only has a single assertion method
-    did_doc = resolver.resolve(service_identifier)
-    assert len(did_doc["assertionMethod"]) == 1
-    old_assertion_method = did_doc["assertionMethod"][0]
-
-    # Create a claim and get a receipt before the service is restarted.
-    identity = did_web.create_identity()
-    claims = crypto.sign_json_claimset(identity, {"foo": "bar"})
-    receipt = client.submit_claim_and_confirm(claims).receipt
-    verify_receipt(claims, trust_store, receipt)
-
-    restart_service()
-
-    did_doc = resolver.resolve(service_identifier)
-    assert len(did_doc["assertionMethod"]) == 2
-    assert old_assertion_method in did_doc["assertionMethod"]
-
-    # Thanks to the DID document containing all past service identities, the
-    # old receipt can still be verified even though the current identity has
-    # changed.
-    verify_receipt(claims, trust_store, receipt)
-
-    # We can also get new receipts, which will use the new identity, and these
-    # can also be verified.
-    new_receipt = client.submit_claim_and_confirm(claims).receipt
-    verify_receipt(claims, trust_store, new_receipt)
+        # store statement
+        transparent_statement = tmp_path / "transparent_statement.cose"
+        transparent_statement.write_bytes(statement)

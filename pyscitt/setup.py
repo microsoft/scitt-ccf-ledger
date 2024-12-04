@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.5.0"
+PACKAGE_VERSION = "0.6.0"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -25,7 +25,7 @@ setup(
     },
     python_requires=">=3.8",
     install_requires=[
-        "ccf==5.*",
+        "ccf==6.0.0-dev7",
         "cryptography==43.*",  # needs to match ccf
         "httpx",
         "cbor2==5.4.*",

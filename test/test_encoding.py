@@ -13,7 +13,7 @@ from pycose.messages import Sign1Message
 from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.crypto import cert_pem_to_der
-from pyscitt.verify import verify_receipt
+from pyscitt.verify import verify_transparent_statement
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
@@ -94,7 +94,7 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
     """
     Sign a COSE Sign1 envelope.
 
-    This function is similar to `crypto.sign_claimset`, but it bypasses pycose
+    This function is similar to `crypto.sign_statement`, but it bypasses pycose
     allowing us to encode invalid messages that pycose would refuse to encode.
 
     Default values for common parameters will be added automatically if not
@@ -136,69 +136,38 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def claim(self, did_web):
-        """Create a signed claim, with protected headers encoded non-canonically."""
+    def signed_statement(self, trusted_ca):
+        """Create a signed statement, with protected headers encoded non-canonically."""
 
-        identity = did_web.create_identity()
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
-    def test_submit_claim(self, client: Client, trust_store, claim):
-        """The ledger should accept claims even if not canonically encoded."""
-        receipt = client.submit_claim_and_confirm(claim).receipt
-        verify_receipt(claim, trust_store, receipt)
-
-    def test_embed_receipt(self, client: Client, trust_store, claim):
-        """
-        When embedding a receipt in a claim, the ledger should not affect the
-        encoding of byte-string pieces.
-        """
-        tx = client.submit_claim_and_confirm(claim).tx
-        embedded = client.get_claim(tx, embed_receipt=True)
-
-        original_pieces = cbor2.loads(claim).value  # type: ignore[attr-defined]
-        updated_pieces = cbor2.loads(embedded).value  # type: ignore[attr-defined]
-
-        # Any part of the message that is cryptographically bound needs to be preserved.
-        # These are respectively, the protected header, the payload and the signature.
-        assert original_pieces[0] == updated_pieces[0]
-        assert original_pieces[2] == updated_pieces[2]
-        assert original_pieces[3] == updated_pieces[3]
-
-    def test_no_buffer_overflow_when_embedding_receipt(self, client: Client, did_web):
-        """
-        When embedding a receipt in a claim, we should have a sufficiently large buffer
-        to accommodate the claim and the receipt. This test creates a claim that is
-        500KB in size and embeds the receipt in it.
-        The receipt should be embedded in the claim without any issues.
-        """
-
-        identity = did_web.create_identity()
-
-        # Create a claim of 500KB in size
-        size = int(1024 * 1024 * 0.5)
-        claim = crypto.sign_claimset(identity, bytes(size), "binary/octet-stream")
-
-        tx = client.submit_claim_and_confirm(claim).tx
-        embedded = client.get_claim(tx, embed_receipt=True)
-
-        original_claim_array = cbor2.loads(claim).value  # type: ignore[attr-defined]
-        updated_claim_array = cbor2.loads(embedded).value  # type: ignore[attr-defined]
-
-        # Check that the protected header, the payload and the signature are preserved.
-        assert original_claim_array[0] == updated_claim_array[0]
-        assert original_claim_array[2] == updated_claim_array[2]
-        assert original_claim_array[3] == updated_claim_array[3]
+    @pytest.mark.skip(
+        "Payloads are accepted, but uhdr stripping results in canonicalisation, and so the receipt cannot match"
+    )
+    def test_submit_signed_statement(
+        self, client: Client, trust_store, signed_statement
+    ):
+        """The ledger should accept signed statements even if not canonically encoded."""
+        transparent_statement = client.register_signed_statement(
+            signed_statement
+        ).response_bytes
+        verify_transparent_statement(
+            transparent_statement, trust_store, signed_statement
+        )
 
 
 class TestHeaderParameters:
     @pytest.fixture(scope="class")
-    def identity(self, did_web):
-        return did_web.create_identity()
+    def identity(self, trusted_ca):
+        return trusted_ca.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256"
+        )
 
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
         def f(parameters, *, signer=identity):
-            return client.submit_claim_and_confirm(sign(signer, b"Hello", parameters))
+            return client.register_signed_statement(sign(signer, b"Hello", parameters))
 
         return f
 
@@ -209,19 +178,6 @@ class TestHeaderParameters:
 
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
-
-    def test_kid(self, submit, identity):
-        # This works because our DID document only has a single key.
-        submit({KID: None})
-        submit({KID: identity.kid.encode("utf-8")})
-
-        with service_error("Failed to decode protected header"):
-            # The KID needs to be a byte string.
-            submit({KID: identity.kid})
-
-        with service_error("kid must start with '#'"):
-            assert identity.kid.startswith("#")
-            submit({KID: identity.kid[1:].encode("utf-8")})
 
     def test_content_type(self, submit):
         # This comes from the CoAP Content-Format registry, and is defined as

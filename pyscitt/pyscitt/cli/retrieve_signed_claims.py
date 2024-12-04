@@ -16,7 +16,6 @@ def retrieve_signed_claimsets(
     from_seqno: Optional[int],
     to_seqno: Optional[int],
     service_trust_store_path: Optional[Path],
-    embed_receipt: bool = False,
 ):
     base_path.mkdir(parents=True, exist_ok=True)
 
@@ -25,8 +24,8 @@ def retrieve_signed_claimsets(
     else:
         service_trust_store = None
 
-    for tx in client.enumerate_claims(start=from_seqno, end=to_seqno):
-        claim = client.get_claim(tx, embed_receipt=embed_receipt)
+    for tx in client.enumerate_statements(start=from_seqno, end=to_seqno):
+        claim = client.get_claim(tx)
         path = base_path / f"{tx}.cose"
 
         if service_trust_store:
@@ -68,7 +67,6 @@ def cli(fn):
             args.from_seqno,
             args.to_seqno,
             args.service_trust_store,
-            args.embed_receipt,
         )
 
     parser.set_defaults(func=cmd)

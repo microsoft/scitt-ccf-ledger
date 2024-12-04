@@ -16,18 +16,17 @@ project(scitt
   LANGUAGES C CXX
 )
 
-set(COMPILE_TARGET "sgx" CACHE STRING "Target compilation platform, either 'sgx', 'virtual', or 'snp'")
+set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(CCF_UNSAFE "Use CCF's unsafe variant (must be separately installed)" OFF)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
-
-set(ATTESTED_FETCH_MRENCLAVE_HEX "" CACHE STRING "attested-fetch MRENCLAVE (hex)")
-set(DID_WEB_RESOLVER_SCRIPT "/tmp/scitt/fetch-did-web-doc.py" CACHE STRING "Path to the DID Web resolver script")
+# Added as option to enable Azure Linux build in 6.0.0-dev7, will eventually be removed
+# once the transition to libstdc++ is complete
+set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-
-find_package(ccf_${COMPILE_TARGET} 5.0.10 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
@@ -46,9 +45,7 @@ add_ccf_app(scitt
   INSTALL_LIBS ON
 )
 
-if (COMPILE_TARGET STREQUAL "sgx")
-  set(SCITT_TARGET scitt.enclave)
-elseif (COMPILE_TARGET STREQUAL "virtual")
+if (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
 elseif (COMPILE_TARGET STREQUAL "snp")
   set(SCITT_TARGET scitt.snp)
@@ -61,29 +58,11 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-10" "clang-tidy" REQUIRED)
+  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-15" "clang-tidy" REQUIRED)
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
 endif ()
-
-if (COMPILE_TARGET STREQUAL "sgx")
-  # Generate an ephemeral signing key
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-    COMMAND openssl genrsa -out ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem -3 3072
-  )
-  add_custom_target(
-    signing_key ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-  )
-
-  # Sign the application
-  sign_app_library(scitt.enclave
-    ${CMAKE_CURRENT_LIST_DIR}/oe_sign.conf
-    ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
-    INSTALL_LIBS ON
-  )
-endif()
 
 install(
   FILES
@@ -95,8 +74,8 @@ install(
   DESTINATION share/scitt/constitution)
 
 if (BUILD_TESTS)
-  if (COMPILE_TARGET STREQUAL "sgx" OR COMPILE_TARGET STREQUAL "snp")
-    message(FATAL_ERROR "Unit tests are not supported on SGX or SNP builds. Set BUILD_TESTS=OFF to disable them.")
+  if (NOT COMPILE_TARGET STREQUAL "virtual")
+    message(FATAL_ERROR "Unit tests are not supported on non virtual builds. Set BUILD_TESTS=OFF to disable them.")
   endif()
 
   # Avoid Gtest files ending up in the scitt install directory
@@ -141,7 +120,6 @@ if (BUILD_TESTS)
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
     unit-tests/did/resolver_test.cpp
-    unit-tests/did/web/syntax_test.cpp
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)

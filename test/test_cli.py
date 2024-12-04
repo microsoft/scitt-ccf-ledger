@@ -18,7 +18,6 @@ from pyscitt.cli.main import main
 from pyscitt.governance import ProposalNotAccepted
 
 from .infra.assertions import service_error
-from .infra.did_web_server import DIDWebServer
 from .infra.generate_cacert import generate_ca_cert_and_key
 
 
@@ -58,106 +57,6 @@ def test_smoke_test(run, client, tmp_path: Path):
     (tmp_path / "config.json").write_text(
         json.dumps({"authentication": {"allow_unauthenticated": True}})
     )
-
-    # We could use the did_web fixture for this, but that sets up certs for us
-    # already, and we want to test the propose_ca_certs command.
-    with DIDWebServer(tmp_path) as server:
-        (tmp_path / "bundle.pem").write_text(server.cert_bundle)
-
-        run(
-            "governance",
-            "propose_configuration",
-            "--configuration",
-            tmp_path / "config.json",
-            with_service_url=True,
-            with_member_auth=True,
-        )
-
-        run(
-            "governance",
-            "propose_ca_certs",
-            "--name",
-            "did_web_tls_roots",
-            "--ca-certs",
-            tmp_path / "bundle.pem",
-            with_service_url=True,
-            with_member_auth=True,
-        )
-
-        print(server.port)
-        run(
-            "create-did-web",
-            "--url",
-            f"https://localhost:{server.port}/me",
-            "--kty",
-            "ec",
-            "--out-dir",
-            tmp_path / "me",
-        )
-
-        run(
-            "sign",
-            "--key",
-            tmp_path / "me" / "key.pem",
-            "--did-doc",
-            tmp_path / "me" / "did.json",
-            "--claims",
-            tmp_path / "claims.json",
-            "--content-type",
-            "application/json",
-            "--out",
-            tmp_path / "claims.cose",
-        )
-
-        run(
-            "split-payload",
-            tmp_path / "claims.cose",
-        )
-
-        run(
-            "submit",
-            "--skip-confirmation",
-            tmp_path / "claims.cose",
-            with_service_url=True,
-        )
-
-        run(
-            "submit",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            with_service_url=True,
-        )
-
-        run("pretty-receipt", tmp_path / "receipt.cbor")
-
-        run(
-            "validate",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            "--service-trust-store",
-            trust_store_path,
-        )
-
-        run(
-            "embed-receipt",
-            tmp_path / "claims.cose",
-            "--receipt",
-            tmp_path / "receipt.cbor",
-            "--out",
-            tmp_path / "claims.embedded.cose",
-        )
-
-        # make sure preview works for embedded receipts as well
-        run("pretty-receipt", tmp_path / "claims.embedded.cose")
-
-        run(
-            "validate",
-            tmp_path / "claims.embedded.cose",
-            "--service-trust-store",
-            trust_store_path,
-        )
 
 
 def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
@@ -205,19 +104,19 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
     )
 
     # Prepare an x509 cose file to submit to the service
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
     run(
         "sign",
         "--key",
         tmp_path / "signerkey.pem",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--x5c",
         tmp_path / "signerca.pem",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "statement.cose",
     )
 
     # Submit cose and make sure TLS verification is enabled
@@ -226,23 +125,12 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
         "submit",
         "--cacert",
         tmp_path / "tlscacert.pem",
-        tmp_path / "claims.cose",
+        tmp_path / "statement.cose",
         "--url",
         # TLS cert SAN entries come from config node_certificate.subject_alt_names
         client.url,
-        "--receipt",
-        tmp_path / "receipt.cbor",
-    )
-
-    run("pretty-receipt", tmp_path / "receipt.cbor")
-
-    run(
-        "embed-receipt",
-        tmp_path / "claims.cose",
-        "--receipt",
-        tmp_path / "receipt.cbor",
-        "--out",
-        tmp_path / "claims.embedded.cose",
+        "--transparent-statement",
+        tmp_path / "transparent_statement.cose",
     )
 
     trust_store_path = tmp_path / "store"
@@ -250,7 +138,7 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
     (trust_store_path / "service.json").write_text(json.dumps(service_params))
     run(
         "validate",
-        tmp_path / "claims.embedded.cose",
+        tmp_path / "transparent_statement.cose",
         "--service-trust-store",
         trust_store_path,
     )
@@ -301,19 +189,19 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     )
 
     # Prepare an x509 cose file to submit to the service
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
     run(
         "sign",
         "--key",
         tmp_path / "signerkey.pem",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--x5c",
         tmp_path / "signerca.pem",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     # Submit cose and make sure TLS verification is enabled
@@ -322,14 +210,12 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
         "submit",
         "--cacert",
         tmp_path / "tlscacert.pem",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
         "--url",
         # TLS cert SAN entries come from config node_certificate.subject_alt_names
         client.url,
-        "--receipt",
-        tmp_path / "claims.embedded.cose",
-        "--receipt-type",
-        "embedded",
+        "--transparent-statement",
+        tmp_path / "transparent_statement.cose",
     )
 
     trust_store_path = tmp_path / "store"
@@ -337,7 +223,7 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     (trust_store_path / "service.json").write_text(json.dumps(service_params))
     run(
         "validate",
-        tmp_path / "claims.embedded.cose",
+        tmp_path / "transparent_statement.cose",
         "--service-trust-store",
         trust_store_path,
     )
@@ -361,65 +247,11 @@ def test_local_development(run, service_url, tmp_path: Path):
     )
 
 
-def test_create_ssh_did_web(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair()
-    ssh_private_key = crypto.private_key_pem_to_ssh(private_key)
-    ssh_public_key = crypto.pub_key_pem_to_ssh(public_key)
-
-    (tmp_path / "id_rsa").write_text(ssh_private_key)
-    (tmp_path / "id_rsa.pub").write_text(ssh_public_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234/me",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234/",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "create-did-web",
-        "--url",
-        f"https://localhost:1234",
-        "--ssh-key",
-        tmp_path / "id_rsa.pub",
-        "--out-dir",
-        tmp_path / "me",
-    )
-
-    run(
-        "sign",
-        "--key",
-        tmp_path / "id_rsa",
-        "--did-doc",
-        tmp_path / "me" / "did.json",
-        "--claims",
-        tmp_path / "claims.json",
-        "--content-type",
-        "application/json",
-        "--out",
-        tmp_path / "claims.cose",
-    )
-
-
 def test_adhoc_signer(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
     (tmp_path / "key_pub.pem").write_text(public_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     # Sign without even an issuer.
     # Note that the ledger wouldn't accept such a claim, we'd need to embed an x509 chain for it to
@@ -428,12 +260,12 @@ def test_adhoc_signer(run, tmp_path: Path):
         "sign",
         "--key",
         tmp_path / "key.pem",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     # Sign with a DID issuer, but without creating an on-disk DID document first.
@@ -444,21 +276,21 @@ def test_adhoc_signer(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--issuer",
         "did:web:example.com",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--content-type",
         "application/json",
         "--alg",
         "PS384",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
 
 def test_registration_info(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     binary_data = b"\xde\xad\xbe\xef"
     binary_path = tmp_path / "binary.txt"
@@ -481,13 +313,13 @@ def test_registration_info(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--content-type",
         "application/json",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
-    data = (tmp_path / "claims.cose").read_bytes()
+    data = (tmp_path / "signed_statement.cose").read_bytes()
     msg = CoseMessage.decode(data)
     info = msg.get_attr(crypto.SCITTRegistrationInfo)
     assert info == {
@@ -503,7 +335,7 @@ def test_registration_info(run, tmp_path: Path):
 def test_extract_payload_from_cose(run, tmp_path: Path):
     private_key, public_key = crypto.generate_rsa_keypair()
     (tmp_path / "key.pem").write_text(private_key)
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
+    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     run(
         "sign",
@@ -511,15 +343,15 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
         tmp_path / "key.pem",
         "--content-type",
         "application/json",
-        "--claims",
-        tmp_path / "claims.json",
+        "--statement",
+        tmp_path / "statement.json",
         "--out",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
     )
 
     run(
         "split-payload",
-        tmp_path / "claims.cose",
+        tmp_path / "signed_statement.cose",
         "--out",
         tmp_path / "payload.json",
     )

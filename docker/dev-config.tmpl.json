@@ -39,7 +39,11 @@
           "certificate_file": "/host/member0_cert.pem",
           "encryption_public_key_file": "/host/member0_enc_pubk.pem"
         }
-      ]
+      ],
+      "cose_signatures": {
+        "issuer": "127.0.0.1:%CCF_PORT%",
+        "subject": "scitt.ccf.signature.v1"
+      }
     }
   }
 }

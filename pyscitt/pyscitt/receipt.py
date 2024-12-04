@@ -88,7 +88,7 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
         if cbor_obj_key.identifier == X5chain.identifier:
             return [base64.b64encode(cert).decode("ascii") for cert in cbor_obj]
         if cbor_obj_key.identifier == KID.identifier:
-            return cbor_obj.decode()
+            return cbor_obj.hex()
         if cbor_obj_key.identifier == X5t.identifier:
             return {"alg": cbor_obj[0], "hash": cbor_obj[1].hex()}
 

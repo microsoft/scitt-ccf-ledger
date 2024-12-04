@@ -7,7 +7,7 @@
 
 namespace scitt
 {
-  enum class ClaimProfile
+  enum class SignedStatementProfile
   {
     IETF,
     X509,
@@ -17,7 +17,7 @@ namespace scitt
 
 FMT_BEGIN_NAMESPACE
 template <>
-struct formatter<scitt::ClaimProfile>
+struct formatter<scitt::SignedStatementProfile>
 {
   template <typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
@@ -26,22 +26,22 @@ struct formatter<scitt::ClaimProfile>
   }
 
   template <typename FormatContext>
-  auto format(const scitt::ClaimProfile& cs, FormatContext& ctx) const
+  auto format(const scitt::SignedStatementProfile& cs, FormatContext& ctx) const
   {
     char const* s = "Unknown";
     switch (cs)
     {
-      case (scitt::ClaimProfile::IETF):
+      case (scitt::SignedStatementProfile::IETF):
       {
         s = "IETF";
         break;
       }
-      case (scitt::ClaimProfile::X509):
+      case (scitt::SignedStatementProfile::X509):
       {
         s = "X509";
         break;
       }
-      case (scitt::ClaimProfile::Notary):
+      case (scitt::SignedStatementProfile::Notary):
       {
         s = "Notary";
         break;

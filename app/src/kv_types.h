@@ -22,24 +22,13 @@ namespace scitt
   using Issuer = std::string; // DID of the issuer
   using Pem = std::string; // PEM-encoded certificate
 
-  struct DidWebResolutionMetadata
-  {
-    std::vector<Pem> tls_certs;
-
-    bool operator==(const DidWebResolutionMetadata&) const = default;
-  };
-  DECLARE_JSON_TYPE(DidWebResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidWebResolutionMetadata, tls_certs);
-
   struct DidResolutionMetadata
   {
     Timestamp updated;
-    std::optional<DidWebResolutionMetadata> web;
-
     bool operator==(const DidResolutionMetadata&) const = default;
   };
   DECLARE_JSON_TYPE(DidResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated, web);
+  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated);
 
   struct IssuerInfo
   {
@@ -196,15 +185,8 @@ namespace scitt
     Configuration, policy, authentication, service_identifier);
 
   // Tables
-
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";
   using EntryTable = ccf::kv::RawCopySerialisedValue<std::vector<uint8_t>>;
-
-  static constexpr auto ENTRY_INFO_TABLE = "public:scitt.entry_info";
-  using EntryInfoTable = ccf::kv::Value<EntryInfo>;
-
-  static constexpr auto ISSUERS_TABLE = "public:scitt.issuers";
-  using IssuersTable = ccf::kv::Map<Issuer, IssuerInfo>;
 
   static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
   using OperationsTable = ccf::kv::Value<OperationLog>;

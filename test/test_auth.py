@@ -12,9 +12,9 @@ from .infra.jwt_issuer import JwtIssuer
 
 class TestAuthentication:
     @pytest.fixture(scope="class")
-    def claim(self, did_web):
-        identity = did_web.create_identity()
-        return crypto.sign_json_claimset(identity, {"foo": "bar"})
+    def signed_statement(self, trusted_ca):
+        identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
+        return crypto.sign_json_statement(identity, {"foo": "bar"})
 
     @pytest.fixture(scope="class")
     def valid_issuer(self, client):
@@ -41,9 +41,9 @@ class TestAuthentication:
         return f
 
     @pytest.fixture
-    def submit(self, client: Client, claim: bytes):
+    def submit(self, client: Client, signed_statement: bytes):
         def f(**kwargs):
-            client.replace(**kwargs).submit_claim_and_confirm(claim)
+            client.replace(**kwargs).register_signed_statement(signed_statement)
 
         return f
 

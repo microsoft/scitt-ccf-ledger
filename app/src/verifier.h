@@ -73,74 +73,6 @@ namespace scitt::verifier
       }
     }
 
-    PublicKey process_ietf_profile(
-      const cose::ProtectedHeader& phdr,
-      ccf::kv::ReadOnlyTx& tx,
-      ::timespec current_time,
-      std::chrono::seconds resolution_cache_expiry,
-      const Configuration& configuration)
-    {
-      // IETF SCITT profile validation.
-
-      check_is_accepted_algorithm(phdr, configuration);
-
-      if (!phdr.cty.has_value())
-      {
-        throw cose::COSEDecodeError("Missing cty in protected header");
-      }
-
-      auto issuer = phdr.issuer;
-      auto kid = phdr.kid;
-
-      if (!issuer.has_value())
-      {
-        throw cose::COSEDecodeError("Missing issuer in protected header");
-      }
-      if (!configuration.policy.is_accepted_issuer(issuer.value()))
-      {
-        throw VerificationError("Unsupported DID issuer in protected header");
-      }
-
-      std::optional<std::string> assertion_method_id;
-
-      if (kid.has_value())
-      {
-        if (!kid.value().starts_with("#"))
-        {
-          throw VerificationError("kid must start with '#'.");
-        }
-        assertion_method_id = fmt::format("{}{}", issuer.value(), kid.value());
-      }
-
-      auto resolution_options = did::DidResolutionOptions{
-        .current_time = current_time,
-        .did_web_options = did::DidWebOptions{
-          .tx = tx,
-          .max_age = resolution_cache_expiry,
-          .if_assertion_method_id_match = assertion_method_id}};
-
-      // Perform DID resolution for the given issuer.
-      // Note: Any DIDResolutionError is expected to be handled by the caller.
-      auto resolution = resolver->resolve(issuer.value(), resolution_options);
-
-      // Locate the right JWK in the resolved DID document.
-      did::Jwk jwk;
-      try
-      {
-        jwk = did::find_assertion_method_jwk_in_did_document(
-          resolution.did_doc, assertion_method_id);
-      }
-      catch (const did::DIDAssertionMethodError& e)
-      {
-        throw VerificationError(e.what());
-      }
-
-      // Convert the JWK into something we can actually use.
-      auto key = get_jwk_public_key(jwk);
-
-      return key;
-    }
-
     PublicKey process_x509_profile(
       const cose::ProtectedHeader& phdr,
       ccf::kv::ReadOnlyTx& tx,
@@ -429,15 +361,17 @@ namespace scitt::verifier
       return PublicKey(cert, std::nullopt);
     }
 
-    std::tuple<ClaimProfile, cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_claim(
+    std::tuple<
+      SignedStatementProfile,
+      cose::ProtectedHeader,
+      cose::UnprotectedHeader>
+    verify_signed_statement(
       const std::vector<uint8_t>& data,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
-      std::chrono::seconds resolution_cache_expiry,
       const Configuration& configuration)
     {
-      ClaimProfile profile;
+      SignedStatementProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       try
@@ -466,7 +400,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          profile = ClaimProfile::Notary;
+          profile = SignedStatementProfile::Notary;
         }
         else if (contains_cwt_issuer(phdr))
         {
@@ -483,24 +417,7 @@ namespace scitt::verifier
               "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
           }
 
-          profile = ClaimProfile::IETF;
-        }
-        else if (phdr.issuer.has_value())
-        {
-          // IETF SCITT did:web claim
-          key = process_ietf_profile(
-            phdr, tx, current_time, resolution_cache_expiry, configuration);
-
-          try
-          {
-            cose::verify(data, key);
-          }
-          catch (const cose::COSESignatureValidationError& e)
-          {
-            throw VerificationError(e.what());
-          }
-
-          profile = ClaimProfile::IETF;
+          profile = SignedStatementProfile::IETF;
         }
         else if (phdr.x5chain.has_value())
         {
@@ -516,7 +433,7 @@ namespace scitt::verifier
             throw VerificationError(e.what());
           }
 
-          profile = ClaimProfile::X509;
+          profile = SignedStatementProfile::X509;
         }
         else
         {
