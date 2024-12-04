@@ -36,9 +36,9 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DLVI_MITIGATIONS=OFF -DSAN=ON ..
     ninja
     echo "Packaging CCF into deb"
-    cpack -G DEB
+    cpack -D CPACK_DEBIAN_FILE_NAME=ccf_virtual_amd64.deb -G DEB
     echo "Installing CCF deb"
-    dpkg -i "ccf_virtual_${CCF_SOURCE_VERSION}_amd64.deb"
+    dpkg -i "ccf_virtual_amd64.deb"
     popd
     popd
 fi
