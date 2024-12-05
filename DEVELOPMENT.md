@@ -176,6 +176,14 @@ PLATFORM=virtual CMAKE_BUILD_TYPE=Debug BUILD_CCF_FROM_SOURCE=ON ./build.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 
+### Fuzzing
+
+Run HTTP API fuzzing tests:
+
+```sh
+
+```
+
 ## AMD SEV-SNP platform
 
 To use [AMD SEV-SNP](https://microsoft.github.io/CCF/main/operations/platforms/snp.html) as a platform, it is required to pass additional configuration values required by CCF for the attestation on AMD SEV-SNP hardware. These values may differ depending on which SNP platform you are using (e.g., Confidential Containers on ACI, Confidential Containers on AKS).

@@ -1,3 +1,4 @@
+boofuzz
 locust
 httpx
 pytest
