@@ -8,6 +8,7 @@
 #include "util.h"
 
 #include <ccf/base_endpoint_registry.h>
+#include <ccf/ds/logger.h>
 #include <ccf/endpoint_context.h>
 #include <ctime>
 #include <functional>
