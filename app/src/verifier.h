@@ -6,7 +6,6 @@
 #include "cose.h"
 #include "did/resolver.h"
 #include "didx509cpp/didx509cpp.h"
-#include "openssl_wrappers.h"
 #include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
@@ -14,6 +13,7 @@
 
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
+#include <crypto/openssl/openssl_wrappers.h>
 #include <fmt/format.h>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
@@ -108,7 +108,8 @@ namespace scitt::verifier
       // only x5t is. This logic will need to authenticate x5chain[0]
       // against x5t before it can proceed to verify the signature.
       // Verify the signature as early as possible
-      OpenSSL::Unique_X509 leaf = parse_certificate(phdr.x5chain.value()[0]);
+      ccf::crypto::OpenSSL::Unique_X509 leaf =
+        parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
       try
       {
@@ -458,7 +459,7 @@ namespace scitt::verifier
      * If successful, returns the leaf certificate. Otherwise throws a
      * VerificationError.
      */
-    static OpenSSL::Unique_X509 verify_chain(
+    static ccf::crypto::OpenSSL::Unique_X509 verify_chain(
       std::span<const ccf::crypto::Pem> trusted,
       std::span<const std::vector<uint8_t>> chain)
     {
@@ -468,24 +469,26 @@ namespace scitt::verifier
           "Certificate chain must contain at least one certificate");
       }
 
-      OpenSSL::Unique_X509 leaf = parse_certificate(chain[0]);
+      ccf::crypto::OpenSSL::Unique_X509 leaf = parse_certificate(chain[0]);
 
-      OpenSSL::Unique_X509_STORE store;
+      ccf::crypto::OpenSSL::Unique_X509_STORE store;
       for (const auto& pem : trusted)
       {
-        OpenSSL::CHECK1(X509_STORE_add_cert(store, parse_certificate(pem)));
+        ccf::crypto::OpenSSL::CHECK1(
+          X509_STORE_add_cert(store, parse_certificate(pem)));
       }
 
-      OpenSSL::Unique_STACK_OF_X509 chain_stack;
+      ccf::crypto::OpenSSL::Unique_STACK_OF_X509 chain_stack;
       for (const auto& der : chain.subspan(1))
       {
-        OpenSSL::Unique_X509 cert = parse_certificate(der);
-        OpenSSL::CHECK1(sk_X509_push(chain_stack, cert));
-        OpenSSL::CHECK1(X509_up_ref(cert));
+        ccf::crypto::OpenSSL::Unique_X509 cert = parse_certificate(der);
+        ccf::crypto::OpenSSL::CHECK1(sk_X509_push(chain_stack, cert));
+        ccf::crypto::OpenSSL::CHECK1(X509_up_ref(cert));
       }
 
-      OpenSSL::Unique_X509_STORE_CTX store_ctx;
-      OpenSSL::CHECK1(X509_STORE_CTX_init(store_ctx, store, leaf, chain_stack));
+      ccf::crypto::OpenSSL::Unique_X509_STORE_CTX store_ctx;
+      ccf::crypto::OpenSSL::CHECK1(
+        X509_STORE_CTX_init(store_ctx, store, leaf, chain_stack));
 
       if (X509_verify_cert(store_ctx) != 1)
       {
@@ -503,30 +506,34 @@ namespace scitt::verifier
 
   private:
     /** Parse a PEM certificate */
-    static OpenSSL::Unique_X509 parse_certificate(const ccf::crypto::Pem& pem)
+    static ccf::crypto::OpenSSL::Unique_X509 parse_certificate(
+      const ccf::crypto::Pem& pem)
     {
-      OpenSSL::Unique_BIO bio(pem);
-      OpenSSL::Unique_X509 cert(bio, true);
+      ccf::crypto::OpenSSL::Unique_BIO bio(pem);
+      ccf::crypto::OpenSSL::Unique_X509 cert(bio, true);
       if (!cert)
       {
         unsigned long ec = ERR_get_error();
         SCITT_INFO(
-          "Could not parse PEM certificate: {}", OpenSSL::error_string(ec));
+          "Could not parse PEM certificate: {}",
+          ccf::crypto::OpenSSL::error_string(ec));
         throw VerificationError("Could not parse certificate");
       }
       return cert;
     }
 
     /** Parse a DER certificate */
-    static OpenSSL::Unique_X509 parse_certificate(std::span<const uint8_t> der)
+    static ccf::crypto::OpenSSL::Unique_X509 parse_certificate(
+      std::span<const uint8_t> der)
     {
-      OpenSSL::Unique_BIO bio(der);
-      OpenSSL::Unique_X509 cert(bio, false);
+      ccf::crypto::OpenSSL::Unique_BIO bio(der.data(), der.size());
+      ccf::crypto::OpenSSL::Unique_X509 cert(bio, false);
       if (!cert)
       {
         unsigned long ec = ERR_get_error();
         SCITT_INFO(
-          "Could not parse DER certificate: {}", OpenSSL::error_string(ec));
+          "Could not parse DER certificate: {}",
+          ccf::crypto::OpenSSL::error_string(ec));
         throw VerificationError("Could not parse certificate");
       }
       return cert;
@@ -580,8 +587,8 @@ namespace scitt::verifier
       {
         auto n = ccf::crypto::raw_from_b64url(jwk.n.value());
         auto e = ccf::crypto::raw_from_b64url(jwk.e.value());
-        OpenSSL::Unique_BIGNUM n_bn;
-        OpenSSL::Unique_BIGNUM e_bn;
+        ccf::crypto::OpenSSL::Unique_BIGNUM n_bn;
+        ccf::crypto::OpenSSL::Unique_BIGNUM e_bn;
         if (BN_bin2bn(n.data(), n.size(), n_bn) == nullptr)
         {
           throw VerificationError("JWK n could not be parsed");
@@ -595,14 +602,14 @@ namespace scitt::verifier
         std::pair<std::vector<uint8_t>, std::vector<uint8_t>> r(
           BN_num_bytes(n_bn), BN_num_bytes(e_bn));
 
-        OpenSSL::CHECKPOSITIVE(
+        ccf::crypto::OpenSSL::CHECKPOSITIVE(
           BN_bn2nativepad(n_bn, r.first.data(), r.first.size()));
-        OpenSSL::CHECKPOSITIVE(
+        ccf::crypto::OpenSSL::CHECKPOSITIVE(
           BN_bn2nativepad(e_bn, r.second.data(), r.second.size()));
 
         return PublicKey(r.first, r.second, cose_alg);
 #else
-        OpenSSL::Unique_RSA rsa;
+        ccf::crypto::OpenSSL::Unique_RSA rsa;
         if (!RSA_set0_key(rsa, n_bn, e_bn, nullptr))
         {
           throw std::runtime_error("RSA key could not be set");
@@ -628,8 +635,8 @@ namespace scitt::verifier
         auto crv = jwk.crv.value();
         auto x = ccf::crypto::raw_from_b64url(jwk.x.value());
         auto y = ccf::crypto::raw_from_b64url(jwk.y.value());
-        OpenSSL::Unique_BIGNUM x_bn;
-        OpenSSL::Unique_BIGNUM y_bn;
+        ccf::crypto::OpenSSL::Unique_BIGNUM x_bn;
+        ccf::crypto::OpenSSL::Unique_BIGNUM y_bn;
         if (BN_bin2bn(x.data(), x.size(), x_bn) == nullptr)
         {
           throw VerificationError("JWK x could not be parsed");
@@ -657,15 +664,15 @@ namespace scitt::verifier
         }
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-        OpenSSL::Unique_BN_CTX bn_ctx;
-        OpenSSL::Unique_EC_GROUP group(nid);
-        OpenSSL::Unique_EC_POINT p(group);
-        OpenSSL::CHECK1(
+        ccf::crypto::OpenSSL::Unique_BN_CTX bn_ctx;
+        ccf::crypto::OpenSSL::Unique_EC_GROUP group(nid);
+        ccf::crypto::OpenSSL::Unique_EC_POINT p(group);
+        ccf::crypto::OpenSSL::CHECK1(
           EC_POINT_set_affine_coordinates(group, p, x_bn, y_bn, bn_ctx));
         size_t buf_size = EC_POINT_point2oct(
           group, p, POINT_CONVERSION_UNCOMPRESSED, nullptr, 0, bn_ctx);
         std::vector<uint8_t> buf(buf_size);
-        OpenSSL::CHECKPOSITIVE(EC_POINT_point2oct(
+        ccf::crypto::OpenSSL::CHECKPOSITIVE(EC_POINT_point2oct(
           group,
           p,
           POINT_CONVERSION_UNCOMPRESSED,
@@ -675,7 +682,7 @@ namespace scitt::verifier
 
         return PublicKey(buf, nid, cose_alg);
 #else
-        auto ec_key = OpenSSL::Unique_EC_KEY(nid);
+        auto ec_key = ccf::crypto::OpenSSL::Unique_EC_KEY(nid);
         if (!EC_KEY_set_public_key_affine_coordinates(ec_key, x_bn, y_bn))
         {
           throw std::runtime_error("EC key could not be set");

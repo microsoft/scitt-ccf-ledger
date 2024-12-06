@@ -141,7 +141,7 @@ if (BUILD_TESTS)
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
-    ${CCF_DIR}/include/ccf/_private # openssl_wrappers depends on ds/x509_time_fmt.h
+    ${CCF_DIR}/include/ccf/_private # public_key.h and verifier.h depend on crypto/openssl/openssl_wrappers.h
   )
 
   if (ENABLE_CLANG_TIDY)

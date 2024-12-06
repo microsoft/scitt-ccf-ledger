@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "openssl_wrappers.h"
-
+#include <crypto/openssl/openssl_wrappers.h>
 #include <optional>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
@@ -21,7 +20,8 @@ namespace scitt
     PublicKey() = default;
 
     PublicKey(
-      const OpenSSL::Unique_X509& cert, std::optional<int64_t> cose_alg) :
+      const ccf::crypto::OpenSSL::Unique_X509& cert,
+      std::optional<int64_t> cose_alg) :
       key(X509_get_pubkey(cert)),
       cose_alg(cose_alg)
     {}
@@ -40,9 +40,9 @@ namespace scitt
         OSSL_PKEY_PARAM_RSA_E, e_raw.data(), e_raw.size());
       params[2] = OSSL_PARAM_construct_end();
 
-      OpenSSL::Unique_EVP_PKEY_CTX pctx("RSA");
-      OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
-      OpenSSL::CHECK1(
+      ccf::crypto::OpenSSL::Unique_EVP_PKEY_CTX pctx("RSA");
+      ccf::crypto::OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
+      ccf::crypto::OpenSSL::CHECK1(
         EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
     }
 
@@ -57,14 +57,15 @@ namespace scitt
         OSSL_PKEY_PARAM_PUB_KEY, buf.data(), buf.size());
       params[2] = OSSL_PARAM_construct_end();
 
-      OpenSSL::Unique_EVP_PKEY_CTX pctx("EC");
-      OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
-      OpenSSL::CHECK1(
+      ccf::crypto::OpenSSL::Unique_EVP_PKEY_CTX pctx("EC");
+      ccf::crypto::OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
+      ccf::crypto::OpenSSL::CHECK1(
         EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
     }
 #else
     PublicKey(
-      const OpenSSL::Unique_RSA& rsa_key, std::optional<int64_t> cose_alg) :
+      const ccf::crypto::OpenSSL::Unique_RSA& rsa_key,
+      std::optional<int64_t> cose_alg) :
       cose_alg(cose_alg)
     {
       if (!EVP_PKEY_set1_RSA(key, rsa_key))
@@ -74,7 +75,8 @@ namespace scitt
     }
 
     PublicKey(
-      const OpenSSL::Unique_EC_KEY& ec_key, std::optional<int64_t> cose_alg) :
+      const ccf::crypto::OpenSSL::Unique_EC_KEY& ec_key,
+      std::optional<int64_t> cose_alg) :
       cose_alg(cose_alg)
     {
       if (!EVP_PKEY_set1_EC_KEY(key, ec_key))
@@ -104,7 +106,7 @@ namespace scitt
     }
 
   private:
-    OpenSSL::Unique_EVP_PKEY key;
+    ccf::crypto::OpenSSL::Unique_EVP_PKEY key;
     std::optional<int64_t> cose_alg;
   };
 }

@@ -4,7 +4,6 @@
 #pragma once
 
 #include "cbor.h"
-#include "openssl_wrappers.h"
 #include "public_key.h"
 #include "tracing.h"
 #include "util.h"

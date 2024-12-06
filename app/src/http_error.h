@@ -10,11 +10,11 @@ namespace scitt
   struct HTTPError : public std::runtime_error
   {
     using Headers = std::unordered_map<std::string, std::string>;
-    http_status status_code;
+    ccf::http_status status_code;
     std::string code;
     Headers headers;
     HTTPError(
-      http_status status_code,
+      ccf::http_status status_code,
       std::string code,
       std::string msg,
       Headers headers = {}) :

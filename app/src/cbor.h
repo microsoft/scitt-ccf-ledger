@@ -5,7 +5,6 @@
 
 #include "tracing.h"
 
-#include <ccf/ccf_assert.h>
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/sha256_hash.h>
 #include <qcbor/UsefulBuf.h>

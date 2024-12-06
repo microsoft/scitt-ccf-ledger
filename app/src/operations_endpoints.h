@@ -153,9 +153,10 @@ namespace scitt
       else if (auto it = operations_.find(operation_id.seqno);
                it != operations_.end())
       {
-        CCF_ASSERT(
-          operation_id.view == it->second.view,
-          "Operation ID has inconsistent view");
+        if (operation_id.view != it->second.view)
+        {
+          throw std::invalid_argument("Operation ID has inconsistent view");
+        }
         return {
           .operation_id = operation_id,
           .status = it->second.status,
@@ -241,15 +242,17 @@ namespace scitt
       else if (auto it = operations_.find(operation_id.seqno);
                it != operations_.end())
       {
-        CCF_ASSERT(
-          operation_id.view == it->second.view,
-          "Operation ID has inconsistent view");
+        if (operation_id.view != it->second.view)
+        {
+          throw std::invalid_argument("Operation ID has inconsistent view");
+        }
         if (it->second.status == OperationStatus::Running)
         {
-          CCF_ASSERT_FMT(
-            it->second.context_digest.has_value(),
-            "No context digest for operation {}",
-            tx_str);
+          if (!it->second.context_digest.has_value())
+          {
+            throw std::invalid_argument(
+              fmt::format("No context digest for operation {}", tx_str));
+          }
           return it->second.context_digest.value();
         }
         else
@@ -289,9 +292,10 @@ namespace scitt
       }
 
       auto it = operations_.find(operation_id.seqno);
-      CCF_ASSERT(
-        (it == operations_.end()) || (operation_id.view == it->second.view),
-        "Operation ID has inconsistent view");
+      if (!(it == operations_.end()) || (operation_id.view == it->second.view))
+      {
+        throw std::invalid_argument("Operation ID has inconsistent view");
+      }
 
       auto current_status = it != operations_.end() ?
         std::optional(it->second.status) :
@@ -401,7 +405,10 @@ namespace scitt
             operation_id.to_str());
         }
       }
-      CCF_ASSERT(valid, "Invalid operation transition");
+      if (!valid)
+      {
+        throw std::logic_error("Invalid operation transition");
+      }
       return valid;
     }
 
