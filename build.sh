@@ -6,7 +6,6 @@ set -ex
 
 CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release}
 PLATFORM=${PLATFORM:-snp}
-CCF_UNSAFE=${CCF_UNSAFE:-OFF}
 BUILD_TESTS=${BUILD_TESTS:-ON}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
 NINJA_FLAGS=${NINJA_FLAGS:-}
@@ -33,7 +32,7 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     echo "Compiling CCF $PLATFORM"
     mkdir -p build
     pushd build
-    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DLVI_MITIGATIONS=OFF -DSAN=ON ..
+    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
     ninja
     echo "Packaging CCF into deb"
     cpack -D CPACK_DEBIAN_FILE_NAME=ccf_virtual_amd64.deb -G DEB
@@ -51,13 +50,12 @@ install_dir=/tmp/scitt
 
 mkdir -p $install_dir
 
-# Note: LVI mitigations are disabled as this is a development build.
+# Note: this is a development build.
 # See docker/ for a non-development build.
 CC="$CC" CXX="$CXX" \
     cmake -GNinja -B build/app \
     -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
     -DCOMPILE_TARGET="${PLATFORM}" \
-    -DCCF_UNSAFE="${CCF_UNSAFE}" \
     -DBUILD_TESTS="${BUILD_TESTS}" \
     -DCMAKE_INSTALL_PREFIX=$install_dir \
     -DENABLE_CLANG_TIDY="${ENABLE_CLANG_TIDY}" \
