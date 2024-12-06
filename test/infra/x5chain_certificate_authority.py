@@ -30,7 +30,7 @@ class X5ChainCertificateAuthority:
     ) -> Tuple[List[Pem], Pem]:
         assert length > 0
         generate_cert_kwargs = {}
-        # Unlike the rest of the kwards, which are handed over to the keypair generation
+        # Unlike the rest of the kwargs, which are handed over to the keypair generation
         # call, add_eku is passed to the certificate generation call.
         add_eku = "add_eku"
         if add_eku in kwargs:
