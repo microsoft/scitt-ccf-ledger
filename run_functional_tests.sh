@@ -8,6 +8,7 @@ DOCKER=${DOCKER:-0}
 PLATFORM=${PLATFORM:-snp}
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
 RUN_FUZZ_TESTS=${RUN_FUZZ_TESTS:-}
+SCITT_DIR=${SCITT_DIR:-/tmp/scitt}
 
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
@@ -43,11 +44,8 @@ if [ "$DOCKER" = "1" ]; then
     # Turn off pytest output capture to allow test logs to be interleaved with
     # the docker logs.
     TEST_ARGS="-s"
-    FUZZ_ARGS=""
 else
-    SCITT_DIR=/tmp/scitt
     TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
-    FUZZ_ARGS="--start-cchost --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution"
 fi
 
 echo "Setting up python virtual environment."
@@ -59,21 +57,16 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
-if [ -n "$RUN_FUZZ_TESTS" ]; then
-    echo "Running fuzz tests..."
-    python -m test.fuzz_api_submissions $FUZZ_ARGS
+if [ -n "$ENABLE_PERF_TESTS" ]; then
+    TEST_ARGS="$TEST_ARGS --enable-perf"
+    echo "Performance tests enabled"
 fi
 
-# if [ -n "$ENABLE_PERF_TESTS" ]; then
-#     TEST_ARGS="$TEST_ARGS --enable-perf"
-#     echo "Performance tests enabled"
-# fi
-
-# echo "Running functional tests..."
-# if [ -n "$ELEVATE_PRIVILEGES" ]; then
-#     sudo -E --preserve-env=PATH \
-#         capsh --keep=1 --user=$(id -un) --inh=cap_net_bind_service --addamb=cap_net_bind_service \
-#         -- -c "pytest ./test -v -rA $TEST_ARGS $(printf "'%s' " "$@")"
-# else
-#     pytest ./test -v -rA $TEST_ARGS "$@"
-# fi
+echo "Running functional tests..."
+if [ -n "$ELEVATE_PRIVILEGES" ]; then
+    sudo -E --preserve-env=PATH \
+        capsh --keep=1 --user=$(id -un) --inh=cap_net_bind_service --addamb=cap_net_bind_service \
+        -- -c "pytest ./test -v -rA $TEST_ARGS $(printf "'%s' " "$@")"
+else
+    pytest ./test -v -rA $TEST_ARGS "$@"
+fi
