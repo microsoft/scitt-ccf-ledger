@@ -89,9 +89,9 @@ namespace scitt
    */
   static size_t get_certificate_ecdsa_curve_size(std::span<const uint8_t> der)
   {
-    OpenSSL::Unique_X509 cert(
-      OpenSSL::Unique_BIO(der.data(), der.size()), false, true);
-    OpenSSL::Unique_PKEY pk(X509_get_pubkey(cert), EVP_PKEY_free);
+    ccf::crypto::OpenSSL::Unique_X509 cert(
+      ccf::crypto::OpenSSL::Unique_BIO(der.data(), der.size()), false, true);
+    ccf::crypto::OpenSSL::Unique_PKEY pk(X509_get_pubkey(cert), EVP_PKEY_free);
 
     size_t bits = EVP_PKEY_bits(pk);
     return (bits + 7) / 8;
@@ -117,7 +117,8 @@ namespace scitt
     }
 
     const uint8_t* p = signature.data();
-    OpenSSL::Unique_ECDSA_SIG sig(d2i_ECDSA_SIG(NULL, &p, signature.size()));
+    ccf::crypto::OpenSSL::Unique_ECDSA_SIG sig(
+      d2i_ECDSA_SIG(NULL, &p, signature.size()));
 
     const BIGNUM* r = ECDSA_SIG_get0_r(sig);
     const BIGNUM* s = ECDSA_SIG_get0_s(sig);

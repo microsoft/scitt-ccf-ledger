@@ -11,6 +11,7 @@
 #include "signature_algorithms.h"
 #include "tracing.h"
 
+#include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <crypto/openssl/openssl_wrappers.h>
@@ -555,7 +556,7 @@ namespace scitt::verifier
         throw std::runtime_error(
           "Failed to load x509 Root CA certificates from KV");
       }
-      return split_x509_cert_bundle(*ca_certs);
+      return ccf::crypto::split_x509_cert_bundle(*ca_certs);
     }
 
     /**
