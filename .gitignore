@@ -5,6 +5,7 @@ build/
 tmp/
 out/
 venv/
+boofuzz-results/
 .venv_ccf_sandbox/
 workspace/
 *.egg-info/

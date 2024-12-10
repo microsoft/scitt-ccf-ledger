@@ -53,3 +53,33 @@ jobs:
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json
           if-no-files-found: warn
+  fuzz-api:
+    name: fuzz
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    runs-on: ubuntu-20.04
+    container:
+      image: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
+    env:
+      PLATFORM: virtual
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./build.sh
+      
+      - name: Fuzz tests
+        run: |
+          set +x
+          ./run_fuzz_tests.sh
+
+      - name: "Upload logs"
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boofuzz-results
+          path: |
+            boofuzz-results/*.{db}
+          if-no-files-found: warn

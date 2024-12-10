@@ -178,10 +178,18 @@ PLATFORM=virtual ./run_functional_tests.sh
 
 ### Fuzzing
 
-Run HTTP API fuzzing tests:
+Run HTTP API fuzzing tests after building the application:
+
+**Using Docker**
 
 ```sh
+DOCKER=1 ./run_fuzz_tests.sh
+```
 
+**Using your host environment**
+
+```sh
+./run_fuzz_tests.sh
 ```
 
 ## AMD SEV-SNP platform
