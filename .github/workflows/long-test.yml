@@ -16,8 +16,7 @@ jobs:
     name: ASAN
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-long-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-20.04
-    container:
-      image: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
+    container: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
     env:
       # Fast unwinder only gives us partial stack traces in LeakSanitzer
       # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
@@ -52,4 +51,35 @@ jobs:
           path: |
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json
+          if-no-files-found: warn
+  fuzz-api:
+    name: fuzz
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    runs-on: ubuntu-20.04
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev8
+    env:
+      PLATFORM: virtual
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./build.sh
+      
+      - name: Fuzz tests
+        run: |
+          set +x
+          ./run_fuzz_tests.sh 2>&1 > fuzz.log
+          echo "Preview test output:"
+          grep -A 1 -B 20 "Number of tests" fuzz.log
+
+      - name: "Upload logs"
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boofuzz-results
+          path: |
+            fuzz.log
           if-no-files-found: warn
