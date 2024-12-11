@@ -34,6 +34,7 @@ echo "Running fuzz tests..."
 export CCF_HOST=${CCF_HOST:-"localhost"}
 export CCF_PORT=${CCF_PORT:-8000}
 export CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
+echo "Service URL: $CCF_URL"
 
 if [ "$DOCKER" = "1" ]; then
     echo "Will use a running docker instance for testing..."
@@ -47,8 +48,8 @@ else
     echo "Will use a built SCITT binary for testing..."
         
     PLATFORM=$PLATFORM ./start.sh &
-    CCF_PROCESS_PID=$!
-    trap "kill $CCF_PROCESS_PID" EXIT
+    # start script will launch cchost process
+    trap 'pkill -f cchost' EXIT
 
     export CCF_URL="https://localhost:8000"
     wait_for_service "$CCF_URL/node/network"
