@@ -11,12 +11,10 @@ from . import (
     retrieve_signed_claims,
     sign,
     split_payload,
-    upload_did_web_doc_to_github,
     validate,
 )
 
 COMMANDS = [
-    ("upload-did-web-github", upload_did_web_doc_to_github),
     ("sign", sign),
     ("submit", register),
     ("retrieve", retrieve_signed_claims),

@@ -64,7 +64,7 @@ namespace
     {
       chain_certs.push_back(ccf::crypto::cert_pem_to_der(c.get().first));
     }
-    Verifier::verify_chain(store_certs, chain_certs);
+    scitt::verifier::Verifier::verify_chain(store_certs, chain_certs);
   }
 }
 
@@ -167,7 +167,7 @@ TEST(Verifier, GarbageCert)
   const std::vector<uint8_t> garbage = {0xde, 0xad, 0xbe, 0xef};
 
   EXPECT_THROW(
-    Verifier::verify_chain(
+    scitt::verifier::Verifier::verify_chain(
       {{root.first}},
       {{
         garbage,
@@ -176,7 +176,7 @@ TEST(Verifier, GarbageCert)
     VerificationError);
 
   EXPECT_THROW(
-    Verifier::verify_chain(
+    scitt::verifier::Verifier::verify_chain(
       {{root.first}},
       {{
         ccf::crypto::cert_pem_to_der(leaf.first),
