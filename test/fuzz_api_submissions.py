@@ -35,8 +35,12 @@ def response_must_be_400():
             is_success = False
 
         if time.time() - start_time_sec > test_time_threshold_sec:
-            fuzz_data_logger.log_info("Timeout reached: {} seconds".format(test_time_threshold_sec))
-            fuzz_data_logger.log_info("Started at: {} and now is: {}".format(start_time_sec, time.time()))
+            fuzz_data_logger.log_info(
+                "Timeout reached: {} seconds".format(test_time_threshold_sec)
+            )
+            fuzz_data_logger.log_info(
+                "Started at: {} and now is: {}".format(start_time_sec, time.time())
+            )
             session._index_end = (
                 0  # stop fuzzing https://github.com/jtpereyda/boofuzz/discussions/600
             )
