@@ -15,8 +15,6 @@ class JwtIssuer:
 
     def create_token(self, claims={}):
         # Add required claims if not already present
-        # https://github.com/microsoft/CCF/pull/4786
-
         # JWT formats times as NumericDate, which is a JSON numeric value counting seconds sine the epoch
         now = int(time.time())
         if "nbf" not in claims:
