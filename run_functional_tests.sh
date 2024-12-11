@@ -7,8 +7,6 @@ set -ex
 DOCKER=${DOCKER:-0}
 PLATFORM=${PLATFORM:-snp}
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
-RUN_FUZZ_TESTS=${RUN_FUZZ_TESTS:-}
-SCITT_DIR=${SCITT_DIR:-/tmp/scitt}
 
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
@@ -45,6 +43,7 @@ if [ "$DOCKER" = "1" ]; then
     # the docker logs.
     TEST_ARGS="-s"
 else
+    SCITT_DIR=/tmp/scitt
     TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
 fi
 
@@ -57,6 +56,7 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
+# Enable performance tests if the variable is set
 if [ -n "$ENABLE_PERF_TESTS" ]; then
     TEST_ARGS="$TEST_ARGS --enable-perf"
     echo "Performance tests enabled"
