@@ -3,30 +3,46 @@
 
 import os
 import ssl
+import time
 
 import boofuzz  # type: ignore
 
 do_not_verify_tls = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
 do_not_verify_tls.check_hostname = False
 do_not_verify_tls.verify_mode = ssl.CERT_NONE
+test_time_threshold_sec = 300
 
 
-def response_must_be_400(target, fuzz_data_logger, session, *args, **kwargs):
-    try:
-        response = target.recv(10000)
-    except:
-        fuzz_data_logger.log_fail("Unable to connect. Target is down.")
-        return False
+def response_must_be_400():
 
-    # check response contains a substring foobar
-    if b"HTTP/1.1 400 BAD_REQUEST" not in response:
-        fuzz_data_logger.log_fail(
-            "Response does not contain 'HTTP/1.1 400 BAD_REQUEST'"
-        )
-        fuzz_data_logger.log_fail("Response: {}".format(response))
-        return False
+    # save current time in python
+    start_time_sec = time.time()
 
-    return True
+    def checker(target, fuzz_data_logger, session, *args, **kwargs):
+        try:
+            response = target.recv(10000)
+        except:
+            fuzz_data_logger.log_fail("Unable to connect. Target is down.")
+            return False
+
+        result = True
+        # check response contains a substring foobar
+        if b"HTTP/1.1 400 BAD_REQUEST" not in response:
+            fuzz_data_logger.log_fail(
+                "Response does not contain 'HTTP/1.1 400 BAD_REQUEST'"
+            )
+            fuzz_data_logger.log_fail("Response: {}".format(response))
+            result = False
+
+        if time.time() - start_time_sec > test_time_threshold_sec:
+            fuzz_data_logger.log_info("Timeout reached")
+            session._index_end = (
+                0  # stop fuzzing https://github.com/jtpereyda/boofuzz/discussions/600
+            )
+
+        return result
+
+    return checker
 
 
 def test_fuzz_api_submissions_random_payload():
@@ -39,7 +55,7 @@ def test_fuzz_api_submissions_random_payload():
                 host="127.0.0.1", port=8000, sslcontext=do_not_verify_tls
             )
         ),
-        post_test_case_callbacks=[response_must_be_400],
+        post_test_case_callbacks=[response_must_be_400()],
         receive_data_after_each_request=False,
         check_data_received_each_request=False,
         receive_data_after_fuzz=False,
@@ -102,7 +118,7 @@ def test_fuzz_api_submissions_cose_payload():
                 host="127.0.0.1", port=8000, sslcontext=do_not_verify_tls
             )
         ),
-        post_test_case_callbacks=[response_must_be_400],
+        post_test_case_callbacks=[response_must_be_400()],
         receive_data_after_each_request=False,
         check_data_received_each_request=False,
         receive_data_after_fuzz=False,
