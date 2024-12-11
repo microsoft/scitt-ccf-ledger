@@ -5,4 +5,4 @@ pytest
 loguru
 aiotools
 ccf==6.0.0-dev8
-cryptography==43.*
+cryptography==44.*
