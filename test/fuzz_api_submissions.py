@@ -101,10 +101,14 @@ def test_fuzz_api_submissions_random_payload():
         )  # 1MB
 
     test_request = boofuzz.s_get("SubmitAny")
-    session._fuzz_data_logger.log_info("Number of mutations: {}".format(test_request.num_mutations()))
+    session._fuzz_data_logger.log_info(
+        "Number of mutations: {}".format(test_request.num_mutations())
+    )
     session.connect(test_request)
     session.fuzz(max_depth=2)
-    session._fuzz_data_logger.log_info("Number of tests executed: {}".format(session.num_cases_actually_fuzzed))
+    session._fuzz_data_logger.log_info(
+        "Number of tests executed: {}".format(session.num_cases_actually_fuzzed)
+    )
     session._fuzz_data_logger.log_info("Execution speed: {}".format(session.exec_speed))
 
 
@@ -156,7 +160,9 @@ def test_fuzz_api_submissions_cose_payload():
     boofuzz.s_static("\r\n", "Request-CRLF")
 
     filepath = os.path.join(current_dir, "payloads/cts-hashv-cwtclaims-b64url.cose")
-    session._fuzz_data_logger.log_info("Seeding test cose file for fuzzing: {}".format(filepath))
+    session._fuzz_data_logger.log_info(
+        "Seeding test cose file for fuzzing: {}".format(filepath)
+    )
     # Add a fuzzable payload
     with boofuzz.s_block("Body-Content"):
         boofuzz.s_from_file(
@@ -164,10 +170,14 @@ def test_fuzz_api_submissions_cose_payload():
         )
 
     test_request = boofuzz.s_get("SubmitCose")
-    session._fuzz_data_logger.log_info("Number of mutations: {}".format(test_request.num_mutations()))
+    session._fuzz_data_logger.log_info(
+        "Number of mutations: {}".format(test_request.num_mutations())
+    )
     session.connect(test_request)
     session.fuzz(max_depth=2)
-    session._fuzz_data_logger.log_info("Number of tests executed: {}".format(session.num_cases_actually_fuzzed))
+    session._fuzz_data_logger.log_info(
+        "Number of tests executed: {}".format(session.num_cases_actually_fuzzed)
+    )
     session._fuzz_data_logger.log_info("Execution speed: {}".format(session.exec_speed))
 
 
