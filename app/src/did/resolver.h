@@ -101,13 +101,16 @@ namespace scitt::did
 
     void register_resolver(std::unique_ptr<MethodResolver> resolver)
     {
-      CCF_ASSERT(
-        resolver->get_method_prefix().starts_with(DID_PREFIX),
-        "Method resolver prefix must start with `did:`");
-      CCF_ASSERT(
-        resolver->get_method_prefix().ends_with(':'),
-        "Method resolver prefix must end with a colon");
-
+      if (!resolver->get_method_prefix().starts_with(DID_PREFIX))
+      {
+        throw std::invalid_argument(
+          "Method resolver prefix must start with `did:`");
+      }
+      if (!resolver->get_method_prefix().ends_with(':'))
+      {
+        throw std::invalid_argument(
+          "Method resolver prefix must end with a colon");
+      }
       resolvers.push_back(std::move(resolver));
     }
   };

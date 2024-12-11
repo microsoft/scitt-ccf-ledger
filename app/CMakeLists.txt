@@ -19,7 +19,7 @@ project(scitt
 set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
-# Added as option to enable Azure Linux build in 6.0.0-dev7, will eventually be removed
+# Added as option to enable Azure Linux build in 6.0.0-dev, will eventually be removed
 # once the transition to libstdc++ is complete
 set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
 
@@ -141,7 +141,7 @@ if (BUILD_TESTS)
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
-    ${CCF_DIR}/include/ccf/_private # openssl_wrappers depends on ds/x509_time_fmt.h
+    ${CCF_DIR}/include/ccf/_private # public_key.h and verifier.h depend on crypto/openssl/openssl_wrappers.h
   )
 
   if (ENABLE_CLANG_TIDY)
