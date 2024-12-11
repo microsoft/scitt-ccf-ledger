@@ -6,6 +6,8 @@ set -ex
 
 DOCKER=${DOCKER:-0}
 PLATFORM=${PLATFORM:-snp}
+
+# Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
 
 # SNP attestation config
