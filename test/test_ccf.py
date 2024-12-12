@@ -1,10 +1,38 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+import json
+
 import pytest
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from jwcrypto import jwk
 
 from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.verify import verify_transparent_statement
+
+
+def test_jwks(client: Client):
+    """
+    Test that the JWKS endpoint returns the expected keys.
+    """
+
+    jwks = client.get_jwks()
+    assert len(jwks["keys"]) == 1
+
+    cert_pem = client.get("/node/network").json()["service_certificate"]
+    cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+
+    pkey_pem = cert.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    key = jwk.JWK.from_pem(pkey_pem)
+    jwk_json = key.export(private_key=False)
+    jwk_from_cert = json.loads(jwk_json)
+    del jwk_from_cert["kid"]
+    assert jwk_from_cert == jwks["keys"][0]
 
 
 @pytest.mark.parametrize(

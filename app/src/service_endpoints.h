@@ -49,9 +49,51 @@ namespace scitt
   }
 
   /**
-   * An indexing strategy collecting all past and present service certificates
-   * and makes them immediately available.
+   * An indexing strategy collecting service keys used to sign receipts.
    */
+  class ServiceKeyIndexingStrategy
+    : public VisitEachEntryInValueTyped<ccf::Service>
+  {
+  public:
+    ServiceKeyIndexingStrategy() :
+      VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
+    {}
+
+    nlohmann::json get_jwks() const
+    {
+      std::lock_guard guard(lock);
+
+      std::vector<nlohmann::json> jwks;
+      for (const auto& service_certificate : service_certificates)
+      {
+        auto verifier = ccf::crypto::make_unique_verifier(service_certificate);
+        jwks.push_back(verifier->public_key_jwk());
+      }
+      nlohmann::json jwks_json;
+      jwks_json["keys"] = jwks;
+      return jwks_json;
+    }
+
+  protected:
+    void visit_entry(
+      const ccf::TxID& tx_id, const ccf::ServiceInfo& service_info) override
+    {
+      std::lock_guard guard(lock);
+
+      // It is possible for multiple entries in the ServiceInfo table to contain
+      // the same certificate, eg. if the service status changes. Using an
+      // std::set removes duplicates.
+      service_certificates.insert(service_info.cert);
+    }
+
+  private:
+    mutable std::mutex lock;
+
+    std::set<ccf::crypto::Pem> service_certificates;
+  }; /**
+      * An indexing strategy collecting all past and present service
+      * certificates and makes them immediately available.
+      */
   class ServiceCertificateIndexingStrategy
     : public VisitEachEntryInValueTyped<ccf::Service>
   {
@@ -160,6 +202,16 @@ namespace scitt
 
       return index->get_did_document(*cfg.service_identifier);
     }
+
+    static nlohmann::json get_jwks(
+      const std::shared_ptr<ServiceKeyIndexingStrategy>& index,
+      ccf::endpoints::EndpointContext& ctx,
+      nlohmann::json&& params)
+    {
+      // Like get_did_document(), this is not right when the indexer is not up
+      // to date, which needs fixing
+      return index->get_jwks();
+    }
   }
 
   static void register_service_endpoints(
@@ -172,8 +224,12 @@ namespace scitt
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();
 
+    auto service_key_index = std::make_shared<ServiceKeyIndexingStrategy>();
+
     context.get_indexing_strategies().install_strategy(
       service_certificate_index);
+
+    context.get_indexing_strategies().install_strategy(service_key_index);
 
     registry
       .make_endpoint(
@@ -235,6 +291,15 @@ namespace scitt
         HTTP_GET,
         ccf::json_adapter(std::bind(
           endpoints::get_did_document, service_certificate_index, _1, _2)),
+        {ccf::empty_auth_policy})
+      .install();
+
+    registry
+      .make_endpoint(
+        "/jwks",
+        HTTP_GET,
+        ccf::json_adapter(
+          std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
         {ccf::empty_auth_policy})
       .install();
   }
