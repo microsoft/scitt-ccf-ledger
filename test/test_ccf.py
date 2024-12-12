@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import json
+from hashlib import sha256
 
 import pytest
 from cryptography import x509
@@ -21,7 +22,22 @@ def pem_cert_to_ccf_jwk(cert_pem: str) -> dict:
     )
     key = jwk.JWK.from_pem(pkey_pem)
     jwk_from_cert = json.loads(key.export(private_key=False))
-    del jwk_from_cert["kid"]
+    # jwcrypto sets the kid to the JWK thumbprint, which is not what CCF does
+    # because it would not work in CBOR/COSE contexts. Instead, CCF uses the
+    # SHA-256 hash of the DER-encoded public key, encoded as hex.
+    # The kid is to be used as an opaque handler by clients, but we want this
+    # test to be precise.
+    ccf_kid = (
+        sha256(
+            cert.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        .digest()
+        .hex()
+    )
+    jwk_from_cert["kid"] = ccf_kid
     return jwk_from_cert
 
 
