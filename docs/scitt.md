@@ -63,7 +63,7 @@ Request
 ```
 POST /entries HTTP/1.1
 Host: transparency.example
-Accept: application/json
+Accept: application/cose
 Content-Type: application/cose
 Payload (in CBOR diagnostic notation)
 
