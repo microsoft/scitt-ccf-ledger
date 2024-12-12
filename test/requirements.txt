@@ -6,3 +6,5 @@ loguru
 aiotools
 ccf==6.0.0-dev8
 cryptography==44.*
+jwcrypto==1.5.*
+types-jwcrypto
