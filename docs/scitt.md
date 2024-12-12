@@ -83,7 +83,6 @@ HTTP/1.1 202 Accepted
 Location: TBD
 
 Content-Type: application/cbor
-Retry-After: <seconds>
 
 {
 
