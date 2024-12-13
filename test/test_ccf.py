@@ -3,6 +3,7 @@
 import json
 from hashlib import sha256
 
+import cbor2
 import pytest
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -108,3 +109,33 @@ def test_recovery(client, trusted_ca, restart_service):
     assert len(jwks["keys"]) == 2
     assert old_jwk in jwks["keys"]
     assert new_jwk in jwks["keys"]
+
+
+def test_transparency_configuration(client):
+    config = client.get(
+        "/.well-known/transparency-configuration",
+        headers={"Accept": "application/json"},
+    )
+    assert config.status_code == 200
+    assert config.headers["Content-Type"] == "application/json"
+    assert config.json() == {"issuer": "TBD"}
+
+    config = client.get(
+        "/.well-known/transparency-configuration",
+        headers={"Accept": "application/cbor"},
+    )
+    assert config.status_code == 200
+    assert config.headers["Content-Type"] == "application/cbor"
+    assert cbor2.loads(config.content) == {"issuer": "TBD"}
+
+    config = client.get(
+        "/.well-known/transparency-configuration", headers={"Accept": "*/*"}
+    )
+    assert config.status_code == 200
+    assert config.headers["Content-Type"] == "application/cbor"
+    assert cbor2.loads(config.content) == {"issuer": "TBD"}
+
+    config = client.get("/.well-known/transparency-configuration")
+    assert config.status_code == 200
+    assert config.headers["Content-Type"] == "application/cbor"
+    assert cbor2.loads(config.content) == {"issuer": "TBD"}

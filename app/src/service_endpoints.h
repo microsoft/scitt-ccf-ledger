@@ -11,6 +11,8 @@
 #include <ccf/endpoint.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
+// TODO: needs to be made public in CCF
+#include <http/http_accept.h>
 
 namespace scitt
 {
@@ -216,6 +218,66 @@ namespace scitt
       // to date, which needs fixing
       return index->get_jwks();
     }
+
+    static void get_transparency_config(
+      ccf::endpoints::ReadOnlyEndpointContext& ctx)
+    {
+      // TODO: a COSESignaturesSubsystem so the endpoint can access the issuer
+      // cleanly
+      nlohmann::json config;
+      config["issuer"] = "TBD";
+
+      const auto accept =
+        ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
+      if (accept.has_value())
+      {
+        const auto accept_options = ::http::parse_accept_header(accept.value());
+        if (accept_options.empty())
+        {
+          throw ccf::RpcException(
+            HTTP_STATUS_NOT_ACCEPTABLE,
+            ccf::errors::UnsupportedContentType,
+            fmt::format(
+              "No supported content type in accept header: {}\nOnly {} is "
+              "currently supported",
+              accept.value(),
+              ccf::http::headervalues::contenttype::JSON));
+        }
+
+        for (const auto& option : accept_options)
+        {
+          // return CBOR eagerly if it is compatible with Accept
+          if (option.matches(ccf::http::headervalues::contenttype::CBOR))
+          {
+            ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+            ctx.rpc_ctx->set_response_header(
+              ccf::http::headers::CONTENT_TYPE,
+              ccf::http::headervalues::contenttype::CBOR);
+            ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
+            return;
+          }
+
+          // JSON if compatible with Accept
+          if (option.matches(ccf::http::headervalues::contenttype::JSON))
+          {
+            ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+            ctx.rpc_ctx->set_response_header(
+              ccf::http::headers::CONTENT_TYPE,
+              ccf::http::headervalues::contenttype::JSON);
+            ctx.rpc_ctx->set_response_body(config.dump());
+            return;
+          }
+        }
+      }
+
+      // If not Accept, default to CBOR
+      ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+      ctx.rpc_ctx->set_response_header(
+        ccf::http::headers::CONTENT_TYPE,
+        ccf::http::headervalues::contenttype::CBOR);
+      ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
+      return;
+    }
   }
 
   static void register_service_endpoints(
@@ -304,6 +366,14 @@ namespace scitt
         HTTP_GET,
         ccf::json_adapter(
           std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
+        {ccf::empty_auth_policy})
+      .install();
+
+    registry
+      .make_read_only_endpoint(
+        "/.well-known/transparency-configuration",
+        HTTP_GET,
+        endpoints::get_transparency_config,
         {ccf::empty_auth_policy})
       .install();
   }
