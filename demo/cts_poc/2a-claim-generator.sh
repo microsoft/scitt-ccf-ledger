@@ -35,7 +35,7 @@ echo -e "\nCreating and signing claim"
 if [ "$SIGNING_METHOD" = "did" ]; then
     echo "Using DID document for signing"
     scitt sign \
-        --claims "$CLAIM_CONTENT_PATH" \
+        --statement "$CLAIM_CONTENT_PATH" \
         --content-type "$CLAIM_CONTENT_TYPE" \
         --key "$PRIVATE_KEY_PATH" \
         --did-doc "$DID_DOC_PATH" \
@@ -43,7 +43,7 @@ if [ "$SIGNING_METHOD" = "did" ]; then
 elif [ "$SIGNING_METHOD" = "cacert" ]; then
     echo "Using local CA certificate for signing"
     scitt sign \
-        --claims "$CLAIM_CONTENT_PATH" \
+        --statement "$CLAIM_CONTENT_PATH" \
         --content-type "$CLAIM_CONTENT_TYPE" \
         --key "$PRIVATE_KEY_PATH" \
         --x5c "$CACERT_PATH" \
@@ -51,7 +51,7 @@ elif [ "$SIGNING_METHOD" = "cacert" ]; then
 elif [ "$SIGNING_METHOD" = "akv" ]; then
     echo "Using AKV configuration for signing"
     scitt sign \
-        --claims "$CLAIM_CONTENT_PATH" \
+        --statement "$CLAIM_CONTENT_PATH" \
         --content-type "$CLAIM_CONTENT_TYPE" \
         --akv-configuration "$AKV_CONFIG_PATH" \
         --x5c "$CACERT_PATH" \
