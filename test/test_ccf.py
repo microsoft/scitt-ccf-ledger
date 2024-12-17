@@ -112,13 +112,15 @@ def test_recovery(client, trusted_ca, restart_service):
 
 
 def test_transparency_configuration(client):
+    reference = {"issuer": "127.0.0.1:0", "jwks_uri": "https://127.0.0.1:0/jwks"}
+
     config = client.get(
         "/.well-known/transparency-configuration",
         headers={"Accept": "application/json"},
     )
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/json"
-    assert config.json() == {"issuer": "TBD"}
+    assert config.json() == reference
 
     config = client.get(
         "/.well-known/transparency-configuration",
@@ -126,16 +128,16 @@ def test_transparency_configuration(client):
     )
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == {"issuer": "TBD"}
+    assert cbor2.loads(config.content) == reference
 
     config = client.get(
         "/.well-known/transparency-configuration", headers={"Accept": "*/*"}
     )
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == {"issuer": "TBD"}
+    assert cbor2.loads(config.content) == reference
 
     config = client.get("/.well-known/transparency-configuration")
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == {"issuer": "TBD"}
+    assert cbor2.loads(config.content) == reference
