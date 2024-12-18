@@ -13,6 +13,7 @@ import cbor2
 import ccf.cose
 import pycose
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509 import load_der_x509_certificate
 from pycose.headers import KID
@@ -61,9 +62,9 @@ class TrustStore(ABC):
         pass
 
     @abstractmethod
-    def lookup(self, phdr) -> ServiceParameters:
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
-        Look up a service's parameters based on the protected headers from a
+        Look up a service's public key based on the protected headers from a
         receipt. Raises an exception if not matching service is found.
         """
         raise NotImplementedError()
@@ -76,56 +77,14 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
         raise ValueError("signature is invalid")
 
 
-def verify_receipt(
-    buf: bytes,
-    service_trust_store: TrustStore,
-    receipt: Union[Receipt, bytes, None] = None,
-) -> None:
-    msg = Sign1Message.decode(buf)
-
-    if isinstance(receipt, Receipt):
-        decoded_receipt = receipt
-    else:
-        if receipt is None:
-            embedded_receipt = crypto.get_last_embedded_receipt_from_cose(buf)
-            if not embedded_receipt:
-                raise ValueError("No embedded receipt found in COSE message")
-            parsed_receipt = cbor2.loads(embedded_receipt)
-        else:
-            parsed_receipt = cbor2.loads(receipt)
-
-        decoded_receipt = Receipt.from_cose_obj(parsed_receipt)
-
-    service_params = service_trust_store.lookup(decoded_receipt.phdr)
-    decoded_receipt.verify(msg, service_params)
-
-
-def get_kid(cose_sign1: bytes) -> bytes:
-    parsed_receipt = Sign1Message.decode(cose_sign1)
-    return parsed_receipt.phdr[KID]
-
-
 def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
     input_signed_statement: bytes,
 ):
-    trust_store_keys = {}
-    for _, service_params in service_trust_store.services.items():
-        cert = load_der_x509_certificate(service_params.certificate, default_backend())
-        key = cert.public_key()
-        kid = (
-            sha256(key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo))
-            .digest()
-            .hex()
-            .encode()
-        )
-        trust_store_keys[kid] = key
-
     st = Sign1Message.decode(transparent_statement)
     for receipt in st.uhdr[crypto.SCITTReceipts]:
-        kid = get_kid(receipt)
-        service_key = trust_store_keys[kid]
+        service_key = service_trust_store.get_key(receipt)
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
         )
@@ -137,9 +96,24 @@ class StaticTrustStore(TrustStore):
     """
 
     services: Dict[str, ServiceParameters] = {}
+    trust_store_keys: dict = {}
 
     def __init__(self, services: Dict[str, ServiceParameters]):
         self.services = services
+        for _, service_params in self.services.items():
+            cert = load_der_x509_certificate(
+                service_params.certificate, default_backend()
+            )
+            key = cert.public_key()
+            kid = (
+                sha256(
+                    key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                )
+                .digest()
+                .hex()
+                .encode()
+            )
+            self.trust_store_keys[kid] = key
 
     @staticmethod
     def load(path: Path) -> "StaticTrustStore":
@@ -175,12 +149,7 @@ class StaticTrustStore(TrustStore):
 
         return StaticTrustStore(store)
 
-    def lookup(self, phdr) -> ServiceParameters:
-        if "service_id" not in phdr:
-            raise ValueError("Receipt does not have a service identity.")
-
-        service_id = phdr["service_id"]
-        if service_id in self.services:
-            return self.services[service_id]
-        else:
-            raise ValueError(f"Unknown service identity {service_id!r}")
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        parsed = Sign1Message.decode(receipt)
+        kid = parsed.phdr[KID]
+        return self.trust_store_keys[kid]

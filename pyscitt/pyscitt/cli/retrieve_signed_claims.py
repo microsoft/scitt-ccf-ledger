@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..client import Client
-from ..verify import StaticTrustStore, verify_receipt
+from ..verify import StaticTrustStore, verify_transparent_statement
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -29,7 +29,7 @@ def retrieve_signed_claimsets(
         path = base_path / f"{tx}.cose"
 
         if service_trust_store:
-            verify_receipt(claim, service_trust_store=service_trust_store)
+            verify_transparent_statement(claim, service_trust_store, claim)
 
         with open(path, "wb") as f:
             f.write(claim)
