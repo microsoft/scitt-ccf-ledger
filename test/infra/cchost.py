@@ -395,6 +395,10 @@ class CCHost(EventLoopThread):
                 "recover": {
                     "initial_service_certificate_validity_days": 1,
                     "previous_service_identity_file": str(previous_service_cert),
+                    # "cose_signatures": {
+                    #     "issuer": f"127.0.0.1:{self.listen_rpc_port + 1}",
+                    #     "subject": "scitt.ccf.signature.v1",
+                    # },
                 },
             }
 

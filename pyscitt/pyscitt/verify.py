@@ -11,17 +11,23 @@ from typing import Dict, Optional, Union
 
 import cbor2
 import ccf.cose
+import httpx
 import pycose
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    PublicFormat,
+    load_pem_public_key,
+)
 from cryptography.x509 import load_der_x509_certificate
+from jwcrypto import jwk
 from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from . import crypto, did
-from .crypto import SCITTIssuer
+from .crypto import CWT_ISS, CWTClaims
 from .receipt import Receipt
 
 
@@ -153,3 +159,36 @@ class StaticTrustStore(TrustStore):
         parsed = Sign1Message.decode(receipt)
         kid = parsed.phdr[KID]
         return self.trust_store_keys[kid]
+
+
+class DynamicTrustStore(TrustStore):
+    """
+    A dynamic trust store, based on a single service identity used to retrieve
+    all keys from the service's transparency configuration endpoint.
+    """
+
+    services: Dict[str, ServiceParameters] = {}
+
+    def __init__(self):
+        self.services = {}
+
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        parsed = Sign1Message.decode(receipt)
+        cwt = parsed.phdr[CWTClaims]
+        issuer = cwt[CWT_ISS]
+
+        session = httpx.Client(verify=False)
+        tc = session.get(
+            f"https://{issuer}/.well-known/transparency-configuration",
+            headers={"Accept": "application/json"},
+        )
+        tc.raise_for_status()
+        jwks_uri = tc.json()["jwksUri"]
+        ju = session.get(jwks_uri)
+        ju.raise_for_status()
+        jwks = ju.json()["keys"]
+        keys = {key["kid"].encode(): key for key in jwks}
+        key = keys[parsed.phdr[KID]]
+        pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
+        key = load_pem_public_key(pem_key, default_backend())
+        return key

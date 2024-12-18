@@ -12,7 +12,7 @@ from jwcrypto import jwk
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import verify_transparent_statement
+from pyscitt.verify import DynamicTrustStore, verify_transparent_statement
 
 
 def pem_cert_to_ccf_jwk(cert_pem: str) -> dict:
@@ -80,14 +80,20 @@ def test_make_signed_statement_transparent(
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
+    dynamic_trust_store = DynamicTrustStore()
+    verify_transparent_statement(
+        transparent_statement, dynamic_trust_store, signed_statement
+    )
+
 
 @pytest.mark.isolated_test
 def test_recovery(client, trusted_ca, restart_service):
     identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
 
-    client.register_signed_statement(
-        crypto.sign_json_statement(identity, {"foo": "bar"})
-    )
+    first_signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    first_transparent_statement = client.register_signed_statement(
+        first_signed_statement
+    ).response_bytes
 
     old_network = client.get("/node/network").json()
     assert old_network["recovery_count"] == 0
@@ -101,14 +107,19 @@ def test_recovery(client, trusted_ca, restart_service):
     new_jwk = pem_cert_to_ccf_jwk(new_network["service_certificate"])
 
     # Check that the service is still operating correctly
-    client.register_signed_statement(
-        crypto.sign_json_statement(identity, {"foo": "hello"})
-    )
+    second_signed_statement = crypto.sign_json_statement(identity, {"foo": "hello"})
+    second_signed_statement = client.register_signed_statement(
+        second_signed_statement
+    ).response_bytes
 
     jwks = client.get_jwks()
     assert len(jwks["keys"]) == 2
     assert old_jwk in jwks["keys"]
     assert new_jwk in jwks["keys"]
+
+    dynamic_trust_store = DynamicTrustStore()
+    # verify_transparent_statement(first_transparent_statement, dynamic_trust_store, first_signed_statement)
+    # verify_transparent_statement(second_signed_statement, dynamic_trust_store, second_signed_statement)
 
 
 @pytest.mark.isolated_test
