@@ -15,6 +15,7 @@ import pycose
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509 import load_der_x509_certificate
+from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
@@ -99,6 +100,11 @@ def verify_receipt(
     decoded_receipt.verify(msg, service_params)
 
 
+def get_kid(cose_sign1: bytes) -> bytes:
+    parsed_receipt = Sign1Message.decode(cose_sign1)
+    return parsed_receipt.phdr[KID]
+
+
 def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
@@ -108,15 +114,18 @@ def verify_transparent_statement(
     for _, service_params in service_trust_store.services.items():
         cert = load_der_x509_certificate(service_params.certificate, default_backend())
         key = cert.public_key()
-        kid = sha256(
-            key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-        ).digest()
+        kid = (
+            sha256(key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo))
+            .digest()
+            .hex()
+            .encode()
+        )
         trust_store_keys[kid] = key
-    # Assume a single service key
-    service_key = list(trust_store_keys.values())[0]
 
     st = Sign1Message.decode(transparent_statement)
     for receipt in st.uhdr[crypto.SCITTReceipts]:
+        kid = get_kid(receipt)
+        service_key = trust_store_keys[kid]
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
         )
