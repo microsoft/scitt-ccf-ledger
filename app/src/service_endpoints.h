@@ -24,7 +24,7 @@ namespace scitt
 
     GetServiceParameters::Out out;
     out.service_id = service_id;
-    out.tree_algorithm = TREE_ALGORITHM_CCF;
+    out.tree_algorithm = "CCF";
     out.signature_algorithm = JOSE_ALGORITHM_ES256;
     out.service_certificate = ccf::crypto::b64_from_raw(certificate_der);
     return out;
