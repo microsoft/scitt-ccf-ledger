@@ -111,8 +111,10 @@ def test_recovery(client, trusted_ca, restart_service):
     assert new_jwk in jwks["keys"]
 
 
-def test_transparency_configuration(client):
-    reference = {"issuer": "127.0.0.1:0", "jwks_uri": "https://127.0.0.1:0/jwks"}
+@pytest.mark.isolated_test
+def test_transparency_configuration(client, cchost):
+    issuer = f"127.0.0.1:{cchost.rpc_port}"
+    reference = {"issuer": issuer, "jwks_uri": f"https://{issuer}/jwks"}
 
     config = client.get(
         "/.well-known/transparency-configuration",
