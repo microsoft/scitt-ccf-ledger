@@ -253,7 +253,7 @@ namespace scitt
 
         nlohmann::json config;
         config["issuer"] = cfg.issuer;
-        config["jwks_uri"] = fmt::format("https://{}/jwks", cfg.issuer);
+        config["jwksUri"] = fmt::format("https://{}/jwks", cfg.issuer);
 
         const auto accept =
           ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
