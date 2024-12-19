@@ -260,7 +260,7 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": 'export function apply() { throw new Error("Boom"); }'
+                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
                 }
             }
         )
