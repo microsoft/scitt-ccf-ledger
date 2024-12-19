@@ -9,7 +9,7 @@ import pytest
 from loguru import logger as LOG
 from pycose.messages import CoseMessage
 
-from pyscitt import crypto, did
+from pyscitt import crypto
 from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_END,
     SCITT_CONSTITUTION_MARKER_START,
@@ -230,10 +230,6 @@ def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
 
 
 def test_local_development(run, service_url, tmp_path: Path):
-    # This is not particularly useful to run tests against, since it uses Mozilla CA roots, meaning
-    # we can't issue any DID web that would validate, but at least we check that the command doesn't
-    # fail.
-    #
     # Note that unlike other commands, we don't need to set the --development flag, since that is
     # the default.
     run(
@@ -268,14 +264,14 @@ def test_adhoc_signer(run, tmp_path: Path):
         tmp_path / "signed_statement.cose",
     )
 
-    # Sign with a DID issuer, but without creating an on-disk DID document first.
+    # Sign with a custom issuer
     # Also tests how to override the default algorithm.
     run(
         "sign",
         "--key",
         tmp_path / "key.pem",
         "--issuer",
-        "did:web:example.com",
+        "foo.bar.baz",
         "--statement",
         tmp_path / "statement.json",
         "--content-type",

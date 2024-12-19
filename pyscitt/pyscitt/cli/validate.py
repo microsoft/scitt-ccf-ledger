@@ -38,8 +38,7 @@ def cli(fn):
     parser.add_argument(
         "--service-trust-store",
         type=Path,
-        help="""Optional folder containing JSON parameter files of SCITT services to trust,
-        otherwise use DID resolver and expect DID in receipt""",
+        help="""Optional folder containing JSON parameter files of SCITT services to trust""",
     )
 
     def cmd(args):

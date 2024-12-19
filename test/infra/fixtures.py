@@ -12,7 +12,6 @@ from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
-from pyscitt.did import format_did_web
 from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
@@ -308,14 +307,15 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="class")
 def service_identifier(service_url: str) -> str:
     """
-    Get the long term service identifier, under the form of a DID.
+    Get the long term service identifier.
 
     The service is configured to include this identifier in receipts.
     """
-
     result = urlparse(service_url)
     assert result.hostname is not None
-    return format_did_web(result.hostname, result.port)
+    if result.port is None or result.port == 443 or result.port == 80:
+        return "https://" + result.hostname
+    return "https://" + result.hostname + ":" + str(result.port)
 
 
 @pytest.fixture(scope="class")
