@@ -48,7 +48,7 @@ Payload (in CBOR diagnostic notation)
 
 {
     "issuer": "https://transparency.example",
-    "jwks_uri": "https://transparency.example/jwks",
+    "jwksUri": "https://transparency.example/jwks",
 }
 ```
 
