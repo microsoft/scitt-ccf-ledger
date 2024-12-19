@@ -341,7 +341,7 @@ def configure_service(base_client: Client, service_issuer: str):
 
     def f(configuration):
         configuration = configuration.copy()
-        configuration.setdefault("authentication", {"allow_unauthenticated": True})
+        configuration.setdefault("authentication", {"allowUnauthenticated": True})
         configuration.setdefault("serviceIssuer", service_issuer)
 
         proposal = governance.set_scitt_configuration_proposal(configuration)

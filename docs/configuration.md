@@ -26,7 +26,7 @@ Example configuration proposal:
             "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
           "authentication": {
-            "allow_unauthenticated": false,
+            "allowUnauthenticated": false,
             "jwt": {
               "required_claims": {
                 "aud": "scitt",
@@ -52,7 +52,7 @@ If API authentication is disabled then requests won't require any form of authen
 Example `set_scitt_configuration` snippet:
 ```json
 "authentication": {
-  "allow_unauthenticated": true
+  "allowUnauthenticated": true
 }
 ```
 
@@ -65,7 +65,7 @@ Extra `required_claims` can be configured which must then be present in an API r
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json
 "authentication": {
-  "allow_unauthenticated": false,
+  "allowUnauthenticated": false,
   "jwt": {
     "required_claims": {
       "foo": "bar",

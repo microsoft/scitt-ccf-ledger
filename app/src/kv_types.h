@@ -163,8 +163,8 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication, jwt, allow_unauthenticated);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication, jwt, "jwt", allow_unauthenticated, "allowUnauthenticated");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);

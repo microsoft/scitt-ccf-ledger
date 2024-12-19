@@ -205,7 +205,7 @@ def setup_local_development(
     assert url.hostname is not None
 
     config = {
-        "authentication": {"allow_unauthenticated": True},
+        "authentication": {"allowUnauthenticated": True},
     }
     proposal = governance.set_scitt_configuration_proposal(config)
     client.governance.propose(proposal, must_pass=True)

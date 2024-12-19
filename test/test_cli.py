@@ -55,14 +55,14 @@ def test_smoke_test(run, client, tmp_path: Path):
     (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
 
     (tmp_path / "config.json").write_text(
-        json.dumps({"authentication": {"allow_unauthenticated": True}})
+        json.dumps({"authentication": {"allowUnauthenticated": True}})
     )
 
 
 def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
     # Add basic service config
     (tmp_path / "config.json").write_text(
-        json.dumps({"authentication": {"allow_unauthenticated": True}})
+        json.dumps({"authentication": {"allowUnauthenticated": True}})
     )
     run(
         "governance",
@@ -147,7 +147,7 @@ def test_use_cacert_submit_verify_x509_signature(run, client, tmp_path: Path):
 def test_use_cacert_submit_verify_x509_embedded(run, client, tmp_path: Path):
     # Add basic service config
     (tmp_path / "config.json").write_text(
-        json.dumps({"authentication": {"allow_unauthenticated": True}})
+        json.dumps({"authentication": {"allowUnauthenticated": True}})
     )
     run(
         "governance",

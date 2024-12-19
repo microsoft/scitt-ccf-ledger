@@ -32,7 +32,7 @@ class TestAuthentication:
             configure_service(
                 {
                     "authentication": {
-                        "allow_unauthenticated": allow_unauthenticated,
+                        "allowUnauthenticated": allow_unauthenticated,
                         "jwt": {"required_claims": required_claims},
                     }
                 }
