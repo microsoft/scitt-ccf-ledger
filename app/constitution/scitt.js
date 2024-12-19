@@ -18,12 +18,6 @@ actions.set("set_scitt_configuration",
             checkType(alg, "string", `configuration.policy.accepted_algorithms[${i}]`);
           }
         }
-        checkType(args.configuration.policy.accepted_did_issuers, "array?", "configuration.policy.accepted_did_issuers");
-        if (args.configuration.policy.accepted_did_issuers) {
-          for (const [i, alg] of args.configuration.policy.accepted_did_issuers.entries()) {
-            checkType(alg, "string", `configuration.policy.accepted_did_issuers[${i}]`);
-          }
-        }
         checkType(args.configuration.policy.policy_script, "string?", "configuration.policy.policy_script");
       }
 

@@ -23,10 +23,6 @@ Example configuration proposal:
         "configuration": {
           "service_identifier": "did:web:scittservicedomain.com",
           "policy": {
-            "accepted_did_issuers": [
-              "did:web:firstallowedsubmitter.com",
-              "did:web:secondallowedsubmitter.com"
-            ],
             "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
           "authentication": {
@@ -79,12 +75,12 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
 ```
 
 ## Service ID
-The long-term stable identifier of this service, as a DID.
+The long-term stable identifier of this service.
 If set, it will be used to populate the issuer field of receipts.
 
 Example `set_scitt_configuration` snippet:
 ```json
-"service_identifier": "did:web:example.com:scitt"
+"service_identifier": "https://transparency.service"
 ```
 
 ## Policy object

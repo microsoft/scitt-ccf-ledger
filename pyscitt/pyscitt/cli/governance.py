@@ -191,7 +191,7 @@ def clean_pem_file(bundle: str) -> str:
 
 
 def setup_local_development(
-    client: Client, trust_store_dir: Optional[Path], did_web_ca_certs: Optional[Path]
+    client: Client, trust_store_dir: Optional[Path]
 ):
     # Member activation and opening the service are not necessary when
     # using sandbox.sh, since that will already been taken care of.
@@ -199,14 +199,6 @@ def setup_local_development(
 
     print("Activating member credentials...")
     client.governance.activate_member()
-
-    # This uses the Mozilla root program. certifi is the same package that
-    # provides roots for eg. the requests and httpx modules.
-    cacert_pem_file = certifi.contents()
-    bundle = clean_pem_file(cacert_pem_file)
-
-    proposal = governance.set_ca_bundle_proposal("did_web_tls_roots", bundle)
-    client.governance.propose(proposal, must_pass=True)
 
     print("Configuring service...")
     url = urlparse(client.url)
@@ -244,7 +236,7 @@ def cli(fn):
     add_proposal_arguments(p)
     p.add_argument(
         "--name",
-        choices=["did_web_tls_roots", "x509_roots"],
+        choices=["x509_roots"],
         required=True,
         help="Name of the CA Cert bundle as referenced in CCF apps",
         dest="bundle_name",
@@ -369,14 +361,9 @@ def cli(fn):
         type=Path,
         help="Folder containing a SCITT trust store, to which this service's identity will be added.",
     )
-    p.add_argument(
-        "--did-web-ca-certs",
-        type=Path,
-        help="Path to PEM-encoded CA Cert bundle, used by the service when resolving DID web issuers. By default, the Mozilla CA roots are used.",
-    )
     p.set_defaults(
         func=lambda args: setup_local_development(
-            create_client(args), args.service_trust_store, args.did_web_ca_certs
+            create_client(args), args.service_trust_store
         )
     )
 

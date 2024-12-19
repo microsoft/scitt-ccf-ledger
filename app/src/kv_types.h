@@ -101,12 +101,6 @@ namespace scitt
       std::optional<std::vector<std::string>> accepted_algorithms;
 
       /**
-       * List of accepted DID issuer when verifying signatures.
-       * The names are case sensitive.
-       */
-      std::optional<std::vector<std::string>> accepted_did_issuers;
-
-      /**
        * Script defining executable policy to be applied to each incoming entry.
        */
       std::optional<PolicyScript> policy_script;
@@ -130,12 +124,6 @@ namespace scitt
         }
       }
 
-      bool is_accepted_issuer(std::string_view issuer) const
-      {
-        return !accepted_did_issuers.has_value() ||
-          contains(accepted_did_issuers.value(), issuer);
-      }
-
       bool operator==(const Policy& other) const = default;
     };
 
@@ -156,7 +144,7 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable identifier of this service, as a DID.
+    // The long-term stable identifier of this service.
     // If set, it will be used to populate the issuer field of receipts
     std::optional<std::string> service_identifier;
   };
@@ -166,7 +154,6 @@ namespace scitt
   DECLARE_JSON_OPTIONAL_FIELDS(
     Configuration::Policy,
     accepted_algorithms,
-    accepted_did_issuers,
     policy_script);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
