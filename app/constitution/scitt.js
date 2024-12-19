@@ -12,10 +12,10 @@ actions.set("set_scitt_configuration",
       checkType(args.configuration, "object", "configuration");
       checkType(args.configuration.policy, "object?", "configuration.policy");
       if (args.configuration.policy) {
-        checkType(args.configuration.policy.accepted_algorithms, "array?", "configuration.policy.accepted_algorithms");
-        if (args.configuration.policy.accepted_algorithms) {
-          for (const [i, alg] of args.configuration.policy.accepted_algorithms.entries()) {
-            checkType(alg, "string", `configuration.policy.accepted_algorithms[${i}]`);
+        checkType(args.configuration.policy.acceptedAlgorithms, "array?", "configuration.policy.acceptedAlgorithms");
+        if (args.configuration.policy.acceptedAlgorithms) {
+          for (const [i, alg] of args.configuration.policy.acceptedAlgorithms.entries()) {
+            checkType(alg, "string", `configuration.policy.acceptedAlgorithms[${i}]`);
           }
         }
         checkType(args.configuration.policy.policy_script, "string?", "configuration.policy.policy_script");

@@ -25,7 +25,7 @@ class TestAcceptedAlgorithms:
     def test_reject_everything(self, configure_service, submit):
         # Configure the service with no accepted algorithms.
         # The service should reject anything we submit to it.
-        configure_service({"policy": {"accepted_algorithms": []}})
+        configure_service({"policy": {"acceptedAlgorithms": []}})
 
         with service_error("InvalidInput: Unsupported algorithm"):
             submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -39,7 +39,7 @@ class TestAcceptedAlgorithms:
     def test_allow_select_algorithm(self, configure_service, submit):
         # Add just one algorithm to the policy. Statements signed with this
         # algorithm are accepted but not the others.
-        configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
+        configure_service({"policy": {"acceptedAlgorithms": ["ES256"]}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
 
         with service_error("InvalidInput: Unsupported algorithm"):
@@ -49,7 +49,7 @@ class TestAcceptedAlgorithms:
             submit(alg="PS256", kty="rsa")
 
     def test_default_allows_anything(self, configure_service, submit):
-        # If no accepted_algorithms are defined in the policy, any algorithm
+        # If no acceptedAlgorithms are defined in the policy, any algorithm
         # is accepted.
         configure_service({"policy": {}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")

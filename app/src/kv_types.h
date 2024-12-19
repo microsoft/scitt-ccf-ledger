@@ -151,10 +151,10 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
-  DECLARE_JSON_OPTIONAL_FIELDS(
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     Configuration::Policy,
-    accepted_algorithms,
-    policy_script);
+    accepted_algorithms, "acceptedAlgorithms",
+    policy_script, "policyScript");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);

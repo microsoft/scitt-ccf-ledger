@@ -92,7 +92,7 @@ If not set, the default accepted algorithms are shown in the example snippet bel
 
 Example `set_scitt_configuration` snippet:
 ```json
-"accepted_algorithms": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EDDSA"]
+"acceptedAlgorithms": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EDDSA"]
 ```
 
 ### Policy script
