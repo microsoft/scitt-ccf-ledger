@@ -160,7 +160,7 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -221,7 +221,7 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -235,7 +235,7 @@ export function apply(profile, phdr) {{
         self, client: Client, configure_service, signed_statement
     ):
         configure_service(
-            {"policy": {"policy_script": "export function apply() { return true }"}}
+            {"policy": {"policyScript": "export function apply() { return true }"}}
         )
 
         client.register_signed_statement(signed_statement)
@@ -246,7 +246,7 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": "export function apply() { return `All entries are refused`; }"
+                    "policyScript": "export function apply() { return `All entries are refused`; }"
                 }
             }
         )
@@ -280,7 +280,7 @@ export function apply(profile, phdr) {{
     def test_invalid_policy(
         self, client: Client, configure_service, signed_statement, script
     ):
-        configure_service({"policy": {"policy_script": script}})
+        configure_service({"policy": {"policyScript": script}})
 
         with service_error("Invalid policy module"):
             client.register_signed_statement(signed_statement)
@@ -306,7 +306,7 @@ if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000))
 return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()

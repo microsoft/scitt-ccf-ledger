@@ -18,7 +18,7 @@ actions.set("set_scitt_configuration",
             checkType(alg, "string", `configuration.policy.acceptedAlgorithms[${i}]`);
           }
         }
-        checkType(args.configuration.policy.policy_script, "string?", "configuration.policy.policy_script");
+        checkType(args.configuration.policy.policyScript, "string?", "configuration.policy.policyScript");
       }
 
       checkType(args.configuration.authentication, "object?", "configuration.authentication");
