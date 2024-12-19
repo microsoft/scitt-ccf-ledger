@@ -5,8 +5,10 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import shutil
 import signal
+import socket
 import ssl
 import subprocess
 from pathlib import Path
@@ -25,6 +27,20 @@ LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
 CCHOST_PID_FILE_NAME = "cchost.pid"
+
+
+def unused_tcp_port(host) -> int:
+    MAX_TRIES = 10
+    for _ in range(MAX_TRIES):
+        port = random.randint(1024, 65535)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, port))
+                return port
+            except socket.error:
+                pass
+    else:
+        raise TimeoutError(f"Could not find unused port after {MAX_TRIES} tries")
 
 
 class CCHost(EventLoopThread):
@@ -73,6 +89,9 @@ class CCHost(EventLoopThread):
 
         self.binary = binary
         self.listen_rpc_port = rpc_port
+        # A predictable port is needed for the SCITT issuer name to be resolvable
+        if self.listen_rpc_port == 0:
+            self.listen_rpc_port = unused_tcp_port("localhost")
         self.listen_node_port = node_port
         self.platform = platform
 
@@ -376,6 +395,10 @@ class CCHost(EventLoopThread):
                 "recover": {
                     "initial_service_certificate_validity_days": 1,
                     "previous_service_identity_file": str(previous_service_cert),
+                    # "cose_signatures": {
+                    #     "issuer": f"127.0.0.1:{self.listen_rpc_port + 1}",
+                    #     "subject": "scitt.ccf.signature.v1",
+                    # },
                 },
             }
 
