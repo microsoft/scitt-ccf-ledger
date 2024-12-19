@@ -13,7 +13,6 @@
 #include "kv_types.h"
 #include "operations_endpoints.h"
 #include "policy_engine.h"
-#include "receipt.h"
 #include "service_endpoints.h"
 #include "tracing.h"
 #include "util.h"
