@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.7.1"
+PACKAGE_VERSION = "0.8.0"
 
 path_here = path.abspath(path.dirname(__file__))
 

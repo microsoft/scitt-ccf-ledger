@@ -12,7 +12,6 @@ from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
-from pyscitt.did import format_did_web
 from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
@@ -306,16 +305,17 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="class")
-def service_identifier(service_url: str) -> str:
+def service_issuer(service_url: str) -> str:
     """
-    Get the long term service identifier, under the form of a DID.
+    Get the long term service issuer string.
 
     The service is configured to include this identifier in receipts.
     """
-
     result = urlparse(service_url)
     assert result.hostname is not None
-    return format_did_web(result.hostname, result.port)
+    if result.port is None or result.port == 443 or result.port == 80:
+        return "https://" + result.hostname
+    return "https://" + result.hostname + ":" + str(result.port)
 
 
 @pytest.fixture(scope="class")
@@ -330,7 +330,7 @@ def base_client(service_url, member_auth):
 
 
 @pytest.fixture(scope="class")
-def configure_service(base_client: Client, service_identifier: str):
+def configure_service(base_client: Client, service_issuer: str):
     """
     Change the service configuration.
 
@@ -341,8 +341,8 @@ def configure_service(base_client: Client, service_identifier: str):
 
     def f(configuration):
         configuration = configuration.copy()
-        configuration.setdefault("authentication", {"allow_unauthenticated": True})
-        configuration.setdefault("service_identifier", service_identifier)
+        configuration.setdefault("authentication", {"allowUnauthenticated": True})
+        configuration.setdefault("serviceIssuer", service_issuer)
 
         proposal = governance.set_scitt_configuration_proposal(configuration)
         base_client.governance.propose(proposal, must_pass=True)
