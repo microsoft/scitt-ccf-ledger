@@ -173,4 +173,3 @@ class StaticTrustStore(TrustStore):
             return self.services[service_id]
         else:
             raise ValueError(f"Unknown service identity {service_id!r}")
-

@@ -153,8 +153,10 @@ namespace scitt
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     Configuration::Policy,
-    accepted_algorithms, "acceptedAlgorithms",
-    policy_script, "policyScript");
+    accepted_algorithms,
+    "acceptedAlgorithms",
+    policy_script,
+    "policyScript");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
@@ -164,12 +166,22 @@ namespace scitt
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    Configuration::Authentication, jwt, "jwt", allow_unauthenticated, "allowUnauthenticated");
+    Configuration::Authentication,
+    jwt,
+    "jwt",
+    allow_unauthenticated,
+    "allowUnauthenticated");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    Configuration, policy, "policy", authentication, "authentication", service_issuer, "serviceIssuer");
+    Configuration,
+    policy,
+    "policy",
+    authentication,
+    "authentication",
+    service_issuer,
+    "serviceIssuer");
 
   // Tables
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";

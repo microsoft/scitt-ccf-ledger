@@ -190,9 +190,7 @@ def clean_pem_file(bundle: str) -> str:
     )
 
 
-def setup_local_development(
-    client: Client, trust_store_dir: Optional[Path]
-):
+def setup_local_development(client: Client, trust_store_dir: Optional[Path]):
     # Member activation and opening the service are not necessary when
     # using sandbox.sh, since that will already been taken care of.
     # They are idempotent operation anyway, so no harm in doing them again.
