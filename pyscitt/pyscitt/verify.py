@@ -169,24 +169,24 @@ class DynamicTrustStore(TrustStore):
 
     services: Dict[str, ServiceParameters] = {}
 
-    def __init__(self):
+    def __init__(self, getter):
         self.services = {}
+        self.getter = getter
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         cwt = parsed.phdr[CWTClaims]
         issuer = cwt[CWT_ISS]
 
-        session = httpx.Client(verify=False)
-        tc = session.get(
+        transparency_configuration = self.getter(
             f"https://{issuer}/.well-known/transparency-configuration",
             headers={"Accept": "application/json"},
         )
-        tc.raise_for_status()
-        jwks_uri = tc.json()["jwksUri"]
-        ju = session.get(jwks_uri)
-        ju.raise_for_status()
-        jwks = ju.json()["keys"]
+        transparency_configuration.raise_for_status()
+        jwks_uri = transparency_configuration.json()["jwksUri"]
+        jwk_set = self.getter(jwks_uri)
+        jwk_set.raise_for_status()
+        jwks = jwk_set.json()["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
         key = keys[parsed.phdr[KID]]
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()

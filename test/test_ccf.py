@@ -80,7 +80,7 @@ def test_make_signed_statement_transparent(
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
-    dynamic_trust_store = DynamicTrustStore()
+    dynamic_trust_store = DynamicTrustStore(client.get)
     verify_transparent_statement(
         transparent_statement, dynamic_trust_store, signed_statement
     )
@@ -117,7 +117,7 @@ def test_recovery(client, trusted_ca, restart_service):
     assert old_jwk in jwks["keys"]
     assert new_jwk in jwks["keys"]
 
-    dynamic_trust_store = DynamicTrustStore()
+    dynamic_trust_store = DynamicTrustStore(client.get)
     # verify_transparent_statement(first_transparent_statement, dynamic_trust_store, first_signed_statement)
     # verify_transparent_statement(second_signed_statement, dynamic_trust_store, second_signed_statement)
 
