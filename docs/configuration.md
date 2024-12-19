@@ -21,7 +21,6 @@ Example configuration proposal:
       "name": "set_scitt_configuration",
       "args": {
         "configuration": {
-          "serviceIssuer": "https://transparency.service",
           "policy": {
             "policyScript": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
@@ -74,15 +73,6 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
 }
 ```
 
-## Service ID
-The long-term stable identifier of this service.
-If set, it will be used to populate the issuer field of receipts.
-
-Example `set_scitt_configuration` snippet:
-```json
-"serviceIssuer": "https://transparency.service"
-```
-
 ## Policy object
 
 ### Accepted algorithms
@@ -130,6 +120,25 @@ Example `set_scitt_configuration` snippet:
   "policyScript": "export function apply(profile, phdr) {\n  if (profile === \"X509\") { return true; }\n  return \"Only X509 claim profile is allowed\";\n}"
 }
 ```
+
+## CCF specific configuration
+
+Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.
+
+### Receipt issuance
+
+Receipts can contain the issuer and subject fields identifying the service.
+
+To use the specific values in the receipts please set it through the [CCF v6 configuration](https://microsoft.github.io/CCF/main/operations/configuration.html):
+
+```json
+"cose_signatures": {
+  "issuer": "myservicedomain.com",
+  "subject": "scitt.ccf.signature.v1"
+}
+```
+
+Once the value is set it will be easy to discover the public keys via `$issuer/.well-known/transparency-configuration` endpoint.
 
 ## Trust stores
 SCITT has a trust store that can be configured: `x509_roots`.

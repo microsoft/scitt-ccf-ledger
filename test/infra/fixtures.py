@@ -305,20 +305,6 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="class")
-def service_issuer(service_url: str) -> str:
-    """
-    Get the long term service issuer string.
-
-    The service is configured to include this identifier in receipts.
-    """
-    result = urlparse(service_url)
-    assert result.hostname is not None
-    if result.port is None or result.port == 443 or result.port == 80:
-        return "https://" + result.hostname
-    return "https://" + result.hostname + ":" + str(result.port)
-
-
-@pytest.fixture(scope="class")
 def base_client(service_url, member_auth):
     """
     Create a Client instance to connect to the test SCITT service.
@@ -330,7 +316,7 @@ def base_client(service_url, member_auth):
 
 
 @pytest.fixture(scope="class")
-def configure_service(base_client: Client, service_issuer: str):
+def configure_service(base_client: Client):
     """
     Change the service configuration.
 
@@ -342,7 +328,6 @@ def configure_service(base_client: Client, service_issuer: str):
     def f(configuration):
         configuration = configuration.copy()
         configuration.setdefault("authentication", {"allowUnauthenticated": True})
-        configuration.setdefault("serviceIssuer", service_issuer)
 
         proposal = governance.set_scitt_configuration_proposal(configuration)
         base_client.governance.propose(proposal, must_pass=True)

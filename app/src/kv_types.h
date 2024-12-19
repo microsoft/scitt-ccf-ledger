@@ -144,8 +144,7 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable issuer string of this service.
-    // If set, it will be used to populate the issuer field of receipts
+    // deprecated
     std::optional<std::string> service_issuer;
   };
 
