@@ -140,7 +140,7 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       GetVersion::Out out;
-      out.scitt_version = SCITT_VERSION;
+      out.version = SCITT_VERSION;
       return out;
     };
 

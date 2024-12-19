@@ -80,12 +80,12 @@ namespace scitt
   {
     struct Out
     {
-      std::string scitt_version;
+      std::string version;
     };
   };
 
   DECLARE_JSON_TYPE(GetVersion::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, scitt_version);
+  DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, version);
 
   struct GetEntry
   {
