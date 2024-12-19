@@ -25,7 +25,7 @@ class TestAcceptedAlgorithms:
     def test_reject_everything(self, configure_service, submit):
         # Configure the service with no accepted algorithms.
         # The service should reject anything we submit to it.
-        configure_service({"policy": {"accepted_algorithms": []}})
+        configure_service({"policy": {"acceptedAlgorithms": []}})
 
         with service_error("InvalidInput: Unsupported algorithm"):
             submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -39,7 +39,7 @@ class TestAcceptedAlgorithms:
     def test_allow_select_algorithm(self, configure_service, submit):
         # Add just one algorithm to the policy. Statements signed with this
         # algorithm are accepted but not the others.
-        configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
+        configure_service({"policy": {"acceptedAlgorithms": ["ES256"]}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
 
         with service_error("InvalidInput: Unsupported algorithm"):
@@ -49,7 +49,7 @@ class TestAcceptedAlgorithms:
             submit(alg="PS256", kty="rsa")
 
     def test_default_allows_anything(self, configure_service, submit):
-        # If no accepted_algorithms are defined in the policy, any algorithm
+        # If no acceptedAlgorithms are defined in the policy, any algorithm
         # is accepted.
         configure_service({"policy": {}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -160,7 +160,7 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -221,7 +221,7 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -235,7 +235,7 @@ export function apply(profile, phdr) {{
         self, client: Client, configure_service, signed_statement
     ):
         configure_service(
-            {"policy": {"policy_script": "export function apply() { return true }"}}
+            {"policy": {"policyScript": "export function apply() { return true }"}}
         )
 
         client.register_signed_statement(signed_statement)
@@ -246,7 +246,7 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": "export function apply() { return `All entries are refused`; }"
+                    "policyScript": "export function apply() { return `All entries are refused`; }"
                 }
             }
         )
@@ -260,7 +260,7 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": 'export function apply() { throw new Error("Boom"); }'
+                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
                 }
             }
         )
@@ -280,7 +280,7 @@ export function apply(profile, phdr) {{
     def test_invalid_policy(
         self, client: Client, configure_service, signed_statement, script
     ):
-        configure_service({"policy": {"policy_script": script}})
+        configure_service({"policy": {"policyScript": script}})
 
         with service_error("Invalid policy module"):
             client.register_signed_statement(signed_statement)
@@ -306,7 +306,7 @@ if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000))
 return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()

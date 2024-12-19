@@ -101,12 +101,6 @@ namespace scitt
       std::optional<std::vector<std::string>> accepted_algorithms;
 
       /**
-       * List of accepted DID issuer when verifying signatures.
-       * The names are case sensitive.
-       */
-      std::optional<std::vector<std::string>> accepted_did_issuers;
-
-      /**
        * Script defining executable policy to be applied to each incoming entry.
        */
       std::optional<PolicyScript> policy_script;
@@ -130,12 +124,6 @@ namespace scitt
         }
       }
 
-      bool is_accepted_issuer(std::string_view issuer) const
-      {
-        return !accepted_did_issuers.has_value() ||
-          contains(accepted_did_issuers.value(), issuer);
-      }
-
       bool operator==(const Policy& other) const = default;
     };
 
@@ -156,33 +144,43 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable identifier of this service, as a DID.
-    // If set, it will be used to populate the issuer field of receipts
-    std::optional<std::string> service_identifier;
+    // deprecated
+    std::optional<std::string> service_issuer;
   };
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
-  DECLARE_JSON_OPTIONAL_FIELDS(
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     Configuration::Policy,
     accepted_algorithms,
-    accepted_did_issuers,
-    policy_script);
+    "acceptedAlgorithms",
+    policy_script,
+    "policyScript");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication::JWT, required_claims);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication::JWT, required_claims, "requiredClaims");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication, jwt, allow_unauthenticated);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication,
+    jwt,
+    "jwt",
+    allow_unauthenticated,
+    "allowUnauthenticated");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration, policy, authentication, service_identifier);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration,
+    policy,
+    "policy",
+    authentication,
+    "authentication",
+    service_issuer,
+    "serviceIssuer");
 
   // Tables
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";

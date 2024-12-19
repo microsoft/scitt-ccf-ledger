@@ -16,7 +16,7 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 - You should have configuration file ready (see [documentation](../../docs/configuration.md#scitt-configuration)), e.g.:
 
     ```bash
-    echo '{ "authentication": { "allow_unauthenticated": true } }' > demo-poc/configuration.json
+    echo '{ "authentication": { "allowUnauthenticated": true } }' > demo-poc/configuration.json
     ```
 
 ## Instructions

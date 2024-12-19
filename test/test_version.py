@@ -5,6 +5,6 @@ import re
 
 
 def test_get_version(client):
-    version = client.get_version()
-    scitt_version = version["scitt_version"]
-    assert re.match(r"\d+\.\d+\.\d+.*", scitt_version)
+    version_response = client.get_version()
+    version = version_response["version"]
+    assert re.match(r"\d+\.\d+\.\d+.*", version)
