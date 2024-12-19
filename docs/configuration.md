@@ -28,7 +28,7 @@ Example configuration proposal:
           "authentication": {
             "allowUnauthenticated": false,
             "jwt": {
-              "required_claims": {
+              "requiredClaims": {
                 "aud": "scitt",
                 "iss": "https://authserver.com/",
                 "http://unique.claim/department_id": "654987"
@@ -60,14 +60,14 @@ Example `set_scitt_configuration` snippet:
 If JWT authentication is enabled then API requests must include a header containing an acceptable JWT from a trusted identity provider. For more details see the [CCF documentation on JWTs](https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html).
 - JWT providers can be configured via the `set_jwt_issuer` action as explained in the [CCF documentation](https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html#setting-up-a-token-issuer-with-manual-key-refresh).
 
-Extra `required_claims` can be configured which must then be present in an API request's JWT for authentication to succeed.
+Extra `requiredClaims` can be configured which must then be present in an API request's JWT for authentication to succeed.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json
 "authentication": {
   "allowUnauthenticated": false,
   "jwt": {
-    "required_claims": {
+    "requiredClaims": {
       "foo": "bar",
     }
   }

@@ -158,8 +158,8 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication::JWT, required_claims);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication::JWT, required_claims, "requiredClaims");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);

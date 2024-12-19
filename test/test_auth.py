@@ -33,7 +33,7 @@ class TestAuthentication:
                 {
                     "authentication": {
                         "allowUnauthenticated": allow_unauthenticated,
-                        "jwt": {"required_claims": required_claims},
+                        "jwt": {"requiredClaims": required_claims},
                     }
                 }
             )
