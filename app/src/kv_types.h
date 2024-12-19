@@ -144,9 +144,9 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable identifier of this service.
+    // The long-term stable issuer string of this service.
     // If set, it will be used to populate the issuer field of receipts
-    std::optional<std::string> service_identifier;
+    std::optional<std::string> service_issuer;
   };
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
@@ -168,8 +168,8 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration, policy, authentication, service_identifier);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration, policy, "policy", authentication, "authentication", service_issuer, "serviceIssuer");
 
   // Tables
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";

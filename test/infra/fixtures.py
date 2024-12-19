@@ -305,9 +305,9 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="class")
-def service_identifier(service_url: str) -> str:
+def service_issuer(service_url: str) -> str:
     """
-    Get the long term service identifier.
+    Get the long term service issuer string.
 
     The service is configured to include this identifier in receipts.
     """
@@ -330,7 +330,7 @@ def base_client(service_url, member_auth):
 
 
 @pytest.fixture(scope="class")
-def configure_service(base_client: Client, service_identifier: str):
+def configure_service(base_client: Client, service_issuer: str):
     """
     Change the service configuration.
 
@@ -342,7 +342,7 @@ def configure_service(base_client: Client, service_identifier: str):
     def f(configuration):
         configuration = configuration.copy()
         configuration.setdefault("authentication", {"allow_unauthenticated": True})
-        configuration.setdefault("service_identifier", service_identifier)
+        configuration.setdefault("serviceIssuer", service_issuer)
 
         proposal = governance.set_scitt_configuration_proposal(configuration)
         base_client.governance.propose(proposal, must_pass=True)

@@ -21,7 +21,7 @@ Example configuration proposal:
       "name": "set_scitt_configuration",
       "args": {
         "configuration": {
-          "service_identifier": "did:web:scittservicedomain.com",
+          "serviceIssuer": "https://transparency.service",
           "policy": {
             "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
@@ -80,7 +80,7 @@ If set, it will be used to populate the issuer field of receipts.
 
 Example `set_scitt_configuration` snippet:
 ```json
-"service_identifier": "https://transparency.service"
+"serviceIssuer": "https://transparency.service"
 ```
 
 ## Policy object

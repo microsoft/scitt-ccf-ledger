@@ -30,7 +30,7 @@ actions.set("set_scitt_configuration",
         }
       }
 
-      checkType(args.configuration.service_identifier, "string?", "configuration.service_identifier");
+      checkType(args.configuration.serviceIssuer, "string?", "configuration.serviceIssuer");
     },
     function(args) {
       ccf.kv["public:ccf.gov.scitt.configuration"].set(getSingletonKvKey(), ccf.jsonCompatibleToBuf(args.configuration));
