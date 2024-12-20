@@ -18,7 +18,7 @@ You need a couple pieces of information to begin with:
 - Source code version which was used to build the application, usually found in `https://<LEDGER-URL>/app/version`. If `app/version` is ambiguous then check the build logs of the Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
 
     ```sh
-    $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".scitt_version"
+    $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".version"
     "1.2.3"
     ```
 

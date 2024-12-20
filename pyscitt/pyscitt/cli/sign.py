@@ -17,7 +17,7 @@ from cryptography.x509 import load_pem_x509_certificate
 
 from pyscitt.key_vault_sign_client import KeyVaultSignClient
 
-from .. import crypto, did
+from .. import crypto
 
 
 class RegistrationInfoType(Enum):
@@ -85,7 +85,6 @@ def _parse_x5c_file(x5c_path: str) -> List[str]:
 
 def create_signer_from_arguments(
     key_path: Path,
-    did_doc_path: Optional[Path],
     kid: Optional[str],
     issuer: Optional[str],
     algorithm: Optional[str],
@@ -93,16 +92,7 @@ def create_signer_from_arguments(
 ) -> crypto.Signer:
     key = crypto.load_private_key(key_path)
 
-    if did_doc_path:
-        if issuer or algorithm:
-            raise ValueError(
-                "The --issuer and --alg flags may not be used together with a DID document."
-            )
-
-        with open(did_doc_path) as f:
-            did_doc = json.load(f)
-        return did.get_signer(key, did_doc, kid)
-    elif x5c_path:
+    if x5c_path:
         ca_certs = _parse_x5c_file(x5c_path)
 
         return crypto.Signer(key, algorithm=algorithm, x5c=ca_certs)
@@ -114,7 +104,6 @@ def sign_statement(
     statement_path: Path,
     key_path: Path,
     out_path: Path,
-    did_doc_path: Optional[Path],
     issuer: Optional[str],
     content_type: str,
     algorithm: Optional[str],
@@ -147,7 +136,7 @@ def sign_statement(
         )
     else:
         signer = create_signer_from_arguments(
-            key_path, did_doc_path, kid, issuer, algorithm, x5c_path
+            key_path, kid, issuer, algorithm, x5c_path
         )
         statement = statement_path.read_bytes()
         registration_info = {arg.name: arg.value() for arg in registration_info_args}
@@ -182,9 +171,6 @@ def cli(fn):
         help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
     )
 
-    # Signing with an existing DID document
-    parser.add_argument("--did-doc", type=Path, help="Path to DID document")
-
     # Ad-hoc signing, without any on-disk document
     parser.add_argument("--issuer", help="Issuer stored in envelope header")
     parser.add_argument("--alg", help="Signing algorithm to use.")
@@ -214,7 +200,6 @@ def cli(fn):
             args.statement,
             args.key,
             args.out,
-            args.did_doc,
             args.issuer,
             args.content_type,
             args.alg,

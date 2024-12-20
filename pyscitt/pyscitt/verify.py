@@ -11,15 +11,13 @@ from typing import Dict, Optional, Union
 
 import cbor2
 import ccf.cose
-import pycose
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.x509 import load_der_x509_certificate
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-from . import crypto, did
-from .crypto import SCITTIssuer
+from . import crypto
 from .receipt import Receipt
 
 
@@ -175,66 +173,3 @@ class StaticTrustStore(TrustStore):
             return self.services[service_id]
         else:
             raise ValueError(f"Unknown service identity {service_id!r}")
-
-
-class DIDDocumentTrustStore(TrustStore):
-    """
-    A trust store backed by a single DID-document.
-
-    The trust store will use the KID found in the protected headers to select
-    the appropriate assertion method from the document.
-    """
-
-    document: dict
-    services: dict
-
-    def __init__(self, document: dict):
-        self.document = document
-
-    def lookup(self, phdr) -> ServiceParameters:
-        issuer = phdr.get(SCITTIssuer)
-        if issuer != self.document.get("id"):
-            raise ValueError(
-                f"Incorrect issuer {issuer!r}, expected {self.document['id']}"
-            )
-
-        if pycose.headers.KID in phdr:
-            kid = phdr[pycose.headers.KID].decode("ascii")
-        else:
-            kid = None
-
-        method = did.find_assertion_method(self.document, kid)
-        jwk = method["publicKeyJwk"]
-        # TODO parse jwk without using x5c as well
-        if len(jwk.get("x5c", [])) < 1:
-            raise ValueError("Missing x5c parameter in service JWK")
-        certificate = base64.b64decode(jwk["x5c"][0])
-
-        return ServiceParameters("CCF", "ES256", certificate)
-
-
-class DIDResolverTrustStore(TrustStore):
-    """
-    A trust store which uses the issuer found in receipts to dynamically
-    resolve the service parameters.
-
-    The trust store does not restrict which issuers are allowed, only that the
-    receipt signature matches the identifier.
-    """
-
-    services: dict
-
-    def __init__(self, resolver: Optional[did.Resolver] = None):
-        if resolver is not None:
-            self.resolver = resolver
-        else:
-            self.resolver = did.Resolver()
-
-    def lookup(self, phdr) -> ServiceParameters:
-        if SCITTIssuer not in phdr:
-            raise ValueError("Receipt does not have an issuer")
-
-        issuer = phdr[SCITTIssuer]
-        document = self.resolver.resolve(issuer)
-
-        return DIDDocumentTrustStore(document).lookup(phdr)
