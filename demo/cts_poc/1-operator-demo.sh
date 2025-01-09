@@ -12,7 +12,6 @@ set -e
 : "${SCITT_CONFIG_PATH:?"variable not set. Please define the path to SCITT configuration JSON file"}"
 
 X509_ROOT_PATH=${X509_ROOT_PATH:-""}
-DID_WEB_ROOT_PATH=${DID_WEB_ROOT_PATH:-""}
 
 SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 
@@ -37,15 +36,6 @@ scitt governance activate_member \
 echo -e "\nConfiguring CCF instance"
 
 # Send proposal to set CA certs
-if [ -n "$DID_WEB_ROOT_PATH" ]; then
-    scitt governance propose_ca_certs \
-        --name did_web_tls_roots \
-        --ca-certs "$DID_WEB_ROOT_PATH" \
-        --url "$SCITT_URL" \
-        --member-key "$MEMBER_KEY_PATH" \
-        --member-cert "$MEMBER_CERT_PATH" \
-        --development
-fi
 if [ -n "$X509_ROOT_PATH" ]; then
     scitt governance propose_ca_certs \
         --name x509_roots \

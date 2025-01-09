@@ -36,7 +36,7 @@ def measure_latency(fn, arg_fn=None, n=DEFAULT_ITERATIONS_NUM):
 @pytest.mark.perf
 @pytest.mark.disable_proxy
 class TestPerf:
-    def test_latency(self, client, did_web, trusted_ca):
+    def test_latency(self, client, trusted_ca):
         payload = {"foo": "bar"}
 
         client = client.replace(wait_time=CLIENT_WAIT_TIME)
@@ -56,8 +56,6 @@ class TestPerf:
 
         # Time-to-receipt depends on the configured signature interval of
         # the CCF network and is hence just a rough estimate.
-        # Uncached did:web resolution uses a local server and is therefore
-        # faster than in a real-world scenario.
         stats = {
             "latency_x5c_submit_s": latency_x5c_submit_s,
             "latency_x5c_submit_and_receipt_s": latency_x5c_submit_and_receipt_s,

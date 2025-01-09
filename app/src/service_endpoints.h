@@ -33,7 +33,7 @@ namespace scitt
   }
 
   static did::DidVerificationMethod certificate_to_verification_method(
-    std::string_view service_identifier,
+    std::string_view service_issuer,
     const std::vector<uint8_t>& certificate_der)
   {
     auto verifier = ccf::crypto::make_unique_verifier(certificate_der);
@@ -43,9 +43,9 @@ namespace scitt
     did::Jwk jwk = nlohmann::json(verifier->public_key_jwk());
     jwk.x5c = {{ccf::crypto::b64_from_raw(certificate_der)}};
     return did::DidVerificationMethod{
-      .id = fmt::format("{}#{}", service_identifier, key_id),
+      .id = fmt::format("{}#{}", service_issuer, key_id),
       .type = std::string(did::VERIFICATION_METHOD_TYPE_JWK),
-      .controller = std::string(service_identifier),
+      .controller = std::string(service_issuer),
       .public_key_jwk = jwk,
     };
   }
@@ -108,16 +108,16 @@ namespace scitt
       VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
     {}
 
-    did::DidDocument get_did_document(std::string_view service_identifier) const
+    did::DidDocument get_did_document(std::string_view service_issuer) const
     {
       std::lock_guard guard(lock);
 
       did::DidDocument doc;
-      doc.id = std::string(service_identifier);
+      doc.id = std::string(service_issuer);
       for (const auto& certificate : service_certificates)
       {
         doc.assertion_method.push_back(
-          certificate_to_verification_method(service_identifier, certificate));
+          certificate_to_verification_method(service_issuer, certificate));
       }
       return doc;
     }
@@ -188,7 +188,7 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
       GetVersion::Out out;
-      out.scitt_version = SCITT_VERSION;
+      out.version = SCITT_VERSION;
       return out;
     };
 
@@ -201,12 +201,12 @@ namespace scitt
                    ->get()
                    .value_or(Configuration{});
 
-      if (!cfg.service_identifier.has_value())
+      if (!cfg.service_issuer.has_value())
       {
-        throw NotFoundError(errors::NotFound, "DID is not enabled");
+        throw NotFoundError(errors::NotFound, "DID:WEB is not enabled");
       }
 
-      return index->get_did_document(*cfg.service_identifier);
+      return index->get_did_document(*cfg.service_issuer);
     }
 
     static nlohmann::json get_jwks(

@@ -12,7 +12,6 @@ from loguru import logger as LOG
 
 from pyscitt import governance
 from pyscitt.client import Client
-from pyscitt.did import format_did_web
 from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
@@ -306,19 +305,6 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="class")
-def service_identifier(service_url: str) -> str:
-    """
-    Get the long term service identifier, under the form of a DID.
-
-    The service is configured to include this identifier in receipts.
-    """
-
-    result = urlparse(service_url)
-    assert result.hostname is not None
-    return format_did_web(result.hostname, result.port)
-
-
-@pytest.fixture(scope="class")
 def base_client(service_url, member_auth):
     """
     Create a Client instance to connect to the test SCITT service.
@@ -330,7 +316,7 @@ def base_client(service_url, member_auth):
 
 
 @pytest.fixture(scope="class")
-def configure_service(base_client: Client, service_identifier: str):
+def configure_service(base_client: Client):
     """
     Change the service configuration.
 
@@ -341,8 +327,7 @@ def configure_service(base_client: Client, service_identifier: str):
 
     def f(configuration):
         configuration = configuration.copy()
-        configuration.setdefault("authentication", {"allow_unauthenticated": True})
-        configuration.setdefault("service_identifier", service_identifier)
+        configuration.setdefault("authentication", {"allowUnauthenticated": True})
 
         proposal = governance.set_scitt_configuration_proposal(configuration)
         base_client.governance.propose(proposal, must_pass=True)
