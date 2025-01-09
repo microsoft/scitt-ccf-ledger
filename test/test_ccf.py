@@ -14,6 +14,8 @@ from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.verify import DynamicTrustStore, verify_transparent_statement
 
+from .infra.assertions import service_error
+
 
 def pem_cert_to_ccf_jwk(cert_pem: str) -> dict:
     cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
@@ -130,6 +132,20 @@ def test_recovery(client, trusted_ca, restart_service):
 def test_transparency_configuration(client, cchost):
     issuer = f"127.0.0.1:{cchost.rpc_port}"
     reference = {"issuer": issuer, "jwksUri": f"https://{issuer}/jwks"}
+
+    # Unsupported Accept header
+    with service_error("UnsupportedContentType"):
+        client.get(
+            "/.well-known/transparency-configuration",
+            headers={"Accept": "application/text"},
+        )
+
+    # Empty Accept header
+    with service_error("UnsupportedContentType"):
+        client.get(
+            "/.well-known/transparency-configuration",
+            headers={"Accept": ""},
+        )
 
     config = client.get(
         "/.well-known/transparency-configuration",

@@ -261,18 +261,6 @@ namespace scitt
         {
           const auto accept_options =
             ccf::http::parse_accept_header(accept.value());
-          if (accept_options.empty())
-          {
-            throw ccf::RpcException(
-              HTTP_STATUS_NOT_ACCEPTABLE,
-              ccf::errors::UnsupportedContentType,
-              fmt::format(
-                "No supported content type in accept header: {}\nOnly {} is "
-                "currently supported",
-                accept.value(),
-                ccf::http::headervalues::contenttype::JSON));
-          }
-
           for (const auto& option : accept_options)
           {
             // return CBOR eagerly if it is compatible with Accept
@@ -297,6 +285,17 @@ namespace scitt
               return;
             }
           }
+
+          // If no compatible content type, return 406
+          throw ccf::RpcException(
+            HTTP_STATUS_NOT_ACCEPTABLE,
+            ccf::errors::UnsupportedContentType,
+            fmt::format(
+              "No supported content type in accept header: {}\nOnly {} and {} "
+              "are currently supported",
+              accept.value(),
+              ccf::http::headervalues::contenttype::JSON,
+              ccf::http::headervalues::contenttype::CBOR));
         }
 
         // If not Accept, default to CBOR
