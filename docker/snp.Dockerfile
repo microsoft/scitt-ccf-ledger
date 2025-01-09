@@ -1,4 +1,4 @@
-ARG CCF_VERSION=6.0.0-dev8
+ARG CCF_VERSION=6.0.0-dev11
 FROM ghcr.io/microsoft/ccf/app/dev/snp:ccf-${CCF_VERSION}  as builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE

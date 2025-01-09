@@ -7,8 +7,10 @@
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
+#include <ccf/cose_signatures_config_interface.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
+#include <ccf/http_accept.h>
 #include <ccf/json_handler.h>
 #include <ccf/service/tables/service.h>
 
@@ -49,9 +51,55 @@ namespace scitt
   }
 
   /**
-   * An indexing strategy collecting all past and present service certificates
-   * and makes them immediately available.
+   * An indexing strategy collecting service keys used to sign receipts.
    */
+  class ServiceKeyIndexingStrategy
+    : public VisitEachEntryInValueTyped<ccf::Service>
+  {
+  public:
+    ServiceKeyIndexingStrategy() :
+      VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
+    {}
+
+    nlohmann::json get_jwks() const
+    {
+      std::lock_guard guard(lock);
+
+      std::vector<nlohmann::json> jwks;
+      for (const auto& service_certificate : service_certificates)
+      {
+        auto verifier = ccf::crypto::make_unique_verifier(service_certificate);
+        auto kid =
+          ccf::crypto::Sha256Hash(verifier->public_key_der()).hex_str();
+        nlohmann::json json_jwk = verifier->public_key_jwk();
+        json_jwk["kid"] = kid;
+        jwks.emplace_back(std::move(json_jwk));
+      }
+      nlohmann::json jwks_json;
+      jwks_json["keys"] = jwks;
+      return jwks_json;
+    }
+
+  protected:
+    void visit_entry(
+      const ccf::TxID& tx_id, const ccf::ServiceInfo& service_info) override
+    {
+      std::lock_guard guard(lock);
+
+      // It is possible for multiple entries in the ServiceInfo table to contain
+      // the same certificate, eg. if the service status changes. Using an
+      // std::set removes duplicates.
+      service_certificates.insert(service_info.cert);
+    }
+
+  private:
+    mutable std::mutex lock;
+
+    std::set<ccf::crypto::Pem> service_certificates;
+  }; /**
+      * An indexing strategy collecting all past and present service
+      * certificates and makes them immediately available.
+      */
   class ServiceCertificateIndexingStrategy
     : public VisitEachEntryInValueTyped<ccf::Service>
   {
@@ -160,6 +208,16 @@ namespace scitt
 
       return index->get_did_document(*cfg.service_issuer);
     }
+
+    static nlohmann::json get_jwks(
+      const std::shared_ptr<ServiceKeyIndexingStrategy>& index,
+      ccf::endpoints::EndpointContext& ctx,
+      nlohmann::json&& params)
+    {
+      // Like get_did_document(), this is not right when the indexer is not up
+      // to date, which needs fixing
+      return index->get_jwks();
+    }
   }
 
   static void register_service_endpoints(
@@ -172,8 +230,82 @@ namespace scitt
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();
 
+    auto service_key_index = std::make_shared<ServiceKeyIndexingStrategy>();
+
     context.get_indexing_strategies().install_strategy(
       service_certificate_index);
+
+    context.get_indexing_strategies().install_strategy(service_key_index);
+
+    auto get_transparency_config =
+      [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
+        auto subsystem =
+          context.get_subsystem<ccf::cose::AbstractCOSESignaturesConfig>();
+        if (!subsystem)
+        {
+          ctx.rpc_ctx->set_error(
+            HTTP_STATUS_INTERNAL_SERVER_ERROR,
+            ccf::errors::InternalError,
+            "COSE signatures subsystem not available");
+          return;
+        }
+        auto cfg = subsystem->get_cose_signatures_config();
+
+        nlohmann::json config;
+        config["issuer"] = cfg.issuer;
+        config["jwksUri"] = fmt::format("https://{}/jwks", cfg.issuer);
+
+        const auto accept =
+          ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
+        if (accept.has_value())
+        {
+          const auto accept_options =
+            ccf::http::parse_accept_header(accept.value());
+          for (const auto& option : accept_options)
+          {
+            // return CBOR eagerly if it is compatible with Accept
+            if (option.matches(ccf::http::headervalues::contenttype::CBOR))
+            {
+              ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+              ctx.rpc_ctx->set_response_header(
+                ccf::http::headers::CONTENT_TYPE,
+                ccf::http::headervalues::contenttype::CBOR);
+              ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
+              return;
+            }
+
+            // JSON if compatible with Accept
+            if (option.matches(ccf::http::headervalues::contenttype::JSON))
+            {
+              ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+              ctx.rpc_ctx->set_response_header(
+                ccf::http::headers::CONTENT_TYPE,
+                ccf::http::headervalues::contenttype::JSON);
+              ctx.rpc_ctx->set_response_body(config.dump());
+              return;
+            }
+          }
+
+          // If no compatible content type, return 406
+          throw ccf::RpcException(
+            HTTP_STATUS_NOT_ACCEPTABLE,
+            ccf::errors::UnsupportedContentType,
+            fmt::format(
+              "No supported content type in accept header: {}\nOnly {} and {} "
+              "are currently supported",
+              accept.value(),
+              ccf::http::headervalues::contenttype::JSON,
+              ccf::http::headervalues::contenttype::CBOR));
+        }
+
+        // If not Accept, default to CBOR
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::CBOR);
+        ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
+        return;
+      };
 
     registry
       .make_endpoint(
@@ -235,6 +367,23 @@ namespace scitt
         HTTP_GET,
         ccf::json_adapter(std::bind(
           endpoints::get_did_document, service_certificate_index, _1, _2)),
+        {ccf::empty_auth_policy})
+      .install();
+
+    registry
+      .make_endpoint(
+        "/jwks",
+        HTTP_GET,
+        ccf::json_adapter(
+          std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
+        {ccf::empty_auth_policy})
+      .install();
+
+    registry
+      .make_read_only_endpoint(
+        "/.well-known/transparency-configuration",
+        HTTP_GET,
+        get_transparency_config,
         {ccf::empty_auth_policy})
       .install();
   }

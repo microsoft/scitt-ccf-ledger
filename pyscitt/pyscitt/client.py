@@ -498,6 +498,13 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
+    def get_did_document(self, did: str) -> dict:
+        # Note: This endpoint only returns data for did:web DIDs.
+        return self.get(f"/did/{did}").json()["did_document"]
+
+    def get_jwks(self) -> dict:
+        return self.get(f"/jwks").json()
+
     def submit_signed_statement(
         self,
         signed_statement: bytes,
