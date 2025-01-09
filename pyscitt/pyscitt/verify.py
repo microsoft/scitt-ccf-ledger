@@ -26,7 +26,7 @@ from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-from . import crypto, did
+from . import crypto
 from .crypto import CWT_ISS, CWTClaims
 from .receipt import Receipt
 
