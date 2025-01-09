@@ -108,7 +108,7 @@ def test_recovery(client, trusted_ca, restart_service):
 
     # Check that the service is still operating correctly
     second_signed_statement = crypto.sign_json_statement(identity, {"foo": "hello"})
-    second_signed_statement = client.register_signed_statement(
+    second_transparent_statement = client.register_signed_statement(
         second_signed_statement
     ).response_bytes
 
@@ -118,8 +118,12 @@ def test_recovery(client, trusted_ca, restart_service):
     assert new_jwk in jwks["keys"]
 
     dynamic_trust_store = DynamicTrustStore(client.get)
-    # verify_transparent_statement(first_transparent_statement, dynamic_trust_store, first_signed_statement)
-    # verify_transparent_statement(second_signed_statement, dynamic_trust_store, second_signed_statement)
+    verify_transparent_statement(
+        first_transparent_statement, dynamic_trust_store, first_signed_statement
+    )
+    verify_transparent_statement(
+        second_transparent_statement, dynamic_trust_store, second_signed_statement
+    )
 
 
 @pytest.mark.isolated_test
