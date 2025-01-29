@@ -19,10 +19,6 @@ project(scitt
 set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
-# Added as option to enable Azure Linux build in 6.0.0-dev, will eventually be removed
-# once the transition to libstdc++ is complete
-set(USE_LIBCXX ON CACHE BOOL "Use libc++ instead of libstdc++")
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
@@ -103,10 +99,6 @@ if (BUILD_TESTS)
     add_subdirectory(${rapidcheck_SOURCE_DIR} ${rapidcheck_BINARY_DIR} EXCLUDE_FROM_ALL)
   endif()
 
-  # Because CCF libraries are built with libc++,
-  # everything else has to be too.
-  target_compile_options(gtest PUBLIC ${COMPILE_LIBCXX})
-  target_compile_options(rapidcheck PUBLIC ${COMPILE_LIBCXX})
   add_san(gtest)
   add_san(rapidcheck)
 
@@ -122,7 +114,6 @@ if (BUILD_TESTS)
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)
-  target_compile_options(unit_tests PUBLIC ${COMPILE_LIBCXX})
   target_link_system_libraries(unit_tests PRIVATE
     GTest::gmock
     rapidcheck
