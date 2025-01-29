@@ -177,10 +177,7 @@ class CCHost(EventLoopThread):
         `set_ready` method is called. The service will keep running until the
         task is cancelled.
         """
-
-        # Ensure SGX_AESM_ADDR is not set when starting cchost.
         cchost_env = os.environ.copy()
-        cchost_env.pop("SGX_AESM_ADDR", None)
 
         LOG.debug("Starting cchost process...")
         stdout_file = open(f"{self.workspace}/std.out", "w")
