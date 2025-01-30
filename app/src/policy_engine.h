@@ -30,10 +30,6 @@ namespace scitt
         {
           return ctx.new_string("X509");
         }
-        case SignedStatementProfile::Notary:
-        {
-          return ctx.new_string("Notary");
-        }
         default:
         {
           throw std::logic_error("Unhandled SignedStatementProfile value");
@@ -147,34 +143,6 @@ namespace scitt
           cwt.set_int64("svn", phdr.cwt_claims.svn.value());
         }
         obj.set("cwt", std::move(cwt));
-      }
-
-      // Extra Notary protected header parameters.
-      {
-        if (phdr.notary_signing_scheme.has_value())
-        {
-          obj.set(
-            "notary_signing_scheme",
-            ctx.new_string(phdr.notary_signing_scheme.value()));
-        }
-
-        if (phdr.notary_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_signing_time", phdr.notary_signing_time.value());
-        }
-
-        if (phdr.notary_authentic_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_authentic_signing_time",
-            phdr.notary_authentic_signing_time.value());
-        }
-
-        if (phdr.notary_expiry.has_value())
-        {
-          obj.set_int64("notary_expiry", phdr.notary_expiry.value());
-        }
       }
 
       return obj;
