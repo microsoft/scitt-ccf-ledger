@@ -42,9 +42,6 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     popd
 fi
 
-git submodule sync
-git submodule update --init --recursive
-
 root_dir=$(pwd)
 install_dir=/tmp/scitt
 

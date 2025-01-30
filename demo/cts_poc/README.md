@@ -116,7 +116,7 @@ The script will submit the COSE claim to the SCITT ledger and will wait for a re
 COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/3-client-demo.sh
 ```
 
-#### Known Issues and Workaround for Local Virtual SGX Build
+#### Known Issues and Workaround for Local Virtual Build
 
 - If you encounter an "unknown service identity" error during the claim submission process, it may be due to attempting to sign and submit using both DID and X509 simultaneously.
     > ValueError: Unknown service identity '6234efjkfhbsd1random000hash0jkbfdsbfdsjbfg'
