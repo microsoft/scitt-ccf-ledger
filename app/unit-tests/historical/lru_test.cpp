@@ -109,12 +109,12 @@ namespace
 
       RC_ASSERT(expected_victim == last_culled);
       RC_ASSERT(expected_state.size() == cache.size());
-      for (const auto& [k, v] : expected_state)
+      for (const auto& [key, value] : expected_state)
       {
         // Thankfully, lookups in the cache have no side effect.
-        auto it = cache.find(k);
+        auto it = cache.find(key);
         RC_ASSERT(it != cache.end());
-        RC_ASSERT(it->second == v);
+        RC_ASSERT(it->second == value);
       }
     }
   }

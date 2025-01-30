@@ -31,7 +31,7 @@ namespace scitt
     {}
   };
 
-  static std::string_view get_jose_alg_from_cose_alg(int64_t cose_alg)
+  [[maybe_unused]] static std::string_view get_jose_alg_from_cose_alg(int64_t cose_alg)
   {
     switch (cose_alg)
     {
@@ -52,43 +52,6 @@ namespace scitt
       default:
         throw InvalidSignatureAlgorithm(
           fmt::format("COSE algorithm {} is not supported", cose_alg));
-    }
-  }
-
-  static int64_t get_cose_alg_from_jose_alg(std::string_view jose_alg)
-  {
-    if (jose_alg == JOSE_ALGORITHM_ES256)
-    {
-      return COSE_ALGORITHM_ES256;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_ES384)
-    {
-      return COSE_ALGORITHM_ES384;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_ES512)
-    {
-      return COSE_ALGORITHM_ES512;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_EDDSA)
-    {
-      return COSE_ALGORITHM_EDDSA;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_PS256)
-    {
-      return COSE_ALGORITHM_PS256;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_PS384)
-    {
-      return COSE_ALGORITHM_PS384;
-    }
-    else if (jose_alg == JOSE_ALGORITHM_PS512)
-    {
-      return COSE_ALGORITHM_PS512;
-    }
-    else
-    {
-      throw InvalidSignatureAlgorithm(
-        fmt::format("JOSE algorithm '{}' is not supported", jose_alg));
     }
   }
 }

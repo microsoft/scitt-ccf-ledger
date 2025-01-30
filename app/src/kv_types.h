@@ -105,6 +105,11 @@ namespace scitt
        */
       std::optional<PolicyScript> policy_script;
 
+      /**
+       * Rego policy to be applied to each incoming entry.
+       */
+      std::optional<PolicyRego> policy_rego;
+
       std::vector<std::string> get_accepted_algorithms() const
       {
         if (accepted_algorithms.has_value())
