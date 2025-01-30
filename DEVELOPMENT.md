@@ -5,7 +5,7 @@ The following explains how to build, run, and test scitt-ccf-ledger.
 ## Development environment
 
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
-This means TEE hardware, in SGX or SNP, is required to run and test scitt-ccf-ledger in full.
+This means TEE hardware (AMD SEV-SNP) is required to run and test scitt-ccf-ledger in full.
 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.

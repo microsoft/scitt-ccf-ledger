@@ -15,7 +15,6 @@ variables:
   DEBIAN_FRONTEND: noninteractive # do not expect the user to provide answers to some commands
   SETUPTOOLS_USE_DISTUTILS: stdlib # python recommended fix for ubuntu 22.04
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
-  # SGX container setup through "LinuxContainerImage2" does not work in the custom pool of SGX VMs and the default ones do not support SGX
   LinuxContainerImage: 'ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${{ parameters.CCF_VERSION }}' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   # CodeQL settings to target the remote repository instead of this wrapper one
