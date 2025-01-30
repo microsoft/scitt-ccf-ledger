@@ -121,7 +121,7 @@ namespace scitt
    * Create an adapter around an existing EndpointFunction to handle thrown
    * HTTPError exceptions.
    */
-  static ccf::endpoints::EndpointFunction error_adapter(
+  [[maybe_unused]] static ccf::endpoints::EndpointFunction error_adapter(
     ccf::endpoints::EndpointFunction fn)
   {
     return generic_error_adapter<
@@ -129,7 +129,7 @@ namespace scitt
       ccf::endpoints::EndpointContext>(fn);
   }
 
-  static ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
+  [[maybe_unused]] static ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
     ccf::endpoints::ReadOnlyEndpointFunction fn)
   {
     return generic_error_adapter<
@@ -137,7 +137,7 @@ namespace scitt
       ccf::endpoints::ReadOnlyEndpointContext>(fn);
   }
 
-  static ccf::endpoints::CommandEndpointFunction error_command_adapter(
+  [[maybe_unused]] static ccf::endpoints::CommandEndpointFunction error_command_adapter(
     ccf::endpoints::CommandEndpointFunction fn)
   {
     return generic_error_adapter<

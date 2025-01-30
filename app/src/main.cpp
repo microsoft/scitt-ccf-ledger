@@ -277,23 +277,46 @@ namespace scitt
           throw BadRequestError(errors::InvalidInput, e.what());
         }
 
-        if (cfg.policy.policy_script.has_value())
+        if (
+          cfg.policy.policy_script.has_value() ||
+          cfg.policy.policy_rego.has_value())
         {
-          const auto policy_violation_reason = check_for_policy_violations(
-            cfg.policy.policy_script.value(),
-            "configured_policy",
-            signed_statement_profile,
-            phdr);
-          if (policy_violation_reason.has_value())
+          if (cfg.policy.policy_script.has_value())
           {
-            SCITT_DEBUG(
-              "Policy check failed: {}", policy_violation_reason.value());
-            throw BadRequestError(
-              errors::PolicyFailed,
-              fmt::format(
-                "Policy was not met: {}", policy_violation_reason.value()));
+            const auto policy_violation_reason = check_for_policy_violations_js(
+              cfg.policy.policy_script.value(),
+              "configured_policy",
+              signed_statement_profile,
+              phdr);
+            if (policy_violation_reason.has_value())
+            {
+              SCITT_DEBUG(
+                "Policy check failed: {}", policy_violation_reason.value());
+              throw BadRequestError(
+                errors::PolicyFailed,
+                fmt::format(
+                  "Policy was not met: {}", policy_violation_reason.value()));
+            }
           }
-          SCITT_DEBUG("Policy check passed");
+          SCITT_DEBUG("Policy script check passed");
+          if (cfg.policy.policy_rego.has_value())
+          {
+            const auto policy_violation_reason =
+              check_for_policy_violations_rego(
+                cfg.policy.policy_rego.value(), signed_statement_profile, phdr);
+            if (policy_violation_reason.has_value())
+            {
+              SCITT_DEBUG(
+                "Policy rego check failed: {}",
+                policy_violation_reason.value());
+              throw BadRequestError(
+                errors::PolicyFailed,
+                fmt::format(
+                  "Policy rego was not met: {}",
+                  policy_violation_reason.value()));
+            }
+          }
+          SCITT_DEBUG("Policy rego check passed");
         }
         else
         {

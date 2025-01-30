@@ -9,6 +9,7 @@
 #include "tracing.h"
 
 #include <ccf/js/common_context.h>
+#include <rego/rego.hh>
 #include <string>
 
 namespace scitt
@@ -255,12 +256,41 @@ namespace scitt
   // Returns nullopt for success, else a string describing why the policy was
   // refused. May also throw if given invalid policies, or policy execution
   // throws.
-  static inline std::optional<std::string> check_for_policy_violations(
+  static inline std::optional<std::string> check_for_policy_violations_js(
     const PolicyScript& script,
     const std::string& policy_name,
     SignedStatementProfile claim_profile,
     const cose::ProtectedHeader& phdr)
   {
     return js::apply_js_policy(script, policy_name, claim_profile, phdr);
+  }
+
+  using PolicyRego = std::string;
+
+  static inline nlohmann::json rego_input_from_profile_and_protected_header(
+    SignedStatementProfile claim_profile, const cose::ProtectedHeader& phdr)
+  {
+    nlohmann::json rego_input;
+    rego_input["profile"] = claim_profile;
+    nlohmann::json cwt;
+    cwt["iss"] = phdr.cwt_claims.iss;
+    cwt["sub"] = phdr.cwt_claims.sub;
+    cwt["iat"] = phdr.cwt_claims.iat;
+    nlohmann::json protected_header;
+    protected_header["cwt"] = cwt;
+    return rego_input;
+  }
+
+  static inline std::optional<std::string> check_for_policy_violations_rego(
+    const PolicyScript& script,
+    SignedStatementProfile claim_profile,
+    const cose::ProtectedHeader& phdr)
+  {
+    auto rego_input =
+      rego_input_from_profile_and_protected_header(claim_profile, phdr);
+
+    rego::Interpreter interpreter;
+    interpreter.set_input_term(rego_input.dump());
+    return interpreter.query(script);
   }
 }
