@@ -39,7 +39,7 @@ set(TRIESTE_USE_SNMALLOC OFF)
 FetchContent_Declare(
   regocpp
   GIT_REPOSITORY https://github.com/microsoft/rego-cpp
-  GIT_TAG        e64553bd0d56650e1bd1a544d70f261002ac3301
+  GIT_TAG        5a6b47653fa212de6cafe1f871c6a6511e59f7b5
 )
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 FetchContent_MakeAvailable(regocpp)
@@ -48,7 +48,6 @@ set_property(TARGET rego PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET yaml PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET json PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET re2 PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_property(TARGET date-tz PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # add CCF dependencies
 # add linking options
