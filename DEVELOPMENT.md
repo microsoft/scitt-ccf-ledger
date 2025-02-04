@@ -5,7 +5,7 @@ The following explains how to build, run, and test scitt-ccf-ledger.
 ## Development environment
 
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
-This means TEE hardware, in SGX or SNP, is required to run and test scitt-ccf-ledger in full.
+This means TEE hardware (AMD SEV-SNP) is required to run and test scitt-ccf-ledger in full.
 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
@@ -39,10 +39,10 @@ It is expected that you have Ubuntu 20.04. Follow the steps below to setup your 
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.0-dev13.tar.gz
-    tar xvzf ccf-6.0.0-dev13.tar.gz
-    cd CCF-ccf-6.0.0-dev13/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=6.0.0-dev13 -e platform=<virtual|snp> -e clang_version=15
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.0-dev18.tar.gz
+    tar xvzf ccf-6.0.0-dev18.tar.gz
+    cd CCF-ccf-6.0.0-dev18/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=6.0.0-dev18 -e platform=<virtual|snp> -e clang_version=15
     ```
 
 ## Compiling
