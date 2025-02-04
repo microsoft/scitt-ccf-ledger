@@ -129,16 +129,16 @@ namespace scitt
       ccf::endpoints::EndpointContext>(fn);
   }
 
-  [[maybe_unused]] static ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
-    ccf::endpoints::ReadOnlyEndpointFunction fn)
+  [[maybe_unused]] static ccf::endpoints::ReadOnlyEndpointFunction
+  error_read_only_adapter(ccf::endpoints::ReadOnlyEndpointFunction fn)
   {
     return generic_error_adapter<
       ccf::endpoints::ReadOnlyEndpointFunction,
       ccf::endpoints::ReadOnlyEndpointContext>(fn);
   }
 
-  [[maybe_unused]] static ccf::endpoints::CommandEndpointFunction error_command_adapter(
-    ccf::endpoints::CommandEndpointFunction fn)
+  [[maybe_unused]] static ccf::endpoints::CommandEndpointFunction
+  error_command_adapter(ccf::endpoints::CommandEndpointFunction fn)
   {
     return generic_error_adapter<
       ccf::endpoints::CommandEndpointFunction,

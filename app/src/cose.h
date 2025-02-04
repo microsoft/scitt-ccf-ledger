@@ -630,8 +630,8 @@ namespace scitt::cose
     return parsed;
   }
 
-  [[maybe_unused]] static std::tuple<ProtectedHeader, UnprotectedHeader> decode_headers(
-    const std::vector<uint8_t>& cose_sign1)
+  [[maybe_unused]] static std::tuple<ProtectedHeader, UnprotectedHeader>
+  decode_headers(const std::vector<uint8_t>& cose_sign1)
   {
     QCBORError qcbor_result;
 

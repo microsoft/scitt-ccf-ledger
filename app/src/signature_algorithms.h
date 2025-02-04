@@ -31,7 +31,8 @@ namespace scitt
     {}
   };
 
-  [[maybe_unused]] static std::string_view get_jose_alg_from_cose_alg(int64_t cose_alg)
+  [[maybe_unused]] static std::string_view get_jose_alg_from_cose_alg(
+    int64_t cose_alg)
   {
     switch (cose_alg)
     {
