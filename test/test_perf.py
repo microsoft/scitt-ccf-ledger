@@ -1,66 +1,75 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import json
 import time
+from typing import cast
 
+import pycose
 import pytest
+from polars import DataFrame
 
 from pyscitt import crypto
+from pyscitt.client import Client
 
-DEFAULT_ITERATIONS_NUM = 10
-CLIENT_WAIT_TIME = 0.01
+from .infra.assertions import service_error
+from .infra.bencher import Bencher, Latency
+from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
+POLICY_SCRIPT = f"""
+export function apply(profile, phdr) {{
+if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
 
-def measure_latency(fn, arg_fn=None, n=DEFAULT_ITERATIONS_NUM):
-    if arg_fn is None:
+// Check exact issuer 
+if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
+if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
 
-        def arg_fn():
-            return None
-
-    times = []
-    for _ in range(n):
-        arg = arg_fn()
-        t_start = time.perf_counter()
-        fn(arg)
-        t_end = time.perf_counter()
-        times.append(t_end - t_start)
-    return {
-        "avg": sum(times) / len(times),
-        "p99": sorted(times)[int(len(times) * 0.99)],
-        "min": min(times),
-        "max": max(times),
-    }
+return true;
+}}"""
 
 
-@pytest.mark.perf
-@pytest.mark.disable_proxy
-class TestPerf:
-    def test_latency(self, client, trusted_ca):
-        payload = {"foo": "bar"}
+def latency(df: DataFrame) -> Latency:
+    return Latency(
+        value=cast(float, df["latency (s)"].mean()),
+        high_value=cast(float, df["latency (s)"].min()),
+        low_value=cast(float, df["latency (s)"].max()),
+    )
 
-        client = client.replace(wait_time=CLIENT_WAIT_TIME)
 
-        # Test x5c performance.
-        identity = trusted_ca.create_identity(
-            length=1, alg="ES256", kty="ec", ec_curve="P-256"
-        )
-        signed_statemtent = crypto.sign_json_statement(identity, payload)
+@pytest.mark.bencher
+def test_statement_latency(client: Client, configure_service):
+    client.wait_time = 0.1
 
-        latency_x5c_submit_s = measure_latency(
-            lambda _: client.register_signed_statement(signed_statemtent)
-        )
-        latency_x5c_submit_and_receipt_s = measure_latency(
-            lambda _: client.register_signed_statement(signed_statemtent)
-        )
+    configure_service({"policy": {"policyScript": POLICY_SCRIPT}})
 
-        # Time-to-receipt depends on the configured signature interval of
-        # the CCF network and is hence just a rough estimate.
-        stats = {
-            "latency_x5c_submit_s": latency_x5c_submit_s,
-            "latency_x5c_submit_and_receipt_s": latency_x5c_submit_and_receipt_s,
-        }
+    with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+        cts_hashv_cwtclaims = f.read()
 
-        # Write stats to file for further analysis.
-        with open("perf.json", "w", encoding="utf-8") as fp:
-            json.dump(stats, fp, indent=2)
+    iterations = 10
+
+    latency_s = []
+    for i in range(iterations):
+        start = time.time()
+        client.submit_signed_statement(cts_hashv_cwtclaims)
+        latency_s.append(time.time() - start)
+
+    df = DataFrame({"latency (s)": latency_s})
+    print("Test Statement Submission")
+    print("Signed Statement submitted successfully")
+    print(df.describe())
+
+    bf = Bencher()
+    bf.set("Submit Signed Statement", latency(df))
+
+    latency_s = []
+    for i in range(iterations):
+        start = time.time()
+        client.register_signed_statement(cts_hashv_cwtclaims)
+        latency_s.append(time.time() - start)
+
+    df = DataFrame({"latency (s)": latency_s})
+    print("Test Statement Registration End to End")
+    print("Signed Statement to Transparent Statement")
+    print(df.describe())
+
+    bf.set("Obtain Transparent Statement", latency(df))
