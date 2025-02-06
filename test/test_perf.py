@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import time
+from typing import cast
 
 import pycose
 import pytest
@@ -11,6 +12,7 @@ from pyscitt import crypto
 from pyscitt.client import Client
 
 from .infra.assertions import service_error
+from .infra.bencher import Bencher, Latency
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 POLICY_SCRIPT = f"""
@@ -24,6 +26,14 @@ if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000))
 
 return true;
 }}"""
+
+
+def latency(df: DataFrame) -> Latency:
+    return Latency(
+        value=cast(float, df["latency (s)"].mean()),
+        high_value=cast(float, df["latency (s)"].min()),
+        low_value=cast(float, df["latency (s)"].max()),
+    )
 
 
 @pytest.mark.isolated_test
@@ -47,6 +57,9 @@ def test_statement_latency(client: Client, configure_service):
     print("Signed Statement submitted successfully")
     print(df.describe())
 
+    bf = Bencher()
+    bf.set("Submit Signed Statement", latency(df))
+
     latency_s = []
     for i in range(iterations):
         start = time.time()
@@ -57,3 +70,5 @@ def test_statement_latency(client: Client, configure_service):
     print("Test Statement Registration End to End")
     print("Signed Statement to Transparent Statement")
     print(df.describe())
+
+    bf.set("Obtain Transparent Statement", latency(df))
