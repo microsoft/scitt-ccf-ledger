@@ -45,8 +45,6 @@ extends:
           checkout_all_repos: true
       tsa:
        enabled: false
-      credscan:
-        suppressionsFile: $(Build.SourcesDirectory)/.config/CredScanSuppressions.json
       policheck:
         break: true
       codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
