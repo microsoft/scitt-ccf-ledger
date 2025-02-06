@@ -9,3 +9,4 @@ cryptography==44.*
 jwcrypto==1.5.*
 types-jwcrypto
 cbor2
+polars
