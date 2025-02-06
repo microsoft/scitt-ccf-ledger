@@ -13,7 +13,7 @@ jobs:
     name: Performance Regression Tests
     runs-on: ubuntu-20.04
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev18
+      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev19
       env:
         PLATFORM: virtual
     steps:
@@ -21,9 +21,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Work-around for https://github.com/actions/runner/issues/2033
+      - name: Work around git safe.directory in container
+        run: chown -R $(id -u):$(id -g) $PWD          
       - name: Build and run virtual perf tests
         run: |
-          git config --global --add safe.directory /__w/CCF/CCF
           ./build.sh
           ./run_functional_tests.sh -k test_perf
         shell: bash
