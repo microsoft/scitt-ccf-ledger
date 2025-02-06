@@ -36,6 +36,7 @@ def latency(df: DataFrame) -> Latency:
     )
 
 
+@pytest.mark.bencher
 @pytest.mark.isolated_test
 def test_statement_latency(client: Client, configure_service):
 

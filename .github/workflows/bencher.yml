@@ -27,7 +27,7 @@ jobs:
       - name: Build and run virtual perf tests
         run: |
           ./build.sh
-          ./run_functional_tests.sh -k test_perf
+          ./run_functional_tests.sh -m bencher
         shell: bash
 
       - uses: bencherdev/bencher@main
