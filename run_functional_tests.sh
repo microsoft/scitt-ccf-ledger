@@ -45,7 +45,11 @@ if [ "$DOCKER" = "1" ]; then
     # the docker logs.
     TEST_ARGS="-s"
 else
+    echo "Using regular build for functional tests, expecting SCITT binary to be present."
     SCITT_DIR=/tmp/scitt
+    echo "List of files in SCITT_DIR $SCITT_DIR"
+    ls -R $SCITT_DIR
+
     TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
 fi
 
