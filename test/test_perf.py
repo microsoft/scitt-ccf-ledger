@@ -30,9 +30,9 @@ return true;
 
 def latency(df: DataFrame) -> Latency:
     return Latency(
-        value=cast(float, df["latency (s)"].mean()),
-        high_value=cast(float, df["latency (s)"].min()),
-        low_value=cast(float, df["latency (s)"].max()),
+        value=cast(float, df["latency (ns)"].mean()),
+        high_value=cast(float, df["latency (ns)"].min()),
+        low_value=cast(float, df["latency (ns)"].max()),
     )
 
 
@@ -47,13 +47,13 @@ def test_statement_latency(client: Client, configure_service):
 
     iterations = 10
 
-    latency_s = []
+    latency_ns = []
     for i in range(iterations):
         start = time.time()
         client.submit_signed_statement(cts_hashv_cwtclaims)
-        latency_s.append(time.time() - start)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
 
-    df = DataFrame({"latency (s)": latency_s})
+    df = DataFrame({"latency (ns)": latency_ns})
     print("Test Statement Submission")
     print("Signed Statement submitted successfully")
     print(df.describe())
@@ -61,13 +61,13 @@ def test_statement_latency(client: Client, configure_service):
     bf = Bencher()
     bf.set("Submit Signed Statement", latency(df))
 
-    latency_s = []
+    latency_ns = []
     for i in range(iterations):
         start = time.time()
         client.register_signed_statement(cts_hashv_cwtclaims)
-        latency_s.append(time.time() - start)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
 
-    df = DataFrame({"latency (s)": latency_s})
+    df = DataFrame({"latency (ns)": latency_ns})
     print("Test Statement Registration End to End")
     print("Signed Statement to Transparent Statement")
     print(df.describe())
