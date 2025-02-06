@@ -1,0 +1,41 @@
+name: "Performance Regression Tests"
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  run_benchmarks:
+    name: Performance Regression Tests
+    runs-on: ubuntu-20.04
+    container:
+      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev18
+      env:
+        PLATFORM: virtual
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and run virtual perf tests
+        run: |
+          git config --global --add safe.directory /__w/CCF/CCF
+          ./build.sh
+          ./run_functional_tests.sh -k test_perf
+        shell: bash
+
+      - uses: bencherdev/bencher@main
+      - name: Track base branch benchmarks with Bencher
+        run: |
+          bencher run \
+          --project scitt-ccf-ledger \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch main \
+          --testbed ubuntu-20.04 \
+          --adapter json \
+          --err \
+          --file bencher.json
