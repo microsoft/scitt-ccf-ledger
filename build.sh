@@ -19,7 +19,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.0-dev18"
+    CCF_SOURCE_VERSION="6.0.0-dev19"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
@@ -60,3 +60,6 @@ CC="$CC" CXX="$CXX" \
 
 ninja -C build/app ${NINJA_FLAGS} --verbose
 ninja -C build/app ${NINJA_FLAGS} install
+
+echo "List of installed files in SCITT_DIR $install_dir"
+ls -R $install_dir
