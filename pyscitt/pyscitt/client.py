@@ -354,7 +354,7 @@ class BaseClient:
             else:
                 raise ValueError(f"Cannot sign request")
 
-        default_wait_time = 0.1
+        default_wait_time = 2
         timeout = 30
         deadline = time.monotonic() + timeout
         attempt = 1

@@ -38,6 +38,7 @@ def latency(df: DataFrame) -> Latency:
 
 @pytest.mark.bencher
 def test_statement_latency(client: Client, configure_service):
+    client.wait_time = 0.1
 
     configure_service({"policy": {"policyScript": POLICY_SCRIPT}})
 
