@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.8.0"
+PACKAGE_VERSION = "0.9.0"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -31,6 +31,8 @@ setup(
         "cbor2==5.4.*",
         "pycose==1.1.0",
         "pyjwt",
+        "jwcrypto==1.5.*",
+        "types-jwcrypto",
         "azure-keyvault",
         "azure-identity",
     ],
