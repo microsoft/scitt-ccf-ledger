@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 6.0.0-dev18
+  default: 6.0.0-dev19
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -45,8 +45,6 @@ extends:
           checkout_all_repos: true
       tsa:
        enabled: false
-      credscan:
-        suppressionsFile: $(Build.SourcesDirectory)/.config/CredScanSuppressions.json
       policheck:
         break: true
       codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
@@ -69,43 +67,42 @@ extends:
             minor: '0'
             name: scitt-ccf-ledger
 
-    - stage: test_virtual_vm_build
+    - stage: virtual_build
       jobs:
-      - job: format
-        displayName: Code Formatting
+      - job: test_virtual
+        displayName: Build and test (Virtual)
+        # specific available images already set in the parent config
+        # implicitly target container is linux_build_container
+        # if you want to use a different container, you need to set it in at job/script level
         pool:
           type: linux
+          # the steps below will implicitly use "target: linux_build_container"
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
+          PLATFORM: virtual
+          # These make CI print all the errors, rather than stopping early.
+          CXXFLAGS: -ferror-limit=0
+          NINJA_FLAGS: -k 0
+          CMAKE_BUILD_TYPE: Debug
         steps:
-        - checkout: SCITT
-          path: s/
-          submodules: recursive
-          lfs: false
-        - template: .pipelines/ado_pipauth.yml@self
-        - script: $(Build.SourcesDirectory)/scripts/ci-checks.sh
-          displayName: "CI checks"
+          # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
+          - checkout: SCITT
+            path: s/
+            submodules: recursive
+            fetchTags: true
+            fetchDepth: 0
+            lfs: false
+          - script: ./build.sh
+            displayName: Build (local)
+          # unit tests run only on virtual platform
+          - script: ./run_unit_tests.sh
+            displayName: Run Unit tests
+          - template: .pipelines/python.yml@self
+          - script: ./run_functional_tests.sh
+            displayName: Run Functional Tests
 
-      - template: .pipelines/local_virtual_build.yml@self # https://learn.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops&pivots=templates-includes#use-other-repositories
-        parameters:
-          Name: clang_tidy
-          DisplayName: Clang tidy
-          RunTests: false
-          Environment:
-            CMAKE_BUILD_TYPE: Debug
-            ENABLE_CLANG_TIDY: ON
-          InstallPackages: [ clang-tidy-10 ]
-
-      - template: .pipelines/local_virtual_build.yml@self
-        parameters:
-          Name: test_virtual
-          DisplayName: Build and test (Virtual)
-          Environment:
-            CMAKE_BUILD_TYPE: Debug
-
-    - stage: test_virtual_docker_build
-      jobs:
       - job: test_virtual_docker
+        displayName: Build and test (Virtual) in Ubuntu with Docker 
         pool:
           type: linux
           isCustom: true
@@ -135,6 +132,7 @@ extends:
     - stage: snp_build
       jobs:
       - job: snp_build
+        displayName: Build (SNP)
         pool:
           type: linux
         variables:
@@ -156,9 +154,8 @@ extends:
               PLATFORM: snp
               BUILD_TESTS: OFF
     
-    - stage: snp_docker_build
-      jobs:
       - job: snp_docker_build
+        displayName: Build (SNP) in Ubuntu with Docker
         pool:
           type: linux
           isCustom: true
