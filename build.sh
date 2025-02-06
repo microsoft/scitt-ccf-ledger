@@ -60,3 +60,6 @@ CC="$CC" CXX="$CXX" \
 
 ninja -C build/app ${NINJA_FLAGS} --verbose
 ninja -C build/app ${NINJA_FLAGS} install
+
+echo "List of installed files in SCITT_DIR $install_dir"
+ls -R $install_dir
