@@ -27,6 +27,10 @@ if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000))
 return true;
 }}"""
 
+POLICY_REGO = f"""
+input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
+"""
+
 
 def latency(df: DataFrame) -> Latency:
     return Latency(
@@ -36,11 +40,20 @@ def latency(df: DataFrame) -> Latency:
     )
 
 
+BF = Bencher()
+
+POLICY = {
+    "js": {"policyScript": POLICY_SCRIPT},
+    "rego": {"policyRego": POLICY_REGO},
+}
+
+
 @pytest.mark.bencher
-def test_statement_latency(client: Client, configure_service):
+@pytest.mark.parametrize("policy", ["js", "rego"])
+def test_statement_latency(client: Client, configure_service, policy):
     client.wait_time = 0.1
 
-    configure_service({"policy": {"policyScript": POLICY_SCRIPT}})
+    configure_service({"policy": POLICY[policy]})
 
     with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
         cts_hashv_cwtclaims = f.read()
@@ -54,12 +67,11 @@ def test_statement_latency(client: Client, configure_service):
         latency_ns.append((time.time() - start) * 1_000_000_000)
 
     df = DataFrame({"latency (ns)": latency_ns})
-    print("Test Statement Submission")
+    print(f"Test Statement Submission ({policy})")
     print("Signed Statement submitted successfully")
     print(df.describe())
 
-    bf = Bencher()
-    bf.set("Submit Signed Statement", latency(df))
+    BF.set(f"Submit Signed Statement ({policy})", latency(df))
 
     latency_ns = []
     for i in range(iterations):
@@ -68,8 +80,8 @@ def test_statement_latency(client: Client, configure_service):
         latency_ns.append((time.time() - start) * 1_000_000_000)
 
     df = DataFrame({"latency (ns)": latency_ns})
-    print("Test Statement Registration End to End")
+    print(f"Test Statement Registration End to End ({policy})")
     print("Signed Statement to Transparent Statement")
     print(df.describe())
 
-    bf.set("Obtain Transparent Statement", latency(df))
+    BF.set(f"Obtain Transparent Statement ({policy})", latency(df))

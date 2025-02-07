@@ -278,6 +278,7 @@ namespace scitt
     cwt["iat"] = phdr.cwt_claims.iat;
     nlohmann::json protected_header;
     protected_header["cwt"] = cwt;
+    rego_input["phdr"] = protected_header;
     return rego_input;
   }
 
@@ -291,6 +292,11 @@ namespace scitt
 
     rego::Interpreter interpreter;
     interpreter.set_input_term(rego_input.dump());
-    return interpreter.query(script);
+    auto rv = interpreter.query(script);
+    if (rv == "{\"expressions\":[true]}")
+    {
+      return std::nullopt;
+    }
+    return rv;
   }
 }

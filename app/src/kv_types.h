@@ -160,7 +160,9 @@ namespace scitt
     accepted_algorithms,
     "acceptedAlgorithms",
     policy_script,
-    "policyScript");
+    "policyScript",
+    policy_rego,
+    "policyRego");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
