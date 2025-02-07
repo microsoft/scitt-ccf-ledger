@@ -128,3 +128,13 @@ COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts
     This means the scitt instance is not configured properly.
     _Workaround:_ To configure on local, run following command and re-try:
     > ./pyscitt.sh governance local_development --url $SCITT_URL
+
+#### Run performance regression tests for CTS
+
+A basic set of performance indicators can be obtained by building the project, and running:
+
+```bash
+./run_functional_tests.sh -m bencher
+```
+
+Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots).
