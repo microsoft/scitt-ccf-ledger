@@ -216,7 +216,7 @@ class TestHeaderParameters:
 
         # Technically, the standard disallows this, as chains of length 1
         # should be encoded as a plain bstr, not wrapped in a list. A number of
-        # implementations get this wrong though (including Notary), so we
+        # implementations get this wrong though, so we
         # explicitly allow it.
         with service_error("chain must include at least one CA certificate"):
             submit(

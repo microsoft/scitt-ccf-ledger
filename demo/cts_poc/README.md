@@ -106,23 +106,6 @@ You will need the details about your keys and your identity needs to have access
     SIGNING_METHOD="akv" CACERT_PATH="demo-poc/x509_roots/cacert.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" AKV_CONFIG_PATH="demo-poc/akv.json" ./demo/cts_poc/2a-claim-generator.sh
     ```
 
-##### Option 4. Use Notary and Azure Key Vault (for ACR container image signatures only)
-
-If you want to generate a signature with a self-signed certificate in Azure Key Vault for a container image present in an Azure Container Registry, you can use the [2b-notary-sign.sh](2b-notary-sign.sh) script. The script uses [Notation](https://github.com/notaryproject/notation) to create the image signature in ACR using the input Key Vault certificate. It then uses [ORAS](https://oras.land/) to fetch the image signature as a COSE object, ready to be submitted to a SCITT ledger.
-
-The process to sign a container image with Notation and Azure Key Vault using a self-signed certificate is documented [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push). Please note that a pre-requisite for this script is to have a Key Vault instance with a self-signed certificate compatible with the [Notary Project certificate requirements](https://github.com/notaryproject/specifications/blob/main/specs/signature-specification.md#certificate-requirements). You can find more information on how to create a compatible self-signed certificate in AKV [here](https://learn.microsoft.com/azure/container-registry/container-registry-tutorial-sign-build-push#create-a-self-signed-certificate-in-akv-azure-cli).
-
-For running the script, you can provide the following environment variables:
-
-- `AKV_NAME`: Name of the Azure Key Vault instance where the certificate is stored.
-- `CERTIFICATE_NAME`: Name of the certificate stored in the Azure Key Vault instance.
-- `CERTIFICATE_VERSION`: Version of the certificate stored in the Azure Key Vault instance.
-- `ACR_NAME`: Name of the Azure Container Registry instance where the image is stored.
-- `IMAGE_REPOSITORY`: ACR repository of the image to sign.
-- `IMAGE_TAG`: Tag of the image to sign (if the digest is not provided).
-- `IMAGE_DIGEST`: Digest of the image to sign.
-- `SIGNATURE_OUTPUT_PATH`: Path to the output file where the COSE file containing the image signature will be stored.
-
 #### Submit the COSE_Sign1 claim file
 
 Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`3-client-demo.sh`](3-client-demo.sh) script.
