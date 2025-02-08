@@ -10,8 +10,7 @@ namespace scitt
   enum class SignedStatementProfile
   {
     IETF,
-    X509,
-    Notary
+    X509
   };
 }
 
@@ -39,11 +38,6 @@ struct formatter<scitt::SignedStatementProfile>
       case (scitt::SignedStatementProfile::X509):
       {
         s = "X509";
-        break;
-      }
-      case (scitt::SignedStatementProfile::Notary):
-      {
-        s = "Notary";
         break;
       }
     }

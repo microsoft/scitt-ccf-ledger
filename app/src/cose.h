@@ -58,24 +58,7 @@ namespace scitt::cose
     COSE_HEADER_PARAM_SCITT_RECEIPTS,
   };
 
-  // Notary header parameters.
-  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_SCHEME =
-    "io.cncf.notary.signingScheme";
-  static constexpr const char* NOTARY_HEADER_PARAM_SIGNING_TIME =
-    "io.cncf.notary.signingTime";
-  static constexpr const char* NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME =
-    "io.cncf.notary.authenticSigningTime";
-  static constexpr const char* NOTARY_HEADER_PARAM_EXPIRY =
-    "io.cncf.notary.expiry";
-
   static constexpr const char* SVN_HEADER_PARAM = "svn";
-
-  static const std::set<std::variant<int64_t, std::string>>
-    NOTARY_HEADER_PARAMS{
-      NOTARY_HEADER_PARAM_SIGNING_SCHEME,
-      NOTARY_HEADER_PARAM_SIGNING_TIME,
-      NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME,
-      NOTARY_HEADER_PARAM_EXPIRY};
 
   struct COSEDecodeError : public std::runtime_error
   {
@@ -111,12 +94,6 @@ namespace scitt::cose
     // CWT Claims header, as defined in
     // https://datatracker.ietf.org/doc/rfc9597/
     CWTClaims cwt_claims;
-
-    // Extra Notary protected header parameters.
-    std::optional<std::string> notary_signing_scheme;
-    std::optional<int64_t> notary_signing_time;
-    std::optional<int64_t> notary_authentic_signing_time;
-    std::optional<int64_t> notary_expiry;
 
     bool is_present(const std::variant<int64_t, std::string>& label) const
     {
@@ -169,37 +146,6 @@ namespace scitt::cose
       {
         return true;
       }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(
-            NOTARY_HEADER_PARAM_SIGNING_SCHEME) and
-        notary_signing_scheme.has_value())
-      {
-        return true;
-      }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(
-            NOTARY_HEADER_PARAM_SIGNING_TIME) and
-        notary_signing_time.has_value())
-      {
-        return true;
-      }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(
-            NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME) and
-        notary_authentic_signing_time.has_value())
-      {
-        return true;
-      }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(NOTARY_HEADER_PARAM_EXPIRY) and
-        notary_expiry.has_value())
-      {
-        return true;
-      }
       return false;
     }
 
@@ -234,8 +180,6 @@ namespace scitt::cose
 
   struct UnprotectedHeader
   {
-    // We currently expect only notary to use the unprotected header and
-    // we expect to find only the x5chain in there.
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
   };
 
@@ -320,10 +264,6 @@ namespace scitt::cose
       KID_INDEX,
       CTY_INDEX,
       X5CHAIN_INDEX,
-      NOTARY_SIGNING_SCHEME_INDEX,
-      NOTARY_SIGNING_TIME_INDEX,
-      NOTARY_AUTHENTIC_SIGNING_TIME_INDEX,
-      NOTARY_EXPIRY_INDEX,
       CWT_CLAIMS_INDEX,
       END_INDEX,
     };
@@ -360,30 +300,6 @@ namespace scitt::cose
     header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
     header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    header_items[NOTARY_SIGNING_SCHEME_INDEX].label.string =
-      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_SCHEME);
-    header_items[NOTARY_SIGNING_SCHEME_INDEX].uLabelType =
-      QCBOR_TYPE_TEXT_STRING;
-    header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType =
-      QCBOR_TYPE_TEXT_STRING;
-
-    header_items[NOTARY_SIGNING_TIME_INDEX].label.string =
-      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_SIGNING_TIME);
-    header_items[NOTARY_SIGNING_TIME_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    header_items[NOTARY_SIGNING_TIME_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
-
-    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].label.string =
-      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_AUTHENTIC_SIGNING_TIME);
-    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uLabelType =
-      QCBOR_TYPE_TEXT_STRING;
-    header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType =
-      QCBOR_TYPE_DATE_EPOCH;
-
-    header_items[NOTARY_EXPIRY_INDEX].label.string =
-      UsefulBuf_FromSZ(NOTARY_HEADER_PARAM_EXPIRY);
-    header_items[NOTARY_EXPIRY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    header_items[NOTARY_EXPIRY_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
 
     header_items[CWT_CLAIMS_INDEX].label.int64 = COSE_HEADER_PARAM_CWT_CLAIMS;
     header_items[CWT_CLAIMS_INDEX].uLabelType = QCBOR_TYPE_INT64;
@@ -546,30 +462,6 @@ namespace scitt::cose
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
-    }
-    // Extra Notary header parameters.
-    if (header_items[NOTARY_SIGNING_SCHEME_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.notary_signing_scheme =
-        cbor::as_string(header_items[NOTARY_SIGNING_SCHEME_INDEX].val.string);
-    }
-    if (header_items[NOTARY_SIGNING_TIME_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.notary_signing_time =
-        header_items[NOTARY_SIGNING_TIME_INDEX].val.epochDate.nSeconds;
-    }
-    if (
-      header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX].uDataType !=
-      QCBOR_TYPE_NONE)
-    {
-      parsed.notary_authentic_signing_time =
-        header_items[NOTARY_AUTHENTIC_SIGNING_TIME_INDEX]
-          .val.epochDate.nSeconds;
-    }
-    if (header_items[NOTARY_EXPIRY_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.notary_expiry =
-        header_items[NOTARY_EXPIRY_INDEX].val.epochDate.nSeconds;
     }
 
     QCBORDecode_ExitMap(&ctx);
