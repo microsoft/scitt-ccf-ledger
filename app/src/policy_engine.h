@@ -11,6 +11,7 @@
 #include <ccf/js/common_context.h>
 #include <rego/rego.hh>
 #include <string>
+#include <chrono>
 
 namespace scitt
 {
@@ -155,6 +156,8 @@ namespace scitt
       SignedStatementProfile claim_profile,
       const scitt::cose::ProtectedHeader& phdr)
     {
+      auto start = std::chrono::system_clock::now();
+
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -200,6 +203,11 @@ namespace scitt
             reason,
             trace.value_or("<no trace>")));
       }
+
+      auto end = std::chrono::system_clock::now();
+      auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        end - start);
+      CCF_APP_INFO("JS policy execution took {}us", elapsed.count());
 
       if (result.is_str())
       {
@@ -255,12 +263,29 @@ namespace scitt
     SignedStatementProfile claim_profile,
     const cose::ProtectedHeader& phdr)
   {
+    auto start = std::chrono::system_clock::now();
+
     auto rego_input =
       rego_input_from_profile_and_protected_header(claim_profile, phdr);
 
-    rego::Interpreter interpreter;
-    interpreter.set_input_term(rego_input.dump());
-    auto rv = interpreter.query(script);
+    rego::Interpreter interpreter(true /* v1 compatible */);
+    auto ma = interpreter.add_module("policy", script);
+    if (ma != nullptr)
+    {
+      throw BadRequestError(
+        scitt::errors::PolicyError,
+        "Invalid policy module"); // Turn Node into an error message?
+    }
+    CCF_APP_INFO("Rego input is {}", rego_input.dump());
+
+    interpreter.set_input_term(rego_input.dump()); // error?
+    auto rv = interpreter.query("data.policy.allow");
+
+    auto end = std::chrono::system_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>( 
+      end - start);
+    CCF_APP_INFO("Rego policy execution took {}us", elapsed.count());
+
     if (rv == "{\"expressions\":[true]}")
     {
       return std::nullopt;

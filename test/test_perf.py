@@ -28,7 +28,29 @@ return true;
 }}"""
 
 POLICY_REGO = f"""
-input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
+package policy
+
+issuer_allowed if {{
+    input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
+}}
+
+svn_undefined if {{
+    not input.phdr.cwt.svn
+}}
+
+svn_positive if {{
+    input.phdr.cwt.svn >= 0
+}}
+
+allow if {{
+    issuer_allowed
+    svn_undefined
+}}
+
+allow if {{
+    issuer_allowed
+    svn_positive
+}}
 """
 
 
