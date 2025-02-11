@@ -7,9 +7,9 @@ import pytest
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from . import policies
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
-from .policies import SAMPLE_POLICY
 
 
 class TestAcceptedAlgorithms:
@@ -269,28 +269,21 @@ export function apply(profile, phdr) {{
         with service_error("Error while applying policy"):
             client.register_signed_statement(signed_statement)
 
-    @pytest.mark.parametrize(
-        "script",
-        [
-            "",
-            "return true",
-            "function apply() {}",
-            "function apply() { not valid javascript }",
-        ],
-    )
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_invalid_policy(
-        self, client: Client, configure_service, signed_statement, script
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service({"policy": {"policyScript": script}})
+        for invalid_policy in policies.INVALID[lang]:
+            configure_service({"policy": invalid_policy})
 
-        with service_error("Invalid policy module"):
-            client.register_signed_statement(signed_statement)
+            with service_error("Invalid policy module"):
+                client.register_signed_statement(signed_statement)
 
-    @pytest.mark.parametrize("policy", ["js", "rego"])
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self, tmp_path, client: Client, configure_service, policy
+        self, tmp_path, client: Client, configure_service, lang
     ):
-        configure_service({"policy": SAMPLE_POLICY[policy]})
+        configure_service({"policy": policies.SAMPLE[lang]})
 
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()

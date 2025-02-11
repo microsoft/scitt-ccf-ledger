@@ -16,6 +16,8 @@ return true;
 SAMPLE_POLICY_REGO = f"""
 package policy
 
+default allow := false
+
 issuer_allowed if {{
     input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
 }}
@@ -47,7 +49,20 @@ allow if {{
 }}
 """
 
-SAMPLE_POLICY = {
+SAMPLE = {
     "js": {"policyScript": SAMPLE_POLICY_SCRIPT},
     "rego": {"policyRego": SAMPLE_POLICY_REGO},
+}
+
+INVALID = {
+    "js": [
+        {"policyScript": ""},
+        {"policyScript": "return true"},
+        {"policyScript": "function apply() {}"},
+        {"policyScript": "function apply() { not valid javascript }"},
+    ],
+    "rego": [
+        {"policyRego": ""},
+        {"policyRego": "package policy\n\ninvalid rego"},
+    ],
 }
