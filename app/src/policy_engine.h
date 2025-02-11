@@ -9,9 +9,9 @@
 #include "tracing.h"
 
 #include <ccf/js/common_context.h>
+#include <chrono>
 #include <rego/rego.hh>
 #include <string>
-#include <chrono>
 
 namespace scitt
 {
@@ -175,6 +175,12 @@ namespace scitt
           fmt::format("Invalid policy module: {}", e.what()));
       }
 
+      auto end = std::chrono::system_clock::now();
+      auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS policy compilation took {}us", elapsed.count());
+      start = std::chrono::system_clock::now();
+
       auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
 
@@ -204,9 +210,9 @@ namespace scitt
             trace.value_or("<no trace>")));
       }
 
-      auto end = std::chrono::system_clock::now();
-      auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-        end - start);
+      end = std::chrono::system_clock::now();
+      elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
       CCF_APP_INFO("JS policy execution took {}us", elapsed.count());
 
       if (result.is_str())
@@ -278,12 +284,18 @@ namespace scitt
     }
     CCF_APP_INFO("Rego input is {}", rego_input.dump());
 
+    auto end = std::chrono::system_clock::now();
+    auto elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego policy compilation took {}us", elapsed.count());
+    start = std::chrono::system_clock::now();
+
     interpreter.set_input_term(rego_input.dump()); // error?
     auto rv = interpreter.query("data.policy.allow");
 
-    auto end = std::chrono::system_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>( 
-      end - start);
+    end = std::chrono::system_clock::now();
+    elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego policy execution took {}us", elapsed.count());
 
     if (rv == "{\"expressions\":[true]}")
