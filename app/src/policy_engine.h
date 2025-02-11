@@ -258,8 +258,21 @@ namespace scitt
     cwt["iss"] = phdr.cwt_claims.iss;
     cwt["sub"] = phdr.cwt_claims.sub;
     cwt["iat"] = phdr.cwt_claims.iat;
+    cwt["svn"] = phdr.cwt_claims.svn;
     nlohmann::json protected_header;
     protected_header["cwt"] = cwt;
+    protected_header["alg"] = phdr.alg;
+    if (phdr.cty.has_value())
+    {
+      if (std::holds_alternative<int64_t>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<int64_t>(phdr.cty.value());
+      }
+      else if (std::holds_alternative<std::string>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<std::string>(phdr.cty.value());
+      }
+    }
     rego_input["phdr"] = protected_header;
     return rego_input;
   }
@@ -275,14 +288,13 @@ namespace scitt
       rego_input_from_profile_and_protected_header(claim_profile, phdr);
 
     rego::Interpreter interpreter(true /* v1 compatible */);
-    auto ma = interpreter.add_module("policy", script);
-    if (ma != nullptr)
+    auto rv = interpreter.add_module("policy", script);
+    if (rv != nullptr)
     {
       throw BadRequestError(
         scitt::errors::PolicyError,
-        "Invalid policy module"); // Turn Node into an error message?
+        "Invalid policy module");
     }
-    CCF_APP_INFO("Rego input is {}", rego_input.dump());
 
     auto end = std::chrono::system_clock::now();
     auto elapsed =
@@ -291,17 +303,17 @@ namespace scitt
     start = std::chrono::system_clock::now();
 
     interpreter.set_input_term(rego_input.dump()); // error?
-    auto rv = interpreter.query("data.policy.allow");
+    auto qv = interpreter.query("data.policy.allow");
 
     end = std::chrono::system_clock::now();
     elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego policy execution took {}us", elapsed.count());
 
-    if (rv == "{\"expressions\":[true]}")
+    if (qv == "{\"expressions\":[true]}")
     {
       return std::nullopt;
     }
-    return rv;
+    return qv;
   }
 }
