@@ -292,8 +292,7 @@ namespace scitt
     if (rv != nullptr)
     {
       throw BadRequestError(
-        scitt::errors::PolicyError,
-        "Invalid policy module");
+        scitt::errors::PolicyError, "Invalid policy module");
     }
 
     auto end = std::chrono::system_clock::now();

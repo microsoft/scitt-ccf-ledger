@@ -4,62 +4,13 @@
 import time
 from typing import cast
 
-import pycose
 import pytest
 from polars import DataFrame
 
-from pyscitt import crypto
 from pyscitt.client import Client
 
-from .infra.assertions import service_error
 from .infra.bencher import Bencher, Latency
-from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
-
-POLICY_SCRIPT = f"""
-export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
-
-// Check exact issuer 
-if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
-if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
-
-return true;
-}}"""
-
-POLICY_REGO = f"""
-package policy
-
-issuer_allowed if {{
-    input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
-}}
-
-seconds_since_epoch := time.now_ns() / 1000000000
-
-iat_in_the_past if {{
-    input.phdr.cwt.iat < seconds_since_epoch
-}}
-
-svn_undefined if {{
-    not input.phdr.cwt.svn
-}}
-
-svn_positive if {{
-    input.phdr.cwt.svn >= 0
-}}
-
-allow if {{
-    issuer_allowed
-    iat_in_the_past
-    svn_undefined
-}}
-
-allow if {{
-    issuer_allowed
-    iat_in_the_past
-    svn_positive
-}}
-"""
+from .policies import SAMPLE_POLICY
 
 
 def latency(df: DataFrame) -> Latency:
@@ -72,18 +23,13 @@ def latency(df: DataFrame) -> Latency:
 
 BF = Bencher()
 
-POLICY = {
-    "js": {"policyScript": POLICY_SCRIPT},
-    "rego": {"policyRego": POLICY_REGO},
-}
-
 
 @pytest.mark.bencher
 @pytest.mark.parametrize("policy", ["js", "rego"])
 def test_statement_latency(client: Client, configure_service, policy):
     client.wait_time = 0.1
 
-    configure_service({"policy": POLICY[policy]})
+    configure_service({"policy": SAMPLE_POLICY[policy]})
 
     with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
         cts_hashv_cwtclaims = f.read()

@@ -101,6 +101,8 @@ export PLATFORM=virtual
 
 The application expects the [configuration](docs/configuration.md) to be submitted via the CCF proposals, for that you could use the CLI.
 
+To set a JavaScript policy:
+
 ```sh
 echo <<< EOL
 {
@@ -112,6 +114,21 @@ echo <<< EOL
     }
 }
 EOL >> test-config.json;
+
+To set a Rego policy:
+
+```sh
+echo <<< EOL
+{
+    "policy": {
+        "policyRego": "\npackage policy\n\nissuer_allowed if {\n    input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"\n}\n\nseconds_since_epoch := time.now_ns() / 1000000000\n\niat_in_the_past if {\n    input.phdr.cwt.iat < seconds_since_epoch\n}\n\nsvn_undefined if {\n    not input.phdr.cwt.svn\n}\n\nsvn_positive if {\n    input.phdr.cwt.svn >= 0\n}\n\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_undefined\n}\n\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_positive\n}\n"
+    },
+    "authentication": {
+        "allowUnauthenticated": true
+    }
+}
+EOL >> test-config.json
+```
 
 ./pyscitt.sh governance propose_configuration -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --configuration test-config.json
 ```

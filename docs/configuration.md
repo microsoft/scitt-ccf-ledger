@@ -13,7 +13,7 @@ Once SCITT is appropriately configured members can vote to [open the service](ht
 
 SCITT configuration can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
 
-Example configuration proposal:
+Example configuration proposal, using a JavaScript policy:
 ```
 {
   "actions": [
@@ -23,6 +23,34 @@ Example configuration proposal:
         "configuration": {
           "policy": {
             "policyScript": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
+          },
+          "authentication": {
+            "allowUnauthenticated": false,
+            "jwt": {
+              "requiredClaims": {
+                "aud": "scitt",
+                "iss": "https://authserver.com/",
+                "http://unique.claim/department_id": "654987"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+Example configuration proposal, using a Rego policy:
+```
+{
+  "actions": [
+    {
+      "name": "set_scitt_configuration",
+      "args": {
+        "configuration": {
+          "policy": {
+            "\npackage policy\n\nissuer_allowed if {\n    input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"\n}\n\nseconds_since_epoch := time.now_ns() / 1000000000\n\niat_in_the_past if {\n    input.phdr.cwt.iat < seconds_since_epoch\n}\n\nsvn_undefined if {\n    not input.phdr.cwt.svn\n}\n\nsvn_positive if {\n    input.phdr.cwt.svn >= 0\n}\n\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_undefined\n}\n\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_positive\n}\n"
           },
           "authentication": {
             "allowUnauthenticated": false,
@@ -116,6 +144,23 @@ Example `set_scitt_configuration` snippet:
   "policyScript": "export function apply(profile, phdr) {\n  if (profile === \"X509\") { return true; }\n  return \"Only X509 claim profile is allowed\";\n}"
 }
 ```
+
+### Policy rego
+Rego code that determines whether an entry should be accepted. The package must be called "policy", and expose a rule called "allow" that must evaluate to `true` when the value of `input` is acceptable.
+
+`input` is set to a JSON object with the following fields:
+
+`profile` is a string representation of a [`scitt::SignedStatementProfile`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/profiles.h#L10) value, mapped through [`scitt::js::claim_profile_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L20).
+
+`phdr` is an object representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger, namely:
+
+- alg (Number)
+- cty (Number or String)
+- cwt (object), containing
+  - iss (string)
+  - sub (string)
+  - iat (Number)
+  - svn (Number)
 
 ## CCF specific configuration
 

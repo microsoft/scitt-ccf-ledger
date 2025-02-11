@@ -9,6 +9,7 @@ from pyscitt.client import Client
 
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
+from .policies import SAMPLE_POLICY
 
 
 class TestAcceptedAlgorithms:
@@ -285,28 +286,11 @@ export function apply(profile, phdr) {{
         with service_error("Invalid policy module"):
             client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("policy", ["js", "rego"])
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self,
-        tmp_path,
-        client: Client,
-        configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
-        untrusted_ca: X5ChainCertificateAuthority,
+        self, tmp_path, client: Client, configure_service, policy
     ):
-
-        policy_script = f"""
-export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
-
-// Check exact issuer 
-if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
-if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
-
-return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": SAMPLE_POLICY[policy]})
 
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
