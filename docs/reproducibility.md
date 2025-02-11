@@ -25,7 +25,7 @@ You need a couple pieces of information to begin with:
 
     ```sh
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".version"
-    "0.11.0"
+    "0.12.3-0-gaaaaaaa"
     ```
 
 - Security policy used to verify the container image ([ccf docs](https://microsoft.github.io/CCF/main/governance/gov_api_schemas/2024-07-01.html#get--gov-service-join-policy)), it will contain image layers, e.g.:
@@ -69,17 +69,17 @@ The quote contains the attestation report that has the necessary measurements. `
 
 ### Extract image layers from security policy
 
-Inspect the service join policy content anextract the Rego policy used to validate the container:
+Inspect the service join policy content and extract the Rego policy used to validate the container:
 
 ```sh
 $ cat service-join-policy.json | jq -r '.snp.hostData["5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65"]' | printf "%s" "$(cat)" > ccepolicy.rego
 ```
 
-`printf "%s" "$(cat)"` is important to not to create additional line in the file as otherwise sha256 digests will not match.
+_`printf "%s" "$(cat)"` is important to not to create additional line in the file as otherwise sha256 digests will not match._
 
-The policy is used by the Utility VM (UVM) to launch a container group (this application). It contains the image layers we want to compare and be able to reproduce.
+The policy is used by the Utility VM (UVM) to launch a container group (this ledger application). It contains the image layers we want to compare and be able to reproduce.
 
-We can use an OPA agent to convert the Rego file to JSON to then select layers or do that manually:
+You can use an OPA agent to convert the Rego file to JSON to then select layers or do that manually, e.g.:
 
 ```sh
 $ curl -s -LO https://openpolicyagent.org/downloads/v1.1.0/opa_linux_amd64_static
@@ -92,11 +92,13 @@ $ cat ccepolicy.json | jq '[ .rules[] | select(.head.name == "containers") | .he
 
 `containerlayers.json` should contain layers of all containers, our application and a `pause` container with a single layer.
 
+**Note:** image layers in the security policy use [dmverity hashes](https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html), hence you will need to convert the built container image before comparison, see [`microsoft/integrity-vhd` CLI](https://github.com/microsoft/integrity-vhd/tree/main/cmd/dmverity-vhd).
+
 ## Reproduce measurements
 
-### Verify security policy is the same
+### 1. Verify security policy is the same
 
-`Host data` contains the hash of the security policy (e.g. `5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65`). The policy can be obtained like it was shows above and saved to a file `ccepolicy.rego`. The hash of the Rego policy is the same as the one in the report:
+`Host data` contains the hash of the security policy (e.g. `5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65`). The policy can be obtained like it was shown above and saved to a file `ccepolicy.rego`. The hash of the Rego policy is the same as the one in the report:
 
 ```sh
 $ sha256sum ccepolicy.rego
@@ -104,40 +106,54 @@ $ sha256sum ccepolicy.rego
 5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65  ccepolicy.rego
 ```
 
-### Build container and compare layers
+Now it is clear that the contents of the policy (image layers) can be trusted in the next step.
 
-- Using the source code version that was obtained above, i.e. `"0.11.0"`, clone the repository locally
+### 2. Build container and compare layers
+
+- Using the source code version that was obtained above, i.e. `"0.12.3-0-gaaaaaaa"`, clone the repository locally. The version is a long format [git describe output](https://git-scm.com/docs/git-describe):
 
     ```sh
-    $ git clone --depth 1 --branch 0.11.0 git@github.com:microsoft/scitt-ccf-ledger.git toreproduce
+    $ git clone --depth 1 --branch 0.12.3 git@github.com:microsoft/scitt-ccf-ledger.git toreproduce
     $ cd toreproduce
     ```
 - Identify the expected CCF build image version by inspecting the Dockerfile used for building the binary:
 
     ```sh
     $ cat docker/snp.Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=6.0.0-dev8
+    ARG CCF_VERSION=6.0.0-dev19
     ```
-- Run a build inside of the CCF docker image and make sure to use a specific path (__w/1/s) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
+- Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
 
     ```sh
-    $ export CCF_VERSION="6.0.0-dev8"
+    $ export CCF_VERSION="6.0.0-dev19"
     $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        --env PLATFORM=snp \
-        ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${CCF_VERSION} git config --global --add safe.directory "*" && ./docker/build.sh
+        ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${CCF_VERSION} git config --global --add safe.directory "*" && PLATFORM=snp SAVE_IMAGE_PATH=image.tar ./docker/build.sh
     ```
+- Convert saved image layers with dmverity cli
 
-### Guest VM
+    ```sh
+    $ curl -LO https://github.com/microsoft/integrity-vhd/releases/download/v1.4/dmverity-vhd
+    $ chmod +x dmverity-vhd
+    $ ./dmverity-vhd --tarball ./image.tar roothash -i ignore
+    Layer 0 root hash: 3f61e43c03c18bda3c34c47a15d4025f4d4f2166e6db4c70218c39e8da8ef8da
+    Layer 1 root hash: 444465dedcbb724d19ec6ffcb642ba830ea98137e26b7d39eb7fd65b1b9a5223
+    Layer 2 root hash: f4132181247193a0a6c34c15ba625518dffefb639eb4017bb32450e0c6951094
+    ...
+    ```
+- Check if the layers from `containerlayers.json` and the output above match.
 
-The details of how to reproduce the Guest VM (to compare it to a `measurement` in the report) are not ready yet.
+### 3. Verify UVM
 
-Guest VM measurements can be authenticated using [platform endorsements](https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64). To get platform endorsements:
+The details of how to reproduce the UVM (to compare it to a `measurement` in the report) are not ready yet.
+
+UVM measurements can be authenticated using [platform endorsements](https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64). To get platform endorsements:
 
 ```sh
 $ curl -s --cacert cacert.pem https://<LEDGER-URL>/node/quotes/self > node-quote.json
 $ cat node-quote.json | jq -r '.uvm_endorsements' | base64 -d > uvm_endorsements.cose
+... verify cose signing envelope ...
 ```
 
 UVM endoresement policy can also be seen in `service-join-policy.json`.
