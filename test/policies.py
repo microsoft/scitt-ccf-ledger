@@ -66,3 +66,73 @@ INVALID = {
         {"policyRego": "package policy\n\ninvalid rego"},
     ],
 }
+
+RUNTIME_ERROR = {
+    "js": {"policyScript": 'export function apply() { throw new Error("Boom"); }'}
+}
+
+FAIL_POLICY_REGO = f"""
+package policy
+
+default allow := false
+"""
+
+FAIL = {
+    "js": {
+        "policyScript": "export function apply() { return `All entries are refused`; }"
+    },
+    "rego": {"policyRego": FAIL_POLICY_REGO},
+}
+
+PASS_POLICY_REGO = f"""
+package policy
+
+default allow := true
+"""
+
+PASS = {
+    "js": {"policyScript": "export function apply() { return true; }"},
+    "rego": {"policyRego": PASS_POLICY_REGO},
+}
+
+
+def svn_policy_script(issuer):
+    policy = f"""
+export function apply(profile, phdr) {{
+    // Check exact issuer 
+    if (phdr.cwt.iss !== "{issuer}") {{ return "Invalid issuer"; }}
+    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
+
+    return true;
+}}
+"""
+    return {"policyScript": policy}
+
+
+def svn_policy_rego(issuer):
+    policy = f"""
+package policy
+
+default allow := false
+
+issuer_allowed if {{
+    input.phdr.cwt.iss == "{issuer}"
+}}
+
+svn_positive if {{
+    input.phdr.cwt.svn >= 0
+    input.phdr.cwt.svn != null
+}}
+
+allow if {{
+    issuer_allowed
+    svn_positive
+}}
+"""
+    return {"policyRego": policy}
+
+
+SVN = {
+    "js": svn_policy_script,
+    "rego": svn_policy_rego,
+}

@@ -301,7 +301,11 @@ namespace scitt
     CCF_APP_INFO("Rego policy compilation took {}us", elapsed.count());
     start = std::chrono::system_clock::now();
 
-    interpreter.set_input_term(rego_input.dump()); // error?
+    auto tv = interpreter.set_input_term(rego_input.dump());
+    if (tv != nullptr)
+    {
+      throw BadRequestError(scitt::errors::PolicyError, "Invalid policy input");
+    }
     auto qv = interpreter.query("data.policy.allow");
 
     end = std::chrono::system_clock::now();
@@ -313,6 +317,15 @@ namespace scitt
     {
       return std::nullopt;
     }
-    return qv;
+    else if (qv == "{\"expressions\":[false]}")
+    {
+      return "Input statement rejected";
+    }
+    else
+    {
+      throw BadRequestError(
+        scitt::errors::PolicyError,
+        fmt::format("Error while applying policy: {}", qv));
+    }
   }
 }

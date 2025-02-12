@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import sys
+
 import pycose
 import pytest
 
@@ -171,11 +173,13 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_svn_policy(
         self,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -197,13 +201,15 @@ export function apply(profile, phdr) {{
             crypto.sign_json_statement(identity, statement, feed=feed, svn=1, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
-        invalid_svn = "Invalid SVN"
+        err_msgs = {
+            "js": "Policy was not met: Invalid SVN",
+            "rego": "Policy was not met",
+        }
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
         refused_signed_statements = {
             # Well-constructed, but not a valid issuer
-            invalid_svn: [
+            err_msgs[lang]: [
                 crypto.sign_json_statement(identity, statement, feed=feed, cwt=True),
                 crypto.sign_json_statement(
                     identity, statement, feed=feed, svn=-11, cwt=True
@@ -211,18 +217,8 @@ export function apply(profile, phdr) {{
             ],
         }
 
-        policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
-    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(trusted_ca)
+        configure_service({"policy": policies.SVN[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -232,39 +228,31 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_pass_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {"policy": {"policyScript": "export function apply() { return true }"}}
-        )
+        configure_service({"policy": policies.PASS[lang]})
 
         client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_fail_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": "export function apply() { return `All entries are refused`; }"
-                }
-            }
-        )
+        configure_service({"policy": policies.FAIL[lang]})
 
         with service_error("Policy was not met"):
             client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js"])
     def test_exceptional_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
-                }
-            }
-        )
+        # No runtime error test for Rego, because things that seem like they
+        # would cause runtime errors, such as dividing by zero, cause a policy
+        # failure instead.
+        configure_service({"policy": policies.RUNTIME_ERROR[lang]})
 
         with service_error("Error while applying policy"):
             client.register_signed_statement(signed_statement)

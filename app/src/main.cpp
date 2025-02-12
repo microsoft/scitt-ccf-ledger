@@ -307,16 +307,16 @@ namespace scitt
             if (policy_violation_reason.has_value())
             {
               SCITT_DEBUG(
-                "Policy rego check failed: {}",
+                "Policy check failed (rego): {}",
                 policy_violation_reason.value());
               throw BadRequestError(
                 errors::PolicyFailed,
                 fmt::format(
-                  "Policy rego was not met: {}",
+                  "Policy was not met (rego): {}",
                   policy_violation_reason.value()));
             }
           }
-          SCITT_DEBUG("Policy rego check passed");
+          SCITT_DEBUG("Policy check passed (rego)");
         }
         else
         {
