@@ -19,9 +19,6 @@ RUN mkdir /tmp/app-build && \
 FROM ghcr.io/microsoft/ccf/app/run/snp:ccf-${CCF_VERSION}
 ARG CCF_VERSION
 
-RUN apt-get update && apt-get install -y python3 \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /usr/src/app
 COPY --from=builder /usr/src/app/lib/libscitt.snp.so libscitt.snp.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
