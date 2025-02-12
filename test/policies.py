@@ -136,3 +136,39 @@ SVN = {
     "js": svn_policy_script,
     "rego": svn_policy_rego,
 }
+
+
+def did_x509_policy_script(issuer):
+    policy = f"""
+export function apply(profile, phdr) {{
+    if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
+
+    // Check exact issuer 
+    if (phdr.cwt.iss !== "{issuer}") {{ return "Invalid issuer"; }}
+
+    return true;
+}}"""
+    return {"policyScript": policy}
+
+
+def did_x509_policy_rego(issuer):
+    policy = f"""
+package policy
+
+default allow := false
+
+issuer_allowed if {{
+    input.phdr.cwt.iss == "{issuer}"
+}}
+
+allow if {{
+    issuer_allowed
+}}
+"""
+    return {"policyRego": policy}
+
+
+DID_X509 = {
+    "js": did_x509_policy_script,
+    "rego": did_x509_policy_rego,
+}

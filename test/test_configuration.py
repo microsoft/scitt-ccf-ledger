@@ -66,12 +66,14 @@ class TestPolicyEngine:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return crypto.sign_json_statement(identity, {"foo": "bar"})
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
         self,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -113,8 +115,12 @@ class TestPolicyEngine:
             crypto.sign_json_statement(identities[1], statement, feed=feed, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
-        invalid_issuer = "Invalid issuer"
+        profile_error = (
+            "This policy only accepts IETF did:x509 signed statements"
+            if lang == "js"
+            else "Policy was not met"
+        )
+        invalid_issuer = "Invalid issuer" if lang == "js" else "Policy was not met"
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
@@ -153,17 +159,8 @@ class TestPolicyEngine:
             ],
         }
 
-        policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(trusted_ca)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)

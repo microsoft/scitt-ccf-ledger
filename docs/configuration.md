@@ -162,6 +162,13 @@ Rego code that determines whether an entry should be accepted. The package must 
   - iat (Number)
   - svn (Number)
 
+Example `set_scitt_configuration` snippet:
+```json
+"policy": {
+  "policyRego": "package policy\ndefault allow := false\n allow if input.profile == \"X509\""
+}
+```
+
 ## CCF specific configuration
 
 Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.
