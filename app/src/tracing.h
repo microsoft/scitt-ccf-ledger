@@ -180,7 +180,6 @@ namespace scitt
         method,
         ctx.rpc_ctx->get_request_url());
 
-      ::timespec start;
       ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
@@ -205,7 +204,7 @@ namespace scitt
     };
   }
 
-  static ccf::endpoints::LocallyCommittedEndpointFunction
+  [[maybe_unused]] static ccf::endpoints::LocallyCommittedEndpointFunction
   tracing_local_commit_adapter(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,
     const std::string& method,
@@ -229,7 +228,7 @@ namespace scitt
   /**
    * Create an adapter around an existing EndpointFunction to handle tracing.
    */
-  static ccf::endpoints::EndpointFunction tracing_adapter(
+  [[maybe_unused]] static ccf::endpoints::EndpointFunction tracing_adapter(
     ccf::endpoints::EndpointFunction fn,
     const std::string& method,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
@@ -237,25 +236,5 @@ namespace scitt
     return generic_tracing_adapter<
       ccf::endpoints::EndpointFunction,
       ccf::endpoints::EndpointContext>(fn, method, get_time);
-  }
-
-  static ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
-    ccf::endpoints::ReadOnlyEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::ReadOnlyEndpointFunction,
-      ccf::endpoints::ReadOnlyEndpointContext>(fn, method, get_time);
-  }
-
-  static ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
-    ccf::endpoints::CommandEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::CommandEndpointFunction,
-      ccf::endpoints::CommandEndpointContext>(fn, method, get_time);
   }
 }

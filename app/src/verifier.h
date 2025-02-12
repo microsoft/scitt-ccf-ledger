@@ -214,6 +214,7 @@ namespace scitt::verifier
       ::timespec current_time,
       const Configuration& configuration)
     {
+      (void)current_time;
       SignedStatementProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;

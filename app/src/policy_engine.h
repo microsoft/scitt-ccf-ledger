@@ -9,6 +9,8 @@
 #include "tracing.h"
 
 #include <ccf/js/common_context.h>
+#include <chrono>
+#include <rego/rego.hh>
 #include <string>
 
 namespace scitt
@@ -154,6 +156,8 @@ namespace scitt
       SignedStatementProfile claim_profile,
       const scitt::cose::ProtectedHeader& phdr)
     {
+      auto start = std::chrono::system_clock::now();
+
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -170,6 +174,12 @@ namespace scitt
           scitt::errors::PolicyError,
           fmt::format("Invalid policy module: {}", e.what()));
       }
+
+      auto end = std::chrono::system_clock::now();
+      auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS policy compilation took {}us", elapsed.count());
+      start = std::chrono::system_clock::now();
 
       auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
@@ -200,6 +210,11 @@ namespace scitt
             trace.value_or("<no trace>")));
       }
 
+      end = std::chrono::system_clock::now();
+      elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS policy execution took {}us", elapsed.count());
+
       if (result.is_str())
       {
         return interpreter.to_str(result);
@@ -223,12 +238,94 @@ namespace scitt
   // Returns nullopt for success, else a string describing why the policy was
   // refused. May also throw if given invalid policies, or policy execution
   // throws.
-  static inline std::optional<std::string> check_for_policy_violations(
+  static inline std::optional<std::string> check_for_policy_violations_js(
     const PolicyScript& script,
     const std::string& policy_name,
     SignedStatementProfile claim_profile,
     const cose::ProtectedHeader& phdr)
   {
     return js::apply_js_policy(script, policy_name, claim_profile, phdr);
+  }
+
+  using PolicyRego = std::string;
+
+  static inline nlohmann::json rego_input_from_profile_and_protected_header(
+    SignedStatementProfile claim_profile, const cose::ProtectedHeader& phdr)
+  {
+    nlohmann::json rego_input;
+    rego_input["profile"] = claim_profile;
+    nlohmann::json cwt;
+    cwt["iss"] = phdr.cwt_claims.iss;
+    cwt["sub"] = phdr.cwt_claims.sub;
+    cwt["iat"] = phdr.cwt_claims.iat;
+    cwt["svn"] = phdr.cwt_claims.svn;
+    nlohmann::json protected_header;
+    protected_header["cwt"] = cwt;
+    protected_header["alg"] = phdr.alg;
+    if (phdr.cty.has_value())
+    {
+      if (std::holds_alternative<int64_t>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<int64_t>(phdr.cty.value());
+      }
+      else if (std::holds_alternative<std::string>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<std::string>(phdr.cty.value());
+      }
+    }
+    rego_input["phdr"] = protected_header;
+    return rego_input;
+  }
+
+  static inline std::optional<std::string> check_for_policy_violations_rego(
+    const PolicyScript& script,
+    SignedStatementProfile claim_profile,
+    const cose::ProtectedHeader& phdr)
+  {
+    auto start = std::chrono::system_clock::now();
+
+    auto rego_input =
+      rego_input_from_profile_and_protected_header(claim_profile, phdr);
+
+    rego::Interpreter interpreter(true /* v1 compatible */);
+    auto rv = interpreter.add_module("policy", script);
+    if (rv != nullptr)
+    {
+      throw BadRequestError(
+        scitt::errors::PolicyError, "Invalid policy module");
+    }
+
+    auto end = std::chrono::system_clock::now();
+    auto elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego policy compilation took {}us", elapsed.count());
+    start = std::chrono::system_clock::now();
+
+    auto tv = interpreter.set_input_term(rego_input.dump());
+    if (tv != nullptr)
+    {
+      throw BadRequestError(scitt::errors::PolicyError, "Invalid policy input");
+    }
+    auto qv = interpreter.query("data.policy.allow");
+
+    end = std::chrono::system_clock::now();
+    elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego policy execution took {}us", elapsed.count());
+
+    if (qv == "{\"expressions\":[true]}")
+    {
+      return std::nullopt;
+    }
+    else if (qv == "{\"expressions\":[false]}")
+    {
+      return "Input statement rejected";
+    }
+    else
+    {
+      throw BadRequestError(
+        scitt::errors::PolicyError,
+        fmt::format("Error while applying policy: {}", qv));
+    }
   }
 }

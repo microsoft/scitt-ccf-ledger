@@ -1,12 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import sys
+
 import pycose
 import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from . import policies
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
@@ -63,12 +66,14 @@ class TestPolicyEngine:
         identity = trusted_ca.create_identity(alg="ES256", kty="ec")
         return crypto.sign_json_statement(identity, {"foo": "bar"})
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
         self,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -110,8 +115,12 @@ class TestPolicyEngine:
             crypto.sign_json_statement(identities[1], statement, feed=feed, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
-        invalid_issuer = "Invalid issuer"
+        profile_error = (
+            "This policy only accepts IETF did:x509 signed statements"
+            if lang == "js"
+            else "Policy was not met"
+        )
+        invalid_issuer = "Invalid issuer" if lang == "js" else "Policy was not met"
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
@@ -150,17 +159,8 @@ class TestPolicyEngine:
             ],
         }
 
-        policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(trusted_ca)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -170,11 +170,13 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_svn_policy(
         self,
         client: Client,
         configure_service,
         trusted_ca: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -196,13 +198,15 @@ export function apply(profile, phdr) {{
             crypto.sign_json_statement(identity, statement, feed=feed, svn=1, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
-        invalid_svn = "Invalid SVN"
+        err_msgs = {
+            "js": "Policy was not met: Invalid SVN",
+            "rego": "Policy was not met",
+        }
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
         refused_signed_statements = {
             # Well-constructed, but not a valid issuer
-            invalid_svn: [
+            err_msgs[lang]: [
                 crypto.sign_json_statement(identity, statement, feed=feed, cwt=True),
                 crypto.sign_json_statement(
                     identity, statement, feed=feed, svn=-11, cwt=True
@@ -210,18 +214,8 @@ export function apply(profile, phdr) {{
             ],
         }
 
-        policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
-    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(trusted_ca)
+        configure_service({"policy": policies.SVN[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.register_signed_statement(signed_statement)
@@ -231,82 +225,50 @@ export function apply(profile, phdr) {{
                 with service_error(err):
                     client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_pass_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {"policy": {"policyScript": "export function apply() { return true }"}}
-        )
+        configure_service({"policy": policies.PASS[lang]})
 
         client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_fail_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": "export function apply() { return `All entries are refused`; }"
-                }
-            }
-        )
+        configure_service({"policy": policies.FAIL[lang]})
 
         with service_error("Policy was not met"):
             client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js"])
     def test_exceptional_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
-                }
-            }
-        )
+        # No runtime error test for Rego, because things that seem like they
+        # would cause runtime errors, such as dividing by zero, cause a policy
+        # failure instead.
+        configure_service({"policy": policies.RUNTIME_ERROR[lang]})
 
         with service_error("Error while applying policy"):
             client.register_signed_statement(signed_statement)
 
-    @pytest.mark.parametrize(
-        "script",
-        [
-            "",
-            "return true",
-            "function apply() {}",
-            "function apply() { not valid javascript }",
-        ],
-    )
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_invalid_policy(
-        self, client: Client, configure_service, signed_statement, script
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service({"policy": {"policyScript": script}})
+        for invalid_policy in policies.INVALID[lang]:
+            configure_service({"policy": invalid_policy})
 
-        with service_error("Invalid policy module"):
-            client.register_signed_statement(signed_statement)
+            with service_error("Invalid policy module"):
+                client.register_signed_statement(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self,
-        tmp_path,
-        client: Client,
-        configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
-        untrusted_ca: X5ChainCertificateAuthority,
+        self, tmp_path, client: Client, configure_service, lang
     ):
-
-        policy_script = f"""
-export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
-
-// Check exact issuer 
-if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
-if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
-
-return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": policies.SAMPLE[lang]})
 
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
