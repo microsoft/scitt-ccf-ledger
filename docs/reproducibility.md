@@ -65,11 +65,11 @@ The quote contains the attestation report that has the necessary measurements. `
     <...>
     ```
 
-- You could also verify the provided report with services such as Microsoft Azure Attestation Service, this step is excluded for the brevity reasons
+- You could also verify the provided report with services such as Microsoft Azure Attestation Service, this step is excluded for brevity reasons
 
 ### Extract image layers from security policy
 
-Inspect the service join policy content and extract the Rego policy used to validate the container:
+Inspect the service join policy content and extract the Rego policy used to validate the container, there might be multiple join policies but they are keyed by their digest which is in the host data measurement above:
 
 ```sh
 $ cat service-join-policy.json | jq -r '.snp.hostData["5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65"]' | printf "%s" "$(cat)" > ccepolicy.rego
@@ -94,11 +94,13 @@ $ cat ccepolicy.json | jq '[ .rules[] | select(.head.name == "containers") | .he
 
 **Note:** image layers in the security policy use [dmverity hashes](https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html), hence you will need to convert the built container image before comparison, see [`microsoft/integrity-vhd` CLI](https://github.com/microsoft/integrity-vhd/tree/main/cmd/dmverity-vhd).
 
+**Note:** In the example here the policy was created with the `az confcom acipolicygen` CLI for the confidential Azure container instances (C-ACI). But the policy could also be for confidential AKS (C-AKS) and the location of the containers and layers would be slightly different.
+
 ## Reproduce measurements
 
 ### 1. Verify security policy is the same
 
-`Host data` contains the hash of the security policy (e.g. `5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65`). The policy can be obtained like it was shown above and saved to a file `ccepolicy.rego`. The hash of the Rego policy is the same as the one in the report:
+`Host data` contains the sha-256 digest of the security policy (e.g. `5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65`). The policy can be obtained like it was shown above and saved to a file `ccepolicy.rego`. The hash of the Rego policy is the same as the one in the report:
 
 ```sh
 $ sha256sum ccepolicy.rego
@@ -156,4 +158,4 @@ $ cat node-quote.json | jq -r '.uvm_endorsements' | base64 -d > uvm_endorsements
 ... verify cose signing envelope ...
 ```
 
-UVM endoresement policy can also be seen in `service-join-policy.json`.
+UVM endorsement policy can also be seen in `service-join-policy.json`.
