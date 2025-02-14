@@ -15,6 +15,7 @@ endif()
 project(scitt
   LANGUAGES C CXX
 )
+set(CMAKE_CXX_STANDARD 20)
 
 set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(BUILD_TESTS "Whether to build tests" ON)
