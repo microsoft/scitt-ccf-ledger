@@ -4,8 +4,8 @@
 #pragma once
 
 #include "cose.h"
-#include "did/resolver.h"
 #include "didx509cpp/didx509cpp.h"
+#include "kv_types.h"
 #include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
@@ -45,9 +45,7 @@ namespace scitt::verifier
   class Verifier
   {
   public:
-    Verifier(std::unique_ptr<did::Resolver> resolver) :
-      resolver(std::move(resolver))
-    {}
+    Verifier() = default;
 
     void check_is_accepted_algorithm(
       const cose::ProtectedHeader& phdr, const Configuration& configuration)
@@ -406,7 +404,5 @@ namespace scitt::verifier
         throw VerificationError("Signing certificate is CA");
       }
     }
-
-    std::unique_ptr<did::Resolver> resolver;
   };
 }

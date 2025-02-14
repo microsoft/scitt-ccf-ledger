@@ -564,48 +564,6 @@ namespace scitt::cose
   };
 
   /**
-   * Extract the bstr fields from a COSE Sign1.
-   *
-   * Returns an array containing the protected headers, the payload and the
-   * signature.
-   */
-  static std::array<std::span<const uint8_t>, 3> extract_sign1_fields(
-    std::span<const uint8_t> cose_sign1)
-  {
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
-
-    QCBORDecode_EnterArray(&ctx, nullptr);
-
-    UsefulBufC bstr_item;
-    // protected headers
-    QCBORDecode_GetByteString(&ctx, &bstr_item);
-    auto phdrs = cbor::as_span(bstr_item);
-
-    QCBORItem item;
-    // skip unprotected header
-    QCBORDecode_VGetNextConsume(&ctx, &item);
-
-    // payload
-    QCBORDecode_GetByteString(&ctx, &bstr_item);
-    auto payload = cbor::as_span(bstr_item);
-
-    // signature
-    QCBORDecode_GetByteString(&ctx, &bstr_item);
-    auto signature = cbor::as_span(bstr_item);
-
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw std::runtime_error("Failed to decode COSE_Sign1");
-    }
-
-    return {phdrs, payload, signature};
-  }
-
-  /**
    * Verify the signature of a COSE Sign1 message using the given public key.
    *
    * Beyond the basic verification of key usage and the signature

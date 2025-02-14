@@ -168,7 +168,7 @@ namespace scitt::did
 
     if (method_id.has_value())
     {
-      if (!contains(id_to_method, method_id.value()))
+      if (!id_to_method.contains(method_id.value()))
       {
         throw DIDAssertionMethodNotFoundError(
           "DID document assertion method references unknown verification "

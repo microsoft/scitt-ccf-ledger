@@ -20,12 +20,6 @@ namespace scitt
     return std::find(v.begin(), v.end(), e) != v.end();
   }
 
-  template <typename K, typename T>
-  bool contains(const std::unordered_map<K, T>& v, const K& e)
-  {
-    return v.find(e) != v.end();
-  }
-
   // From Microsoft's GSL utilities.
   template <class F>
   class final_action

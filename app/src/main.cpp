@@ -6,7 +6,6 @@
 #include "constants.h"
 #include "cose.h"
 #include "did/document.h"
-#include "did/resolver.h"
 #include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
@@ -232,8 +231,7 @@ namespace scitt
         indexing::MAX_BUCKETS);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
-      auto resolver = std::make_unique<did::UniversalResolver>();
-      verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
+      verifier = std::make_unique<verifier::Verifier>();
 
       auto register_signed_statement = [this](EndpointContext& ctx) {
         const auto& body = ctx.rpc_ctx->get_request_body();
