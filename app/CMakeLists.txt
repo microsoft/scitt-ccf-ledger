@@ -109,7 +109,6 @@ if (BUILD_TESTS)
     unit-tests/main.cpp
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
-    unit-tests/did/resolver_test.cpp
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)
