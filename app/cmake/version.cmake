@@ -10,7 +10,8 @@ else()
   find_package(Git)
 
   execute_process(
-    COMMAND "bash" "-c" "${GIT_EXECUTABLE} describe --tags --match=\"*.*.*\""
+    # use the long version in the form of <tag>-<commits since tag>-g<commit hash>
+    COMMAND "bash" "-c" "${GIT_EXECUTABLE} describe --tags --long"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     OUTPUT_VARIABLE "SCITT_VERSION"
     OUTPUT_STRIP_TRAILING_WHITESPACE
