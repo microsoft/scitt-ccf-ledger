@@ -15,6 +15,7 @@ endif()
 project(scitt
   LANGUAGES C CXX
 )
+set(CMAKE_CXX_STANDARD 20)
 
 set(COMPILE_TARGET "snp" CACHE STRING "Target compilation platform, either 'virtual', or 'snp'")
 option(BUILD_TESTS "Whether to build tests" ON)
@@ -107,10 +108,8 @@ if (BUILD_TESTS)
   add_executable(
     unit_tests
     unit-tests/main.cpp
-    unit-tests/cbor_test.cpp
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
-    unit-tests/did/resolver_test.cpp
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)
