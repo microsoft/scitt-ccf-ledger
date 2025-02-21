@@ -372,7 +372,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
-          SCITT_DEBUG("Get signed statement from the ledger");
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
@@ -410,6 +410,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
@@ -421,6 +422,7 @@ namespace scitt
           ccf::cose::edit::desc::Value receipts_desc{
             ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
+          SCITT_DEBUG("Embed receipt into transparent statement");
           auto statement =
             ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 
