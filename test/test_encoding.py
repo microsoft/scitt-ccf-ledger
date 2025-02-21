@@ -167,7 +167,9 @@ class TestHeaderParameters:
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
         def f(parameters, *, signer=identity):
-            return client.submit_signed_statement_and_wait(sign(signer, b"Hello", parameters))
+            return client.submit_signed_statement_and_wait(
+                sign(signer, b"Hello", parameters)
+            )
 
         return f
 

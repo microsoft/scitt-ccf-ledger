@@ -44,4 +44,3 @@ class TestHistorical:
         for s in submissions:
             receipt = client.get_transparent_statement(s.tx)
             verify_transparent_statement(receipt, trust_store, s.signed_statement)
-

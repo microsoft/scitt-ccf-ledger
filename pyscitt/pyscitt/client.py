@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 import base64
-import cbor2
 import hashlib
 import json
 import time
@@ -14,6 +13,7 @@ from http import HTTPStatus
 from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
+import cbor2
 import httpx
 from loguru import logger as LOG
 
@@ -544,7 +544,7 @@ class Client(BaseClient):
                 HTTPStatus.ACCEPTED.value,
                 HTTPStatus.TOO_MANY_REQUESTS.value,
                 HTTPStatus.SERVICE_UNAVAILABLE.value,
-                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running"
+                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running",
             ],
         )
         response = cbor2.loads(resp.read())

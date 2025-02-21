@@ -311,7 +311,9 @@ return true;
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
-        statement = client.submit_signed_statement_and_wait(cts_hashv_cwtclaims).response_bytes
+        statement = client.submit_signed_statement_and_wait(
+            cts_hashv_cwtclaims
+        ).response_bytes
 
         # store statement
         transparent_statement = tmp_path / "transparent_statement.cose"
