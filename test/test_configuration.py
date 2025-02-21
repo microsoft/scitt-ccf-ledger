@@ -110,7 +110,6 @@ class TestPolicyEngine:
             crypto.sign_json_statement(identities[1], statement, feed=feed, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_issuer = "Invalid issuer"
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
@@ -151,9 +150,7 @@ class TestPolicyEngine:
         }
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
+export function apply(phdr) {{
     // Check exact issuer 
     if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
 
@@ -196,7 +193,6 @@ export function apply(profile, phdr) {{
             crypto.sign_json_statement(identity, statement, feed=feed, svn=1, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_svn = "Invalid SVN"
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
@@ -211,9 +207,7 @@ export function apply(profile, phdr) {{
         }
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
+export function apply(phdr) {{
     // Check exact issuer 
     if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
     if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
@@ -295,8 +289,7 @@ export function apply(profile, phdr) {{
     ):
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
+export function apply(phdr) {{
 
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}

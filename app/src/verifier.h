@@ -103,10 +103,7 @@ namespace scitt::verifier
     void process_ietf_didx509_subprofile(
       const cose::ProtectedHeader& phdr, const std::vector<uint8_t>& data)
     {
-      // NB: In later revisions of SCITT, x5chain is unprotected, and
-      // only x5t is. This logic will need to authenticate x5chain[0]
-      // against x5t before it can proceed to verify the signature.
-      // Verify the signature as early as possible
+      // Verify the signature using the key of the leaf in the x5chain
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
@@ -202,62 +199,39 @@ namespace scitt::verifier
       }
     }
 
-    std::tuple<
-      SignedStatementProfile,
-      cose::ProtectedHeader,
-      cose::UnprotectedHeader>
+    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
     verify_signed_statement(
       const std::vector<uint8_t>& data,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       const Configuration& configuration)
     {
-      SignedStatementProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(data);
 
-        // Validate_profile and retrieve key.
-        PublicKey key;
         if (contains_cwt_issuer(phdr))
         {
-          if (
-            phdr.cwt_claims.iss->starts_with("did:x509") &&
-            phdr.x5chain.has_value())
+          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
           {
-            // IETF SCITT did:x509 claim
-            process_ietf_didx509_subprofile(phdr, data);
+            throw VerificationError("CWT_Claims issuer must be a did:x509");
           }
-          else
+
+          if (!phdr.x5chain.has_value())
           {
             throw VerificationError(
-              "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
+              "Signed statement protected header must contain an x5chain");
           }
 
-          profile = SignedStatementProfile::IETF;
-        }
-        else if (phdr.x5chain.has_value())
-        {
-          // X.509 SCITT claim
-          key = process_x509_profile(phdr, tx, configuration);
-
-          try
-          {
-            cose::verify(data, key);
-          }
-          catch (const cose::COSESignatureValidationError& e)
-          {
-            throw VerificationError(e.what());
-          }
-
-          profile = SignedStatementProfile::X509;
+          process_ietf_didx509_subprofile(phdr, data);
         }
         else
         {
-          SCITT_INFO("Unknown COSE profile");
-          throw cose::COSEDecodeError("Unknown COSE profile");
+          throw VerificationError(
+            "Signed statement protected header must contain CWT_Claims with at "
+            "least an issuer");
         }
       }
       catch (const cose::COSEDecodeError& e)
@@ -265,7 +239,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return std::make_tuple(profile, phdr, uhdr);
+      return {phdr, uhdr};
     }
 
     /**
