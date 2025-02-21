@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import base64
+import cbor2
 import hashlib
 import json
 import time
@@ -370,6 +371,7 @@ class BaseClient:
             LOG.debug(" ".join(str(p) for p in log_parts))
 
             for code in retry_on:
+                # FIXME: response can be CBOR
                 if isinstance(code, tuple):
                     if (
                         response.status_code == code[0]
@@ -498,61 +500,62 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
-    def get_did_document(self, did: str) -> dict:
-        # Note: This endpoint only returns data for did:web DIDs.
-        return self.get(f"/did/{did}").json()["did_document"]
-
     def get_jwks(self) -> dict:
-        return self.get(f"/jwks").json()
+        resp = self.get(f"/jwks")
+        resp.raise_for_status()
+        return resp.json()
 
     def submit_signed_statement(
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
         headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
+        )
+        resp.raise_for_status()
+        response = cbor2.loads(resp.read())
         operation_id = response["OperationId"]
         return PendingSubmission(operation_id)
 
-    def register_signed_statement(
+    def submit_signed_statement_and_wait(
         self,
         signed_statement: bytes,
     ) -> Submission:
-        # FIXME: parse CBOR instead of JSON 
         headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
+        )
+        resp.raise_for_status()
+        response = cbor2.loads(resp.read())
         operation_id = response["OperationId"]
         tx = self.wait_for_operation(operation_id)
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
     def wait_for_operation(self, operation: str) -> str:
-        # FIXME: parse CBOR instead of JSON 
-        response = self.get(
+        resp = self.get(
             f"/operations/{operation}",
-            retry_on=[lambda r: r.is_success and r.json()["Status"] == "running"],
+            retry_on=[
+                HTTPStatus.ACCEPTED[0],
+                HTTPStatus.TOO_MANY_REQUESTS[0],
+                HTTPStatus.SERVICE_UNAVAILABLE[0],
+                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running"
+            ],
         )
-        payload = response.json()
+        response = cbor2.loads(resp.read())
 
-        if payload["Status"] == "succeeded":
-            return payload["EntryId"]
-        elif payload["Status"] == "failed":
-            error = payload["Error"]
+        if response["Status"] == "succeeded":
+            return response["EntryId"]
+        elif response["Status"] == "failed":
+            error = response["Error"]
             raise ServiceError(response.headers, error["code"], error["message"])
         else:
-            raise ValueError("Invalid status {}".format(payload["Status"]))
-
-    def get_operations(self):
-        # FIXME: remove this
-        return self.get("/operations").json()["operations"]
+            raise ValueError("Invalid status {}".format(response["Status"]))
 
     def get_claim(self, tx: str) -> bytes:
         response = self.get_historical(f"/entries/{tx}")

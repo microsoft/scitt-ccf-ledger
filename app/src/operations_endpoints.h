@@ -426,26 +426,35 @@ namespace scitt
       std::make_shared<OperationsIndexingStrategy>(registry);
     context.get_indexing_strategies().install_strategy(operations_index);
 
-    // FIXME: remove this endpoint
-    registry
-      .make_endpoint(
-        "/operations",
-        HTTP_GET,
-        ccf::json_adapter(
-          std::bind(endpoints::get_all_operations, operations_index, _1, _2)),
-        authn_policy)
-      .set_auto_schema<void, GetAllOperations::Out>()
-      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-      .install();
+    auto get_op_with_status = [operations_index](ccf::endpoints::EndpointContext& ctx) {
+      auto operation = endpoints::get_operation(operations_index, ctx, {});
+      if (operation.status == OperationStatus::Running)
+      {
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
+      }
+      else
+      {
+        if (operation.status == OperationStatus::Succeeded && auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+        {
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::LOCATION,
+            fmt::format("https://{}/entries/{}", *host, operation.entry_id));
+        }
+        auto body = nlohmann::json(operation).dump();
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::CBOR);
+        ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
+      }
+    };
 
     registry
       .make_endpoint(
         "/operations/{txid}",
         HTTP_GET,
-        ccf::json_adapter(
-          std::bind(endpoints::get_operation, operations_index, _1, _2)),
+        get_op_with_status,
         authn_policy)
-      .set_auto_schema<void, GetOperation::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
   }
@@ -502,9 +511,9 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(
       ccf::http::headers::CONTENT_TYPE,
-      ccf::http::headervalues::contenttype::JSON);
+      ccf::http::headervalues::contenttype::CBOR);
     auto body = nlohmann::json(operation).dump();
-    ctx.rpc_ctx->set_response_body(std::move(body));
+    ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
     if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
@@ -512,15 +521,6 @@ namespace scitt
       ctx.rpc_ctx->set_response_header(
         ccf::http::headers::LOCATION,
         fmt::format("https://{}/operations/{}", *host, tx_str));
-    }
-
-    AppData& app_data = get_app_data(ctx.rpc_ctx);
-    if (app_data.asynchronous_operation.has_value())
-    {
-      app_data.asynchronous_operation->trigger(fmt::format(
-        "https://{}/operations/{}/callback",
-        app_data.asynchronous_operation->bind_address,
-        tx_str));
     }
   }
 }
