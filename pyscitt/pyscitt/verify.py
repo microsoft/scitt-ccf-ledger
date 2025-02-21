@@ -183,7 +183,7 @@ class DynamicTrustStore(TrustStore):
             headers={"Accept": "application/json"},
         )
         transparency_configuration.raise_for_status()
-        jwks_uri = transparency_configuration.json()["jwksUri"]
+        jwks_uri = transparency_configuration.json()["jwks_uri"]
         jwk_set = self.getter(jwks_uri)
         jwk_set.raise_for_status()
         jwks = jwk_set.json()["keys"]
