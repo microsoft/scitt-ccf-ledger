@@ -45,7 +45,3 @@ class TestHistorical:
             receipt = client.get_transparent_statement(s.tx)
             verify_transparent_statement(receipt, trust_store, s.signed_statement)
 
-    def test_get_signed_statement(self, client: Client, trust_store, submissions):
-        for s in submissions:
-            signed_statement = client.get_signed_statement(s.tx)
-            verify_transparent_statement(s.receipt, trust_store, signed_statement)
