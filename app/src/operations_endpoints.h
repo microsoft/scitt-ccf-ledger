@@ -426,35 +426,34 @@ namespace scitt
       std::make_shared<OperationsIndexingStrategy>(registry);
     context.get_indexing_strategies().install_strategy(operations_index);
 
-    auto get_op_with_status = [operations_index](ccf::endpoints::EndpointContext& ctx) {
-      auto operation = endpoints::get_operation(operations_index, ctx, {});
-      if (operation.status == OperationStatus::Running)
-      {
-        ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
-      }
-      else
-      {
-        if (operation.status == OperationStatus::Succeeded && auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+    auto get_op_with_status =
+      [operations_index](ccf::endpoints::EndpointContext& ctx) {
+        auto operation = endpoints::get_operation(operations_index, ctx, {});
+        if (operation.status == OperationStatus::Running)
         {
-          ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::LOCATION,
-            fmt::format("https://{}/entries/{}", *host, operation.entry_id));
+          ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
         }
-        auto body = nlohmann::json(operation).dump();
-        ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE,
-          ccf::http::headervalues::contenttype::CBOR);
-        ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
-      }
-    };
+        else
+        {
+          std::optional<std::string> host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST);
+          if (host.has_value() && operation.status == OperationStatus::Succeeded && operation.entry_id.has_value())
+          {
+            ctx.rpc_ctx->set_response_header(
+              ccf::http::headers::LOCATION,
+              fmt::format("https://{}/entries/{}", host.value(), operation.entry_id.value().to_str()));
+          }
+          auto body = nlohmann::json(operation).dump();
+          ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::CONTENT_TYPE,
+            ccf::http::headervalues::contenttype::CBOR);
+          ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
+        }
+      };
 
     registry
       .make_endpoint(
-        "/operations/{txid}",
-        HTTP_GET,
-        get_op_with_status,
-        authn_policy)
+        "/operations/{txid}", HTTP_GET, get_op_with_status, authn_policy)
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
   }
