@@ -426,6 +426,7 @@ namespace scitt
       std::make_shared<OperationsIndexingStrategy>(registry);
     context.get_indexing_strategies().install_strategy(operations_index);
 
+    // FIXME: remove this endpoint
     registry
       .make_endpoint(
         "/operations",

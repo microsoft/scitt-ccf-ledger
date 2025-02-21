@@ -96,7 +96,7 @@ namespace scitt
   };
 
   DECLARE_JSON_TYPE(GetEntry::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(GetEntry::Out, entry_id, "entryId");
+  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(GetEntry::Out, entry_id, "EntryId");
 
   struct GetOperation
   {
@@ -111,9 +111,9 @@ namespace scitt
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetOperation::Out);
   DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
-    GetOperation::Out, operation_id, "operationId", status, "status");
+    GetOperation::Out, operation_id, "OperationId", status, "Status");
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    GetOperation::Out, entry_id, "entryId", error, "error");
+    GetOperation::Out, entry_id, "EntryId", error, "Error");
 
   struct GetAllOperations
   {

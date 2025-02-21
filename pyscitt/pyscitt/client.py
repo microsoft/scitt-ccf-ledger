@@ -515,40 +515,43 @@ class Client(BaseClient):
             headers=headers,
             content=signed_statement,
         ).json()
-        operation_id = response["operationId"]
+        operation_id = response["OperationId"]
         return PendingSubmission(operation_id)
 
     def register_signed_statement(
         self,
         signed_statement: bytes,
     ) -> Submission:
+        # FIXME: parse CBOR instead of JSON 
         headers = {"Content-Type": "application/cose"}
         response = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
         ).json()
-        operation_id = response["operationId"]
+        operation_id = response["OperationId"]
         tx = self.wait_for_operation(operation_id)
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
     def wait_for_operation(self, operation: str) -> str:
+        # FIXME: parse CBOR instead of JSON 
         response = self.get(
             f"/operations/{operation}",
-            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
+            retry_on=[lambda r: r.is_success and r.json()["Status"] == "running"],
         )
         payload = response.json()
 
-        if payload["status"] == "succeeded":
-            return payload["entryId"]
-        elif payload["status"] == "failed":
-            error = payload["error"]
+        if payload["Status"] == "succeeded":
+            return payload["EntryId"]
+        elif payload["Status"] == "failed":
+            error = payload["Error"]
             raise ServiceError(response.headers, error["code"], error["message"])
         else:
-            raise ValueError("Invalid status {}".format(payload["status"]))
+            raise ValueError("Invalid status {}".format(payload["Status"]))
 
     def get_operations(self):
+        # FIXME: remove this
         return self.get("/operations").json()["operations"]
 
     def get_claim(self, tx: str) -> bytes:
