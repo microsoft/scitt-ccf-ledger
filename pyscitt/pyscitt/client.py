@@ -555,10 +555,6 @@ class Client(BaseClient):
         response = self.get_historical(f"/entries/{tx}")
         return response.content
 
-    def get_signed_statement(self, tx: str) -> bytes:
-        response = self.get_historical(f"/entries/{tx}")
-        return response.content
-
     def get_receipt(self, tx: str, *, operation: bool = False) -> bytes:
         """
         Get a receipt from the ledger.
@@ -569,7 +565,7 @@ class Client(BaseClient):
         if operation:
             tx = self.wait_for_operation(tx)
 
-        response = self.get_historical(f"/entries/{tx}/receipt")
+        response = self.get_historical(f"/entries/{tx}")
         return response.content
 
     def get_transparent_statement(self, tx: str, *, operation: bool = False) -> bytes:
