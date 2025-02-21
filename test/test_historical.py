@@ -18,7 +18,7 @@ class TestHistorical:
         result = []
         for i in range(COUNT):
             signed_statement = crypto.sign_json_statement(identity, {"value": i})
-            submission = client.register_signed_statement(signed_statement)
+            submission = client.submit_signed_statement_and_wait(signed_statement)
             result.append(
                 SimpleNamespace(
                     signed_statement=signed_statement,

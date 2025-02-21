@@ -541,9 +541,9 @@ class Client(BaseClient):
         resp = self.get(
             f"/operations/{operation}",
             retry_on=[
-                HTTPStatus.ACCEPTED[0],
-                HTTPStatus.TOO_MANY_REQUESTS[0],
-                HTTPStatus.SERVICE_UNAVAILABLE[0],
+                HTTPStatus.ACCEPTED.value,
+                HTTPStatus.TOO_MANY_REQUESTS.value,
+                HTTPStatus.SERVICE_UNAVAILABLE.value,
                 lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running"
             ],
         )
