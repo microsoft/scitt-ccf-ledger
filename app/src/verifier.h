@@ -100,7 +100,7 @@ namespace scitt::verifier
       return key;
     }
 
-    void process_ietf_didx509_subprofile(
+    void process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr, const std::vector<uint8_t>& data)
     {
       // Verify the signature using the key of the leaf in the x5chain
@@ -201,7 +201,7 @@ namespace scitt::verifier
 
     std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
     verify_signed_statement(
-      const std::vector<uint8_t>& data,
+      const std::vector<uint8_t>& signed_statement,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       const Configuration& configuration)
@@ -210,7 +210,7 @@ namespace scitt::verifier
       cose::UnprotectedHeader uhdr;
       try
       {
-        std::tie(phdr, uhdr) = cose::decode_headers(data);
+        std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
 
         if (contains_cwt_issuer(phdr))
         {
@@ -225,7 +225,7 @@ namespace scitt::verifier
               "Signed statement protected header must contain an x5chain");
           }
 
-          process_ietf_didx509_subprofile(phdr, data);
+          process_signed_statement_with_didx509_issuer(phdr, signed_statement);
         }
         else
         {

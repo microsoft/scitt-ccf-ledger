@@ -23,7 +23,11 @@ class X5ChainCertificateAuthority:
         Create a new identity for x5c signer
         """
         x5c, private_key = self.create_chain(length=length, ca=ca, **kwargs)
-        return crypto.Signer(private_key, algorithm=alg, x5c=x5c)
+        identity = crypto.Signer(private_key, algorithm=alg, x5c=x5c)
+        if "eku" in kwargs:
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(self.root_cert_pem)
+            identity.issuer = f"did:x509:0:sha256:{root_fingerprint}::eku:{kwargs['eku']}"
+        return identity
 
     def create_chain(
         self, *, length: int = 1, ca: bool = False, **kwargs
