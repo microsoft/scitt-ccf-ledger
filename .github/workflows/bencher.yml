@@ -13,7 +13,7 @@ jobs:
     name: Performance Regression Tests
     runs-on: ubuntu-20.04
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev19
+      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev20
       env:
         PLATFORM: virtual
     steps:
