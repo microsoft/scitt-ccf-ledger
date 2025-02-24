@@ -516,8 +516,8 @@ class Client(BaseClient):
             content=signed_statement,
         )
         resp.raise_for_status()
-        response = cbor2.loads(resp.read())
-        operation_id = response["OperationId"]
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         return PendingSubmission(operation_id)
 
     def submit_signed_statement_and_wait(
@@ -531,8 +531,8 @@ class Client(BaseClient):
             content=signed_statement,
         )
         resp.raise_for_status()
-        response = cbor2.loads(resp.read())
-        operation_id = response["OperationId"]
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)

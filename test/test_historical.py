@@ -35,7 +35,7 @@ class TestHistorical:
                 start=submissions[0].seqno, end=submissions[-1].seqno
             )
         )
-
+        print("Found statements:", seqnos)
         # This works because we don't run tests concurrently on a shared server.
         # If we did, we'd have to check for a sub-list instead.
         assert [s.tx for s in submissions] == seqnos

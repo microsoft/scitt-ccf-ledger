@@ -448,7 +448,7 @@ namespace scitt
               host.value(),
               operation.entry_id.value().to_str()));
         }
-        auto body = nlohmann::json(operation).dump();
+        auto body = nlohmann::json(operation);
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
@@ -517,7 +517,7 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(
       ccf::http::headers::CONTENT_TYPE,
       ccf::http::headervalues::contenttype::CBOR);
-    auto body = nlohmann::json(operation).dump();
+    auto body = nlohmann::json(operation);
     ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
