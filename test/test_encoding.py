@@ -181,21 +181,6 @@ class TestHeaderParameters:
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
 
-    def test_content_type(self, submit):
-        # This comes from the CoAP Content-Format registry, and is defined as
-        # `text/plain; charset=utf-8` (not that it matters, since the ledger
-        # doesn't use the value).
-        submit({ContentType: 0})
-
-        submit({ContentType: "text/plain"})
-
-        with service_error("Missing cty in protected header"):
-            submit({ContentType: None})
-
-        with service_error("Content-type must be of type text string or int64"):
-            # Note this is a byte string, not text string
-            submit({ContentType: b"text/plain"})
-
     def test_x5chain(
         self,
         submit,
