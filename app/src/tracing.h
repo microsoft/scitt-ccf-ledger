@@ -238,24 +238,4 @@ namespace scitt
       ccf::endpoints::EndpointFunction,
       ccf::endpoints::EndpointContext>(fn, method, get_time);
   }
-
-  static ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
-    ccf::endpoints::ReadOnlyEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::ReadOnlyEndpointFunction,
-      ccf::endpoints::ReadOnlyEndpointContext>(fn, method, get_time);
-  }
-
-  static ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
-    ccf::endpoints::CommandEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::CommandEndpointFunction,
-      ccf::endpoints::CommandEndpointContext>(fn, method, get_time);
-  }
 }

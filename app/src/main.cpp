@@ -353,40 +353,7 @@ namespace scitt
             consensus, view, seqno, error_reason);
         };
 
-      static constexpr auto get_entry_path = "/entries/{txid}";
-      auto get_entry = [this](
-                         EndpointContext& ctx,
-                         const ccf::historical::StatePtr& historical_state) {
-        const auto parsed_query =
-          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-
-        SCITT_DEBUG("Get transaction historical state");
-        auto historical_tx = historical_state->store->create_read_only_tx();
-
-        auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
-
-        ctx.rpc_ctx->set_response_body(entry.value());
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE, "application/cose");
-      };
-      make_endpoint(
-        get_entry_path,
-        HTTP_GET,
-        scitt::historical::adapter(get_entry, state_cache, is_tx_committed),
-        authn_policy)
-        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-        .install();
-
-      static constexpr auto get_entry_receipt_path = "/entries/{txid}/receipt";
+      static constexpr auto get_entry_receipt_path = "/entries/{txid}";
       auto get_entry_receipt =
         [this](
           EndpointContext& ctx,
@@ -405,7 +372,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
-          SCITT_DEBUG("Get signed statement from the ledger");
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
@@ -443,6 +410,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
@@ -454,6 +422,7 @@ namespace scitt
           ccf::cose::edit::desc::Value receipts_desc{
             ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
+          SCITT_DEBUG("Embed receipt into transparent statement");
           auto statement =
             ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 

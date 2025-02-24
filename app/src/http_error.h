@@ -128,20 +128,4 @@ namespace scitt
       ccf::endpoints::EndpointFunction,
       ccf::endpoints::EndpointContext>(fn);
   }
-
-  static ccf::endpoints::ReadOnlyEndpointFunction error_read_only_adapter(
-    ccf::endpoints::ReadOnlyEndpointFunction fn)
-  {
-    return generic_error_adapter<
-      ccf::endpoints::ReadOnlyEndpointFunction,
-      ccf::endpoints::ReadOnlyEndpointContext>(fn);
-  }
-
-  static ccf::endpoints::CommandEndpointFunction error_command_adapter(
-    ccf::endpoints::CommandEndpointFunction fn)
-  {
-    return generic_error_adapter<
-      ccf::endpoints::CommandEndpointFunction,
-      ccf::endpoints::CommandEndpointContext>(fn);
-  }
 }

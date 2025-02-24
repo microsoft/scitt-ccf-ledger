@@ -44,7 +44,7 @@ def test_register_statement_x5c(
     identity = trusted_ca.create_identity(length=length, alg=algorithm, **params)
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
-    transparent_statement = client.register_signed_statement(
+    transparent_statement = client.submit_signed_statement_and_wait(
         signed_statement
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
@@ -62,7 +62,7 @@ def test_invalid_certificate_chain(
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_wrong_certificate(
@@ -82,7 +82,7 @@ def test_wrong_certificate(
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Signature verification failed"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_untrusted_ca(client: Client):
@@ -94,7 +94,7 @@ def test_untrusted_ca(client: Client):
     signged_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signged_statement)
+        client.submit_signed_statement_and_wait(signged_statement)
 
 
 def test_self_signed_trusted(
@@ -119,7 +119,7 @@ def test_self_signed_trusted(
     # We're pretty flexible about the error message here, because the exact
     # behaviour depends on the OpenSSL version.
     with service_error("Certificate chain"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
@@ -141,10 +141,10 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
         second_identity, {"foo": "bar"}
     )
 
-    first_transparent_statement = client.register_signed_statement(
+    first_transparent_statement = client.submit_signed_statement_and_wait(
         first_signed_statement
     ).response_bytes
-    second_transparent_statement = client.register_signed_statement(
+    second_transparent_statement = client.submit_signed_statement_and_wait(
         second_signed_statement
     ).response_bytes
 
@@ -167,7 +167,7 @@ def test_self_signed_untrusted(client: Client):
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_leaf_ca(
@@ -180,7 +180,7 @@ def test_leaf_ca(
     identity = trusted_ca.create_identity(alg="ES256", kty="ec", ca=True)
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Signing certificate is CA"):
-        client.register_signed_statement(signed_statement).receipt
+        client.submit_signed_statement_and_wait(signed_statement).receipt
 
 
 def test_root_ca(
@@ -194,7 +194,7 @@ def test_root_ca(
     identity = crypto.Signer(trusted_ca.root_key_pem, x5c=[trusted_ca.root_cert_pem])
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Certificate chain must include at least one CA certificate"):
-        client.register_signed_statement(signed_statement).receipt
+        client.submit_signed_statement_and_wait(signed_statement).receipt
 
 
 def strip_uhdr(cose: bytes) -> bytes:

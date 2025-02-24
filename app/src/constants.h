@@ -17,8 +17,6 @@ namespace scitt
 
   namespace errors
   {
-    const std::string DIDMethodNotSupported = "DIDMethodNotSupported";
-    const std::string DIDResolutionError = "DIDResolutionError";
     const std::string IndexingInProgressRetryLater =
       "IndexingInProgressRetryLater";
     const std::string InternalError = "InternalError";
@@ -26,7 +24,6 @@ namespace scitt
     const std::string TransactionNotCached = "TransactionNotCached";
     const std::string QueryParameterError = "QueryParameterError";
     const std::string PayloadTooLarge = "PayloadTooLarge";
-    const std::string UnknownFeed = "UnknownFeed";
     const std::string NotFound = "NotFound";
     const std::string OperationExpired = "OperationExpired";
     const std::string PolicyError = "PolicyError";

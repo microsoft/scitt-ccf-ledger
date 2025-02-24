@@ -29,9 +29,6 @@ namespace scitt
     std::optional<std::string> request_id;
     std::optional<std::string> client_request_id;
     timespec start_time;
-
-    // Used by operations_endpoints.h
-    std::optional<AsynchronousOperation> asynchronous_operation;
   };
 
   static AppData& get_app_data(const std::shared_ptr<ccf::RpcContext>& ctx)

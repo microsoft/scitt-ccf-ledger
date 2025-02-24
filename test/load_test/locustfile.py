@@ -64,6 +64,6 @@ class Submitter(ScittUser):
             lambda: (
                 self.client.submit_signed_statement(signed_statement)
                 if self.skip_confirmation
-                else self.client.register_signed_statement(signed_statement)
+                else self.client.submit_signed_statement_and_wait(signed_statement)
             ),
         )

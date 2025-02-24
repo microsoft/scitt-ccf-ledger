@@ -13,6 +13,7 @@ from http import HTTPStatus
 from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
+import cbor2
 import httpx
 from loguru import logger as LOG
 
@@ -370,6 +371,7 @@ class BaseClient:
             LOG.debug(" ".join(str(p) for p in log_parts))
 
             for code in retry_on:
+                # FIXME: response can be CBOR
                 if isinstance(code, tuple):
                     if (
                         response.status_code == code[0]
@@ -498,64 +500,64 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
-    def get_did_document(self, did: str) -> dict:
-        # Note: This endpoint only returns data for did:web DIDs.
-        return self.get(f"/did/{did}").json()["did_document"]
-
     def get_jwks(self) -> dict:
-        return self.get(f"/jwks").json()
+        resp = self.get(f"/jwks")
+        resp.raise_for_status()
+        return resp.json()
 
     def submit_signed_statement(
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
         headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
-        operation_id = response["operationId"]
+        )
+        resp.raise_for_status()
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         return PendingSubmission(operation_id)
 
-    def register_signed_statement(
+    def submit_signed_statement_and_wait(
         self,
         signed_statement: bytes,
     ) -> Submission:
         headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
-        operation_id = response["operationId"]
+        )
+        resp.raise_for_status()
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
     def wait_for_operation(self, operation: str) -> str:
-        response = self.get(
+        resp = self.get(
             f"/operations/{operation}",
-            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
+            retry_on=[
+                HTTPStatus.ACCEPTED.value,
+                HTTPStatus.TOO_MANY_REQUESTS.value,
+                HTTPStatus.SERVICE_UNAVAILABLE.value,
+                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running",
+            ],
         )
-        payload = response.json()
+        response = cbor2.loads(resp.read())
 
-        if payload["status"] == "succeeded":
-            return payload["entryId"]
-        elif payload["status"] == "failed":
-            error = payload["error"]
+        if response["Status"] == "succeeded":
+            return response["EntryId"]
+        elif response["Status"] == "failed":
+            error = response["Error"]
             raise ServiceError(response.headers, error["code"], error["message"])
         else:
-            raise ValueError("Invalid status {}".format(payload["status"]))
-
-    def get_operations(self):
-        return self.get("/operations").json()["operations"]
+            raise ValueError("Invalid status {}".format(response["Status"]))
 
     def get_claim(self, tx: str) -> bytes:
-        response = self.get_historical(f"/entries/{tx}")
-        return response.content
-
-    def get_signed_statement(self, tx: str) -> bytes:
         response = self.get_historical(f"/entries/{tx}")
         return response.content
 
@@ -569,7 +571,7 @@ class Client(BaseClient):
         if operation:
             tx = self.wait_for_operation(tx)
 
-        response = self.get_historical(f"/entries/{tx}/receipt")
+        response = self.get_historical(f"/entries/{tx}")
         return response.content
 
     def get_transparent_statement(self, tx: str, *, operation: bool = False) -> bytes:

@@ -64,7 +64,7 @@ def test_statement_latency(client: Client, configure_service):
     latency_ns = []
     for i in range(iterations):
         start = time.time()
-        client.register_signed_statement(cts_hashv_cwtclaims)
+        client.submit_signed_statement_and_wait(cts_hashv_cwtclaims)
         latency_ns.append((time.time() - start) * 1_000_000_000)
 
     df = DataFrame({"latency (ns)": latency_ns})

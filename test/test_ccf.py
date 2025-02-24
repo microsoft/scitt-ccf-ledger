@@ -77,7 +77,7 @@ def test_make_signed_statement_transparent(
     identity = trusted_ca.create_identity(**params)
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
-    transparent_statement = client.register_signed_statement(
+    transparent_statement = client.submit_signed_statement_and_wait(
         signed_statement
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
@@ -93,7 +93,7 @@ def test_recovery(client, trusted_ca, restart_service):
     identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
 
     first_signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
-    first_transparent_statement = client.register_signed_statement(
+    first_transparent_statement = client.submit_signed_statement_and_wait(
         first_signed_statement
     ).response_bytes
 
@@ -110,7 +110,7 @@ def test_recovery(client, trusted_ca, restart_service):
 
     # Check that the service is still operating correctly
     second_signed_statement = crypto.sign_json_statement(identity, {"foo": "hello"})
-    second_transparent_statement = client.register_signed_statement(
+    second_transparent_statement = client.submit_signed_statement_and_wait(
         second_signed_statement
     ).response_bytes
 
@@ -131,45 +131,7 @@ def test_recovery(client, trusted_ca, restart_service):
 @pytest.mark.isolated_test
 def test_transparency_configuration(client, cchost):
     issuer = f"127.0.0.1:{cchost.rpc_port}"
-    reference = {"issuer": issuer, "jwksUri": f"https://{issuer}/jwks"}
-
-    # Unsupported Accept header
-    with service_error("UnsupportedContentType"):
-        client.get(
-            "/.well-known/transparency-configuration",
-            headers={"Accept": "application/text"},
-        )
-
-    # Empty Accept header
-    with service_error("UnsupportedContentType"):
-        client.get(
-            "/.well-known/transparency-configuration",
-            headers={"Accept": ""},
-        )
-
-    config = client.get(
-        "/.well-known/transparency-configuration",
-        headers={"Accept": "application/json"},
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/json"
-    assert config.json() == reference
-
-    config = client.get(
-        "/.well-known/transparency-configuration",
-        headers={"Accept": "application/cbor"},
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == reference
-
-    config = client.get(
-        "/.well-known/transparency-configuration", headers={"Accept": "*/*"}
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == reference
-
+    reference = {"issuer": issuer, "jwks_uri": f"https://{issuer}/jwks"}
     config = client.get("/.well-known/transparency-configuration")
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"
