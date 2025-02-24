@@ -11,22 +11,6 @@
 
 namespace scitt
 {
-  struct GetIssuerInfo
-  {
-    using Out = IssuerInfo;
-  };
-
-  struct GetIssuers
-  {
-    struct Out
-    {
-      std::vector<std::string> issuers;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetIssuers::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetIssuers::Out, issuers);
-
   struct GetServiceParameters
   {
     struct Out
@@ -87,17 +71,6 @@ namespace scitt
   DECLARE_JSON_TYPE(GetVersion::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, version);
 
-  struct GetEntry
-  {
-    struct Out
-    {
-      ccf::TxID entry_id;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetEntry::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(GetEntry::Out, entry_id, "EntryId");
-
   struct GetOperation
   {
     struct Out
@@ -105,6 +78,7 @@ namespace scitt
       ccf::TxID operation_id;
       OperationStatus status;
       std::optional<ccf::TxID> entry_id;
+      // FIXME: it needs to be in expcted structure as per RFC
       std::optional<nlohmann::json> error;
     };
   };
@@ -124,18 +98,5 @@ namespace scitt
   };
   DECLARE_JSON_TYPE(GetAllOperations::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
-
-  struct PostOperationCallback
-  {
-    struct In
-    {
-      std::vector<uint8_t> context;
-      std::optional<nlohmann::json> result;
-    };
-  };
-
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(PostOperationCallback::In);
-  DECLARE_JSON_REQUIRED_FIELDS(PostOperationCallback::In, context);
-  DECLARE_JSON_OPTIONAL_FIELDS(PostOperationCallback::In, result);
 
 } // namespace scitt
