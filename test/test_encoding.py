@@ -197,8 +197,16 @@ class TestHeaderParameters:
             submit({ContentType: b"text/plain"})
 
     def test_x5chain(
-        self, submit, client: Client, trusted_ca: X5ChainCertificateAuthority
+        self,
+        submit,
+        client: Client,
+        trusted_ca: X5ChainCertificateAuthority,
+        configure_service,
     ):
+        configure_service(
+            {"policy": {"policyScript": "export function apply() { return true; }"}}
+        )
+
         signer = trusted_ca.create_identity(
             length=1, kty="ec", alg="ES256", add_eku="2.999"
         )
@@ -242,7 +250,7 @@ class TestHeaderParameters:
                 signer=signer,
             )
 
-        with service_error("Could not parse certificate"):
+        with service_error("OpenSSL error"):
             submit(
                 {X5chain: [cert_pem_to_der(signer.x5c[0]), b"Garbage root"]},
                 signer=signer,
