@@ -118,14 +118,6 @@ EOL >> test-config.json;
 
 Above you can see a special `workspace` directory which would have been created when running with `docker/run-dev.sh` and would contain the member keys.
 
-### Adding x509 CA roots
-
-Root CAs are used to validate COSE envelopes being submitted to the `/entries` endpoint. Similar to the [configuration](docs/configuration.md) CA roots can be set with the CLI.
-
-```sh
-./pyscitt.sh governance propose_ca_certs --name x509_roots -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --ca-certs myexpectedca.pem
-```
-
 ## Testing
 
 scitt-ccf-ledger has unit tests, covering individual components of the source code, and functional tests, covering end-to-end use cases of scitt-ccf-ledger.
