@@ -3,7 +3,12 @@
 
 #pragma once
 
+#include "cbor.h"
 #include "tracing.h"
+#include <qcbor/qcbor_decode.h>
+#include <qcbor/qcbor_encode.h>
+#include <qcbor/qcbor_spiffy_decode.h>
+#include <stdexcept>
 
 namespace scitt
 {
@@ -23,6 +28,28 @@ namespace scitt
       code(code),
       headers(headers)
     {}
+
+    std::vector<uint8_t> to_cbor() const
+    {
+      std::vector<uint8_t> output(16);
+      UsefulBuf output_buf{output.data(), output.size()};
+      QCBOREncodeContext ectx;
+      QCBOREncode_Init(&ectx, output_buf);
+      QCBOREncode_OpenMap(&ectx);
+      // QCBOREncode_AddTextToMapN(&ectx, -1, UsefulBuf_FROM_SZ_LITERAL(code.c_str()));
+      // QCBOREncode_AddTextToMapN(&ectx, -2, UsefulBuf_FROM_SZ_LITERAL(what()));
+      QCBOREncode_CloseMap(&ectx);
+      UsefulBufC encoded_cbor;
+      QCBORError err;
+      err = QCBOREncode_Finish(&ectx, &encoded_cbor);
+      if (err != QCBOR_SUCCESS)
+      {
+        throw std::logic_error("Failed to encode CBOR error");
+      }
+      output.resize(encoded_cbor.len);
+      output.shrink_to_fit();
+      return output;
+    }
   };
 
   struct BadRequestError : public HTTPError
@@ -103,7 +130,14 @@ namespace scitt
           SCITT_INFO("Code={}", e.code);
         }
 
-        ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
+        // ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
+
+        ctx.rpc_ctx->set_response_status(e.status_code);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::CBOR);
+        ctx.rpc_ctx->set_response_body(e.to_cbor());
+
         for (const auto& [header_name, header_value] : e.headers)
         {
           ctx.rpc_ctx->set_response_header(header_name, header_value);

@@ -110,6 +110,7 @@ if (BUILD_TESTS)
     unit-tests/main.cpp
     unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
+    unit-tests/generic_error_adapter_test.cpp
     unit-tests/historical/lru_test.cpp
   )
   add_san(unit_tests)
