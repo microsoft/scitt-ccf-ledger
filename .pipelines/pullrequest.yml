@@ -8,7 +8,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 - name: CCF_VERSION
   displayName: Target CCF version to build for
   type: string
-  default: 6.0.0-dev19
+  default: 6.0.0-dev20
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
