@@ -12,12 +12,22 @@ from pyscitt.verify import verify_transparent_statement
 
 class TestHistorical:
     @pytest.fixture(scope="class")
-    def submissions(self, client: Client, trusted_ca):
+    def submissions(self, client: Client, trusted_ca, configure_service):
         COUNT = 5
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec", add_eku="2.999")
+        configure_service(
+            {
+                "policy": {
+                    "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+                }
+            }
+        )
+
         result = []
         for i in range(COUNT):
-            signed_statement = crypto.sign_json_statement(identity, {"value": i})
+            signed_statement = crypto.sign_json_statement(
+                identity, {"value": i}, cwt=True
+            )
             submission = client.register_signed_statement(signed_statement)
             result.append(
                 SimpleNamespace(
@@ -29,7 +39,7 @@ class TestHistorical:
             )
         return result
 
-    def test_enumerate_statements(self, client: Client, submissions):
+    def test_enumerate_statements(self, client: Client, submissions, configure_service):
         seqnos = list(
             client.enumerate_statements(
                 start=submissions[0].seqno, end=submissions[-1].seqno
