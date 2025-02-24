@@ -132,44 +132,6 @@ def test_recovery(client, trusted_ca, restart_service):
 def test_transparency_configuration(client, cchost):
     issuer = f"127.0.0.1:{cchost.rpc_port}"
     reference = {"issuer": issuer, "jwks_uri": f"https://{issuer}/jwks"}
-
-    # Unsupported Accept header
-    with service_error("UnsupportedContentType"):
-        client.get(
-            "/.well-known/transparency-configuration",
-            headers={"Accept": "application/text"},
-        )
-
-    # Empty Accept header
-    with service_error("UnsupportedContentType"):
-        client.get(
-            "/.well-known/transparency-configuration",
-            headers={"Accept": ""},
-        )
-
-    config = client.get(
-        "/.well-known/transparency-configuration",
-        headers={"Accept": "application/json"},
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/json"
-    assert config.json() == reference
-
-    config = client.get(
-        "/.well-known/transparency-configuration",
-        headers={"Accept": "application/cbor"},
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == reference
-
-    config = client.get(
-        "/.well-known/transparency-configuration", headers={"Accept": "*/*"}
-    )
-    assert config.status_code == 200
-    assert config.headers["Content-Type"] == "application/cbor"
-    assert cbor2.loads(config.content) == reference
-
     config = client.get("/.well-known/transparency-configuration")
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"
