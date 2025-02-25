@@ -5,6 +5,7 @@
 
 #include "cbor.h"
 #include "tracing.h"
+
 #include <qcbor/qcbor_decode.h>
 #include <qcbor/qcbor_encode.h>
 #include <qcbor/qcbor_spiffy_decode.h>
@@ -35,12 +36,12 @@ namespace scitt
       int64_t err_code_label = -1;
       int64_t err_message_label = -2;
       // The size of the buffer must be equal or larger than the data,
-      // otherwise decodign will fail 
+      // otherwise decodign will fail
       size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
         QCBOR_HEAD_BUFFER_SIZE + // key
         sizeof(err_code_label) + // key
         QCBOR_HEAD_BUFFER_SIZE + // value
-        code.size() +            // value
+        code.size() + // value
         QCBOR_HEAD_BUFFER_SIZE + // key
         sizeof(err_message_label) + // key
         QCBOR_HEAD_BUFFER_SIZE + // value
@@ -52,7 +53,8 @@ namespace scitt
       QCBOREncode_Init(&ectx, output_buf);
       QCBOREncode_OpenMap(&ectx);
       QCBOREncode_AddTextToMapN(&ectx, err_code_label, cbor::from_string(code));
-      QCBOREncode_AddTextToMapN(&ectx, err_message_label, cbor::from_string(error_mesasge));
+      QCBOREncode_AddTextToMapN(
+        &ectx, err_message_label, cbor::from_string(error_mesasge));
       QCBOREncode_CloseMap(&ectx);
       UsefulBufC encoded_cbor;
       QCBORError err;
