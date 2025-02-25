@@ -23,6 +23,12 @@ from .receipt import Receipt
 from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
+CT_APPLICATION_JSON = "application/json"
+CT_APPLICATION_CBOR = "application/cbor"
+CT_APPLICATION_COSE = "application/cose"
+CT_APLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
+CBOR_ERR_TITLE_TAG = -1
+CBOR_ERR_DETAIL_TAG = -2
 
 
 class MemberAuthenticationMethod(ABC):
@@ -278,6 +284,27 @@ class BaseClient:
         values.update(kwargs)
         return self.__class__(**values)
 
+    def parse_response_error(self, response: httpx.Response) -> Optional[ServiceError]:
+        """
+        Parse the error response from the server and return a ServiceError instance.
+        """
+        if response.is_success:
+            return None
+
+        content_type = response.headers.get("content-type", CT_APPLICATION_JSON)
+        if (
+            content_type == CT_APPLICATION_CBOR
+            or content_type == CT_APPLICATION_COSE
+            or content_type == CT_APLICATION_CBOR_ERROR
+        ):
+            error = cbor2.loads(response.read())
+            return ServiceError(
+                response.headers, error[CBOR_ERR_TITLE_TAG], error[CBOR_ERR_DETAIL_TAG]
+            )
+        else:
+            error = response.json()["error"]
+            return ServiceError(response.headers, error["code"], error["message"])
+
     def request(
         self,
         method,
@@ -351,7 +378,7 @@ class BaseClient:
 
                 # Set the request data and the content-type header
                 kwargs["content"] = payload
-                kwargs.setdefault("headers", {})["content-type"] = "application/cose"
+                kwargs.setdefault("headers", {})["content-type"] = CT_APPLICATION_COSE
             else:
                 raise ValueError(f"Cannot sign request")
 
@@ -359,6 +386,7 @@ class BaseClient:
         timeout = 30
         deadline = time.monotonic() + timeout
         attempt = 1
+        response_error = None
         while True:
             response = self.session.request(method, url, **kwargs)
 
@@ -366,16 +394,19 @@ class BaseClient:
             if attempt > 1:
                 log_parts.append(f"(attempt #{attempt})")
             log_parts.append(response.status_code)
-            if not response.is_success:
-                log_parts.append(response.json().get("error", {}).get("code"))
+
+            response_error = self.parse_response_error(response)
+            if response_error is not None:
+                log_parts.append(response_error.code)
+
             LOG.debug(" ".join(str(p) for p in log_parts))
 
             for code in retry_on:
-                # FIXME: response can be CBOR
                 if isinstance(code, tuple):
                     if (
                         response.status_code == code[0]
-                        and response.json().get("error", {}).get("code") == code[1]
+                        and response_error is not None
+                        and response_error.code == code[1]
                     ):
                         break
                 elif callable(code):
@@ -397,10 +428,9 @@ class BaseClient:
             time.sleep(wait)
             attempt += 1
 
-        if not response.is_success:
-            error = response.json()["error"]
-            LOG.error(f"Request failed: {error}")
-            raise ServiceError(response.headers, error["code"], error["message"])
+        if response_error is not None:
+            LOG.error(f"Request failed: {response_error.code} {response_error.message}")
+            raise response_error
 
         if wait_for_confirmation:
             self.wait_for_confirmation(response.headers[CCF_TX_ID_HEADER])
@@ -509,7 +539,7 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
-        headers = {"Content-Type": "application/cose"}
+        headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
@@ -524,7 +554,7 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> Submission:
-        headers = {"Content-Type": "application/cose"}
+        headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
@@ -553,7 +583,9 @@ class Client(BaseClient):
             return response["EntryId"]
         elif response["Status"] == "failed":
             error = response["Error"]
-            raise ServiceError(response.headers, error["code"], error["message"])
+            raise ServiceError(
+                response.headers, error[CBOR_ERR_TITLE_TAG], error[CBOR_ERR_DETAIL_TAG]
+            )
         else:
             raise ValueError("Invalid status {}".format(response["Status"]))
 
