@@ -62,7 +62,6 @@ def test_jwks(client: Client):
     [
         {"alg": "ES256", "kty": "ec", "ec_curve": "P-256", "add_eku": "2.999"},
         {"alg": "ES384", "kty": "ec", "ec_curve": "P-384", "add_eku": "2.999"},
-        #        {"alg": "ES512", "kty": "ec", "ec_curve": "P-521", "add_eku": "2.999"}, https://github.com/microsoft/CCF/issues/6858
         {"alg": "PS256", "kty": "rsa", "add_eku": "2.999"},
         {"alg": "PS384", "kty": "rsa", "add_eku": "2.999"},
         {"alg": "PS512", "kty": "rsa", "add_eku": "2.999"},
