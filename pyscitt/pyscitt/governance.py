@@ -157,17 +157,6 @@ def set_scitt_configuration_proposal(configuration: dict) -> dict:
     }
 
 
-def set_ca_bundle_proposal(name: str, bundle: str) -> dict:
-    return {
-        "actions": [
-            {
-                "name": "set_ca_cert_bundle",
-                "args": {"name": name, "cert_bundle": bundle},
-            }
-        ]
-    }
-
-
 def transition_service_to_open_proposal(
     next_service_identity: str, previous_service_identity: Optional[str] = None
 ) -> dict:

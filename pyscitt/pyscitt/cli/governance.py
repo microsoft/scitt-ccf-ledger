@@ -63,12 +63,6 @@ def execute_action(client: Client, action: GovernanceAction, args: argparse.Name
             print(f"Proposal {result.id} is {result.state}")
 
 
-def propose_root_ca_certs(bundle_name: str, ca_cert_path: Path):
-    cert_bundle = ca_cert_path.read_text()
-    proposal = governance.set_ca_bundle_proposal(bundle_name, cert_bundle)
-    return GovernanceAction(proposal)
-
-
 def propose_configuration(configuration_path: Path):
     with open(configuration_path) as f:
         configuration = json.load(f)
@@ -228,30 +222,6 @@ def setup_local_development(client: Client, trust_store_dir: Optional[Path]):
 def cli(fn):
     parser = fn(description="Execute governance actions")
     sub = parser.add_subparsers(help="Governance action to execute", required=True)
-
-    p = sub.add_parser("propose_ca_certs")
-    add_client_arguments(p, with_member_auth=True)
-    add_proposal_arguments(p)
-    p.add_argument(
-        "--name",
-        choices=["x509_roots"],
-        required=True,
-        help="Name of the CA Cert bundle as referenced in CCF apps",
-        dest="bundle_name",
-    )
-    p.add_argument(
-        "--ca-certs",
-        type=Path,
-        help="Path to PEM-encoded CA Cert bundle",
-        required=True,
-    )
-    p.set_defaults(
-        func=lambda args: execute_action(
-            create_client(args),
-            propose_root_ca_certs(args.bundle_name, args.ca_certs),
-            args,
-        )
-    )
 
     p = sub.add_parser("propose_configuration")
     add_client_arguments(p, with_member_auth=True)

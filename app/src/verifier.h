@@ -72,41 +72,14 @@ namespace scitt::verifier
       }
     }
 
-    PublicKey process_x509_profile(
+    void process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr,
-      ccf::kv::ReadOnlyTx& tx,
-      const Configuration& configuration)
+      const Configuration& configuration,
+      const std::vector<uint8_t>& data)
     {
-      // X.509 SCITT profile validation.
-
       check_is_accepted_algorithm(phdr, configuration);
 
-      if (!phdr.cty.has_value())
-      {
-        throw cose::COSEDecodeError("Missing cty in protected header");
-      }
-      if (!phdr.x5chain.has_value())
-      {
-        throw cose::COSEDecodeError("Missing x5chain in protected header");
-      }
-
-      auto x5chain = phdr.x5chain;
-
-      // Verify the chain of certs against the x509 root store.
-      auto roots = x509_root_store(tx);
-      auto cert = verify_chain(roots, x5chain.value());
-      auto key = PublicKey(cert, std::nullopt);
-
-      return key;
-    }
-
-    void process_ietf_didx509_subprofile(
-      const cose::ProtectedHeader& phdr, const std::vector<uint8_t>& data)
-    {
-      // NB: In later revisions of SCITT, x5chain is unprotected, and
-      // only x5t is. This logic will need to authenticate x5chain[0]
-      // against x5t before it can proceed to verify the signature.
-      // Verify the signature as early as possible
+      // Verify the signature using the key of the leaf in the x5chain
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
@@ -202,62 +175,40 @@ namespace scitt::verifier
       }
     }
 
-    std::tuple<
-      SignedStatementProfile,
-      cose::ProtectedHeader,
-      cose::UnprotectedHeader>
+    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
     verify_signed_statement(
-      const std::vector<uint8_t>& data,
+      const std::vector<uint8_t>& signed_statement,
       ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       const Configuration& configuration)
     {
-      SignedStatementProfile profile;
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       try
       {
-        std::tie(phdr, uhdr) = cose::decode_headers(data);
+        std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
 
-        // Validate_profile and retrieve key.
-        PublicKey key;
         if (contains_cwt_issuer(phdr))
         {
-          if (
-            phdr.cwt_claims.iss->starts_with("did:x509") &&
-            phdr.x5chain.has_value())
+          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
           {
-            // IETF SCITT did:x509 claim
-            process_ietf_didx509_subprofile(phdr, data);
+            throw VerificationError("CWT_Claims issuer must be a did:x509");
           }
-          else
+
+          if (!phdr.x5chain.has_value())
           {
             throw VerificationError(
-              "Payloads with CWT_Claims must have a did:x509 iss and x5chain");
+              "Signed statement protected header must contain an x5chain");
           }
 
-          profile = SignedStatementProfile::IETF;
-        }
-        else if (phdr.x5chain.has_value())
-        {
-          // X.509 SCITT claim
-          key = process_x509_profile(phdr, tx, configuration);
-
-          try
-          {
-            cose::verify(data, key);
-          }
-          catch (const cose::COSESignatureValidationError& e)
-          {
-            throw VerificationError(e.what());
-          }
-
-          profile = SignedStatementProfile::X509;
+          process_signed_statement_with_didx509_issuer(
+            phdr, configuration, signed_statement);
         }
         else
         {
-          SCITT_INFO("Unknown COSE profile");
-          throw cose::COSEDecodeError("Unknown COSE profile");
+          throw VerificationError(
+            "Signed statement protected header must contain CWT_Claims with at "
+            "least an issuer");
         }
       }
       catch (const cose::COSEDecodeError& e)
@@ -265,61 +216,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return std::make_tuple(profile, phdr, uhdr);
-    }
-
-    /**
-     * Verify a chain of certificates against a set of trusted roots.
-     *
-     * The set of trusted roots should be PEM-encoded whereas the chain
-     * DER-encoded.
-     *
-     * If successful, returns the leaf certificate. Otherwise throws a
-     * VerificationError.
-     */
-    static ccf::crypto::OpenSSL::Unique_X509 verify_chain(
-      std::span<const ccf::crypto::Pem> trusted,
-      std::span<const std::vector<uint8_t>> chain)
-    {
-      if (chain.empty())
-      {
-        throw VerificationError(
-          "Certificate chain must contain at least one certificate");
-      }
-
-      ccf::crypto::OpenSSL::Unique_X509 leaf = parse_certificate(chain[0]);
-
-      ccf::crypto::OpenSSL::Unique_X509_STORE store;
-      for (const auto& pem : trusted)
-      {
-        ccf::crypto::OpenSSL::CHECK1(
-          X509_STORE_add_cert(store, parse_certificate(pem)));
-      }
-
-      ccf::crypto::OpenSSL::Unique_STACK_OF_X509 chain_stack;
-      for (const auto& der : chain.subspan(1))
-      {
-        ccf::crypto::OpenSSL::Unique_X509 cert = parse_certificate(der);
-        ccf::crypto::OpenSSL::CHECK1(sk_X509_push(chain_stack, cert));
-        ccf::crypto::OpenSSL::CHECK1(X509_up_ref(cert));
-      }
-
-      ccf::crypto::OpenSSL::Unique_X509_STORE_CTX store_ctx;
-      ccf::crypto::OpenSSL::CHECK1(
-        X509_STORE_CTX_init(store_ctx, store, leaf, chain_stack));
-
-      if (X509_verify_cert(store_ctx) != 1)
-      {
-        int err = X509_STORE_CTX_get_error(store_ctx);
-        SCITT_INFO(
-          "Certificate chain is invalid: {}",
-          X509_verify_cert_error_string(err));
-        throw VerificationError("Certificate chain is invalid");
-      }
-
-      check_certificate_policy(chain_stack, leaf);
-
-      return leaf;
+      return {phdr, uhdr};
     }
 
   private:
@@ -355,54 +252,6 @@ namespace scitt::verifier
         throw VerificationError("Could not parse certificate");
       }
       return cert;
-    }
-
-    /**
-     * Get the set of trusted x509 CAs from the KV.
-     */
-    static std::vector<ccf::crypto::Pem> x509_root_store(
-      ccf::kv::ReadOnlyTx& tx)
-    {
-      // TODO: move bundle name to constants and make more specific.
-      auto ca_certs =
-        tx.template ro<ccf::CACertBundlePEMs>(ccf::Tables::CA_CERT_BUNDLE_PEMS)
-          ->get("x509_roots");
-      if (!ca_certs.has_value())
-      {
-        // Internal error, not exposed to client.
-        throw std::runtime_error(
-          "Failed to load x509 Root CA certificates from KV");
-      }
-      return ccf::crypto::split_x509_cert_bundle(*ca_certs);
-    }
-
-    /**
-     * Assuming a verified chain and leaf certificate, enforce additional
-     * policies.
-     */
-    static void check_certificate_policy(STACK_OF(X509) * chain, X509* leaf)
-    {
-      if (sk_X509_num(chain) == 0)
-      {
-        throw VerificationError(
-          "Certificate chain must include at least one CA certificate");
-      }
-
-      // OpenSSL doesn't require the chain to include the final trust anchor
-      // certificate, since it can find it in the trust store. However, for
-      // auditability reasons, it is preferable for all claims to be verifiable
-      // in isolation. For this reason, we require that the last certificate of
-      // the chain be self-signed.
-      X509* root = sk_X509_value(chain, sk_X509_num(chain) - 1);
-      if (!(X509_get_extension_flags(root) & EXFLAG_SS))
-      {
-        throw VerificationError("Chain root must be self-signed");
-      }
-
-      if (X509_get_extension_flags(leaf) & EXFLAG_CA)
-      {
-        throw VerificationError("Signing certificate is CA");
-      }
     }
   };
 }

@@ -108,7 +108,6 @@ if (BUILD_TESTS)
   add_executable(
     unit_tests
     unit-tests/main.cpp
-    unit-tests/verifier_test.cpp
     unit-tests/configurable_auth_test.cpp
     unit-tests/historical/lru_test.cpp
   )
