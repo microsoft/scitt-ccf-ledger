@@ -14,6 +14,11 @@
 
 namespace scitt::cbor
 {
+  static constexpr int64_t CBOR_ERROR_TITLE = -1;
+  static constexpr int64_t CBOR_ERROR_DETAIL = -2;
+  static constexpr const char* CBOR_ERROR_CONTENT_TYPE =
+    "application/concise-problem-details+cbor";
+
   inline UsefulBufC from_bytes(std::span<const uint8_t> v)
   {
     return UsefulBufC{v.data(), v.size()};

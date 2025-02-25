@@ -19,6 +19,7 @@ namespace scitt
     ccf::http_status status_code;
     std::string code;
     Headers headers;
+    // FIXME: use discriminator to switch between cbor and json error
     HTTPError(
       ccf::http_status status_code,
       std::string code,
@@ -30,20 +31,23 @@ namespace scitt
       headers(headers)
     {}
 
+    /**
+     * Convert the error to a CBOR-encoded byte array.
+     * Follow rfc9290 for error encoding but use only
+     * title and detail and encode them cbor text.
+     */
     std::vector<uint8_t> to_cbor() const
     {
       std::string error_mesasge = what();
-      int64_t err_code_label = -1;
-      int64_t err_message_label = -2;
       // The size of the buffer must be equal or larger than the data,
       // otherwise decodign will fail
       size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
         QCBOR_HEAD_BUFFER_SIZE + // key
-        sizeof(err_code_label) + // key
+        sizeof(cbor::CBOR_ERROR_TITLE) + // key
         QCBOR_HEAD_BUFFER_SIZE + // value
         code.size() + // value
         QCBOR_HEAD_BUFFER_SIZE + // key
-        sizeof(err_message_label) + // key
+        sizeof(cbor::CBOR_ERROR_DETAIL) + // key
         QCBOR_HEAD_BUFFER_SIZE + // value
         error_mesasge.size(); // value
       std::vector<uint8_t> output(buff_size);
@@ -52,9 +56,10 @@ namespace scitt
       QCBOREncodeContext ectx;
       QCBOREncode_Init(&ectx, output_buf);
       QCBOREncode_OpenMap(&ectx);
-      QCBOREncode_AddTextToMapN(&ectx, err_code_label, cbor::from_string(code));
       QCBOREncode_AddTextToMapN(
-        &ectx, err_message_label, cbor::from_string(error_mesasge));
+        &ectx, cbor::CBOR_ERROR_TITLE, cbor::from_string(code));
+      QCBOREncode_AddTextToMapN(
+        &ectx, cbor::CBOR_ERROR_DETAIL, cbor::from_string(error_mesasge));
       QCBOREncode_CloseMap(&ectx);
       UsefulBufC encoded_cbor;
       QCBORError err;
@@ -147,12 +152,12 @@ namespace scitt
           SCITT_INFO("Code={}", e.code);
         }
 
+        // FIXME: return json error if required by the caller
         // ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
 
         ctx.rpc_ctx->set_response_status(e.status_code);
         ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE,
-          ccf::http::headervalues::contenttype::CBOR);
+          ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
         ctx.rpc_ctx->set_response_body(e.to_cbor());
 
         for (const auto& [header_name, header_value] : e.headers)
