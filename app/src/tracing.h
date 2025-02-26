@@ -144,7 +144,7 @@ namespace scitt
     const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
-    return [fn, path, get_time](Ctx& ctx) {
+    return [fn, path, get_time](ccf::endpoints::EndpointContext& ctx) {
       auto cleanup = finally(clear_trace_state);
 
       request_id = create_request_id();

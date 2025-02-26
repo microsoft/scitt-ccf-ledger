@@ -67,8 +67,7 @@ namespace scitt::historical
       {
         case HistoricalTxStatus::Error:
         {
-          throw InternalServerCborError(
-            ccf::errors::InternalError, std::move(error_reason));
+          throw InternalCborError(std::move(error_reason));
         }
         case HistoricalTxStatus::PendingOrUnknown:
         {

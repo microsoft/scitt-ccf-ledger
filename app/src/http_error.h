@@ -18,6 +18,7 @@ namespace scitt
     using Headers = std::unordered_map<std::string, std::string>;
     ccf::http_status status_code;
     std::string code;
+    bool returns_cbor_error;
     Headers headers;
     HTTPError(
       ccf::http_status status_code,
@@ -28,6 +29,7 @@ namespace scitt
       std::runtime_error(msg),
       status_code(status_code),
       code(code),
+      returns_cbor_error(returns_cbor_error),
       headers(headers)
     {}
 
@@ -83,7 +85,7 @@ namespace scitt
 
   struct BadRequestCborError : public HTTPError
   {
-    BadRequestJsonError(std::string code, std::string msg) :
+    BadRequestCborError(std::string code, std::string msg) :
       HTTPError(HTTP_STATUS_BAD_REQUEST, code, msg, true)
     {}
   };
@@ -123,6 +125,34 @@ namespace scitt
     }
   };
 
+  struct ServiceUnavailableCborError : public HTTPError
+  {
+    ServiceUnavailableCborError(
+      std::string code,
+      std::string msg,
+      std::optional<uint32_t> retry_after = std::nullopt) :
+      HTTPError(
+        HTTP_STATUS_SERVICE_UNAVAILABLE,
+        code,
+        msg,
+        true,
+        make_headers(retry_after))
+    {}
+
+  private:
+    static HTTPError::Headers make_headers(std::optional<uint32_t> retry_after)
+    {
+      if (retry_after)
+      {
+        return {{"Retry-After", std::to_string(retry_after.value())}};
+      }
+      else
+      {
+        return {};
+      }
+    }
+  };
+
   struct InternalServerError : public HTTPError
   {
     InternalServerError(
@@ -134,14 +164,14 @@ namespace scitt
 
   struct InternalJsonError : public InternalServerError
   {
-    InternalError(std::string msg) :
+    InternalJsonError(std::string msg) :
       InternalServerError(errors::InternalError, msg, false)
     {}
   };
 
   struct InternalCborError : public InternalServerError
   {
-    InternalError(std::string msg) :
+    InternalCborError(std::string msg) :
       InternalServerError(errors::InternalError, msg, true)
     {}
   };

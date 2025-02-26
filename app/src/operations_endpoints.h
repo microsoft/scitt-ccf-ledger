@@ -412,8 +412,15 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
     {
-      auto txid = historical::get_tx_id_from_request_path(ctx);
-      return index->lookup(txid);
+      auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
+      const auto tx_id = ccf::TxID::from_str(tx_id_str);
+      if (!tx_id.has_value())
+      {
+        throw BadRequestCborError(
+          errors::InvalidInput,
+          fmt::format("Invalid Operation ID: {}", tx_id_str));
+      }
+      return index->lookup(tx_id.value());
     }
   }
 
