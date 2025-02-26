@@ -38,6 +38,7 @@ namespace
   // Test function that throws an HTTPError
   void test_function(MockContext& ctx)
   {
+    (void)ctx;
     throw BadRequestCborError("BadRequest", "This is a bad request");
   }
 
@@ -59,7 +60,7 @@ namespace
         // Decode the CBOR body and check its contents
         QCBORError err;
         QCBORDecodeContext decode_ctx;
-        UsefulBufC input_buf{body.data(), body.size()};
+        const UsefulBufC input_buf{body.data(), body.size()};
         QCBORDecode_Init(&decode_ctx, input_buf, QCBOR_DECODE_MODE_NORMAL);
         QCBORDecode_EnterMap(&decode_ctx, nullptr);
         QCBORItem item;
