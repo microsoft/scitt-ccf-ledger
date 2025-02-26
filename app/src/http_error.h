@@ -19,11 +19,11 @@ namespace scitt
     ccf::http_status status_code;
     std::string code;
     Headers headers;
-    // FIXME: use discriminator to switch between cbor and json error
     HTTPError(
       ccf::http_status status_code,
       std::string code,
       std::string msg,
+      bool returns_cbor_error = true,
       Headers headers = {}) :
       std::runtime_error(msg),
       status_code(status_code),
@@ -36,7 +36,7 @@ namespace scitt
      * Follow rfc9290 for error encoding but use only
      * title and detail and encode them cbor text.
      */
-    std::vector<uint8_t> to_cbor() const
+    std::vector<uint8_t> to_cbor_error() const
     {
       std::string error_mesasge = what();
       // The size of the buffer must be equal or larger than the data,
@@ -74,35 +74,35 @@ namespace scitt
     }
   };
 
-  struct BadRequestError : public HTTPError
+  struct BadRequestJsonError : public HTTPError
   {
-    BadRequestError(std::string code, std::string msg) :
-      HTTPError(HTTP_STATUS_BAD_REQUEST, code, msg)
+    BadRequestJsonError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_BAD_REQUEST, code, msg, false)
     {}
   };
 
-  struct NotFoundError : public HTTPError
+  struct BadRequestCborError : public HTTPError
   {
-    NotFoundError(std::string code, std::string msg) :
-      HTTPError(HTTP_STATUS_NOT_FOUND, code, msg)
+    BadRequestJsonError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_BAD_REQUEST, code, msg, true)
     {}
   };
 
-  struct UnauthorizedError : public HTTPError
+  struct NotFoundCborError : public HTTPError
   {
-    UnauthorizedError(std::string code, std::string msg) :
-      HTTPError(HTTP_STATUS_UNAUTHORIZED, code, msg)
+    NotFoundCborError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_NOT_FOUND, code, msg, true)
     {}
   };
 
-  struct ServiceUnavailableError : public HTTPError
+  struct ServiceUnavailableJsonError : public HTTPError
   {
-    ServiceUnavailableError(
+    ServiceUnavailableJsonError(
       std::string code,
       std::string msg,
       std::optional<uint32_t> retry_after = std::nullopt) :
       HTTPError(
-        HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, make_headers(retry_after))
+        HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, false, make_headers(retry_after))
     {}
 
   private:
@@ -121,15 +121,22 @@ namespace scitt
 
   struct InternalServerError : public HTTPError
   {
-    InternalServerError(std::string code, std::string msg) :
-      HTTPError(HTTP_STATUS_INTERNAL_SERVER_ERROR, code, msg)
+    InternalServerError(std::string code, std::string msg, bool returns_cbor_error) :
+      HTTPError(HTTP_STATUS_INTERNAL_SERVER_ERROR, code, msg, returns_cbor_error)
     {}
   };
 
-  struct InternalError : public InternalServerError
+  struct InternalJsonError : public InternalServerError
   {
     InternalError(std::string msg) :
-      InternalServerError(errors::InternalError, msg)
+      InternalServerError(errors::InternalError, msg, false)
+    {}
+  };
+
+  struct InternalCborError : public InternalServerError
+  {
+    InternalError(std::string msg) :
+      InternalServerError(errors::InternalError, msg, true)
     {}
   };
 
@@ -152,13 +159,17 @@ namespace scitt
           SCITT_INFO("Code={}", e.code);
         }
 
-        // FIXME: return json error if required by the caller
-        // ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
-
-        ctx.rpc_ctx->set_response_status(e.status_code);
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
-        ctx.rpc_ctx->set_response_body(e.to_cbor());
+        if (e.returns_cbor_error)
+        {
+          ctx.rpc_ctx->set_response_status(e.status_code);
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+          ctx.rpc_ctx->set_response_body(e.to_cbor_error());
+        }
+        else
+        {
+          ctx.rpc_ctx->set_error(e.status_code, e.code, e.what());
+        }
 
         for (const auto& [header_name, header_value] : e.headers)
         {

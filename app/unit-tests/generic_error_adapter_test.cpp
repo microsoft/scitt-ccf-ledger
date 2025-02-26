@@ -30,7 +30,7 @@ namespace
   // Test function that throws an HTTPError
   void test_function(MockContext& ctx)
   {
-    throw BadRequestError("BadRequest", "This is a bad request");
+    throw BadRequestCborError("BadRequest", "This is a bad request");
   }
 
   // Unit test for generic_error_adapter

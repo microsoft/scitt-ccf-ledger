@@ -33,9 +33,6 @@ namespace scitt::historical
   using ccf::historical::HistoricalTxStatus;
   using ccf::historical::StatePtr;
 
-  // CCF defines a version, but makes it return std::optional instead of using
-  // exceptions.
-  using TxIDExtractor = std::function<ccf::TxID(EndpointContext& args)>;
   using ActiveHandlesLRU = LRU<ccf::SeqNo, bool>;
 
   // TODO: move this to constants.h and describe how it influences memory
@@ -44,28 +41,21 @@ namespace scitt::historical
   inline ActiveHandlesLRU ACTIVE_HANDLES_LRU(MAX_ACTIVE_HANDLES);
   inline std::mutex ACTIVE_HANDLES_MUTEX;
 
-  static ccf::TxID get_tx_id_from_request_path(EndpointContext& ctx)
-  {
-    auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
-
-    const auto tx_id = ccf::TxID::from_str(tx_id_str);
-    if (!tx_id.has_value())
-    {
-      throw BadRequestError(
-        errors::InvalidInput,
-        fmt::format("Invalid transaction ID: {}", tx_id_str));
-    }
-    return tx_id.value();
-  }
-
-  static StatePtr get_historical_state(
+  static StatePtr get_historical_entry_state(
     AbstractStateCache& state_cache,
     const CheckHistoricalTxStatus& available,
-    const TxIDExtractor& extractor,
     EndpointContext& ctx)
   {
     // Extract the requested transaction ID
-    ccf::TxID target_tx_id = extractor(ctx);
+    auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
+    const auto tx_id = ccf::TxID::from_str(tx_id_str);
+    if (!tx_id.has_value())
+    {
+      throw BadRequestCborError(
+        errors::InvalidInput,
+        fmt::format("Invalid transaction ID: {}", tx_id_str));
+    }
+    ccf::TxID target_tx_id = tx_id.value();
 
     // Check that the requested transaction ID is available
     {
@@ -77,17 +67,17 @@ namespace scitt::historical
       {
         case HistoricalTxStatus::Error:
         {
-          throw InternalServerError(
+          throw InternalServerCborError(
             ccf::errors::InternalError, std::move(error_reason));
         }
         case HistoricalTxStatus::PendingOrUnknown:
         {
-          throw ServiceUnavailableError(
+          throw ServiceUnavailableCborError(
             ccf::errors::TransactionPendingOrUnknown, std::move(error_reason));
         }
         case HistoricalTxStatus::Invalid:
         {
-          throw NotFoundError(
+          throw NotFoundCborError(
             ccf::errors::TransactionInvalid, std::move(error_reason));
         }
         case HistoricalTxStatus::Valid:
@@ -122,7 +112,7 @@ namespace scitt::historical
     if (historical_state == nullptr)
     {
       constexpr uint32_t retry_after_seconds = 1;
-      throw ServiceUnavailableError(
+      throw ServiceUnavailableCborError(
         errors::TransactionNotCached,
         fmt::format(
           "Historical transaction {} is not cached.", target_tx_id.to_str()),
@@ -132,38 +122,14 @@ namespace scitt::historical
     return historical_state;
   }
 
-  static EndpointFunction adapter(
+  static EndpointFunction entry_adapter(
     const HandleHistoricalQuery& f,
     AbstractStateCache& state_cache,
-    const CheckHistoricalTxStatus& available,
-    const TxIDExtractor& extractor = get_tx_id_from_request_path)
+    const CheckHistoricalTxStatus& available)
   {
-    return [f, &state_cache, available, extractor](EndpointContext& ctx) {
-      auto state = get_historical_state(state_cache, available, extractor, ctx);
+    return [f, &state_cache, available](EndpointContext& ctx) {
+      auto state = get_historical_entry_state(state_cache, available, ctx);
       f(ctx, state);
     };
-  }
-
-  using HandleJsonHistoricalQuery =
-    std::function<ccf::jsonhandler::JsonAdapterResponse(
-      EndpointContext& args, StatePtr state, nlohmann::json&& params)>;
-
-  /**
-   * A combination of ccf::json_adapter and historical::adapter.
-   *
-   * Because the signatures are incompatible, the two adapaters don't natively
-   * compose. This combined adapter may be used instead.
-   */
-  static EndpointFunction json_adapter(
-    const HandleJsonHistoricalQuery& f,
-    AbstractStateCache& state_cache,
-    const CheckHistoricalTxStatus& available,
-    const TxIDExtractor& extractor = get_tx_id_from_request_path)
-  {
-    return ccf::json_adapter([f, &state_cache, available, extractor](
-                               EndpointContext& ctx, nlohmann::json&& params) {
-      auto state = get_historical_state(state_cache, available, extractor, ctx);
-      return f(ctx, state, std::move(params));
-    });
   }
 }

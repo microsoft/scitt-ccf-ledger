@@ -58,7 +58,7 @@ namespace scitt
 
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
-   * BadRequestError if the query parameter cannot be parsed. Also supports
+   * BadRequestJsonError if the query parameter cannot be parsed. Also supports
    * boolean parameters as "true" and "false".
    *
    * Returns std::nullopt if the parameter is missing.
@@ -91,7 +91,7 @@ namespace scitt
       }
       else
       {
-        throw BadRequestError(
+        throw BadRequestJsonError(
           errors::QueryParameterError,
           fmt::format(
             "Invalid value for query parameter '{}': {}", name, value));
@@ -103,7 +103,7 @@ namespace scitt
       const auto [p, ec] = std::from_chars(value.begin(), value.end(), result);
       if (ec != std::errc() || p != value.end())
       {
-        throw BadRequestError(
+        throw BadRequestJsonError(
           errors::QueryParameterError,
           fmt::format(
             "Invalid value for query parameter '{}': {}", name, value));
@@ -130,13 +130,13 @@ namespace scitt
     auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
     if (!proof.has_value())
     {
-      throw InternalError("Failed to get Merkle proof");
+      throw InternalCborError("Failed to get Merkle proof");
     }
 
     auto signature = describe_cose_signature_v1(*receipt_ptr);
     if (!signature.has_value())
     {
-      throw InternalError("Failed to get COSE signature");
+      throw InternalCborError("Failed to get COSE signature");
     }
 
     // See
@@ -205,9 +205,8 @@ namespace scitt
         };
 
       auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
-      endpoint.locally_committed_func =
-        tracing_local_commit_adapter(l, method, get_time);
+        method, verb, tracing_adapter_first(error_adapter(f), method, get_time), ap);
+      endpoint.locally_committed_func = tracing_adapter_last(l, method, get_time);
       return endpoint;
     }
 
@@ -239,7 +238,7 @@ namespace scitt
           "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
         {
-          throw BadRequestError(
+          throw BadRequestCborError(
             errors::PayloadTooLarge,
             fmt::format(
               "Entry size {} exceeds maximum allowed size {}",
@@ -251,7 +250,7 @@ namespace scitt
         auto result = this->get_untrusted_host_time_v1(host_time);
         if (result != ccf::ApiResult::OK)
         {
-          throw InternalError(fmt::format(
+          throw InternalCborError(fmt::format(
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
@@ -272,7 +271,7 @@ namespace scitt
         catch (const verifier::VerificationError& e)
         {
           SCITT_DEBUG("Signed statement verification failed: {}", e.what());
-          throw BadRequestError(errors::InvalidInput, e.what());
+          throw BadRequestCborError(errors::InvalidInput, e.what());
         }
 
         if (cfg.policy.policy_script.has_value())
@@ -286,7 +285,7 @@ namespace scitt
           {
             SCITT_DEBUG(
               "Policy check failed: {}", policy_violation_reason.value());
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::PolicyFailed,
               fmt::format(
                 "Policy was not met: {}", policy_violation_reason.value()));
@@ -298,7 +297,7 @@ namespace scitt
           if (verifier::contains_cwt_issuer(phdr))
           {
             SCITT_DEBUG("No policy applied, but CWT issuer present");
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::PolicyFailed,
               "Policy was not met: CWT issuer present but no policy "
               "configured");
@@ -365,7 +364,7 @@ namespace scitt
           auto entry = entries->get();
           if (!entry.has_value())
           {
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::InvalidInput,
               fmt::format(
                 "Transaction ID {} does not correspond to a submission.",
@@ -384,7 +383,7 @@ namespace scitt
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        scitt::historical::adapter(
+        scitt::historical::entry_adapter(
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -403,7 +402,7 @@ namespace scitt
           auto entry = entries->get();
           if (!entry.has_value())
           {
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::InvalidInput,
               fmt::format(
                 "Transaction ID {} does not correspond to a submission.",
@@ -435,7 +434,7 @@ namespace scitt
       make_endpoint(
         get_entry_statement_path,
         HTTP_GET,
-        scitt::historical::adapter(
+        scitt::historical::entry_adapter(
           get_entry_statement, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -467,7 +466,7 @@ namespace scitt
             const auto result = get_last_committed_txid_v1(view, seqno);
             if (result != ccf::ApiResult::OK)
             {
-              throw InternalError(fmt::format(
+              throw InternalJsonError(fmt::format(
                 "Failed to get last committed transaction ID: {}",
                 ccf::api_result_to_str(result)));
             }
@@ -476,7 +475,7 @@ namespace scitt
 
           if (to_seqno < from_seqno)
           {
-            throw BadRequestError(
+            throw BadRequestJsonError(
               errors::InvalidInput,
               fmt::format(
                 "Invalid range: Starts at {} but ends at {}",
@@ -487,13 +486,13 @@ namespace scitt
           const auto tx_status = get_tx_status(to_seqno);
           if (!tx_status.has_value())
           {
-            throw InternalError(fmt::format(
+            throw InternalJsonError(fmt::format(
               "Failed to get transaction status for seqno {}", to_seqno));
           }
 
           if (tx_status.value() != ccf::TxStatus::Committed)
           {
-            throw BadRequestError(
+            throw BadRequestJsonError(
               errors::InvalidInput,
               fmt::format(
                 "Only committed transactions can be queried. Transaction at "
@@ -505,9 +504,9 @@ namespace scitt
           const auto indexed_txid = entry_seqno_index->get_indexed_watermark();
           if (indexed_txid.seqno < to_seqno)
           {
-            throw ServiceUnavailableError(
+            throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
+              "Index of requested range not available yet, retry later", 1);
           }
 
           static constexpr size_t max_seqno_per_page = 10000;
@@ -519,9 +518,9 @@ namespace scitt
             entry_seqno_index->get_write_txs_in_range(range_begin, range_end);
           if (!interesting_seqnos.has_value())
           {
-            throw ServiceUnavailableError(
+            throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
+              "Index of requested range not available yet, retry later", 1);
           }
 
           SCITT_DEBUG("Get entries for the target range");
@@ -532,7 +531,7 @@ namespace scitt
             auto result = get_view_for_seqno_v1(seqno, view);
             if (result != ccf::ApiResult::OK)
             {
-              throw InternalError(fmt::format(
+              throw InternalJsonError(fmt::format(
                 "Failed to get view for seqno: {}",
                 ccf::api_result_to_str(result)));
             }

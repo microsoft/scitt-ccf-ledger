@@ -193,11 +193,7 @@ namespace scitt
           context.get_subsystem<ccf::cose::AbstractCOSESignaturesConfig>();
         if (!subsystem)
         {
-          ctx.rpc_ctx->set_error(
-            HTTP_STATUS_INTERNAL_SERVER_ERROR,
-            ccf::errors::InternalError,
-            "COSE signatures subsystem not available");
-          return;
+          throw InternalCborError("COSE signatures subsystem not available");
         }
         auto cfg = subsystem->get_cose_signatures_config();
 
@@ -254,6 +250,7 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
+    // FIXME: /jwks should return CBOR errors by default
     registry
       .make_endpoint(
         "/jwks",

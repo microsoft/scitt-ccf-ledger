@@ -94,7 +94,7 @@ namespace scitt
         get_status_for_txid(operation_id.view, operation_id.seqno, tx_status);
       if (result != ccf::ApiResult::OK)
       {
-        throw InternalError(fmt::format(
+        throw InternalCborError(fmt::format(
           "Failed to get transaction status: {}",
           ccf::api_result_to_str(result)));
       }
@@ -134,7 +134,7 @@ namespace scitt
 
       if (operation_id.seqno < lower_bound)
       {
-        throw NotFoundError(
+        throw NotFoundCborError(
           errors::OperationExpired, "Operation ID is too old");
       }
       else if (operation_id.seqno >= upper_bound)
@@ -155,7 +155,7 @@ namespace scitt
       {
         if (operation_id.view != it->second.view)
         {
-          throw std::invalid_argument("Operation ID has inconsistent view");
+          throw BadRequestCborError(errors::InvalidInput, "Operation ID has inconsistent view");
         }
         return {
           .operation_id = operation_id,
@@ -169,7 +169,7 @@ namespace scitt
         // The transaction number is within our indexing range, yet doesn't
         // match any valid operation. The client must have sent us a transaction
         // ID for something completely different.
-        throw NotFoundError(errors::NotFound, "Invalid operation ID");
+        throw NotFoundCborError(errors::NotFound, "Invalid operation ID");
       }
     }
 
@@ -196,7 +196,7 @@ namespace scitt
       auto it = operations_.find(operation_id.seqno);
       if (!(it == operations_.end()) || (operation_id.view == it->second.view))
       {
-        throw std::invalid_argument("Operation ID has inconsistent view");
+        throw BadRequestCborError(errors::InvalidInput, "Operation ID has inconsistent view");
       }
 
       auto current_status = it != operations_.end() ?
@@ -309,7 +309,7 @@ namespace scitt
       }
       if (!valid)
       {
-        throw std::logic_error("Invalid operation transition");
+        throw InternalCborError("Invalid operation transition");
       }
       return valid;
     }
