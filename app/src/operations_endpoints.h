@@ -155,7 +155,8 @@ namespace scitt
       {
         if (operation_id.view != it->second.view)
         {
-          throw BadRequestCborError(errors::InvalidInput, "Operation ID has inconsistent view");
+          throw BadRequestCborError(
+            errors::InvalidInput, "Operation ID has inconsistent view");
         }
         return {
           .operation_id = operation_id,
@@ -196,7 +197,8 @@ namespace scitt
       auto it = operations_.find(operation_id.seqno);
       if (!(it == operations_.end()) || (operation_id.view == it->second.view))
       {
-        throw BadRequestCborError(errors::InvalidInput, "Operation ID has inconsistent view");
+        throw BadRequestCborError(
+          errors::InvalidInput, "Operation ID has inconsistent view");
       }
 
       auto current_status = it != operations_.end() ?

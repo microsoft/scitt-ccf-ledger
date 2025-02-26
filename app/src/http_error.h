@@ -102,7 +102,11 @@ namespace scitt
       std::string msg,
       std::optional<uint32_t> retry_after = std::nullopt) :
       HTTPError(
-        HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, false, make_headers(retry_after))
+        HTTP_STATUS_SERVICE_UNAVAILABLE,
+        code,
+        msg,
+        false,
+        make_headers(retry_after))
     {}
 
   private:
@@ -121,8 +125,10 @@ namespace scitt
 
   struct InternalServerError : public HTTPError
   {
-    InternalServerError(std::string code, std::string msg, bool returns_cbor_error) :
-      HTTPError(HTTP_STATUS_INTERNAL_SERVER_ERROR, code, msg, returns_cbor_error)
+    InternalServerError(
+      std::string code, std::string msg, bool returns_cbor_error) :
+      HTTPError(
+        HTTP_STATUS_INTERNAL_SERVER_ERROR, code, msg, returns_cbor_error)
     {}
   };
 

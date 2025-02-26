@@ -94,7 +94,8 @@ namespace scitt
     // FIXME: should be CBOR or JSON
     if (result != ccf::ApiResult::OK)
     {
-      SCITT_FAIL("::END:: Code=InternalError get_untrusted_host_time_v1 failed");
+      SCITT_FAIL(
+        "::END:: Code=InternalError get_untrusted_host_time_v1 failed");
       rpc_ctx->set_error(
         HTTP_STATUS_INTERNAL_SERVER_ERROR,
         errors::InternalError,
@@ -170,7 +171,8 @@ namespace scitt
       if (result != ccf::ApiResult::OK)
       {
         // FIXME: should be CBOR or JSON
-        SCITT_FAIL("::END:: Code=InternalError get_untrusted_host_time_v1 failed");
+        SCITT_FAIL(
+          "::END:: Code=InternalError get_untrusted_host_time_v1 failed");
         ctx.rpc_ctx->set_error(
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           errors::InternalError,
@@ -183,7 +185,8 @@ namespace scitt
       // If the status is 2xx, CCF will later call our local commit handler,
       // which may modify the response. We delay printing the end of request
       // log line until after that point, to get the most accurate status code.
-      // Another adapter is used for the local commit handler, see tracing_adapter_last.
+      // Another adapter is used for the local commit handler, see
+      // tracing_adapter_last.
       int status = ctx.rpc_ctx->get_response_status();
       if (status < 200 || status >= 300)
       {
@@ -193,11 +196,10 @@ namespace scitt
   }
 
   /**
-   * Locally committed function will be called after the main endpoint logic succeeds.
-   * It will not be called if the main endpoint logic fails.
+   * Locally committed function will be called after the main endpoint logic
+   * succeeds. It will not be called if the main endpoint logic fails.
    */
-  static ccf::endpoints::LocallyCommittedEndpointFunction
-  tracing_adapter_last(
+  static ccf::endpoints::LocallyCommittedEndpointFunction tracing_adapter_last(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,
     const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)

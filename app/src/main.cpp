@@ -205,8 +205,12 @@ namespace scitt
         };
 
       auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method, verb, tracing_adapter_first(error_adapter(f), method, get_time), ap);
-      endpoint.locally_committed_func = tracing_adapter_last(l, method, get_time);
+        method,
+        verb,
+        tracing_adapter_first(error_adapter(f), method, get_time),
+        ap);
+      endpoint.locally_committed_func =
+        tracing_adapter_last(l, method, get_time);
       return endpoint;
     }
 
@@ -506,7 +510,8 @@ namespace scitt
           {
             throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later", 1);
+              "Index of requested range not available yet, retry later",
+              1);
           }
 
           static constexpr size_t max_seqno_per_page = 10000;
@@ -520,7 +525,8 @@ namespace scitt
           {
             throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later", 1);
+              "Index of requested range not available yet, retry later",
+              1);
           }
 
           SCITT_DEBUG("Get entries for the target range");
