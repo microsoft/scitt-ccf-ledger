@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "cbor.h"
 #include "http_error.h"
 
 #include <gmock/gmock.h>
@@ -19,6 +20,10 @@ namespace
     MOCK_METHOD(
       void, set_response_header, (const std::string&, const std::string&));
     MOCK_METHOD(void, set_response_body, (const std::vector<uint8_t>&));
+    MOCK_METHOD(
+      void,
+      set_error,
+      (ccf::http_status, const std::string&, const std::string&));
   };
 
   class MockContext
@@ -48,8 +53,7 @@ namespace
     EXPECT_CALL(
       *ctx.rpc_ctx,
       set_response_header(
-        ccf::http::headers::CONTENT_TYPE,
-        ccf::http::headervalues::contenttype::CBOR));
+        ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE));
     EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_))
       .WillOnce([](const std::vector<uint8_t>& body) {
         // Decode the CBOR body and check its contents
