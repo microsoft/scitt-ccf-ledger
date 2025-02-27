@@ -6,6 +6,7 @@
 #include "cbor.h"
 #include "tracing.h"
 
+#include <ccf/endpoint.h>
 #include <qcbor/qcbor_decode.h>
 #include <qcbor/qcbor_encode.h>
 #include <qcbor/qcbor_spiffy_decode.h>
@@ -40,39 +41,7 @@ namespace scitt
      */
     std::vector<uint8_t> to_cbor_error() const
     {
-      std::string error_message = what();
-      // The size of the buffer must be equal or larger than the data,
-      // otherwise decodign will fail
-      size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
-        QCBOR_HEAD_BUFFER_SIZE + // key
-        sizeof(cbor::CBOR_ERROR_TITLE) + // key
-        QCBOR_HEAD_BUFFER_SIZE + // value
-        code.size() + // value
-        QCBOR_HEAD_BUFFER_SIZE + // key
-        sizeof(cbor::CBOR_ERROR_DETAIL) + // key
-        QCBOR_HEAD_BUFFER_SIZE + // value
-        error_message.size(); // value
-      std::vector<uint8_t> output(buff_size);
-
-      UsefulBuf output_buf{output.data(), output.size()};
-      QCBOREncodeContext ectx;
-      QCBOREncode_Init(&ectx, output_buf);
-      QCBOREncode_OpenMap(&ectx);
-      QCBOREncode_AddTextToMapN(
-        &ectx, cbor::CBOR_ERROR_TITLE, cbor::from_string(code));
-      QCBOREncode_AddTextToMapN(
-        &ectx, cbor::CBOR_ERROR_DETAIL, cbor::from_string(error_message));
-      QCBOREncode_CloseMap(&ectx);
-      UsefulBufC encoded_cbor;
-      QCBORError err;
-      err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-      if (err != QCBOR_SUCCESS)
-      {
-        throw std::logic_error("Failed to encode CBOR error");
-      }
-      output.resize(encoded_cbor.len);
-      output.shrink_to_fit();
-      return output;
+      return cbor::cbor_error(code, what());
     }
   };
 
@@ -214,8 +183,15 @@ namespace scitt
       }
       catch (const std::exception& e)
       {
-        SCITT_FAIL("Unhandled exception in endpoint: {}", e.what());
-        throw;
+        auto uncaught_error = InternalCborError(e.what());
+        SCITT_FAIL(
+          "Unhandled exception in endpoint: Code={} {}",
+          uncaught_error.code,
+          uncaught_error.what());
+        ctx.rpc_ctx->set_response_status(uncaught_error.status_code);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+        ctx.rpc_ctx->set_response_body(uncaught_error.to_cbor_error());
       }
     };
   }

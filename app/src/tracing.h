@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app_data.h"
+#include "cbor.h"
 #include "constants.h"
 #include "util.h"
 
@@ -99,16 +100,16 @@ namespace scitt
 
     ::timespec end;
     ccf::ApiResult result = get_time(end);
-    // TODO: should be CBOR or JSON
     if (result != ccf::ApiResult::OK)
     {
       SCITT_FAIL(
         "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 failed",
         fn_stage_name);
-      rpc_ctx->set_error(
-        HTTP_STATUS_INTERNAL_SERVER_ERROR,
-        errors::InternalError,
-        "Failed to get time.");
+      rpc_ctx->set_response_status(500);
+      rpc_ctx->set_response_header(
+        ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+      rpc_ctx->set_response_body(
+        cbor::cbor_error(errors::InternalError, "Failed to get time."));
       return;
     }
 
@@ -190,15 +191,15 @@ namespace scitt
       ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
-        // TODO: should be CBOR or JSON
         SCITT_FAIL(
           "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 "
           "failed",
           FN_STAGE_MAIN);
-        ctx.rpc_ctx->set_error(
-          HTTP_STATUS_INTERNAL_SERVER_ERROR,
-          errors::InternalError,
-          "Failed to get time.");
+        ctx.rpc_ctx->set_response_status(500);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+        ctx.rpc_ctx->set_response_body(
+          cbor::cbor_error(errors::InternalError, "Failed to get time."));
         return;
       }
 
