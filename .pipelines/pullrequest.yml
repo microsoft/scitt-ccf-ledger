@@ -98,11 +98,6 @@ extends:
           - script: ./run_unit_tests.sh
             displayName: Run Unit tests
           - template: .pipelines/python.yml@self
-          - task: UsePythonVersion@0
-            displayName: 'Set Python environment'
-            inputs:
-              versionSpec: '3.8'
-              addToPath: true
           - script: ./run_functional_tests.sh
             displayName: Run Functional Tests
 
