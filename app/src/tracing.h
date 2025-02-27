@@ -20,6 +20,9 @@ namespace scitt
   constexpr std::string_view CLIENT_REQUEST_ID_HEADER =
     "x-ms-client-request-id";
 
+  static constexpr auto FN_STAGE_MAIN = "MAIN";
+  static constexpr auto FN_STAGE_POSTCOMMIT = "POSTCOMMIT";
+
   static const std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
 
   inline thread_local std::optional<std::string> request_id;
@@ -71,8 +74,10 @@ namespace scitt
 // These macros could be invoked from anywhere, including outside of the scitt
 // namespace. All references to global symbols must therefore be fully qualified
 // (ie. using ::scitt::foo).
+// Example log entry:
+// 2025-02-27T11:40:31.368697Z -0.013 0   [info ][app] /tmp/app/src/tracing.h:181      | ::START:: Stage=MAIN Verb=POST Path=/entries Query= URL=/entries RequestId=c90fff41f2f59642
 #define SCITT_LOG(f, s, ...) \
-  f("{}" s, ::scitt::tracing_context(), ##__VA_ARGS__)
+  f(s " {}", ##__VA_ARGS__, ::scitt::tracing_context())
 
 #define SCITT_TRACE(s, ...) SCITT_LOG(CCF_APP_TRACE, s, ##__VA_ARGS__)
 #define SCITT_DEBUG(s, ...) SCITT_LOG(CCF_APP_DEBUG, s, ##__VA_ARGS__)
@@ -83,6 +88,7 @@ namespace scitt
 
   static void log_request_end(
     const std::shared_ptr<ccf::RpcContext>& rpc_ctx,
+    const std::string& fn_stage_name,
     const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time,
     std::optional<ccf::TxID> txid = std::nullopt)
@@ -95,7 +101,8 @@ namespace scitt
     if (result != ccf::ApiResult::OK)
     {
       SCITT_FAIL(
-        "::END:: Code=InternalError get_untrusted_host_time_v1 failed");
+        "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 failed",
+        fn_stage_name);
       rpc_ctx->set_error(
         HTTP_STATUS_INTERNAL_SERVER_ERROR,
         errors::InternalError,
@@ -113,7 +120,9 @@ namespace scitt
     if (txid.has_value())
     {
       SCITT_INFO(
-        "::END:: Verb={} Path={} Query={} URL={} Status={} TxId={} TimeMs={}",
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TxId={} "
+        "TimeMs={}",
+        fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
         path,
         rpc_ctx->get_request_query().c_str(),
@@ -125,7 +134,8 @@ namespace scitt
     else
     {
       SCITT_INFO(
-        "::END:: Verb={} Path={} Query={} URL={} Status={} TimeMs={}",
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TimeMs={}",
+        fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
         path,
         rpc_ctx->get_request_query().c_str(),
@@ -152,6 +162,13 @@ namespace scitt
 
       client_request_id =
         ctx.rpc_ctx->get_request_header(CLIENT_REQUEST_ID_HEADER);
+      // Send the x-ms-client-request-id in the response headers if supplied in
+      // the request
+      if (client_request_id)
+      {
+        ctx.rpc_ctx->set_response_header(
+          CLIENT_REQUEST_ID_HEADER, *client_request_id);
+      }
 
       // The user data is used to propagate the request IDs to the local
       // commit callback
@@ -160,7 +177,8 @@ namespace scitt
       app_data.client_request_id = client_request_id;
 
       SCITT_INFO(
-        "::START:: Verb={} Path={} Query={} URL={}",
+        "::START:: Stage={} Verb={} Path={} Query={} URL={}",
+        FN_STAGE_MAIN,
         ctx.rpc_ctx->get_request_verb().c_str(),
         path,
         ctx.rpc_ctx->get_request_query().c_str(),
@@ -172,7 +190,9 @@ namespace scitt
       {
         // FIXME: should be CBOR or JSON
         SCITT_FAIL(
-          "::END:: Code=InternalError get_untrusted_host_time_v1 failed");
+          "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 "
+          "failed",
+          FN_STAGE_MAIN);
         ctx.rpc_ctx->set_error(
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           errors::InternalError,
@@ -182,16 +202,7 @@ namespace scitt
 
       fn(ctx);
 
-      // If the status is 2xx, CCF will later call our local commit handler,
-      // which may modify the response. We delay printing the end of request
-      // log line until after that point, to get the most accurate status code.
-      // Another adapter is used for the local commit handler, see
-      // tracing_adapter_last.
-      int status = ctx.rpc_ctx->get_response_status();
-      if (status < 200 || status >= 300)
-      {
-        log_request_end(ctx.rpc_ctx, path, get_time);
-      }
+      log_request_end(ctx.rpc_ctx, FN_STAGE_MAIN, path, get_time);
     };
   }
 
@@ -215,7 +226,7 @@ namespace scitt
 
         fn(ctx, txid);
 
-        log_request_end(ctx.rpc_ctx, path, get_time, txid);
+        log_request_end(ctx.rpc_ctx, FN_STAGE_POSTCOMMIT, path, get_time, txid);
       };
   }
 }
