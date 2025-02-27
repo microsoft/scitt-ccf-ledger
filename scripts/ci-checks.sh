@@ -26,7 +26,7 @@ echo "-- Python dependencies"
 # Virtual Environment w/ dependencies for Python steps
 if [ ! -f "scripts/venv/bin/activate" ]
 then
-  python3.10 -m venv scripts/venv
+  python3.8 -m venv scripts/venv
 fi
 
 source scripts/venv/bin/activate
