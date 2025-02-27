@@ -17,7 +17,7 @@ mkdir -p "$OUTPUT_FOLDER"
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3.10 -m venv "venv"
 fi
 
 # Activate environment and install pyscitt local library

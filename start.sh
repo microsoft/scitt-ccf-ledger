@@ -24,14 +24,14 @@ fi
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3.10 -m venv "venv"
 fi
 source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
-exec python3.8 -m test.infra.cchost \
+exec python3.10 -m test.infra.cchost \
     --port 8000 \
     --cchost $CCF_DIR/bin/cchost \
     --package $SCITT_DIR/lib/libscitt \
