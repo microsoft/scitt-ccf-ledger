@@ -26,7 +26,7 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 CT_APPLICATION_JSON = "application/json"
 CT_APPLICATION_CBOR = "application/cbor"
 CT_APPLICATION_COSE = "application/cose"
-CT_APLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
+CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
 CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
 
@@ -295,7 +295,7 @@ class BaseClient:
         if (
             content_type == CT_APPLICATION_CBOR
             or content_type == CT_APPLICATION_COSE
-            or content_type == CT_APLICATION_CBOR_ERROR
+            or content_type == CT_APPLICATION_CBOR_ERROR
         ):
             error = cbor2.loads(response.read())
             return ServiceError(
