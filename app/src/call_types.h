@@ -78,7 +78,7 @@ namespace scitt
       ccf::TxID operation_id;
       OperationStatus status;
       std::optional<ccf::TxID> entry_id;
-      // FIXME: it needs to be in expcted structure as per RFC
+      // TODO: it needs to be in expcted structure as per RFC
       std::optional<nlohmann::json> error;
     };
   };
@@ -88,15 +88,5 @@ namespace scitt
     GetOperation::Out, operation_id, "OperationId", status, "Status");
   DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     GetOperation::Out, entry_id, "EntryId", error, "Error");
-
-  struct GetAllOperations
-  {
-    struct Out
-    {
-      std::vector<GetOperation::Out> operations;
-    };
-  };
-  DECLARE_JSON_TYPE(GetAllOperations::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
 
 } // namespace scitt

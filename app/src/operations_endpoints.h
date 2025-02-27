@@ -49,30 +49,6 @@ namespace scitt
     {}
 
     /**
-     * Get the list of all operations whose state is known by the indexing
-     * strategy.
-     *
-     * The function isn't intended to be used in normal situations, but can
-     * serve as a convenient debugging endpoint into the state of the indexing
-     * strategy.
-     */
-    std::vector<GetOperation::Out> operations() const
-    {
-      std::lock_guard guard(lock);
-      std::vector<GetOperation::Out> result;
-      for (const auto& it : operations_)
-      {
-        result.push_back(GetOperation::Out{
-          .operation_id = ccf::TxID{it.second.view, it.first},
-          .status = it.second.status,
-          .entry_id = it.second.completion_tx,
-          .error = it.second.error,
-        });
-      }
-      return result;
-    }
-
-    /**
      * Look up an operation by its transaction ID.
      *
      * If the transaction ID is unknown, this function generally returns an
@@ -397,16 +373,6 @@ namespace scitt
 
   namespace endpoints
   {
-    static GetAllOperations::Out get_all_operations(
-      const std::shared_ptr<OperationsIndexingStrategy>& index,
-      ccf::endpoints::EndpointContext& ctx,
-      nlohmann::json&& params)
-    {
-      return {
-        .operations = index->operations(),
-      };
-    }
-
     static GetOperation::Out get_operation(
       const std::shared_ptr<OperationsIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
