@@ -6,6 +6,7 @@
 #include <qcbor/UsefulBuf.h>
 #include <qcbor/qcbor_encode.h>
 #include <span>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -49,10 +50,10 @@ namespace scitt::cbor
    * title and detail and encode them cbor text.
    */
   inline std::vector<uint8_t> cbor_error(
-    std::string code, std::string error_message)
+    const std::string& code, const std::string& error_message)
   {
     // The size of the buffer must be equal or larger than the data,
-    // otherwise decodign will fail
+    // otherwise decoding will fail
     size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
       QCBOR_HEAD_BUFFER_SIZE + // key
       sizeof(CBOR_ERROR_TITLE) + // key
