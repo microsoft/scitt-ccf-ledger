@@ -165,7 +165,7 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
     {
-      // FIXME: this is not right when the indexer is not up to date
+      // TODO: this is not right when the indexer is not up to date
       return index->get_jwks();
     }
   }
@@ -208,6 +208,9 @@ namespace scitt
         return;
       };
 
+    /**
+     * The endpoint exposes the current service parameters.
+     */
     registry
       .make_endpoint(
         "/parameters",
@@ -217,6 +220,11 @@ namespace scitt
       .set_auto_schema<void, GetServiceParameters::Out>()
       .install();
 
+    /**
+     * The endpoint exposes older service parameters.
+     * Parameters can change in the case of a
+     * disaster recovery.
+     */
     registry
       .make_endpoint(
         "/parameters/historic",
@@ -231,6 +239,11 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
+    /**
+     * Convenience endpoint to provide the service configuration.
+     * The configuration includes the policy script used to validate
+     * the submitted statements.
+     */
     registry
       .make_endpoint(
         "/configuration",
@@ -240,6 +253,11 @@ namespace scitt
       .set_auto_schema<void, Configuration>()
       .install();
 
+    /**
+     * Convenience endpoint to provide the version of the SCITT service.
+     * The version is used to find the correct source control version
+     * it was built from.
+     */
     registry
       .make_endpoint(
         "/version",
@@ -250,7 +268,12 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
-    // FIXME: /jwks should return CBOR errors by default
+    /**
+     * This endpoint is indirectly mentioned in the RFC,
+     * through the "jwks_uri" field in the transparency configuration.
+     * See 2.1.1. Transparency Configuration
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_endpoint(
         "/jwks",
@@ -260,6 +283,10 @@ namespace scitt
         no_authn_policy)
       .install();
 
+    /**
+     * See 2.1.1. Transparency Configuration
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_read_only_endpoint(
         "/.well-known/transparency-configuration",

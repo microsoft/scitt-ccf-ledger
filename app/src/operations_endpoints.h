@@ -466,6 +466,10 @@ namespace scitt
       }
     };
 
+    /**
+     * Check Registration, 2.1.3 in
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_endpoint(
         "/operations/{txid}", HTTP_GET, get_op_with_status, authn_policy)

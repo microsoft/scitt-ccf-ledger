@@ -75,7 +75,9 @@ namespace scitt
 // namespace. All references to global symbols must therefore be fully qualified
 // (ie. using ::scitt::foo).
 // Example log entry:
-// 2025-02-27T11:40:31.368697Z -0.013 0   [info ][app] /tmp/app/src/tracing.h:181      | ::START:: Stage=MAIN Verb=POST Path=/entries Query= URL=/entries RequestId=c90fff41f2f59642
+// 2025-02-27T11:40:31.368697Z -0.013 0   [info ][app]
+// /tmp/app/src/tracing.h:181      | ::START:: Stage=MAIN Verb=POST
+// Path=/entries Query= URL=/entries RequestId=c90fff41f2f59642
 #define SCITT_LOG(f, s, ...) \
   f(s " {}", ##__VA_ARGS__, ::scitt::tracing_context())
 
@@ -97,7 +99,7 @@ namespace scitt
 
     ::timespec end;
     ccf::ApiResult result = get_time(end);
-    // FIXME: should be CBOR or JSON
+    // TODO: should be CBOR or JSON
     if (result != ccf::ApiResult::OK)
     {
       SCITT_FAIL(
@@ -188,7 +190,7 @@ namespace scitt
       ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
-        // FIXME: should be CBOR or JSON
+        // TODO: should be CBOR or JSON
         SCITT_FAIL(
           "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 "
           "failed",
@@ -208,7 +210,8 @@ namespace scitt
 
   /**
    * Locally committed function will be called after the main endpoint logic
-   * succeeds. It will not be called if the main endpoint logic fails.
+   * succeeds including other CCF conditional logic. It will not be called
+   * if the main endpoint logic fails.
    */
   static ccf::endpoints::LocallyCommittedEndpointFunction tracing_adapter_last(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,

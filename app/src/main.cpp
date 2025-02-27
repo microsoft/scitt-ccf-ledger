@@ -182,6 +182,9 @@ namespace scitt
       return std::nullopt;
     }
 
+    /**
+     * Create an endpoint with a default locally committed handler.
+     */
     ccf::endpoints::Endpoint make_endpoint(
       const std::string& method,
       ccf::RESTVerb verb,
@@ -192,6 +195,11 @@ namespace scitt
         method, verb, f, ccf::endpoints::default_locally_committed_func, ap);
     }
 
+    /**
+     * Create an endpoint with a custom locally committed handler.
+     * Although the additional handler is supplied it does not
+     * guarantee that it will be called.
+     */
     ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
       const std::string& method,
       ccf::RESTVerb verb,
@@ -338,6 +346,7 @@ namespace scitt
 
         record_synchronous_operation(host_time, ctx.tx);
       };
+
       /**
        * Signed Statement Registration, 2.1.2 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
@@ -384,6 +393,10 @@ namespace scitt
             ccf::http::headervalues::contenttype::COSE);
         };
 
+      /**
+       * Resolve Receipt, 2.1.4 in
+       * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       */
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
@@ -435,6 +448,11 @@ namespace scitt
             ccf::http::headervalues::contenttype::COSE);
         };
 
+      /**
+       * This endpoint is not part of RFC,
+       * but to avoid clients embedding the receipt in the statement
+       * we provide a convenience endpoint that does this for them.
+       */
       make_endpoint(
         get_entry_statement_path,
         HTTP_GET,
@@ -567,6 +585,11 @@ namespace scitt
           return out;
         };
 
+      /**
+       * This endpoint is not part of RFC,
+       * but for convenience we provide a way to retrieve the transaction IDs
+       * of all entries in a given range.
+       */
       make_endpoint(
         get_entries_tx_ids_path,
         HTTP_GET,
