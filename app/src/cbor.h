@@ -7,6 +7,7 @@
 #include <qcbor/qcbor_encode.h>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace scitt::cbor
 {
