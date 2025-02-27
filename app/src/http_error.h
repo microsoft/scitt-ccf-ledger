@@ -40,7 +40,7 @@ namespace scitt
      */
     std::vector<uint8_t> to_cbor_error() const
     {
-      std::string error_mesasge = what();
+      std::string error_message = what();
       // The size of the buffer must be equal or larger than the data,
       // otherwise decodign will fail
       size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
@@ -51,7 +51,7 @@ namespace scitt
         QCBOR_HEAD_BUFFER_SIZE + // key
         sizeof(cbor::CBOR_ERROR_DETAIL) + // key
         QCBOR_HEAD_BUFFER_SIZE + // value
-        error_mesasge.size(); // value
+        error_message.size(); // value
       std::vector<uint8_t> output(buff_size);
 
       UsefulBuf output_buf{output.data(), output.size()};
@@ -61,7 +61,7 @@ namespace scitt
       QCBOREncode_AddTextToMapN(
         &ectx, cbor::CBOR_ERROR_TITLE, cbor::from_string(code));
       QCBOREncode_AddTextToMapN(
-        &ectx, cbor::CBOR_ERROR_DETAIL, cbor::from_string(error_mesasge));
+        &ectx, cbor::CBOR_ERROR_DETAIL, cbor::from_string(error_message));
       QCBOREncode_CloseMap(&ectx);
       UsefulBufC encoded_cbor;
       QCBORError err;
