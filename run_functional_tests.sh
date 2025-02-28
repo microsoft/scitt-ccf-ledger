@@ -55,7 +55,15 @@ fi
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    if command -v python3.10 &> /dev/null; then
+        PYTHON=python3.10
+    elif command -v python3.8 &> /dev/null; then
+        PYTHON=python3.8
+    else
+        echo "Neither python3.10 nor python3.8 is available. Please install one of them."
+        exit 1
+    fi
+    $PYTHON -m venv "venv"
 fi
 source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt
