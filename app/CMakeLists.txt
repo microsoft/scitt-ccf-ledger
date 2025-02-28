@@ -105,13 +105,15 @@ if (BUILD_TESTS)
 
   enable_testing()
 
+  # Use globbing to collect unit test source files
+  file(GLOB UNIT_TEST_SOURCES "unit-tests/**test.cpp")
+  file(GLOB_RECURSE UNIT_TEST_SOURCES_RECURSE "unit-tests/**/*test.cpp")
+  list(APPEND UNIT_TEST_SOURCES ${UNIT_TEST_SOURCES_RECURSE})
   add_executable(
     unit_tests
     unit-tests/main.cpp
-    unit-tests/verifier_test.cpp
-    unit-tests/configurable_auth_test.cpp
-    unit-tests/generic_error_adapter_test.cpp
-    unit-tests/historical/lru_test.cpp
+    
+    ${UNIT_TEST_SOURCES}
   )
   add_san(unit_tests)
   target_link_system_libraries(unit_tests PRIVATE
