@@ -134,25 +134,4 @@ To use the specific values in the receipts please set it through the [CCF v6 con
 }
 ```
 
-Once the value is set it will be easy to discover the public keys via `$issuer/.well-known/transparency-configuration` endpoint.
-
-## Trust stores
-SCITT has a trust store that can be configured: `x509_roots`.
-
-### X509 Roots
-CA certificates which are used as trusted roots during verification of submitted claims which use an X509 certificate for identity rather than a DID.
-
-Example governance proposal:
-```json
-{
-  "actions": [
-    {
-      "name": "set_ca_cert_bundle",
-      "args": {
-        "name": "x509_roots",
-        "cert_bundle": "-----BEGIN CERTIFICATE-----\nMI...<Omitted for brevity>...Eo\n-----END CERTIFICATE-----\n"
-      }
-    }
-  ]
-}
-```
+Once the value is set, the public keys can be discoverd through the `$issuer/.well-known/transparency-configuration` endpoint.
