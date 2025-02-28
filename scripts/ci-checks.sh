@@ -52,4 +52,4 @@ else
 fi
 
 echo "-- Copyright notices headers"
-python3.10 "$SCRIPT_DIR"/notice-check.py
+python3.8 "$SCRIPT_DIR"/notice-check.py
