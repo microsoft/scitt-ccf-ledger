@@ -4,7 +4,7 @@ This demo provides a simple and generic Proof of Concept for a Code Transparency
 
 ## Prerequisites
 
-- A Certificate Authority (CA) certificate is required from the issuer who will be signing and then submitting the COSE_Sign1 signature envelopes. The CA will need to be added to the configuration for CTS to be able to accept the incoming signature envelopes. You can set up custom [X509 roots](../../docs/configuration.md#x509-roots) locally via the script `0-cacerts-generator.sh`:
+- A Certificate Authority (CA) certificate is required from the issuer who will be signing and then submitting the COSE_Sign1 signature envelopes. CTS will need to be configured with a registration policy that accepts statements signed by that CA. You can create custom certificate authorities locally via the script `0-cacerts-generator.sh`:
 
     ```bash
     mkdir -p demo-poc/x509_roots
@@ -41,7 +41,7 @@ All the commands must be run from the root of the repository.
 
     If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`https://localhost:8000`).
 
-2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here a pre-generated x509 CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault. Furthermore, if you have [DID WEB TLS roots](../../docs/configuration.md#did-web-tls-roots) you would like to configure, you can specify the path to the certificate file with the `DID_WEB_ROOT_PATH` environment variable.
+2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance. Here a pre-generated x509 CA is used `demo-poc/x509_roots/cacert.pem` but you can add your own if using Key Vault. 
 
     ```bash
     MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" X509_ROOT_PATH="demo-poc/x509_roots/cacert.pem" SCITT_CONFIG_PATH="demo-poc/configuration.json" ./demo/cts_poc/1-operator-demo.sh
@@ -65,17 +65,7 @@ If you created your own certificate and key combination as mentioned in the prer
 SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
 ```
 
-##### Option 2. Use DID document and private key
-
-**Note**: This step assumes that user already has DID configured. For more details you can also check github DID demo [here](../github/README.md)
-
-If you have a DID document and the corresponding private key, you can use those for creating the signature with a similar command:
-
-```bash
-SIGNING_METHOD="did" DID_DOC_PATH="demo-poc/did_roots/did.json" PRIVATE_KEY_PATH="demo-poc/did_roots/key.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
-```
-
-##### Option 3. Use Azure Key Vault certificate and key
+##### Option 2. Use Azure Key Vault certificate and key
 
 You will need the details about your keys and your identity needs to have access to use the keys for signing.
 
@@ -118,10 +108,6 @@ COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts
 
 #### Known Issues and Workaround for Local Virtual Build
 
-- If you encounter an "unknown service identity" error during the claim submission process, it may be due to attempting to sign and submit using both DID and X509 simultaneously.
-    > ValueError: Unknown service identity '6234efjkfhbsd1random000hash0jkbfdsbfdsjbfg'
-
-    _Workaround:_ To avoid this, ensure you use either X509 or DID exclusively throughout the entire demo.
 - Proposal failing with 403
     > enclave:../src/node/rpc/member_frontend.h:103 - POST /gov/proposals returning error 403: Member m[1e6aee66336c09bf4random8b55398nodeb3d2e08478c092491459a6063] is not active.
 
