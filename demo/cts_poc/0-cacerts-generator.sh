@@ -11,7 +11,7 @@ set -e
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
-    python3.10 -m venv "venv"
+    python3.8 -m venv "venv"
 fi
 
 # Activate environment and install pyscitt local library and test dependencies
@@ -21,6 +21,6 @@ pip install --disable-pip-version-check -q -r test/requirements.txt
 
 # Create CA certificate and private key
 echo -e "\nCreating CA certificate PEM files"
-exec python3.10 -m test.infra.generate_cacert --output-dir "$CACERT_OUTPUT_DIR"
+exec python3.8 -m test.infra.generate_cacert --output-dir "$CACERT_OUTPUT_DIR"
 
 echo -e "\nScript completed successfully"
