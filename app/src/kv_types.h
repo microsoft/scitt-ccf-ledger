@@ -30,6 +30,21 @@ namespace scitt
      {OperationStatus::Failed, "failed"},
      {OperationStatus::Succeeded, "succeeded"}});
 
+  std::string operationStatusToString(OperationStatus status)
+  {
+    switch (status)
+    {
+      case OperationStatus::Running:
+        return "running";
+      case OperationStatus::Failed:
+        return "failed";
+      case OperationStatus::Succeeded:
+        return "succeeded";
+      default:
+        throw std::invalid_argument("Invalid OperationStatus value");
+    }
+  }
+
   struct OperationLog
   {
     OperationStatus status;

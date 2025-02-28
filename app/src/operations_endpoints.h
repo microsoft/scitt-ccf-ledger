@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 #include "app_data.h"
+#include "cbor.h"
 #include "historical/historical_queries_adapter.h"
 #include "odata_error.h"
 #include "visit_each_entry_in_value.h"
@@ -423,12 +424,12 @@ namespace scitt
               host.value(),
               operation.entry_id.value().to_str()));
         }
-        auto body = nlohmann::json(operation);
+
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
           ccf::http::headervalues::contenttype::CBOR);
-        ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
+        ctx.rpc_ctx->set_response_body(cbor::operation_to_cbor(operation));
       }
     };
 
@@ -496,8 +497,7 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(
       ccf::http::headers::CONTENT_TYPE,
       ccf::http::headervalues::contenttype::CBOR);
-    auto body = nlohmann::json(operation);
-    ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(body));
+    ctx.rpc_ctx->set_response_body(cbor::operation_to_cbor(operation));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
     if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))

@@ -1,0 +1,98 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+#include "call_types.h"
+
+#include "cbor.h"
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+#include <iomanip> // setw
+#include <nlohmann/json.hpp>
+#include <sstream>
+
+using namespace testing;
+using namespace scitt;
+
+// Utility function to convert a vector of bytes to a hex string
+static std::string to_hex_string(const std::vector<std::uint8_t>& data)
+{
+  std::ostringstream oss;
+  for (auto byte : data)
+  {
+    oss << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(byte);
+  }
+  return oss.str();
+}
+
+// Utility function to convert hex string to a vector of bytes
+static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
+{
+  std::vector<std::uint8_t> bytes;
+  for (size_t i = 0; i < hex.length(); i += 2)
+  {
+    std::string byteString = hex.substr(i, 2);
+    char byte = static_cast<char>(strtol(byteString.c_str(), nullptr, 16));
+    bytes.push_back(static_cast<std::uint8_t>(byte));
+  }
+  return bytes;
+}
+
+// The error should look like the following according to RFC:
+// {
+//   / status / "Status": "failed",
+//   / error /  "Error": {
+//     / title /         -1: \
+//             "Bad Signature Algorithm",
+//     / detail /        -2: \
+//             "Signed Statement contained a non supported algorithm"
+//   }
+// }
+const auto expected_error_hex =
+  "a22077426164205369676e617475726520416c676f726974686d2178345369676e6564205374"
+  "6174656d656e7420636f6e7461696e65642061206e6f6e20737570706f7274656420616c676f"
+  "726974686d";
+
+namespace
+{
+  TEST(UtilityFunctionTest, bytesToHexToBytes)
+  {
+    std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    EXPECT_EQ(to_hex_string(data), "01020304");
+    EXPECT_EQ(from_hex_string("01020304"), data);
+  }
+
+  TEST(GetOperationOutTest, CBORSerializationWithStatusRunning)
+  {
+    GetOperation::Out out{
+      .operation_id = ccf::TxID{1, 2},
+      .status = OperationStatus::Running,
+    };
+
+    std::vector<std::uint8_t> cbor_value = cbor::operation_to_cbor(out);
+
+    EXPECT_EQ(
+      to_hex_string(cbor_value),
+      "a26b4f7065726174696f6e496463312e32665374617475736772756e6e696e67");
+  }
+
+  TEST(GetOperationOutTest, CBORSerializationWithNestedError)
+  {
+    GetOperation::Out out{
+      .operation_id = ccf::TxID{1, 2},
+      .status = OperationStatus::Failed,
+      .error = ODataError{
+        .code = "Bad Signature Algorithm",
+        .message = "Signed Statement contained a non supported algorithm"}};
+
+    std::vector<std::uint8_t> cbor_value = cbor::operation_to_cbor(out);
+
+    EXPECT_EQ(
+      to_hex_string(cbor_value),
+      "a3654572726f72a22077426164205369676e617475726520416c676f726974686d217834"
+      "5369676e65642053746174656d656e7420636f6e7461696e65642061206e6f6e20737570"
+      "706f7274656420616c676f726974686d66537461747573666661696c65646b4f70657261"
+      "74696f6e496463312e32");
+  }
+}
