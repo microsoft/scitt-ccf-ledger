@@ -424,7 +424,7 @@ namespace scitt
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
           ccf::http::headervalues::contenttype::CBOR);
-        ctx.rpc_ctx->set_response_body(cbor::operation_to_cbor(operation));
+        ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
       }
     };
 
@@ -492,7 +492,7 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(
       ccf::http::headers::CONTENT_TYPE,
       ccf::http::headervalues::contenttype::CBOR);
-    ctx.rpc_ctx->set_response_body(cbor::operation_to_cbor(operation));
+    ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
     if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))

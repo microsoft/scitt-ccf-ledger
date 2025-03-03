@@ -30,7 +30,7 @@ namespace scitt
      {OperationStatus::Failed, "failed"},
      {OperationStatus::Succeeded, "succeeded"}});
 
-  std::string operationStatusToString(OperationStatus status)
+  static std::string operationStatusToString(OperationStatus status)
   {
     switch (status)
     {

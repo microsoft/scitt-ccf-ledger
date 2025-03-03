@@ -8,8 +8,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <iomanip> // setw
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <string>
+#include <vector>
 
 using namespace testing;
 using namespace scitt;
@@ -39,8 +42,10 @@ static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
   return bytes;
 }
 
-// The error should look like the following according to RFC:
+// The error should look like the one in RFC, OperationId is not shown in RFC
+// but we always render it:
 // {
+//   / id /     "OperationId": "1.2",
 //   / status / "Status": "failed",
 //   / error /  "Error": {
 //     / title /         -1: \
@@ -49,10 +54,11 @@ static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
 //             "Signed Statement contained a non supported algorithm"
 //   }
 // }
-const auto expected_error_hex =
-  "a22077426164205369676e617475726520416c676f726974686d2178345369676e6564205374"
-  "6174656d656e7420636f6e7461696e65642061206e6f6e20737570706f7274656420616c676f"
-  "726974686d";
+const std::string expected_error_hex =
+  "a36b4f7065726174696f6e496463312e3266537461747573666661696c6564654572726f72a2"
+  "2077426164205369676e617475726520416c676f726974686d2178345369676e656420537461"
+  "74656d656e7420636f6e7461696e65642061206e6f6e20737570706f7274656420616c676f72"
+  "6974686d";
 
 namespace
 {
@@ -70,7 +76,7 @@ namespace
       .status = OperationStatus::Running,
     };
 
-    std::vector<std::uint8_t> cbor_value = cbor::operation_to_cbor(out);
+    std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
 
     EXPECT_EQ(
       to_hex_string(cbor_value),
@@ -86,13 +92,8 @@ namespace
         .code = "Bad Signature Algorithm",
         .message = "Signed Statement contained a non supported algorithm"}};
 
-    std::vector<std::uint8_t> cbor_value = cbor::operation_to_cbor(out);
+    std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
 
-    EXPECT_EQ(
-      to_hex_string(cbor_value),
-      "a3654572726f72a22077426164205369676e617475726520416c676f726974686d217834"
-      "5369676e65642053746174656d656e7420636f6e7461696e65642061206e6f6e20737570"
-      "706f7274656420616c676f726974686d66537461747573666661696c65646b4f70657261"
-      "74696f6e496463312e32");
+    EXPECT_EQ(to_hex_string(cbor_value), expected_error_hex);
   }
 }

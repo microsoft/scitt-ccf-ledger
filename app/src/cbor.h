@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "call_types.h"
-
+#include <optional>
 #include <qcbor/UsefulBuf.h>
 #include <qcbor/qcbor_decode.h>
 #include <qcbor/qcbor_encode.h>
@@ -88,53 +87,64 @@ namespace scitt::cbor
     return output;
   }
 
-  inline std::vector<uint8_t> operation_to_cbor(GetOperation::Out& operation)
+  inline std::vector<uint8_t> operation_props_to_cbor(
+    const std::string& operation_id,
+    const std::string& status,
+    const std::optional<std::string>& entry_id,
+    const std::optional<std::string>& error_code,
+    const std::optional<std::string>& error_message)
   {
     /**
      * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     * max 6 key values and 2 maps.
+     * max 6 key values in operation and 2 maps (outer and submap for error).
      * The size of data will be less than struct because error keys will shrink
      */
-    size_t buff_size = sizeof(operation) + 14 * QCBOR_HEAD_BUFFER_SIZE;
-    std::vector<uint8_t> output(buff_size);
+    size_t approx_buff_size =
+      14 * QCBOR_HEAD_BUFFER_SIZE + operation_id.size() + status.size();
+    if (entry_id.has_value())
+    {
+      approx_buff_size += entry_id.value().size();
+    }
+    if (error_code.has_value())
+    {
+      approx_buff_size += error_code.value().size();
+    }
+    if (error_message.has_value())
+    {
+      approx_buff_size += error_message.value().size();
+    }
+    std::vector<uint8_t> output(approx_buff_size);
+
     UsefulBuf output_buf{output.data(), output.size()};
-
-    QCBOREncodeContext encode_ctx;
-    QCBOREncode_Init(&encode_ctx, output_buf);
-    QCBOREncode_OpenMap(&encode_ctx);
-
-    QCBOREncode_AddTextToMap(
-      &encode_ctx, "OperationId", from_string(operation.operation_id.to_str()));
-    QCBOREncode_AddTextToMap(
-      &encode_ctx,
-      "Status",
-      from_string(operationStatusToString(operation.status)));
-    if (operation.entry_id.has_value())
+    QCBOREncodeContext ectx;
+    QCBOREncode_Init(&ectx, output_buf);
+    QCBOREncode_OpenMap(&ectx);
+    QCBOREncode_AddTextToMap(&ectx, "OperationId", from_string(operation_id));
+    QCBOREncode_AddTextToMap(&ectx, "Status", from_string(status));
+    if (entry_id.has_value())
     {
-      QCBOREncode_AddTextToMap(
-        &encode_ctx,
-        "EntryId",
-        from_string(operation.entry_id.value().to_str()));
+      QCBOREncode_AddTextToMap(&ectx, "EntryId", from_string(entry_id.value()));
     }
-    if (operation.error.has_value())
+    if (error_code.has_value() || error_message.has_value())
     {
-      QCBOREncode_OpenMapInMap(&encode_ctx, "Error");
-      QCBOREncode_AddTextToMapN(
-        &encode_ctx,
-        CBOR_ERROR_TITLE,
-        from_string(operation.error.value().code));
-      QCBOREncode_AddTextToMapN(
-        &encode_ctx,
-        CBOR_ERROR_DETAIL,
-        from_string(operation.error.value().message));
-      QCBOREncode_CloseMap(&encode_ctx);
+      QCBOREncode_OpenMapInMap(&ectx, "Error");
+      if (error_code.has_value())
+      {
+        QCBOREncode_AddTextToMapN(
+          &ectx, CBOR_ERROR_TITLE, from_string(error_code.value()));
+      }
+      if (error_message.has_value())
+      {
+        QCBOREncode_AddTextToMapN(
+          &ectx, CBOR_ERROR_DETAIL, from_string(error_message.value()));
+      }
+      QCBOREncode_CloseMap(&ectx);
     }
-
-    QCBOREncode_CloseMap(&encode_ctx);
+    QCBOREncode_CloseMap(&ectx);
 
     UsefulBufC encoded_cbor;
     QCBORError err;
-    err = QCBOREncode_Finish(&encode_ctx, &encoded_cbor);
+    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
     if (err != QCBOR_SUCCESS)
     {
       throw std::logic_error("Failed to encode CBOR error");
