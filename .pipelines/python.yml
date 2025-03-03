@@ -3,7 +3,6 @@ steps:
     sudo apt-get -q update
     sudo apt-get -qq install -y software-properties-common
     sudo apt-get -q update
-    sudo apt-get -q install -y --no-install-recommends python3.8 python3.8-minimal python3.8-dev python3.8-venv
     sudo apt-get -qq clean
     sudo rm -rf /var/lib/apt/lists/*
   displayName: Install python dependencies
