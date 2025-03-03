@@ -42,6 +42,13 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     popd
 fi
 
+if [ "$ENABLE_CLANG_TIDY" = "ON" ]; then
+    if ! command -v clang-tidy &> /dev/null && ! command -v clang-tidy-15 &> /dev/null; then
+        echo "clang-tidy could not be found, please install it, e.g. apt-get install -y clang-tidy-15"
+        exit 1
+    fi
+fi
+
 root_dir=$(pwd)
 install_dir=/tmp/scitt
 

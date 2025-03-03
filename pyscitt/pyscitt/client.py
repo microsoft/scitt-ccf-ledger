@@ -13,6 +13,7 @@ from http import HTTPStatus
 from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
+import cbor2
 import httpx
 from loguru import logger as LOG
 
@@ -22,6 +23,12 @@ from .receipt import Receipt
 from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
+CT_APPLICATION_JSON = "application/json"
+CT_APPLICATION_CBOR = "application/cbor"
+CT_APPLICATION_COSE = "application/cose"
+CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
+CBOR_ERR_TITLE_TAG = -1
+CBOR_ERR_DETAIL_TAG = -2
 
 
 class MemberAuthenticationMethod(ABC):
@@ -277,6 +284,27 @@ class BaseClient:
         values.update(kwargs)
         return self.__class__(**values)
 
+    def parse_response_error(self, response: httpx.Response) -> Optional[ServiceError]:
+        """
+        Parse the error response from the server and return a ServiceError instance.
+        """
+        if response.is_success:
+            return None
+
+        content_type = response.headers.get("content-type", CT_APPLICATION_JSON)
+        if (
+            content_type == CT_APPLICATION_CBOR
+            or content_type == CT_APPLICATION_COSE
+            or content_type == CT_APPLICATION_CBOR_ERROR
+        ):
+            error = cbor2.loads(response.read())
+            return ServiceError(
+                response.headers, error[CBOR_ERR_TITLE_TAG], error[CBOR_ERR_DETAIL_TAG]
+            )
+        else:
+            error = response.json()["error"]
+            return ServiceError(response.headers, error["code"], error["message"])
+
     def request(
         self,
         method,
@@ -350,7 +378,7 @@ class BaseClient:
 
                 # Set the request data and the content-type header
                 kwargs["content"] = payload
-                kwargs.setdefault("headers", {})["content-type"] = "application/cose"
+                kwargs.setdefault("headers", {})["content-type"] = CT_APPLICATION_COSE
             else:
                 raise ValueError(f"Cannot sign request")
 
@@ -358,6 +386,7 @@ class BaseClient:
         timeout = 30
         deadline = time.monotonic() + timeout
         attempt = 1
+        response_error = None
         while True:
             response = self.session.request(method, url, **kwargs)
 
@@ -365,15 +394,19 @@ class BaseClient:
             if attempt > 1:
                 log_parts.append(f"(attempt #{attempt})")
             log_parts.append(response.status_code)
-            if not response.is_success:
-                log_parts.append(response.json().get("error", {}).get("code"))
+
+            response_error = self.parse_response_error(response)
+            if response_error is not None:
+                log_parts.append(response_error.code)
+
             LOG.debug(" ".join(str(p) for p in log_parts))
 
             for code in retry_on:
                 if isinstance(code, tuple):
                     if (
                         response.status_code == code[0]
-                        and response.json().get("error", {}).get("code") == code[1]
+                        and response_error is not None
+                        and response_error.code == code[1]
                     ):
                         break
                 elif callable(code):
@@ -395,10 +428,9 @@ class BaseClient:
             time.sleep(wait)
             attempt += 1
 
-        if not response.is_success:
-            error = response.json()["error"]
-            LOG.error(f"Request failed: {error}")
-            raise ServiceError(response.headers, error["code"], error["message"])
+        if response_error is not None:
+            LOG.error(f"Request failed: {response_error.code} {response_error.message}")
+            raise response_error
 
         if wait_for_confirmation:
             self.wait_for_confirmation(response.headers[CCF_TX_ID_HEADER])
@@ -498,64 +530,66 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
-    def get_did_document(self, did: str) -> dict:
-        # Note: This endpoint only returns data for did:web DIDs.
-        return self.get(f"/did/{did}").json()["did_document"]
-
     def get_jwks(self) -> dict:
-        return self.get(f"/jwks").json()
+        resp = self.get(f"/jwks")
+        resp.raise_for_status()
+        return resp.json()
 
     def submit_signed_statement(
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
-        headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        headers = {"Content-Type": CT_APPLICATION_COSE}
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
-        operation_id = response["operationId"]
+        )
+        resp.raise_for_status()
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         return PendingSubmission(operation_id)
 
-    def register_signed_statement(
+    def submit_signed_statement_and_wait(
         self,
         signed_statement: bytes,
     ) -> Submission:
-        headers = {"Content-Type": "application/cose"}
-        response = self.post(
+        headers = {"Content-Type": CT_APPLICATION_COSE}
+        resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
-        ).json()
-        operation_id = response["operationId"]
+        )
+        resp.raise_for_status()
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
     def wait_for_operation(self, operation: str) -> str:
-        response = self.get(
+        resp = self.get(
             f"/operations/{operation}",
-            retry_on=[lambda r: r.is_success and r.json()["status"] == "running"],
+            retry_on=[
+                HTTPStatus.ACCEPTED.value,
+                HTTPStatus.TOO_MANY_REQUESTS.value,
+                HTTPStatus.SERVICE_UNAVAILABLE.value,
+                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running",
+            ],
         )
-        payload = response.json()
+        response = cbor2.loads(resp.read())
 
-        if payload["status"] == "succeeded":
-            return payload["entryId"]
-        elif payload["status"] == "failed":
-            error = payload["error"]
-            raise ServiceError(response.headers, error["code"], error["message"])
+        if response["Status"] == "succeeded":
+            return response["EntryId"]
+        elif response["Status"] == "failed":
+            error = response["Error"]
+            raise ServiceError(
+                response.headers, error[CBOR_ERR_TITLE_TAG], error[CBOR_ERR_DETAIL_TAG]
+            )
         else:
-            raise ValueError("Invalid status {}".format(payload["status"]))
-
-    def get_operations(self):
-        return self.get("/operations").json()["operations"]
+            raise ValueError("Invalid status {}".format(response["Status"]))
 
     def get_claim(self, tx: str) -> bytes:
-        response = self.get_historical(f"/entries/{tx}")
-        return response.content
-
-    def get_signed_statement(self, tx: str) -> bytes:
         response = self.get_historical(f"/entries/{tx}")
         return response.content
 
@@ -569,7 +603,7 @@ class Client(BaseClient):
         if operation:
             tx = self.wait_for_operation(tx)
 
-        response = self.get_historical(f"/entries/{tx}/receipt")
+        response = self.get_historical(f"/entries/{tx}")
         return response.content
 
     def get_transparent_statement(self, tx: str, *, operation: bool = False) -> bytes:

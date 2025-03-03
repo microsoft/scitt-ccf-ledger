@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+bencher.json
 ccf-source/
 build/
 tmp/
