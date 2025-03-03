@@ -13,11 +13,6 @@
 
 namespace scitt
 {
-  using OperationCallback = std::function<void(
-    ccf::endpoints::EndpointContext& context,
-    nlohmann::json callback_context,
-    std::optional<nlohmann::json> result)>;
-
   /**
    * An indexing strategy which maintains a map from Operation ID to state.
    *
