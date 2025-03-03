@@ -5,6 +5,7 @@
 
 #include "cbor.h"
 
+#include <cstdlib>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <iomanip> // setw
@@ -30,13 +31,15 @@ static std::string to_hex_string(const std::vector<std::uint8_t>& data)
 }
 
 // Utility function to convert hex string to a vector of bytes
+static const int HEX_BASE = 16;
 static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
 {
   std::vector<std::uint8_t> bytes;
   for (size_t i = 0; i < hex.length(); i += 2)
   {
-    std::string byteString = hex.substr(i, 2);
-    char byte = static_cast<char>(strtol(byteString.c_str(), nullptr, 16));
+    const std::string byteString = hex.substr(i, 2);
+    char byte =
+      static_cast<char>(strtol(byteString.c_str(), nullptr, HEX_BASE));
     bytes.push_back(static_cast<std::uint8_t>(byte));
   }
   return bytes;
@@ -64,19 +67,19 @@ namespace
 {
   TEST(UtilityFunctionTest, bytesToHexToBytes)
   {
-    std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    const std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};
     EXPECT_EQ(to_hex_string(data), "01020304");
     EXPECT_EQ(from_hex_string("01020304"), data);
   }
 
   TEST(GetOperationOutTest, CBORSerializationWithStatusRunning)
   {
-    GetOperation::Out out{
+    const GetOperation::Out out{
       .operation_id = ccf::TxID{1, 2},
       .status = OperationStatus::Running,
     };
 
-    std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
+    const std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
 
     EXPECT_EQ(
       to_hex_string(cbor_value),
@@ -85,14 +88,14 @@ namespace
 
   TEST(GetOperationOutTest, CBORSerializationWithNestedError)
   {
-    GetOperation::Out out{
+    const GetOperation::Out out{
       .operation_id = ccf::TxID{1, 2},
       .status = OperationStatus::Failed,
       .error = ODataError{
         .code = "Bad Signature Algorithm",
         .message = "Signed Statement contained a non supported algorithm"}};
 
-    std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
+    const std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
 
     EXPECT_EQ(to_hex_string(cbor_value), expected_error_hex);
   }
