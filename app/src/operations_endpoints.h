@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 #include "app_data.h"
+#include "cbor.h"
 #include "historical/historical_queries_adapter.h"
 #include "odata_error.h"
 #include "visit_each_entry_in_value.h"
@@ -12,11 +13,6 @@
 
 namespace scitt
 {
-  using OperationCallback = std::function<void(
-    ccf::endpoints::EndpointContext& context,
-    nlohmann::json callback_context,
-    std::optional<nlohmann::json> result)>;
-
   /**
    * An indexing strategy which maintains a map from Operation ID to state.
    *
@@ -49,30 +45,6 @@ namespace scitt
     {}
 
     /**
-     * Get the list of all operations whose state is known by the indexing
-     * strategy.
-     *
-     * The function isn't intended to be used in normal situations, but can
-     * serve as a convenient debugging endpoint into the state of the indexing
-     * strategy.
-     */
-    std::vector<GetOperation::Out> operations() const
-    {
-      std::lock_guard guard(lock);
-      std::vector<GetOperation::Out> result;
-      for (const auto& it : operations_)
-      {
-        result.push_back(GetOperation::Out{
-          .operation_id = ccf::TxID{it.second.view, it.first},
-          .status = it.second.status,
-          .entry_id = it.second.completion_tx,
-          .error = it.second.error,
-        });
-      }
-      return result;
-    }
-
-    /**
      * Look up an operation by its transaction ID.
      *
      * If the transaction ID is unknown, this function generally returns an
@@ -94,7 +66,7 @@ namespace scitt
         get_status_for_txid(operation_id.view, operation_id.seqno, tx_status);
       if (result != ccf::ApiResult::OK)
       {
-        throw InternalError(fmt::format(
+        throw InternalCborError(fmt::format(
           "Failed to get transaction status: {}",
           ccf::api_result_to_str(result)));
       }
@@ -134,7 +106,7 @@ namespace scitt
 
       if (operation_id.seqno < lower_bound)
       {
-        throw NotFoundError(
+        throw NotFoundCborError(
           errors::OperationExpired, "Operation ID is too old");
       }
       else if (operation_id.seqno >= upper_bound)
@@ -155,7 +127,8 @@ namespace scitt
       {
         if (operation_id.view != it->second.view)
         {
-          throw std::invalid_argument("Operation ID has inconsistent view");
+          throw BadRequestCborError(
+            errors::InvalidInput, "Operation ID has inconsistent view");
         }
         return {
           .operation_id = operation_id,
@@ -169,105 +142,7 @@ namespace scitt
         // The transaction number is within our indexing range, yet doesn't
         // match any valid operation. The client must have sent us a transaction
         // ID for something completely different.
-        throw NotFoundError(errors::NotFound, "Invalid operation ID");
-      }
-    }
-
-    /**
-     * Get the context digest for a currently running operation.
-     *
-     * This is used in the operation callback to check the integrity of the
-     * context.
-     *
-     * Throws an HTTPError if the operation's state cannot be retrieved. If the
-     * operation state is likely to be available at a later point, a
-     * ServiceUnavailableError is thrown, allowing the caller to try again
-     * later. Otherwise a BadRequestError or NotFoundError is thrown.
-     */
-    ccf::crypto::Sha256Hash get_context_digest(
-      const ccf::TxID& operation_id) const
-    {
-      std::lock_guard guard(lock);
-
-      // Before we can look up the operation ID in the operations map, we must
-      // check whether this is a valid committed transaction or not. Otherwise
-      // we risk confusing sequence numbers across different views.
-      ccf::TxStatus tx_status;
-      auto result =
-        get_status_for_txid(operation_id.view, operation_id.seqno, tx_status);
-      if (result != ccf::ApiResult::OK)
-      {
-        throw InternalError(fmt::format(
-          "Failed to get transaction status: {}",
-          ccf::api_result_to_str(result)));
-      }
-
-      std::string tx_str = operation_id.to_str();
-      switch (tx_status)
-      {
-        case ccf::TxStatus::Unknown:
-        case ccf::TxStatus::Pending:
-          // This can happen when the transaction hasn't been globally
-          // committed to the ledger yet. No point looking up in the map yet,
-          // but we throw a transient error since eventually the transaction ID
-          // could be valid.
-          throw ServiceUnavailableError(
-            ccf::errors::TransactionPendingOrUnknown,
-            fmt::format("Transaction {} is not available.", tx_str));
-
-        case ccf::TxStatus::Invalid:
-          // Either the client passed in a garbage TX ID, or it was a real
-          // transaction that got rolled back. Either way, there's no point
-          // retrying it since it will never become valid in the future.
-          throw NotFoundError(
-            ccf::errors::TransactionInvalid,
-            fmt::format("Transaction {} is invalid.", tx_str));
-
-        case ccf::TxStatus::Committed:
-          break;
-      }
-
-      if (operation_id.seqno < lower_bound)
-      {
-        throw NotFoundError(
-          errors::OperationExpired,
-          fmt::format("Transaction {} is too old", tx_str));
-      }
-      else if (operation_id.seqno >= upper_bound)
-      {
-        throw ServiceUnavailableError(
-          errors::IndexingInProgressRetryLater,
-          fmt::format("Transaction {} is not available.", tx_str));
-      }
-      else if (auto it = operations_.find(operation_id.seqno);
-               it != operations_.end())
-      {
-        if (operation_id.view != it->second.view)
-        {
-          throw std::invalid_argument("Operation ID has inconsistent view");
-        }
-        if (it->second.status == OperationStatus::Running)
-        {
-          if (!it->second.context_digest.has_value())
-          {
-            throw std::invalid_argument(
-              fmt::format("No context digest for operation {}", tx_str));
-          }
-          return it->second.context_digest.value();
-        }
-        else
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Operation is in an invalid state: {}",
-              nlohmann::json(it->second.status).dump()));
-        }
-      }
-      else
-      {
-        // For a well-behaved client, this shouldn't ever happen.
-        throw NotFoundError(errors::NotFound, "Invalid operation ID");
+        throw NotFoundCborError(errors::NotFound, "Invalid operation ID");
       }
     }
 
@@ -294,7 +169,8 @@ namespace scitt
       auto it = operations_.find(operation_id.seqno);
       if (!(it == operations_.end()) || (operation_id.view == it->second.view))
       {
-        throw std::invalid_argument("Operation ID has inconsistent view");
+        throw BadRequestCborError(
+          errors::InvalidInput, "Operation ID has inconsistent view");
       }
 
       auto current_status = it != operations_.end() ?
@@ -407,7 +283,7 @@ namespace scitt
       }
       if (!valid)
       {
-        throw std::logic_error("Invalid operation transition");
+        throw InternalCborError("Invalid operation transition");
       }
       return valid;
     }
@@ -493,23 +369,20 @@ namespace scitt
 
   namespace endpoints
   {
-    static GetAllOperations::Out get_all_operations(
-      const std::shared_ptr<OperationsIndexingStrategy>& index,
-      ccf::endpoints::EndpointContext& ctx,
-      nlohmann::json&& params)
-    {
-      return {
-        .operations = index->operations(),
-      };
-    }
-
     static GetOperation::Out get_operation(
       const std::shared_ptr<OperationsIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
     {
-      auto txid = historical::get_tx_id_from_request_path(ctx);
-      return index->lookup(txid);
+      auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
+      const auto tx_id = ccf::TxID::from_str(tx_id_str);
+      if (!tx_id.has_value())
+      {
+        throw BadRequestCborError(
+          errors::InvalidInput,
+          fmt::format("Invalid Operation ID: {}", tx_id_str));
+      }
+      return index->lookup(tx_id.value());
     }
   }
 
@@ -524,25 +397,44 @@ namespace scitt
       std::make_shared<OperationsIndexingStrategy>(registry);
     context.get_indexing_strategies().install_strategy(operations_index);
 
-    registry
-      .make_endpoint(
-        "/operations",
-        HTTP_GET,
-        ccf::json_adapter(
-          std::bind(endpoints::get_all_operations, operations_index, _1, _2)),
-        authn_policy)
-      .set_auto_schema<void, GetAllOperations::Out>()
-      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-      .install();
+    auto get_op_with_status = [operations_index](
+                                ccf::endpoints::EndpointContext& ctx) {
+      auto operation = endpoints::get_operation(operations_index, ctx, {});
+      if (operation.status == OperationStatus::Running)
+      {
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
+      }
+      else
+      {
+        std::optional<std::string> host =
+          ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST);
+        if (
+          host.has_value() && operation.status == OperationStatus::Succeeded &&
+          operation.entry_id.has_value())
+        {
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::LOCATION,
+            fmt::format(
+              "https://{}/entries/{}",
+              host.value(),
+              operation.entry_id.value().to_str()));
+        }
 
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE,
+          ccf::http::headervalues::contenttype::CBOR);
+        ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
+      }
+    };
+
+    /**
+     * Check Registration, 2.1.3 in
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_endpoint(
-        "/operations/{txid}",
-        HTTP_GET,
-        ccf::json_adapter(
-          std::bind(endpoints::get_operation, operations_index, _1, _2)),
-        authn_policy)
-      .set_auto_schema<void, GetOperation::Out>()
+        "/operations/{txid}", HTTP_GET, get_op_with_status, authn_policy)
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
   }
@@ -599,9 +491,8 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(
       ccf::http::headers::CONTENT_TYPE,
-      ccf::http::headervalues::contenttype::JSON);
-    auto body = nlohmann::json(operation).dump();
-    ctx.rpc_ctx->set_response_body(std::move(body));
+      ccf::http::headervalues::contenttype::CBOR);
+    ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
     ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
     if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
@@ -609,15 +500,6 @@ namespace scitt
       ctx.rpc_ctx->set_response_header(
         ccf::http::headers::LOCATION,
         fmt::format("https://{}/operations/{}", *host, tx_str));
-    }
-
-    AppData& app_data = get_app_data(ctx.rpc_ctx);
-    if (app_data.asynchronous_operation.has_value())
-    {
-      app_data.asynchronous_operation->trigger(fmt::format(
-        "https://{}/operations/{}/callback",
-        app_data.asynchronous_operation->bind_address,
-        tx_str));
     }
   }
 }

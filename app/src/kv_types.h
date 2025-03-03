@@ -18,39 +18,6 @@
 
 namespace scitt
 {
-  using Timestamp = int64_t; // seconds since epoch
-  using Issuer = std::string; // DID of the issuer
-  using Pem = std::string; // PEM-encoded certificate
-
-  struct DidResolutionMetadata
-  {
-    Timestamp updated;
-    bool operator==(const DidResolutionMetadata&) const = default;
-  };
-  DECLARE_JSON_TYPE(DidResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated);
-
-  struct IssuerInfo
-  {
-    std::optional<did::DidDocument> did_document;
-    std::optional<DidResolutionMetadata> did_resolution_metadata;
-    std::optional<ODataError> error;
-  };
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(IssuerInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(IssuerInfo);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    IssuerInfo, did_document, did_resolution_metadata, error);
-
-  struct EntryInfo
-  {
-    /**
-     * The COSE protected header of the countersigner (this service).
-     */
-    std::vector<uint8_t> sign_protected;
-  };
-  DECLARE_JSON_TYPE(EntryInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected);
-
   enum class OperationStatus
   {
     Running,
@@ -62,6 +29,21 @@ namespace scitt
     {{OperationStatus::Running, "running"},
      {OperationStatus::Failed, "failed"},
      {OperationStatus::Succeeded, "succeeded"}});
+
+  static std::string operationStatusToString(OperationStatus status)
+  {
+    switch (status)
+    {
+      case OperationStatus::Running:
+        return "running";
+      case OperationStatus::Failed:
+        return "failed";
+      case OperationStatus::Succeeded:
+        return "succeeded";
+      default:
+        throw std::invalid_argument("Invalid OperationStatus value");
+    }
+  }
 
   struct OperationLog
   {

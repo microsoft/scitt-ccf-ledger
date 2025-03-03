@@ -2,31 +2,18 @@
 // Licensed under the MIT License.
 
 #pragma once
+#include "cbor.h"
 #include "kv_types.h"
+#include "odata_error.h"
 
 #include <ccf/ds/json.h>
+#include <ccf/tx_id.h>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 #include <vector>
 
 namespace scitt
 {
-  struct GetIssuerInfo
-  {
-    using Out = IssuerInfo;
-  };
-
-  struct GetIssuers
-  {
-    struct Out
-    {
-      std::vector<std::string> issuers;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetIssuers::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetIssuers::Out, issuers);
-
   struct GetServiceParameters
   {
     struct Out
@@ -87,17 +74,6 @@ namespace scitt
   DECLARE_JSON_TYPE(GetVersion::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, version);
 
-  struct GetEntry
-  {
-    struct Out
-    {
-      ccf::TxID entry_id;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetEntry::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(GetEntry::Out, entry_id, "entryId");
-
   struct GetOperation
   {
     struct Out
@@ -105,37 +81,29 @@ namespace scitt
       ccf::TxID operation_id;
       OperationStatus status;
       std::optional<ccf::TxID> entry_id;
-      std::optional<nlohmann::json> error;
+      std::optional<ODataError> error;
     };
   };
 
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetOperation::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
-    GetOperation::Out, operation_id, "operationId", status, "status");
-  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    GetOperation::Out, entry_id, "entryId", error, "error");
-
-  struct GetAllOperations
+  static std::vector<uint8_t> operation_to_cbor(
+    const GetOperation::Out& operation)
   {
-    struct Out
-    {
-      std::vector<GetOperation::Out> operations;
-    };
-  };
-  DECLARE_JSON_TYPE(GetAllOperations::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetAllOperations::Out, operations);
+    std::optional<std::string> entry_id_opt = operation.entry_id.has_value() ?
+      std::optional<std::string>(operation.entry_id.value().to_str()) :
+      std::nullopt;
+    std::optional<std::string> error_code_opt = operation.error.has_value() ?
+      std::optional<std::string>(operation.error.value().code) :
+      std::nullopt;
+    std::optional<std::string> error_message_opt = operation.error.has_value() ?
+      std::optional<std::string>(operation.error.value().message) :
+      std::nullopt;
 
-  struct PostOperationCallback
-  {
-    struct In
-    {
-      std::vector<uint8_t> context;
-      std::optional<nlohmann::json> result;
-    };
-  };
-
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(PostOperationCallback::In);
-  DECLARE_JSON_REQUIRED_FIELDS(PostOperationCallback::In, context);
-  DECLARE_JSON_OPTIONAL_FIELDS(PostOperationCallback::In, result);
+    return cbor::operation_props_to_cbor(
+      operation.operation_id.to_str(),
+      operationStatusToString(operation.status),
+      entry_id_opt,
+      error_code_opt,
+      error_message_opt);
+  }
 
 } // namespace scitt

@@ -6,7 +6,6 @@
 #include "constants.h"
 #include "cose.h"
 #include "did/document.h"
-#include "did/resolver.h"
 #include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
@@ -59,7 +58,7 @@ namespace scitt
 
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
-   * BadRequestError if the query parameter cannot be parsed. Also supports
+   * BadRequestJsonError if the query parameter cannot be parsed. Also supports
    * boolean parameters as "true" and "false".
    *
    * Returns std::nullopt if the parameter is missing.
@@ -92,7 +91,7 @@ namespace scitt
       }
       else
       {
-        throw BadRequestError(
+        throw BadRequestJsonError(
           errors::QueryParameterError,
           fmt::format(
             "Invalid value for query parameter '{}': {}", name, value));
@@ -104,7 +103,7 @@ namespace scitt
       const auto [p, ec] = std::from_chars(value.begin(), value.end(), result);
       if (ec != std::errc() || p != value.end())
       {
-        throw BadRequestError(
+        throw BadRequestJsonError(
           errors::QueryParameterError,
           fmt::format(
             "Invalid value for query parameter '{}': {}", name, value));
@@ -131,13 +130,13 @@ namespace scitt
     auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
     if (!proof.has_value())
     {
-      throw InternalError("Failed to get Merkle proof");
+      throw InternalCborError("Failed to get Merkle proof");
     }
 
     auto signature = describe_cose_signature_v1(*receipt_ptr);
     if (!signature.has_value())
     {
-      throw InternalError("Failed to get COSE signature");
+      throw InternalCborError("Failed to get COSE signature");
     }
 
     // See
@@ -183,6 +182,9 @@ namespace scitt
       return std::nullopt;
     }
 
+    /**
+     * Create an endpoint with a default locally committed handler.
+     */
     ccf::endpoints::Endpoint make_endpoint(
       const std::string& method,
       ccf::RESTVerb verb,
@@ -193,6 +195,11 @@ namespace scitt
         method, verb, f, ccf::endpoints::default_locally_committed_func, ap);
     }
 
+    /**
+     * Create an endpoint with a custom locally committed handler.
+     * Although the additional handler is supplied it does not
+     * guarantee that it will be called.
+     */
     ccf::endpoints::Endpoint make_endpoint_with_local_commit_handler(
       const std::string& method,
       ccf::RESTVerb verb,
@@ -206,9 +213,12 @@ namespace scitt
         };
 
       auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method, verb, tracing_adapter(error_adapter(f), method, get_time), ap);
+        method,
+        verb,
+        tracing_adapter_first(error_adapter(f), method, get_time),
+        ap);
       endpoint.locally_committed_func =
-        tracing_local_commit_adapter(l, method, get_time);
+        tracing_adapter_last(l, method, get_time);
       return endpoint;
     }
 
@@ -232,8 +242,7 @@ namespace scitt
         indexing::MAX_BUCKETS);
       context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
-      auto resolver = std::make_unique<did::UniversalResolver>();
-      verifier = std::make_unique<verifier::Verifier>(std::move(resolver));
+      verifier = std::make_unique<verifier::Verifier>();
 
       auto register_signed_statement = [this](EndpointContext& ctx) {
         const auto& body = ctx.rpc_ctx->get_request_body();
@@ -241,7 +250,7 @@ namespace scitt
           "Signed Statement Registration body size: {} bytes", body.size());
         if (body.size() > MAX_ENTRY_SIZE_BYTES)
         {
-          throw BadRequestError(
+          throw BadRequestCborError(
             errors::PayloadTooLarge,
             fmt::format(
               "Entry size {} exceeds maximum allowed size {}",
@@ -253,7 +262,7 @@ namespace scitt
         auto result = this->get_untrusted_host_time_v1(host_time);
         if (result != ccf::ApiResult::OK)
         {
-          throw InternalError(fmt::format(
+          throw InternalCborError(fmt::format(
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
 
@@ -274,7 +283,7 @@ namespace scitt
         catch (const verifier::VerificationError& e)
         {
           SCITT_DEBUG("Signed statement verification failed: {}", e.what());
-          throw BadRequestError(errors::InvalidInput, e.what());
+          throw BadRequestCborError(errors::InvalidInput, e.what());
         }
 
         if (cfg.policy.policy_script.has_value())
@@ -288,7 +297,7 @@ namespace scitt
           {
             SCITT_DEBUG(
               "Policy check failed: {}", policy_violation_reason.value());
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::PolicyFailed,
               fmt::format(
                 "Policy was not met: {}", policy_violation_reason.value()));
@@ -300,7 +309,7 @@ namespace scitt
           if (verifier::contains_cwt_issuer(phdr))
           {
             SCITT_DEBUG("No policy applied, but CWT issuer present");
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::PolicyFailed,
               "Policy was not met: CWT issuer present but no policy "
               "configured");
@@ -337,6 +346,7 @@ namespace scitt
 
         record_synchronous_operation(host_time, ctx.tx);
       };
+
       /**
        * Signed Statement Registration, 2.1.2 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
@@ -355,40 +365,7 @@ namespace scitt
             consensus, view, seqno, error_reason);
         };
 
-      static constexpr auto get_entry_path = "/entries/{txid}";
-      auto get_entry = [this](
-                         EndpointContext& ctx,
-                         const ccf::historical::StatePtr& historical_state) {
-        const auto parsed_query =
-          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-
-        SCITT_DEBUG("Get transaction historical state");
-        auto historical_tx = historical_state->store->create_read_only_tx();
-
-        auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
-        auto entry = entries->get();
-        if (!entry.has_value())
-        {
-          throw BadRequestError(
-            errors::InvalidInput,
-            fmt::format(
-              "Transaction ID {} does not correspond to a submission.",
-              historical_state->transaction_id.to_str()));
-        }
-
-        ctx.rpc_ctx->set_response_body(entry.value());
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::CONTENT_TYPE, "application/cose");
-      };
-      make_endpoint(
-        get_entry_path,
-        HTTP_GET,
-        scitt::historical::adapter(get_entry, state_cache, is_tx_committed),
-        authn_policy)
-        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-        .install();
-
-      static constexpr auto get_entry_receipt_path = "/entries/{txid}/receipt";
+      static constexpr auto get_entry_receipt_path = "/entries/{txid}";
       auto get_entry_receipt =
         [this](
           EndpointContext& ctx,
@@ -400,14 +377,14 @@ namespace scitt
           auto entry = entries->get();
           if (!entry.has_value())
           {
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::InvalidInput,
               fmt::format(
                 "Transaction ID {} does not correspond to a submission.",
                 historical_state->transaction_id.to_str()));
           }
 
-          SCITT_DEBUG("Get signed statement from the ledger");
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
@@ -416,10 +393,14 @@ namespace scitt
             ccf::http::headervalues::contenttype::COSE);
         };
 
+      /**
+       * Resolve Receipt, 2.1.4 in
+       * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       */
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        scitt::historical::adapter(
+        scitt::historical::entry_adapter(
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -438,13 +419,14 @@ namespace scitt
           auto entry = entries->get();
           if (!entry.has_value())
           {
-            throw BadRequestError(
+            throw BadRequestCborError(
               errors::InvalidInput,
               fmt::format(
                 "Transaction ID {} does not correspond to a submission.",
                 historical_state->transaction_id.to_str()));
           }
 
+          SCITT_DEBUG("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
@@ -456,6 +438,7 @@ namespace scitt
           ccf::cose::edit::desc::Value receipts_desc{
             ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
+          SCITT_DEBUG("Embed receipt into transparent statement");
           auto statement =
             ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 
@@ -465,10 +448,15 @@ namespace scitt
             ccf::http::headervalues::contenttype::COSE);
         };
 
+      /**
+       * This endpoint is not part of RFC,
+       * but to avoid clients embedding the receipt in the statement
+       * we provide a convenience endpoint that does this for them.
+       */
       make_endpoint(
         get_entry_statement_path,
         HTTP_GET,
-        scitt::historical::adapter(
+        scitt::historical::entry_adapter(
           get_entry_statement, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -500,7 +488,7 @@ namespace scitt
             const auto result = get_last_committed_txid_v1(view, seqno);
             if (result != ccf::ApiResult::OK)
             {
-              throw InternalError(fmt::format(
+              throw InternalJsonError(fmt::format(
                 "Failed to get last committed transaction ID: {}",
                 ccf::api_result_to_str(result)));
             }
@@ -509,7 +497,7 @@ namespace scitt
 
           if (to_seqno < from_seqno)
           {
-            throw BadRequestError(
+            throw BadRequestJsonError(
               errors::InvalidInput,
               fmt::format(
                 "Invalid range: Starts at {} but ends at {}",
@@ -520,13 +508,13 @@ namespace scitt
           const auto tx_status = get_tx_status(to_seqno);
           if (!tx_status.has_value())
           {
-            throw InternalError(fmt::format(
+            throw InternalJsonError(fmt::format(
               "Failed to get transaction status for seqno {}", to_seqno));
           }
 
           if (tx_status.value() != ccf::TxStatus::Committed)
           {
-            throw BadRequestError(
+            throw BadRequestJsonError(
               errors::InvalidInput,
               fmt::format(
                 "Only committed transactions can be queried. Transaction at "
@@ -538,9 +526,10 @@ namespace scitt
           const auto indexed_txid = entry_seqno_index->get_indexed_watermark();
           if (indexed_txid.seqno < to_seqno)
           {
-            throw ServiceUnavailableError(
+            throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
+              "Index of requested range not available yet, retry later",
+              1);
           }
 
           static constexpr size_t max_seqno_per_page = 10000;
@@ -552,9 +541,10 @@ namespace scitt
             entry_seqno_index->get_write_txs_in_range(range_begin, range_end);
           if (!interesting_seqnos.has_value())
           {
-            throw ServiceUnavailableError(
+            throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
+              "Index of requested range not available yet, retry later",
+              1);
           }
 
           SCITT_DEBUG("Get entries for the target range");
@@ -565,7 +555,7 @@ namespace scitt
             auto result = get_view_for_seqno_v1(seqno, view);
             if (result != ccf::ApiResult::OK)
             {
-              throw InternalError(fmt::format(
+              throw InternalJsonError(fmt::format(
                 "Failed to get view for seqno: {}",
                 ccf::api_result_to_str(result)));
             }
@@ -595,6 +585,11 @@ namespace scitt
           return out;
         };
 
+      /**
+       * This endpoint is not part of RFC,
+       * but for convenience we provide a way to retrieve the transaction IDs
+       * of all entries in a given range.
+       */
       make_endpoint(
         get_entries_tx_ids_path,
         HTTP_GET,

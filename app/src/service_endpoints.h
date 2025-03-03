@@ -32,24 +32,6 @@ namespace scitt
     return out;
   }
 
-  static did::DidVerificationMethod certificate_to_verification_method(
-    std::string_view service_issuer,
-    const std::vector<uint8_t>& certificate_der)
-  {
-    auto verifier = ccf::crypto::make_unique_verifier(certificate_der);
-    auto key_id = ccf::crypto::Sha256Hash(certificate_der).hex_str();
-
-    // We roundtrip via JSON to convert from CCF's JWK type to our own.
-    did::Jwk jwk = nlohmann::json(verifier->public_key_jwk());
-    jwk.x5c = {{ccf::crypto::b64_from_raw(certificate_der)}};
-    return did::DidVerificationMethod{
-      .id = fmt::format("{}#{}", service_issuer, key_id),
-      .type = std::string(did::VERIFICATION_METHOD_TYPE_JWK),
-      .controller = std::string(service_issuer),
-      .public_key_jwk = jwk,
-    };
-  }
-
   /**
    * An indexing strategy collecting service keys used to sign receipts.
    */
@@ -107,20 +89,6 @@ namespace scitt
     ServiceCertificateIndexingStrategy() :
       VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
     {}
-
-    did::DidDocument get_did_document(std::string_view service_issuer) const
-    {
-      std::lock_guard guard(lock);
-
-      did::DidDocument doc;
-      doc.id = std::string(service_issuer);
-      for (const auto& certificate : service_certificates)
-      {
-        doc.assertion_method.push_back(
-          certificate_to_verification_method(service_issuer, certificate));
-      }
-      return doc;
-    }
 
     std::vector<GetServiceParameters::Out> get_service_parameters() const
     {
@@ -192,30 +160,12 @@ namespace scitt
       return out;
     };
 
-    static did::DidDocument get_did_document(
-      const std::shared_ptr<ServiceCertificateIndexingStrategy>& index,
-      ccf::endpoints::EndpointContext& ctx,
-      nlohmann::json&& params)
-    {
-      auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
-                   ->get()
-                   .value_or(Configuration{});
-
-      if (!cfg.service_issuer.has_value())
-      {
-        throw NotFoundError(errors::NotFound, "DID:WEB is not enabled");
-      }
-
-      return index->get_did_document(*cfg.service_issuer);
-    }
-
     static nlohmann::json get_jwks(
       const std::shared_ptr<ServiceKeyIndexingStrategy>& index,
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
     {
-      // Like get_did_document(), this is not right when the indexer is not up
-      // to date, which needs fixing
+      // TODO: this is not right when the indexer is not up to date
       return index->get_jwks();
     }
   }
@@ -243,62 +193,13 @@ namespace scitt
           context.get_subsystem<ccf::cose::AbstractCOSESignaturesConfig>();
         if (!subsystem)
         {
-          ctx.rpc_ctx->set_error(
-            HTTP_STATUS_INTERNAL_SERVER_ERROR,
-            ccf::errors::InternalError,
-            "COSE signatures subsystem not available");
-          return;
+          throw InternalCborError("COSE signatures subsystem not available");
         }
         auto cfg = subsystem->get_cose_signatures_config();
 
         nlohmann::json config;
         config["issuer"] = cfg.issuer;
-        config["jwksUri"] = fmt::format("https://{}/jwks", cfg.issuer);
-
-        const auto accept =
-          ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
-        if (accept.has_value())
-        {
-          const auto accept_options =
-            ccf::http::parse_accept_header(accept.value());
-          for (const auto& option : accept_options)
-          {
-            // return CBOR eagerly if it is compatible with Accept
-            if (option.matches(ccf::http::headervalues::contenttype::CBOR))
-            {
-              ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
-              ctx.rpc_ctx->set_response_header(
-                ccf::http::headers::CONTENT_TYPE,
-                ccf::http::headervalues::contenttype::CBOR);
-              ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
-              return;
-            }
-
-            // JSON if compatible with Accept
-            if (option.matches(ccf::http::headervalues::contenttype::JSON))
-            {
-              ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
-              ctx.rpc_ctx->set_response_header(
-                ccf::http::headers::CONTENT_TYPE,
-                ccf::http::headervalues::contenttype::JSON);
-              ctx.rpc_ctx->set_response_body(config.dump());
-              return;
-            }
-          }
-
-          // If no compatible content type, return 406
-          throw ccf::RpcException(
-            HTTP_STATUS_NOT_ACCEPTABLE,
-            ccf::errors::UnsupportedContentType,
-            fmt::format(
-              "No supported content type in accept header: {}\nOnly {} and {} "
-              "are currently supported",
-              accept.value(),
-              ccf::http::headervalues::contenttype::JSON,
-              ccf::http::headervalues::contenttype::CBOR));
-        }
-
-        // If not Accept, default to CBOR
+        config["jwks_uri"] = fmt::format("https://{}/jwks", cfg.issuer);
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
@@ -307,6 +208,9 @@ namespace scitt
         return;
       };
 
+    /**
+     * The endpoint exposes the current service parameters.
+     */
     registry
       .make_endpoint(
         "/parameters",
@@ -316,6 +220,11 @@ namespace scitt
       .set_auto_schema<void, GetServiceParameters::Out>()
       .install();
 
+    /**
+     * The endpoint exposes older service parameters.
+     * Parameters can change in the case of a
+     * disaster recovery.
+     */
     registry
       .make_endpoint(
         "/parameters/historic",
@@ -330,6 +239,11 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
+    /**
+     * Convenience endpoint to provide the service configuration.
+     * The configuration includes the policy script used to validate
+     * the submitted statements.
+     */
     registry
       .make_endpoint(
         "/configuration",
@@ -339,6 +253,11 @@ namespace scitt
       .set_auto_schema<void, Configuration>()
       .install();
 
+    /**
+     * Convenience endpoint to provide the version of the SCITT service.
+     * The version is used to find the correct source control version
+     * it was built from.
+     */
     registry
       .make_endpoint(
         "/version",
@@ -349,42 +268,31 @@ namespace scitt
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .install();
 
-    registry
-      .make_endpoint(
-        "/.well-known/did.json",
-        HTTP_GET,
-        ccf::json_adapter(std::bind(
-          endpoints::get_did_document, service_certificate_index, _1, _2)),
-        {ccf::empty_auth_policy})
-      .install();
-
-    // The DID document used to be served under this endpoint only, until we
-    // added the .well-known path above. As a transitional measure, we keep
-    // both of them around for a bit.
-    registry
-      .make_endpoint(
-        "/scitt/did.json",
-        HTTP_GET,
-        ccf::json_adapter(std::bind(
-          endpoints::get_did_document, service_certificate_index, _1, _2)),
-        {ccf::empty_auth_policy})
-      .install();
-
+    /**
+     * This endpoint is indirectly mentioned in the RFC,
+     * through the "jwks_uri" field in the transparency configuration.
+     * See 2.1.1. Transparency Configuration
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_endpoint(
         "/jwks",
         HTTP_GET,
         ccf::json_adapter(
           std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
-        {ccf::empty_auth_policy})
+        no_authn_policy)
       .install();
 
+    /**
+     * See 2.1.1. Transparency Configuration
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
     registry
       .make_read_only_endpoint(
         "/.well-known/transparency-configuration",
         HTTP_GET,
         get_transparency_config,
-        {ccf::empty_auth_policy})
+        no_authn_policy)
       .install();
   }
 }

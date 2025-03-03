@@ -65,17 +65,7 @@ If you created your own certificate and key combination as mentioned in the prer
 SIGNING_METHOD="cacert" CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
 ```
 
-##### Option 2. Use DID document and private key
-
-**Note**: This step assumes that user already has DID configured. For more details you can also check github DID demo [here](../github/README.md)
-
-If you have a DID document and the corresponding private key, you can use those for creating the signature with a similar command:
-
-```bash
-SIGNING_METHOD="did" DID_DOC_PATH="demo-poc/did_roots/did.json" PRIVATE_KEY_PATH="demo-poc/did_roots/key.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" ./demo/cts_poc/2a-claim-generator.sh
-```
-
-##### Option 3. Use Azure Key Vault certificate and key
+##### Option 2. Use Azure Key Vault certificate and key
 
 You will need the details about your keys and your identity needs to have access to use the keys for signing.
 
@@ -128,13 +118,3 @@ COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts
     This means the scitt instance is not configured properly.
     _Workaround:_ To configure on local, run following command and re-try:
     > ./pyscitt.sh governance local_development --url $SCITT_URL
-
-#### Run performance regression tests for CTS
-
-A basic set of performance indicators can be obtained by building the project, and running:
-
-```bash
-./run_functional_tests.sh -m bencher
-```
-
-Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots).
