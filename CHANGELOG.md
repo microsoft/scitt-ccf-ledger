@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [0.12.1]
 
 ### Changes
-* Upgrade to CCF 6.0.0-rc0 (#275)
+* Upgrade to CCF 6.0.0-dev20 (#275)
 
 ## [0.10.2]
 
