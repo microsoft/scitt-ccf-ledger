@@ -21,7 +21,7 @@ class TestAcceptedAlgorithms:
             signed_statement = crypto.sign_json_statement(
                 identity, {"foo": "bar"}, cwt=True
             )
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         return f
 
@@ -179,12 +179,12 @@ export function apply(phdr) {{
         configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         for err, signed_statements in refused_signed_statements.items():
             for signed_statement in signed_statements:
                 with service_error(err):
-                    client.register_signed_statement(signed_statement)
+                    client.submit_signed_statement_and_wait(signed_statement)
 
     def test_svn_policy(
         self,
@@ -237,12 +237,12 @@ export function apply(phdr) {{
         configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         for err, signed_statements in refused_signed_statements.items():
             for signed_statement in signed_statements:
                 with service_error(err):
-                    client.register_signed_statement(signed_statement)
+                    client.submit_signed_statement_and_wait(signed_statement)
 
     def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_statement
@@ -251,7 +251,7 @@ export function apply(phdr) {{
             {"policy": {"policyScript": "export function apply() { return true }"}}
         )
 
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
     def test_trivial_fail_policy(
         self, client: Client, configure_service, signed_statement
@@ -265,7 +265,7 @@ export function apply(phdr) {{
         )
 
         with service_error("Policy was not met"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
     def test_exceptional_policy(
         self, client: Client, configure_service, signed_statement
@@ -279,7 +279,7 @@ export function apply(phdr) {{
         )
 
         with service_error("Error while applying policy"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
     @pytest.mark.parametrize(
         "script",
@@ -296,7 +296,7 @@ export function apply(phdr) {{
         configure_service({"policy": {"policyScript": script}})
 
         with service_error("Invalid policy module"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
     def test_cts_hashv_cwtclaims_payload_with_policy(
         self,
@@ -323,7 +323,9 @@ return true;
         with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
-        statement = client.register_signed_statement(cts_hashv_cwtclaims).response_bytes
+        statement = client.submit_signed_statement_and_wait(
+            cts_hashv_cwtclaims
+        ).response_bytes
 
         # store statement
         transparent_statement = tmp_path / "transparent_statement.cose"

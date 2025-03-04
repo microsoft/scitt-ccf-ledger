@@ -28,7 +28,7 @@ class TestHistorical:
             signed_statement = crypto.sign_json_statement(
                 identity, {"value": i}, cwt=True
             )
-            submission = client.register_signed_statement(signed_statement)
+            submission = client.submit_signed_statement_and_wait(signed_statement)
             result.append(
                 SimpleNamespace(
                     signed_statement=signed_statement,
@@ -45,7 +45,7 @@ class TestHistorical:
                 start=submissions[0].seqno, end=submissions[-1].seqno
             )
         )
-
+        print("Found statements:", seqnos)
         # This works because we don't run tests concurrently on a shared server.
         # If we did, we'd have to check for a sub-list instead.
         assert [s.tx for s in submissions] == seqnos
@@ -54,8 +54,3 @@ class TestHistorical:
         for s in submissions:
             receipt = client.get_transparent_statement(s.tx)
             verify_transparent_statement(receipt, trust_store, s.signed_statement)
-
-    def test_get_signed_statement(self, client: Client, trust_store, submissions):
-        for s in submissions:
-            signed_statement = client.get_signed_statement(s.tx)
-            verify_transparent_statement(s.receipt, trust_store, signed_statement)

@@ -180,10 +180,12 @@ class DynamicTrustStore(TrustStore):
 
         transparency_configuration = self.getter(
             f"https://{issuer}/.well-known/transparency-configuration",
-            headers={"Accept": "application/json"},
+            headers={"Accept": "application/cbor"},
         )
         transparency_configuration.raise_for_status()
-        jwks_uri = transparency_configuration.json()["jwksUri"]
+        config_response = cbor2.loads(transparency_configuration.content)
+
+        jwks_uri = config_response["jwks_uri"]
         jwk_set = self.getter(jwks_uri)
         jwk_set.raise_for_status()
         jwks = jwk_set.json()["keys"]

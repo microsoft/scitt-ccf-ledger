@@ -145,7 +145,7 @@ namespace scitt
       }
       catch (const std::exception& e)
       {
-        throw BadRequestError(
+        throw BadRequestCborError(
           scitt::errors::PolicyError,
           fmt::format("Invalid policy module: {}", e.what()));
       }
@@ -170,7 +170,7 @@ namespace scitt
       {
         auto [reason, trace] = interpreter.error_message();
 
-        throw BadRequestError(
+        throw BadRequestCborError(
           scitt::errors::PolicyError,
           fmt::format(
             "Error while applying policy: {}\n{}",
@@ -190,7 +190,7 @@ namespace scitt
         return std::nullopt;
       }
 
-      throw BadRequestError(
+      throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format(
           "Unexpected return value from policy: {}",

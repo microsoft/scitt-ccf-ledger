@@ -46,7 +46,7 @@ class TestAuthentication:
     @pytest.fixture
     def submit(self, client: Client, signed_statement: bytes):
         def f(**kwargs):
-            client.replace(**kwargs).register_signed_statement(signed_statement)
+            client.replace(**kwargs).submit_signed_statement_and_wait(signed_statement)
 
         return f
 
