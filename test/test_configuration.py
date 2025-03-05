@@ -18,8 +18,11 @@ class TestAcceptedAlgorithms:
     def submit(self, client: Client, trusted_ca):
         def f(**kwargs):
             """Sign and submit the statement with a new identity"""
+            kwargs["add_eku"] = "2.999"
             identity = trusted_ca.create_identity(**kwargs)
-            signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+            signed_statement = crypto.sign_json_statement(
+                identity, {"foo": "bar"}, cwt=True
+            )
             client.submit_signed_statement_and_wait(signed_statement)
 
         return f
@@ -27,7 +30,14 @@ class TestAcceptedAlgorithms:
     def test_reject_everything(self, configure_service, submit):
         # Configure the service with no accepted algorithms.
         # The service should reject anything we submit to it.
-        configure_service({"policy": {"acceptedAlgorithms": []}})
+        configure_service(
+            {
+                "policy": {
+                    "acceptedAlgorithms": [],
+                    "policyScript": 'export function apply() { return "Not supported"; }',
+                }
+            }
+        )
 
         with service_error("InvalidInput: Unsupported algorithm"):
             submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -41,7 +51,14 @@ class TestAcceptedAlgorithms:
     def test_allow_select_algorithm(self, configure_service, submit):
         # Add just one algorithm to the policy. Statements signed with this
         # algorithm are accepted but not the others.
-        configure_service({"policy": {"acceptedAlgorithms": ["ES256"]}})
+        configure_service(
+            {
+                "policy": {
+                    "acceptedAlgorithms": ["ES256"],
+                    "policyScript": "export function apply() { return true; }",
+                }
+            }
+        )
         submit(alg="ES256", kty="ec", ec_curve="P-256")
 
         with service_error("InvalidInput: Unsupported algorithm"):
@@ -53,7 +70,9 @@ class TestAcceptedAlgorithms:
     def test_default_allows_anything(self, configure_service, submit):
         # If no acceptedAlgorithms are defined in the policy, any algorithm
         # is accepted.
-        configure_service({"policy": {}})
+        configure_service(
+            {"policy": {"policyScript": "export function apply() { return true; }"}}
+        )
         submit(alg="ES256", kty="ec", ec_curve="P-256")
         submit(alg="ES384", kty="ec", ec_curve="P-384")
         submit(alg="PS256", kty="rsa")
@@ -62,8 +81,8 @@ class TestAcceptedAlgorithms:
 class TestPolicyEngine:
     @pytest.fixture(scope="class")
     def signed_statement(self, trusted_ca: X5ChainCertificateAuthority):
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
-        return crypto.sign_json_statement(identity, {"foo": "bar"})
+        identity = trusted_ca.create_identity(alg="ES256", kty="ec", add_eku="2.999")
+        return crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
     def test_ietf_didx509_policy(
         self,
@@ -112,12 +131,11 @@ class TestPolicyEngine:
             crypto.sign_json_statement(identities[1], statement, feed=feed, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_issuer = "Invalid issuer"
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
-        not_supported = "Payloads with CWT_Claims must have a did:x509 iss and x5chain"
+        not_supported = "CWT_Claims issuer must be a did:x509"
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
         refused_signed_statements = {
@@ -153,9 +171,7 @@ class TestPolicyEngine:
         }
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
+export function apply(phdr) {{
     // Check exact issuer 
     if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
 
@@ -198,7 +214,6 @@ export function apply(profile, phdr) {{
             crypto.sign_json_statement(identity, statement, feed=feed, svn=1, cwt=True),
         ]
 
-        profile_error = "This policy only accepts IETF did:x509 signed statements"
         invalid_svn = "Invalid SVN"
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
@@ -213,9 +228,7 @@ export function apply(profile, phdr) {{
         }
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-    if (profile !== "IETF") {{ return "{profile_error}"; }}
-
+export function apply(phdr) {{
     // Check exact issuer 
     if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
     if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
@@ -305,8 +318,7 @@ export function apply(profile, phdr) {{
     ):
 
         policy_script = f"""
-export function apply(profile, phdr) {{
-if (profile !== "IETF") {{ return "This policy only accepts IETF did:x509 signed statements"; }}
+export function apply(phdr) {{
 
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}

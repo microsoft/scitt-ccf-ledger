@@ -271,13 +271,12 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
-        SignedStatementProfile signed_statement_profile;
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;
         try
         {
           SCITT_DEBUG("Verify submitted signed statement");
-          std::tie(signed_statement_profile, phdr, uhdr) =
+          std::tie(phdr, uhdr) =
             verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
@@ -289,10 +288,7 @@ namespace scitt
         if (cfg.policy.policy_script.has_value())
         {
           const auto policy_violation_reason = check_for_policy_violations(
-            cfg.policy.policy_script.value(),
-            "configured_policy",
-            signed_statement_profile,
-            phdr);
+            cfg.policy.policy_script.value(), "configured_policy", phdr);
           if (policy_violation_reason.has_value())
           {
             SCITT_DEBUG(
@@ -337,10 +333,7 @@ namespace scitt
         auto* entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
 
-        SCITT_INFO(
-          "SignedStatementProfile={} SignedStatementSizeKb={}",
-          signed_statement_profile,
-          body.size() / 1024);
+        SCITT_INFO("SignedStatementSizeKb={}", body.size() / 1024);
 
         SCITT_DEBUG("SignedStatement was submitted synchronously");
 

@@ -355,8 +355,6 @@ def trusted_ca(client) -> X5ChainCertificateAuthority:
     The service will accept statements signed using certificates issued by the CA.
     """
     ca = X5ChainCertificateAuthority(kty="ec")
-    proposal = governance.set_ca_bundle_proposal("x509_roots", ca.cert_bundle)
-    client.governance.propose(proposal, must_pass=True)
     return ca
 
 

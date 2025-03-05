@@ -105,7 +105,7 @@ The application expects the [configuration](docs/configuration.md) to be submitt
 echo <<< EOL
 {
     "policy": {
-        "policyScript": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
+        "policyScript": "export function apply(phdr) { if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
     },
     "authentication": {
         "allowUnauthenticated": true
@@ -117,14 +117,6 @@ EOL >> test-config.json;
 ```
 
 Above you can see a special `workspace` directory which would have been created when running with `docker/run-dev.sh` and would contain the member keys.
-
-### Adding x509 CA roots
-
-Root CAs are used to validate COSE envelopes being submitted to the `/entries` endpoint. Similar to the [configuration](docs/configuration.md) CA roots can be set with the CLI.
-
-```sh
-./pyscitt.sh governance propose_ca_certs --name x509_roots -k --url https://localhost:8000 --member-key workspace/member0_privk.pem --member-cert workspace/member0_cert.pem --ca-certs myexpectedca.pem
-```
 
 ## Testing
 

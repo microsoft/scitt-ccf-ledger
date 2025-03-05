@@ -112,7 +112,6 @@ if (BUILD_TESTS)
   add_executable(
     unit_tests
     unit-tests/main.cpp
-    
     ${UNIT_TEST_SOURCES}
   )
   add_san(unit_tests)

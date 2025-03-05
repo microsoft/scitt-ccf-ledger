@@ -17,26 +17,6 @@ namespace scitt
 
   namespace js
   {
-    static inline ccf::js::core::JSWrappedValue claim_profile_to_js_val(
-      ccf::js::core::Context& ctx, SignedStatementProfile claim_profile)
-    {
-      switch (claim_profile)
-      {
-        case SignedStatementProfile::IETF:
-        {
-          return ctx.new_string("IETF");
-        }
-        case SignedStatementProfile::X509:
-        {
-          return ctx.new_string("X509");
-        }
-        default:
-        {
-          throw std::logic_error("Unhandled SignedStatementProfile value");
-        }
-      }
-    }
-
     static inline ccf::js::core::JSWrappedValue protected_header_to_js_val(
       ccf::js::core::Context& ctx, const scitt::cose::ProtectedHeader& phdr)
     {
@@ -151,7 +131,6 @@ namespace scitt
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
-      SignedStatementProfile claim_profile,
       const scitt::cose::ProtectedHeader& phdr)
     {
       // Allow the policy to access common globals (including shims for
@@ -171,12 +150,11 @@ namespace scitt
           fmt::format("Invalid policy module: {}", e.what()));
       }
 
-      auto profile_val = claim_profile_to_js_val(interpreter, claim_profile);
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {profile_val, phdr_val},
+        {phdr_val},
         ccf::JSRuntimeOptions{
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
@@ -226,9 +204,8 @@ namespace scitt
   static inline std::optional<std::string> check_for_policy_violations(
     const PolicyScript& script,
     const std::string& policy_name,
-    SignedStatementProfile claim_profile,
     const cose::ProtectedHeader& phdr)
   {
-    return js::apply_js_policy(script, policy_name, claim_profile, phdr);
+    return js::apply_js_policy(script, policy_name, phdr);
   }
 }
