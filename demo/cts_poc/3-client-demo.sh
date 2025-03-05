@@ -40,8 +40,7 @@ RECEIPT_PATH="$RECEIPT_FOLDER"/embedded.receipt.cose
 
 # Submit signed claim
 scitt submit "$COSE_CLAIMS_PATH" \
-    --receipt "$RECEIPT_PATH" \
-    --receipt-type embedded \
+    --transparent-statement "$RECEIPT_PATH" \
     --url "$SCITT_URL" \
     --development
 

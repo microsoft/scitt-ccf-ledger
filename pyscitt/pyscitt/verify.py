@@ -11,15 +11,23 @@ from typing import Dict, Optional, Union
 
 import cbor2
 import ccf.cose
+import httpx
 import pycose
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    PublicFormat,
+    load_pem_public_key,
+)
 from cryptography.x509 import load_der_x509_certificate
+from jwcrypto import jwk
+from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-from . import crypto, did
-from .crypto import SCITTIssuer
+from . import crypto
+from .crypto import CWT_ISS, CWTClaims
 from .receipt import Receipt
 
 
@@ -60,9 +68,9 @@ class TrustStore(ABC):
         pass
 
     @abstractmethod
-    def lookup(self, phdr) -> ServiceParameters:
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
-        Look up a service's parameters based on the protected headers from a
+        Look up a service's public key based on the protected headers from a
         receipt. Raises an exception if not matching service is found.
         """
         raise NotImplementedError()
@@ -75,48 +83,14 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
         raise ValueError("signature is invalid")
 
 
-def verify_receipt(
-    buf: bytes,
-    service_trust_store: TrustStore,
-    receipt: Union[Receipt, bytes, None] = None,
-) -> None:
-    msg = Sign1Message.decode(buf)
-
-    if isinstance(receipt, Receipt):
-        decoded_receipt = receipt
-    else:
-        if receipt is None:
-            embedded_receipt = crypto.get_last_embedded_receipt_from_cose(buf)
-            if not embedded_receipt:
-                raise ValueError("No embedded receipt found in COSE message")
-            parsed_receipt = cbor2.loads(embedded_receipt)
-        else:
-            parsed_receipt = cbor2.loads(receipt)
-
-        decoded_receipt = Receipt.from_cose_obj(parsed_receipt)
-
-    service_params = service_trust_store.lookup(decoded_receipt.phdr)
-    decoded_receipt.verify(msg, service_params)
-
-
 def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
     input_signed_statement: bytes,
 ):
-    trust_store_keys = {}
-    for _, service_params in service_trust_store.services.items():
-        cert = load_der_x509_certificate(service_params.certificate, default_backend())
-        key = cert.public_key()
-        kid = sha256(
-            key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-        ).digest()
-        trust_store_keys[kid] = key
-    # Assume a single service key
-    service_key = list(trust_store_keys.values())[0]
-
     st = Sign1Message.decode(transparent_statement)
     for receipt in st.uhdr[crypto.SCITTReceipts]:
+        service_key = service_trust_store.get_key(receipt)
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
         )
@@ -128,9 +102,24 @@ class StaticTrustStore(TrustStore):
     """
 
     services: Dict[str, ServiceParameters] = {}
+    trust_store_keys: dict = {}
 
     def __init__(self, services: Dict[str, ServiceParameters]):
         self.services = services
+        for _, service_params in self.services.items():
+            cert = load_der_x509_certificate(
+                service_params.certificate, default_backend()
+            )
+            key = cert.public_key()
+            kid = (
+                sha256(
+                    key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                )
+                .digest()
+                .hex()
+                .encode()
+            )
+            self.trust_store_keys[kid] = key
 
     @staticmethod
     def load(path: Path) -> "StaticTrustStore":
@@ -166,75 +155,42 @@ class StaticTrustStore(TrustStore):
 
         return StaticTrustStore(store)
 
-    def lookup(self, phdr) -> ServiceParameters:
-        if "service_id" not in phdr:
-            raise ValueError("Receipt does not have a service identity.")
-
-        service_id = phdr["service_id"]
-        if service_id in self.services:
-            return self.services[service_id]
-        else:
-            raise ValueError(f"Unknown service identity {service_id!r}")
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        parsed = Sign1Message.decode(receipt)
+        kid = parsed.phdr[KID]
+        return self.trust_store_keys[kid]
 
 
-class DIDDocumentTrustStore(TrustStore):
+class DynamicTrustStore(TrustStore):
     """
-    A trust store backed by a single DID-document.
-
-    The trust store will use the KID found in the protected headers to select
-    the appropriate assertion method from the document.
+    A dynamic trust store, based on a single service identity used to retrieve
+    all keys from the service's transparency configuration endpoint.
     """
 
-    document: dict
-    services: dict
+    services: Dict[str, ServiceParameters] = {}
 
-    def __init__(self, document: dict):
-        self.document = document
+    def __init__(self, getter):
+        self.services = {}
+        self.getter = getter
 
-    def lookup(self, phdr) -> ServiceParameters:
-        issuer = phdr.get(SCITTIssuer)
-        if issuer != self.document.get("id"):
-            raise ValueError(
-                f"Incorrect issuer {issuer!r}, expected {self.document['id']}"
-            )
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        parsed = Sign1Message.decode(receipt)
+        cwt = parsed.phdr[CWTClaims]
+        issuer = cwt[CWT_ISS]
 
-        if pycose.headers.KID in phdr:
-            kid = phdr[pycose.headers.KID].decode("ascii")
-        else:
-            kid = None
+        transparency_configuration = self.getter(
+            f"https://{issuer}/.well-known/transparency-configuration",
+            headers={"Accept": "application/cbor"},
+        )
+        transparency_configuration.raise_for_status()
+        config_response = cbor2.loads(transparency_configuration.content)
 
-        method = did.find_assertion_method(self.document, kid)
-        jwk = method["publicKeyJwk"]
-        # TODO parse jwk without using x5c as well
-        if len(jwk.get("x5c", [])) < 1:
-            raise ValueError("Missing x5c parameter in service JWK")
-        certificate = base64.b64decode(jwk["x5c"][0])
-
-        return ServiceParameters("CCF", "ES256", certificate)
-
-
-class DIDResolverTrustStore(TrustStore):
-    """
-    A trust store which uses the issuer found in receipts to dynamically
-    resolve the service parameters.
-
-    The trust store does not restrict which issuers are allowed, only that the
-    receipt signature matches the identifier.
-    """
-
-    services: dict
-
-    def __init__(self, resolver: Optional[did.Resolver] = None):
-        if resolver is not None:
-            self.resolver = resolver
-        else:
-            self.resolver = did.Resolver()
-
-    def lookup(self, phdr) -> ServiceParameters:
-        if SCITTIssuer not in phdr:
-            raise ValueError("Receipt does not have an issuer")
-
-        issuer = phdr[SCITTIssuer]
-        document = self.resolver.resolve(issuer)
-
-        return DIDDocumentTrustStore(document).lookup(phdr)
+        jwks_uri = config_response["jwks_uri"]
+        jwk_set = self.getter(jwks_uri)
+        jwk_set.raise_for_status()
+        jwks = jwk_set.json()["keys"]
+        keys = {key["kid"].encode(): key for key in jwks}
+        key = keys[parsed.phdr[KID]]
+        pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
+        key = load_pem_public_key(pem_key, default_backend())
+        return key

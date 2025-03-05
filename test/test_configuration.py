@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os.path
+
 import pycose
 import pytest
 
@@ -18,14 +20,14 @@ class TestAcceptedAlgorithms:
             """Sign and submit the statement with a new identity"""
             identity = trusted_ca.create_identity(**kwargs)
             signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         return f
 
     def test_reject_everything(self, configure_service, submit):
         # Configure the service with no accepted algorithms.
         # The service should reject anything we submit to it.
-        configure_service({"policy": {"accepted_algorithms": []}})
+        configure_service({"policy": {"acceptedAlgorithms": []}})
 
         with service_error("InvalidInput: Unsupported algorithm"):
             submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -39,7 +41,7 @@ class TestAcceptedAlgorithms:
     def test_allow_select_algorithm(self, configure_service, submit):
         # Add just one algorithm to the policy. Statements signed with this
         # algorithm are accepted but not the others.
-        configure_service({"policy": {"accepted_algorithms": ["ES256"]}})
+        configure_service({"policy": {"acceptedAlgorithms": ["ES256"]}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
 
         with service_error("InvalidInput: Unsupported algorithm"):
@@ -49,7 +51,7 @@ class TestAcceptedAlgorithms:
             submit(alg="PS256", kty="rsa")
 
     def test_default_allows_anything(self, configure_service, submit):
-        # If no accepted_algorithms are defined in the policy, any algorithm
+        # If no acceptedAlgorithms are defined in the policy, any algorithm
         # is accepted.
         configure_service({"policy": {}})
         submit(alg="ES256", kty="ec", ec_curve="P-256")
@@ -160,15 +162,15 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         for err, signed_statements in refused_signed_statements.items():
             for signed_statement in signed_statements:
                 with service_error(err):
-                    client.register_signed_statement(signed_statement)
+                    client.submit_signed_statement_and_wait(signed_statement)
 
     def test_svn_policy(
         self,
@@ -221,24 +223,24 @@ export function apply(profile, phdr) {{
     return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
         for signed_statement in permitted_signed_statements:
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
         for err, signed_statements in refused_signed_statements.items():
             for signed_statement in signed_statements:
                 with service_error(err):
-                    client.register_signed_statement(signed_statement)
+                    client.submit_signed_statement_and_wait(signed_statement)
 
     def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_statement
     ):
         configure_service(
-            {"policy": {"policy_script": "export function apply() { return true }"}}
+            {"policy": {"policyScript": "export function apply() { return true }"}}
         )
 
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
     def test_trivial_fail_policy(
         self, client: Client, configure_service, signed_statement
@@ -246,13 +248,13 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": "export function apply() { return `All entries are refused`; }"
+                    "policyScript": "export function apply() { return `All entries are refused`; }"
                 }
             }
         )
 
         with service_error("Policy was not met"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
     def test_exceptional_policy(
         self, client: Client, configure_service, signed_statement
@@ -260,13 +262,13 @@ export function apply(profile, phdr) {{
         configure_service(
             {
                 "policy": {
-                    "policy_script": 'export function apply() { throw new Error("Boom"); }'
+                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
                 }
             }
         )
 
         with service_error("Error while applying policy"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
     @pytest.mark.parametrize(
         "script",
@@ -280,16 +282,24 @@ export function apply(profile, phdr) {{
     def test_invalid_policy(
         self, client: Client, configure_service, signed_statement, script
     ):
-        configure_service({"policy": {"policy_script": script}})
+        configure_service({"policy": {"policyScript": script}})
 
         with service_error("Invalid policy module"):
-            client.register_signed_statement(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement)
 
+    @pytest.mark.parametrize(
+        "filepath",
+        [
+            "test/payloads/cts-hashv-cwtclaims-b64url.cose",
+            "test/payloads/manifest.spdx.json.sha384.digest.cose",
+        ],
+    )
     def test_cts_hashv_cwtclaims_payload_with_policy(
         self,
         tmp_path,
         client: Client,
         configure_service,
+        filepath,
         trusted_ca: X5ChainCertificateAuthority,
         untrusted_ca: X5ChainCertificateAuthority,
     ):
@@ -306,13 +316,15 @@ if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000))
 return true;
 }}"""
 
-        configure_service({"policy": {"policy_script": policy_script}})
+        configure_service({"policy": {"policyScript": policy_script}})
 
-        with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+        with open(filepath, "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
-        statement = client.register_signed_statement(cts_hashv_cwtclaims).response_bytes
+        statement = client.submit_signed_statement_and_wait(
+            cts_hashv_cwtclaims
+        ).response_bytes
 
         # store statement
-        transparent_statement = tmp_path / "transparent_statement.cose"
+        transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)

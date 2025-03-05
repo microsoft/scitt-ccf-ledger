@@ -4,8 +4,8 @@
 #pragma once
 
 #include "cose.h"
-#include "did/resolver.h"
 #include "didx509cpp/didx509cpp.h"
+#include "kv_types.h"
 #include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
@@ -45,9 +45,7 @@ namespace scitt::verifier
   class Verifier
   {
   public:
-    Verifier(std::unique_ptr<did::Resolver> resolver) :
-      resolver(std::move(resolver))
-    {}
+    Verifier() = default;
 
     void check_is_accepted_algorithm(
       const cose::ProtectedHeader& phdr, const Configuration& configuration)
@@ -204,165 +202,6 @@ namespace scitt::verifier
       }
     }
 
-    void validate_notary_protected_header(
-      const cose::ProtectedHeader& phdr, const Configuration& configuration)
-    {
-      auto cty = phdr.cty;
-      auto notary_signing_scheme = phdr.notary_signing_scheme;
-      auto notary_signing_time = phdr.notary_signing_time;
-      auto notary_authentic_signing_time = phdr.notary_authentic_signing_time;
-      auto notary_expiry = phdr.notary_expiry;
-
-      // alg, crit, cty, io.cncf.notary.signingScheme are required.
-
-      check_is_accepted_algorithm(phdr, configuration);
-
-      if (!phdr.crit.has_value())
-      {
-        throw cose::COSEDecodeError("Missing crit in protected header");
-      }
-      if (!cty.has_value())
-      {
-        throw cose::COSEDecodeError("Missing cty in protected header");
-      }
-      if (!notary_signing_scheme.has_value())
-      {
-        throw cose::COSEDecodeError(
-          "Missing io.cncf.notary.signingScheme in protected header");
-      }
-      auto crit = phdr.crit.value();
-
-      // decode_protected_header checks crit is not empty
-
-      // TODO: Replace all of this critical param checking once t_cose properly
-      // supports custom header parameters in crit.
-      for (const auto& crit_param : crit)
-      {
-        if (!phdr.is_known(crit_param, cose::NOTARY_HEADER_PARAMS))
-        {
-          SCITT_INFO("Unknown critical parameter: {}", crit_param);
-          throw cose::COSEDecodeError("Unknown parameter found in crit");
-        }
-        else if (!phdr.is_present(crit_param))
-        {
-          SCITT_INFO(
-            "Critical parameter {} missing from protected header", crit_param);
-          throw cose::COSEDecodeError(
-            "Critial parameter missing from protected header");
-        }
-      }
-
-      if (!phdr.is_critical("io.cncf.notary.signingScheme"))
-      {
-        throw cose::COSEDecodeError(
-          "crit must contain 'io.cncf.notary.signingScheme'");
-      }
-
-      if (
-        !std::holds_alternative<std::string>(cty.value()) ||
-        std::get<std::string>(cty.value()) !=
-          "application/vnd.cncf.notary.payload.v1+json")
-      {
-        throw cose::COSEDecodeError(
-          "cty must be 'application/vnd.cncf.notary.payload.v1+json' for "
-          "Notary claims");
-      }
-
-      if (notary_signing_scheme.value() == "notary.x509")
-      {
-        // notary_signing_time is not critical but is required iff notary.x509
-        if (!notary_signing_time.has_value())
-        {
-          throw cose::COSEDecodeError(
-            "Missing io.cncf.notary.signingTime in protected header");
-        }
-        if (notary_authentic_signing_time.has_value())
-        {
-          throw cose::COSEDecodeError(
-            "io.cncf.notary.authenticSigningTime not allowed in protected "
-            "header when io.cncf.notary.signingScheme is `notary.x509`");
-        }
-      }
-      else if (notary_signing_scheme.value() == "notary.x509.signingAuthority")
-      {
-        // notary_authentic_signing_time is critical and required iff
-        // notary.x509.signingAuthority
-        if (notary_signing_time.has_value())
-        {
-          throw cose::COSEDecodeError(
-            "Notary io.cncf.notary.signingTime not allowed in protected header "
-            "when io.cncf.notary.signingScheme is "
-            "`notary.x509.signingAuthority`");
-        }
-        if (!notary_authentic_signing_time.has_value())
-        {
-          throw cose::COSEDecodeError(
-            "Missing io.cncf.notary.authenticSigningTime in protected header");
-        }
-        if (!phdr.is_critical("io.cncf.notary.authenticSigningTime"))
-        {
-          throw cose::COSEDecodeError(
-            "Missing io.cncf.notary.authenticSigningTime in crit parameters");
-        }
-      }
-      else
-      {
-        throw cose::COSEDecodeError(
-          "Notary io.cncf.notary.signingScheme must be `notary.x509` or "
-          "`notary.x509.signingAuthority`");
-      }
-
-      if (notary_expiry.has_value())
-      {
-        // notary_expiry is critial but not required.
-        if (!phdr.is_critical("io.cncf.notary.expiry"))
-        {
-          throw cose::COSEDecodeError(
-            "Missing io.cncf.notary.expiry in crit parameters");
-        }
-      }
-    }
-
-    PublicKey process_notary_profile(
-      const cose::ProtectedHeader& phdr,
-      const cose::UnprotectedHeader& uhdr,
-      ccf::kv::ReadOnlyTx& tx,
-      const Configuration& configuration)
-    {
-      // Validate protected header
-      validate_notary_protected_header(phdr, configuration);
-
-      std::vector<std::vector<uint8_t>> x5chain{};
-
-      if (phdr.x5chain.has_value() && uhdr.x5chain.has_value())
-      {
-        throw VerificationError(
-          "Notary claim has an x5chain (label 33) "
-          "parameter in both its protected and unprotected header.");
-      }
-      else if (phdr.x5chain.has_value())
-      {
-        SCITT_INFO("Notary x5chain in protected header.");
-        x5chain = phdr.x5chain.value();
-      }
-      else if (uhdr.x5chain.has_value())
-      {
-        SCITT_INFO("Notary x5chain in unprotected header.");
-        x5chain = uhdr.x5chain.value();
-      }
-      else
-      {
-        throw VerificationError(
-          "Notary claim is missing an x5chain (label 33) "
-          "parameter in its headers.");
-      }
-
-      // Verify the chain of certs against the x509 root store.
-      auto roots = x509_root_store(tx);
-      auto cert = verify_chain(roots, x5chain);
-      return PublicKey(cert, std::nullopt);
-    }
-
     std::tuple<
       SignedStatementProfile,
       cose::ProtectedHeader,
@@ -382,29 +221,7 @@ namespace scitt::verifier
 
         // Validate_profile and retrieve key.
         PublicKey key;
-        if (phdr.notary_signing_scheme.has_value())
-        {
-          // Notary claim
-          // Verify profile
-          key = process_notary_profile(phdr, uhdr, tx, configuration);
-
-          // Verify signature.
-          try
-          {
-            // Note it is okay to allow unknown critical params here because
-            // validation of critical parameters has already been done during
-            // validation of the protected header in
-            // `validate_notary_protected_header`
-            cose::verify(data, key, /* allow_unknown_crit */ true);
-          }
-          catch (const cose::COSESignatureValidationError& e)
-          {
-            throw VerificationError(e.what());
-          }
-
-          profile = SignedStatementProfile::Notary;
-        }
-        else if (contains_cwt_issuer(phdr))
+        if (contains_cwt_issuer(phdr))
         {
           if (
             phdr.cwt_claims.iss->starts_with("did:x509") &&
@@ -560,143 +377,6 @@ namespace scitt::verifier
     }
 
     /**
-     * Get a PublicKey out of a JSON Web Key.
-     */
-    static PublicKey get_jwk_public_key(const scitt::did::Jwk& jwk)
-    {
-      if (jwk.kty != "EC" && jwk.kty != "RSA" && jwk.kty != "OKP")
-      {
-        throw VerificationError("JWK has an unsupported key type");
-      }
-
-      // TODO: check the `use` and `key_ops` fields of the JWK
-      // to ensure the key usage is correct.
-      std::optional<int64_t> cose_alg;
-      if (jwk.alg.has_value())
-      {
-        try
-        {
-          cose_alg = get_cose_alg_from_jose_alg(jwk.alg.value());
-        }
-        catch (const InvalidSignatureAlgorithm& e)
-        {
-          throw VerificationError(e.what());
-        }
-      }
-
-      if (jwk.kty == "RSA" && jwk.n.has_value() && jwk.e.has_value())
-      {
-        auto n = ccf::crypto::raw_from_b64url(jwk.n.value());
-        auto e = ccf::crypto::raw_from_b64url(jwk.e.value());
-        ccf::crypto::OpenSSL::Unique_BIGNUM n_bn;
-        ccf::crypto::OpenSSL::Unique_BIGNUM e_bn;
-        if (BN_bin2bn(n.data(), n.size(), n_bn) == nullptr)
-        {
-          throw VerificationError("JWK n could not be parsed");
-        }
-        if (BN_bin2bn(e.data(), e.size(), e_bn) == nullptr)
-        {
-          throw VerificationError("JWK e could not be parsed");
-        }
-
-#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-        std::pair<std::vector<uint8_t>, std::vector<uint8_t>> r(
-          BN_num_bytes(n_bn), BN_num_bytes(e_bn));
-
-        ccf::crypto::OpenSSL::CHECKPOSITIVE(
-          BN_bn2nativepad(n_bn, r.first.data(), r.first.size()));
-        ccf::crypto::OpenSSL::CHECKPOSITIVE(
-          BN_bn2nativepad(e_bn, r.second.data(), r.second.size()));
-
-        return PublicKey(r.first, r.second, cose_alg);
-#else
-        ccf::crypto::OpenSSL::Unique_RSA rsa;
-        if (!RSA_set0_key(rsa, n_bn, e_bn, nullptr))
-        {
-          throw std::runtime_error("RSA key could not be set");
-        }
-        // Ignore previous pointers, as they're now managed by RSA*.
-        (void)n_bn.release();
-        (void)e_bn.release();
-
-        return PublicKey(rsa, cose_alg);
-#endif
-      }
-
-      if (jwk.kty == "OKP" && jwk.crv == "Ed25519" && jwk.x.has_value())
-      {
-        auto x = ccf::crypto::raw_from_b64url(jwk.x.value());
-        return PublicKey(EVP_PKEY_ED25519, x, cose_alg);
-      }
-
-      if (
-        jwk.kty == "EC" && jwk.crv.has_value() && jwk.x.has_value() &&
-        jwk.y.has_value())
-      {
-        auto crv = jwk.crv.value();
-        auto x = ccf::crypto::raw_from_b64url(jwk.x.value());
-        auto y = ccf::crypto::raw_from_b64url(jwk.y.value());
-        ccf::crypto::OpenSSL::Unique_BIGNUM x_bn;
-        ccf::crypto::OpenSSL::Unique_BIGNUM y_bn;
-        if (BN_bin2bn(x.data(), x.size(), x_bn) == nullptr)
-        {
-          throw VerificationError("JWK x could not be parsed");
-        }
-        if (BN_bin2bn(y.data(), y.size(), y_bn) == nullptr)
-        {
-          throw VerificationError("JWK y could not be parsed");
-        }
-        int nid;
-        if (crv == "P-256")
-        {
-          nid = NID_X9_62_prime256v1;
-        }
-        else if (crv == "P-384")
-        {
-          nid = NID_secp384r1;
-        }
-        else if (crv == "P-521")
-        {
-          nid = NID_secp521r1;
-        }
-        else
-        {
-          throw VerificationError("JWK EC Key has no valid supported curve");
-        }
-
-#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-        ccf::crypto::OpenSSL::Unique_BN_CTX bn_ctx;
-        ccf::crypto::OpenSSL::Unique_EC_GROUP group(nid);
-        ccf::crypto::OpenSSL::Unique_EC_POINT p(group);
-        ccf::crypto::OpenSSL::CHECK1(
-          EC_POINT_set_affine_coordinates(group, p, x_bn, y_bn, bn_ctx));
-        size_t buf_size = EC_POINT_point2oct(
-          group, p, POINT_CONVERSION_UNCOMPRESSED, nullptr, 0, bn_ctx);
-        std::vector<uint8_t> buf(buf_size);
-        ccf::crypto::OpenSSL::CHECKPOSITIVE(EC_POINT_point2oct(
-          group,
-          p,
-          POINT_CONVERSION_UNCOMPRESSED,
-          buf.data(),
-          buf.size(),
-          bn_ctx));
-
-        return PublicKey(buf, nid, cose_alg);
-#else
-        auto ec_key = ccf::crypto::OpenSSL::Unique_EC_KEY(nid);
-        if (!EC_KEY_set_public_key_affine_coordinates(ec_key, x_bn, y_bn))
-        {
-          throw std::runtime_error("EC key could not be set");
-        }
-
-        return PublicKey(ec_key, cose_alg);
-#endif
-      }
-
-      throw VerificationError("JWK has no valid supported key");
-    }
-
-    /**
      * Assuming a verified chain and leaf certificate, enforce additional
      * policies.
      */
@@ -724,7 +404,5 @@ namespace scitt::verifier
         throw VerificationError("Signing certificate is CA");
       }
     }
-
-    std::unique_ptr<did::Resolver> resolver;
   };
 }

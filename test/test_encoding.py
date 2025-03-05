@@ -149,7 +149,7 @@ class TestNonCanonicalEncoding:
         self, client: Client, trust_store, signed_statement
     ):
         """The ledger should accept signed statements even if not canonically encoded."""
-        transparent_statement = client.register_signed_statement(
+        transparent_statement = client.submit_signed_statement_and_wait(
             signed_statement
         ).response_bytes
         verify_transparent_statement(
@@ -167,7 +167,9 @@ class TestHeaderParameters:
     @pytest.fixture(scope="class")
     def submit(self, client, identity):
         def f(parameters, *, signer=identity):
-            return client.register_signed_statement(sign(signer, b"Hello", parameters))
+            return client.submit_signed_statement_and_wait(
+                sign(signer, b"Hello", parameters)
+            )
 
         return f
 
@@ -216,7 +218,7 @@ class TestHeaderParameters:
 
         # Technically, the standard disallows this, as chains of length 1
         # should be encoded as a plain bstr, not wrapped in a list. A number of
-        # implementations get this wrong though (including Notary), so we
+        # implementations get this wrong though, so we
         # explicitly allow it.
         with service_error("chain must include at least one CA certificate"):
             submit(

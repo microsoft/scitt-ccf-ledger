@@ -30,10 +30,6 @@ namespace scitt
         {
           return ctx.new_string("X509");
         }
-        case SignedStatementProfile::Notary:
-        {
-          return ctx.new_string("Notary");
-        }
         default:
         {
           throw std::logic_error("Unhandled SignedStatementProfile value");
@@ -149,34 +145,6 @@ namespace scitt
         obj.set("cwt", std::move(cwt));
       }
 
-      // Extra Notary protected header parameters.
-      {
-        if (phdr.notary_signing_scheme.has_value())
-        {
-          obj.set(
-            "notary_signing_scheme",
-            ctx.new_string(phdr.notary_signing_scheme.value()));
-        }
-
-        if (phdr.notary_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_signing_time", phdr.notary_signing_time.value());
-        }
-
-        if (phdr.notary_authentic_signing_time.has_value())
-        {
-          obj.set_int64(
-            "notary_authentic_signing_time",
-            phdr.notary_authentic_signing_time.value());
-        }
-
-        if (phdr.notary_expiry.has_value())
-        {
-          obj.set_int64("notary_expiry", phdr.notary_expiry.value());
-        }
-      }
-
       return obj;
     }
 
@@ -198,7 +166,7 @@ namespace scitt
       }
       catch (const std::exception& e)
       {
-        throw BadRequestError(
+        throw BadRequestCborError(
           scitt::errors::PolicyError,
           fmt::format("Invalid policy module: {}", e.what()));
       }
@@ -224,7 +192,7 @@ namespace scitt
       {
         auto [reason, trace] = interpreter.error_message();
 
-        throw BadRequestError(
+        throw BadRequestCborError(
           scitt::errors::PolicyError,
           fmt::format(
             "Error while applying policy: {}\n{}",
@@ -244,7 +212,7 @@ namespace scitt
         return std::nullopt;
       }
 
-      throw BadRequestError(
+      throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format(
           "Unexpected return value from policy: {}",

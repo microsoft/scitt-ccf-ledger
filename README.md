@@ -11,7 +11,7 @@ This research project is at an early stage and is open sourced to facilitate aca
 
 The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
 
-Being a CCF application, scitt-ccf-ledger runs in Intel SGX enclaves or AMD SEV-SNP platforms. However, for testing purposes, it also supports running on regular hardware in what is called *virtual* mode.
+Being a CCF application, scitt-ccf-ledger targets AMD SEV-SNP but also supports running on x86-64 hardware without TEE support in what is called *virtual* mode.
 
 All instructions below assume Linux as the operating system.
 
@@ -65,6 +65,16 @@ See [pyscitt](pyscitt/README.md) for more details.
 ### Reproducing builds
 
 See [reproducibility.md](./docs/reproducibility.md) for instructions.
+
+#### Run performance regression tests for CTS
+
+A basic set of performance indicators can be obtained by building the project, and running:
+
+```bash
+./run_functional_tests.sh -m bencher
+```
+
+Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
 
 ## Contributing
 

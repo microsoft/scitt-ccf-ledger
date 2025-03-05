@@ -44,7 +44,7 @@ def test_register_statement_x5c(
     identity = trusted_ca.create_identity(length=length, alg=algorithm, **params)
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
-    transparent_statement = client.register_signed_statement(
+    transparent_statement = client.submit_signed_statement_and_wait(
         signed_statement
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
@@ -62,7 +62,7 @@ def test_invalid_certificate_chain(
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_wrong_certificate(
@@ -82,7 +82,7 @@ def test_wrong_certificate(
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Signature verification failed"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_untrusted_ca(client: Client):
@@ -94,7 +94,7 @@ def test_untrusted_ca(client: Client):
     signged_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signged_statement)
+        client.submit_signed_statement_and_wait(signged_statement)
 
 
 def test_self_signed_trusted(
@@ -119,7 +119,7 @@ def test_self_signed_trusted(
     # We're pretty flexible about the error message here, because the exact
     # behaviour depends on the OpenSSL version.
     with service_error("Certificate chain"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
@@ -141,10 +141,10 @@ def test_multiple_trusted_roots(client: Client, trust_store: TrustStore):
         second_identity, {"foo": "bar"}
     )
 
-    first_transparent_statement = client.register_signed_statement(
+    first_transparent_statement = client.submit_signed_statement_and_wait(
         first_signed_statement
     ).response_bytes
-    second_transparent_statement = client.register_signed_statement(
+    second_transparent_statement = client.submit_signed_statement_and_wait(
         second_signed_statement
     ).response_bytes
 
@@ -167,7 +167,7 @@ def test_self_signed_untrusted(client: Client):
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
 
     with service_error("Certificate chain is invalid"):
-        client.register_signed_statement(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement)
 
 
 def test_leaf_ca(
@@ -180,7 +180,7 @@ def test_leaf_ca(
     identity = trusted_ca.create_identity(alg="ES256", kty="ec", ca=True)
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Signing certificate is CA"):
-        client.register_signed_statement(signed_statement).receipt
+        client.submit_signed_statement_and_wait(signed_statement).receipt
 
 
 def test_root_ca(
@@ -194,7 +194,7 @@ def test_root_ca(
     identity = crypto.Signer(trusted_ca.root_key_pem, x5c=[trusted_ca.root_cert_pem])
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
     with service_error("Certificate chain must include at least one CA certificate"):
-        client.register_signed_statement(signed_statement).receipt
+        client.submit_signed_statement_and_wait(signed_statement).receipt
 
 
 def strip_uhdr(cose: bytes) -> bytes:
@@ -204,56 +204,3 @@ def strip_uhdr(cose: bytes) -> bytes:
     msg = Sign1Message.decode(cose)
     msg.uhdr = {}
     return msg.encode(tag=True, sign=False)
-
-
-@pytest.mark.parametrize(
-    "length, algorithm, params",
-    [
-        (1, "PS384", {"kty": "rsa"}),
-        (2, "PS384", {"kty": "rsa"}),
-        (1, "ES256", {"kty": "ec", "ec_curve": "P-256"}),
-    ],
-)
-def test_submit_signed_statement_notary_x509(
-    client: Client,
-    trust_store: TrustStore,
-    trusted_ca: X5ChainCertificateAuthority,
-    length: int,
-    algorithm: str,
-    params: dict,
-):
-    """
-    Submit signed statement to the SCITT CCF ledger and verify the resulting receipts for x5c.
-
-    Test is parametrized over different signing parameters.
-    """
-    identity = trusted_ca.create_identity(length=length, alg=algorithm, **params)
-
-    phdr: dict = {}
-    phdr[pycose.headers.Algorithm] = identity.algorithm
-    phdr[pycose.headers.ContentType] = "application/vnd.cncf.notary.payload.v1+json"
-    phdr[pycose.headers.Critical] = ["io.cncf.notary.signingScheme"]
-    phdr["io.cncf.notary.signingTime"] = cbor2.CBORTag(1, int(time.time()))
-    phdr["io.cncf.notary.signingScheme"] = "notary.x509"
-
-    uhdr: dict = {}
-    assert identity.x5c is not None
-    uhdr[pycose.headers.X5chain] = [crypto.cert_pem_to_der(x5) for x5 in identity.x5c]
-    uhdr["io.cncf.notary.signingAgent"] = "Notation/1.0.0"
-
-    payload = json.dumps(
-        {
-            "targetArtifact": {
-                "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-                "digest": "sha256:beac45bd57e10fa6b607fb84daa51dce8d81928f173d215f1f3544c07f90c8c1",
-                "size": 942,
-            }
-        }
-    ).encode("utf-8")
-
-    msg = Sign1Message(phdr=phdr, uhdr=uhdr, payload=payload)
-    msg.key = CoseKey.from_pem_private_key(identity.private_key)
-    signed_statement = msg.encode(tag=True)
-
-    statement = client.register_signed_statement(signed_statement).response_bytes
-    verify_transparent_statement(statement, trust_store, strip_uhdr(signed_statement))

@@ -31,7 +31,7 @@ def register_signed_statement(
         )
         return
 
-    submission = client.register_signed_statement(signed_statement)
+    submission = client.submit_signed_statement_and_wait(signed_statement)
     print(f"Registered {path} as transaction {submission.tx}")
 
     if transparent_statement_path:

@@ -18,39 +18,6 @@
 
 namespace scitt
 {
-  using Timestamp = int64_t; // seconds since epoch
-  using Issuer = std::string; // DID of the issuer
-  using Pem = std::string; // PEM-encoded certificate
-
-  struct DidResolutionMetadata
-  {
-    Timestamp updated;
-    bool operator==(const DidResolutionMetadata&) const = default;
-  };
-  DECLARE_JSON_TYPE(DidResolutionMetadata);
-  DECLARE_JSON_REQUIRED_FIELDS(DidResolutionMetadata, updated);
-
-  struct IssuerInfo
-  {
-    std::optional<did::DidDocument> did_document;
-    std::optional<DidResolutionMetadata> did_resolution_metadata;
-    std::optional<ODataError> error;
-  };
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(IssuerInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(IssuerInfo);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    IssuerInfo, did_document, did_resolution_metadata, error);
-
-  struct EntryInfo
-  {
-    /**
-     * The COSE protected header of the countersigner (this service).
-     */
-    std::vector<uint8_t> sign_protected;
-  };
-  DECLARE_JSON_TYPE(EntryInfo);
-  DECLARE_JSON_REQUIRED_FIELDS(EntryInfo, sign_protected);
-
   enum class OperationStatus
   {
     Running,
@@ -62,6 +29,21 @@ namespace scitt
     {{OperationStatus::Running, "running"},
      {OperationStatus::Failed, "failed"},
      {OperationStatus::Succeeded, "succeeded"}});
+
+  static std::string operationStatusToString(OperationStatus status)
+  {
+    switch (status)
+    {
+      case OperationStatus::Running:
+        return "running";
+      case OperationStatus::Failed:
+        return "failed";
+      case OperationStatus::Succeeded:
+        return "succeeded";
+      default:
+        throw std::invalid_argument("Invalid OperationStatus value");
+    }
+  }
 
   struct OperationLog
   {
@@ -101,12 +83,6 @@ namespace scitt
       std::optional<std::vector<std::string>> accepted_algorithms;
 
       /**
-       * List of accepted DID issuer when verifying signatures.
-       * The names are case sensitive.
-       */
-      std::optional<std::vector<std::string>> accepted_did_issuers;
-
-      /**
        * Script defining executable policy to be applied to each incoming entry.
        */
       std::optional<PolicyScript> policy_script;
@@ -130,12 +106,6 @@ namespace scitt
         }
       }
 
-      bool is_accepted_issuer(std::string_view issuer) const
-      {
-        return !accepted_did_issuers.has_value() ||
-          contains(accepted_did_issuers.value(), issuer);
-      }
-
       bool operator==(const Policy& other) const = default;
     };
 
@@ -156,33 +126,43 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
-    // The long-term stable identifier of this service, as a DID.
-    // If set, it will be used to populate the issuer field of receipts
-    std::optional<std::string> service_identifier;
+    // deprecated
+    std::optional<std::string> service_issuer;
   };
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Policy);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Policy);
-  DECLARE_JSON_OPTIONAL_FIELDS(
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
     Configuration::Policy,
     accepted_algorithms,
-    accepted_did_issuers,
-    policy_script);
+    "acceptedAlgorithms",
+    policy_script,
+    "policyScript");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication::JWT, required_claims);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication::JWT, required_claims, "requiredClaims");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration::Authentication, jwt, allow_unauthenticated);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration::Authentication,
+    jwt,
+    "jwt",
+    allow_unauthenticated,
+    "allowUnauthenticated");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    Configuration, policy, authentication, service_identifier);
+  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
+    Configuration,
+    policy,
+    "policy",
+    authentication,
+    "authentication",
+    service_issuer,
+    "serviceIssuer");
 
   // Tables
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";

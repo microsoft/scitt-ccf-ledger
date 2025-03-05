@@ -50,18 +50,7 @@ create many instances of a resource. In these cases, the fixture acts as a
 factory, which can be called repeatedly to create each instance of the
 resource.
 
-For example, a test function may create fresh did:web identities by adding the
-`did_web` fixture to its arguments. The `did_web` object is then used to create
-one or more different identities.
-
-```python
-def test_multiple_identities(did_web: DIDWebServer):
-  alice = did_web.create_identity()
-  bob = did_web.create_identity()
-  assert alice.issuer != bob.issuer
-```
-
-Similarly, some fixtures are in fact helper functions which may not return any
+Some fixtures are in fact helper functions which may not return any
 value, but have a side effect each time they are called. For example, in the
 `test_cli.py` file, the `run` fixture is used to execute the `scitt` CLI:
 
@@ -137,14 +126,7 @@ policies, etc. If no authentication setting is specified, the service is left
 open to all (this differs from the usual ledger's default which is to reject
 all incoming requests).
 
-The `did_web` fixture provides a `DIDWebServer` instance that can be used to
-create new `did:web` identities. An HTTPS server is started in the background,
-and its self-signed TLS root certificate is set as the SCITT ledger's trust
-anchor for `did:web` resolution. Every identity returned by
-`did_web.create_identity()` is unique, thanks to using a random UUID in its
-path, ensuring different test runs don't interfere with each other.
-
-Similar to the `did_web` one, the `trusted_ca` fixture can be used to create
+The `trusted_ca` fixture can be used to create
 new X509-based identities. The fixture creates a new Certificate Authority and
 the service is configured to trust its root certificate. New identities are
 created by calling `trusted_ca.create_identity()`.

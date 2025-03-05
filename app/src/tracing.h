@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app_data.h"
+#include "cbor.h"
 #include "constants.h"
 #include "util.h"
 
@@ -19,6 +20,9 @@ namespace scitt
   constexpr std::string_view REQUEST_ID_HEADER = "x-ms-request-id";
   constexpr std::string_view CLIENT_REQUEST_ID_HEADER =
     "x-ms-client-request-id";
+
+  static constexpr auto FN_STAGE_MAIN = "MAIN";
+  static constexpr auto FN_STAGE_POSTCOMMIT = "POSTCOMMIT";
 
   static const std::regex CLIENT_REQUEST_ID_REGEX("^[0-9a-zA-Z-]+");
 
@@ -71,8 +75,12 @@ namespace scitt
 // These macros could be invoked from anywhere, including outside of the scitt
 // namespace. All references to global symbols must therefore be fully qualified
 // (ie. using ::scitt::foo).
+// Example log entry:
+// 2025-02-27T11:40:31.368697Z -0.013 0   [info ][app]
+// /tmp/app/src/tracing.h:181      | ::START:: Stage=MAIN Verb=POST
+// Path=/entries Query= URL=/entries RequestId=c90fff41f2f59642
 #define SCITT_LOG(f, s, ...) \
-  f("{}" s, ::scitt::tracing_context(), ##__VA_ARGS__)
+  f(s " {}", ##__VA_ARGS__, ::scitt::tracing_context())
 
 #define SCITT_TRACE(s, ...) SCITT_LOG(CCF_APP_TRACE, s, ##__VA_ARGS__)
 #define SCITT_DEBUG(s, ...) SCITT_LOG(CCF_APP_DEBUG, s, ##__VA_ARGS__)
@@ -83,7 +91,8 @@ namespace scitt
 
   static void log_request_end(
     const std::shared_ptr<ccf::RpcContext>& rpc_ctx,
-    const std::string& method,
+    const std::string& fn_stage_name,
+    const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time,
     std::optional<ccf::TxID> txid = std::nullopt)
   {
@@ -93,16 +102,18 @@ namespace scitt
     ccf::ApiResult result = get_time(end);
     if (result != ccf::ApiResult::OK)
     {
-      SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
-      rpc_ctx->set_error(
-        HTTP_STATUS_INTERNAL_SERVER_ERROR,
-        errors::InternalError,
-        "Failed to get time.");
+      SCITT_FAIL(
+        "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 failed",
+        fn_stage_name);
+      rpc_ctx->set_response_status(500);
+      rpc_ctx->set_response_header(
+        ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+      rpc_ctx->set_response_body(
+        cbor::cbor_error(errors::InternalError, "Failed to get time."));
       return;
     }
 
     auto duration_ms = diff_timespec_ms(app_data.start_time, end);
-
     if (duration_ms < 0)
     {
       SCITT_INFO(
@@ -112,9 +123,12 @@ namespace scitt
     if (txid.has_value())
     {
       SCITT_INFO(
-        "Verb={} Path={} URL={} Status={} TxId={} TimeMs={}",
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TxId={} "
+        "TimeMs={}",
+        fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
-        method,
+        path,
+        rpc_ctx->get_request_query().c_str(),
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
         txid->to_str(),
@@ -123,22 +137,27 @@ namespace scitt
     else
     {
       SCITT_INFO(
-        "Verb={} Path={} URL={} Status={} TimeMs={}",
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TimeMs={}",
+        fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
-        method,
+        path,
+        rpc_ctx->get_request_query().c_str(),
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
         std::to_string(duration_ms));
     }
   }
 
-  template <typename Fn, typename Ctx>
-  Fn generic_tracing_adapter(
-    Fn fn,
-    const std::string& method,
+  /**
+   * This tracing adapter is wrapping the main endpoint logic that can fail.
+   * In a case of success it will continue executing a local commit handler.
+   */
+  static ccf::endpoints::EndpointFunction tracing_adapter_first(
+    ccf::endpoints::EndpointFunction fn,
+    const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
-    return [fn, method, get_time](Ctx& ctx) {
+    return [fn, path, get_time](ccf::endpoints::EndpointContext& ctx) {
       auto cleanup = finally(clear_trace_state);
 
       request_id = create_request_id();
@@ -146,24 +165,12 @@ namespace scitt
 
       client_request_id =
         ctx.rpc_ctx->get_request_header(CLIENT_REQUEST_ID_HEADER);
-
-      if (client_request_id.has_value())
+      // Send the x-ms-client-request-id in the response headers if supplied in
+      // the request
+      if (client_request_id)
       {
-        // Validate client request id to avoid misinterpretation of the log,
-        // e.g. if it contains a space.
-        if (!std::regex_match(
-              client_request_id.value(), CLIENT_REQUEST_ID_REGEX))
-        {
-          client_request_id = std::nullopt;
-          SCITT_INFO("Code=InvalidInput Invalid client request id");
-          ctx.rpc_ctx->set_error(
-            HTTP_STATUS_BAD_REQUEST,
-            errors::InvalidInput,
-            "Invalid client request id.");
-          return;
-        }
         ctx.rpc_ctx->set_response_header(
-          "x-ms-client-request-id", client_request_id.value());
+          CLIENT_REQUEST_ID_HEADER, *client_request_id);
       }
 
       // The user data is used to propagate the request IDs to the local
@@ -172,47 +179,48 @@ namespace scitt
       app_data.request_id = request_id;
       app_data.client_request_id = client_request_id;
 
-      auto query = ctx.rpc_ctx->get_request_query();
-
       SCITT_INFO(
-        "Verb={} Path={} URL={}",
+        "::START:: Stage={} Verb={} Path={} Query={} URL={}",
+        FN_STAGE_MAIN,
         ctx.rpc_ctx->get_request_verb().c_str(),
-        method,
+        path,
+        ctx.rpc_ctx->get_request_query().c_str(),
         ctx.rpc_ctx->get_request_url());
 
       ::timespec start;
       ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
-        SCITT_FAIL("Code=InternalError get_untrusted_host_time_v1 failed");
-        ctx.rpc_ctx->set_error(
-          HTTP_STATUS_INTERNAL_SERVER_ERROR,
-          errors::InternalError,
-          "Failed to get time.");
+        SCITT_FAIL(
+          "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 "
+          "failed",
+          FN_STAGE_MAIN);
+        ctx.rpc_ctx->set_response_status(500);
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+        ctx.rpc_ctx->set_response_body(
+          cbor::cbor_error(errors::InternalError, "Failed to get time."));
         return;
       }
 
       fn(ctx);
 
-      // If the status is 2xx, CCF will later call our local commit handler,
-      // which may modify the response. We delay printing the end of request
-      // log line until after that point, to get the most accurate status code.
-      int status = ctx.rpc_ctx->get_response_status();
-      if (status < 200 || status >= 300)
-      {
-        log_request_end(ctx.rpc_ctx, method, get_time);
-      }
+      log_request_end(ctx.rpc_ctx, FN_STAGE_MAIN, path, get_time);
     };
   }
 
-  static ccf::endpoints::LocallyCommittedEndpointFunction
-  tracing_local_commit_adapter(
+  /**
+   * Locally committed function will be called after the main endpoint logic
+   * succeeds including other CCF conditional logic. It will not be called
+   * if the main endpoint logic fails.
+   */
+  static ccf::endpoints::LocallyCommittedEndpointFunction tracing_adapter_last(
     ccf::endpoints::LocallyCommittedEndpointFunction fn,
-    const std::string& method,
+    const std::string& path,
     const std::function<ccf::ApiResult(::timespec& time)>& get_time)
   {
     return
-      [fn, method, get_time](
+      [fn, path, get_time](
         ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& txid) {
         auto cleanup = finally(clear_trace_state);
 
@@ -222,40 +230,7 @@ namespace scitt
 
         fn(ctx, txid);
 
-        log_request_end(ctx.rpc_ctx, method, get_time, txid);
+        log_request_end(ctx.rpc_ctx, FN_STAGE_POSTCOMMIT, path, get_time, txid);
       };
-  }
-
-  /**
-   * Create an adapter around an existing EndpointFunction to handle tracing.
-   */
-  static ccf::endpoints::EndpointFunction tracing_adapter(
-    ccf::endpoints::EndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::EndpointFunction,
-      ccf::endpoints::EndpointContext>(fn, method, get_time);
-  }
-
-  static ccf::endpoints::ReadOnlyEndpointFunction tracing_read_only_adapter(
-    ccf::endpoints::ReadOnlyEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::ReadOnlyEndpointFunction,
-      ccf::endpoints::ReadOnlyEndpointContext>(fn, method, get_time);
-  }
-
-  static ccf::endpoints::CommandEndpointFunction tracing_command_adapter(
-    ccf::endpoints::CommandEndpointFunction fn,
-    const std::string& method,
-    const std::function<ccf::ApiResult(::timespec& time)>& get_time)
-  {
-    return generic_tracing_adapter<
-      ccf::endpoints::CommandEndpointFunction,
-      ccf::endpoints::CommandEndpointContext>(fn, method, get_time);
   }
 }

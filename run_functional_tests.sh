@@ -45,13 +45,25 @@ if [ "$DOCKER" = "1" ]; then
     # the docker logs.
     TEST_ARGS="-s"
 else
+    echo "Using regular build for functional tests, expecting SCITT binary to be present."
     SCITT_DIR=/tmp/scitt
+    echo "List of files in SCITT_DIR $SCITT_DIR"
+    ls -R $SCITT_DIR
+
     TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
 fi
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    if command -v python3.10 &> /dev/null; then
+        PYTHON=python3.10
+    elif command -v python3.8 &> /dev/null; then
+        PYTHON=python3.8
+    else
+        echo "Neither python3.10 nor python3.8 is available. Please install one of them."
+        exit 1
+    fi
+    $PYTHON -m venv "venv"
 fi
 source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt

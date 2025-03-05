@@ -19,7 +19,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.0-dev8"
+    CCF_SOURCE_VERSION="6.0.0-rc0"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
@@ -42,8 +42,12 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     popd
 fi
 
-git submodule sync
-git submodule update --init --recursive
+if [ "$ENABLE_CLANG_TIDY" = "ON" ]; then
+    if ! command -v clang-tidy &> /dev/null && ! command -v clang-tidy-15 &> /dev/null; then
+        echo "clang-tidy could not be found, please install it, e.g. apt-get install -y clang-tidy-15"
+        exit 1
+    fi
+fi
 
 root_dir=$(pwd)
 install_dir=/tmp/scitt
@@ -63,3 +67,6 @@ CC="$CC" CXX="$CXX" \
 
 ninja -C build/app ${NINJA_FLAGS} --verbose
 ninja -C build/app ${NINJA_FLAGS} install
+
+echo "List of installed files in SCITT_DIR $install_dir"
+ls -R $install_dir

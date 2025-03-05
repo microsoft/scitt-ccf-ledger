@@ -5,7 +5,7 @@ The following explains how to build, run, and test scitt-ccf-ledger.
 ## Development environment
 
 scitt-ccf-ledger uses a Trusted Execution Environment (TEE) to provide strong security guarantees.
-This means TEE hardware, in SGX or SNP, is required to run and test scitt-ccf-ledger in full.
+This means TEE hardware (AMD SEV-SNP) is required to run and test scitt-ccf-ledger in full.
 
 However, scitt-ccf-ledger also supports running in *virtual* mode which does not require TEE hardware
 and is generally sufficient for local development.
@@ -39,10 +39,10 @@ It is expected that you have Ubuntu 20.04. Follow the steps below to setup your 
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.0-dev8.tar.gz
-    tar xvzf ccf-6.0.0-dev8.tar.gz
-    cd CCF-ccf-6.0.0-dev8/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=6.0.0-dev8 -e platform=<virtual|snp> -e clang_version=15
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.0-rc0.tar.gz
+    tar xvzf ccf-6.0.0-rc0.tar.gz
+    cd CCF-ccf-6.0.0-rc0/getting_started/setup_vm/
+    ./run.sh app-dev.yml -e ccf_ver=6.0.0-rc0 -e platform=<virtual|snp> -e clang_version=15
     ```
 
 ## Compiling
@@ -105,10 +105,10 @@ The application expects the [configuration](docs/configuration.md) to be submitt
 echo <<< EOL
 {
     "policy": {
-        "policy_script": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
+        "policyScript": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
     },
     "authentication": {
-        "allow_unauthenticated": true
+        "allowUnauthenticated": true
     }
 }
 EOL >> test-config.json;
