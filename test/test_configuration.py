@@ -13,11 +13,11 @@ from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 class TestAcceptedAlgorithms:
     @pytest.fixture
-    def submit(self, client: Client, trusted_ca):
+    def submit(self, client: Client, cert_authority):
         def f(**kwargs):
             """Sign and submit the statement with a new identity"""
             kwargs["add_eku"] = "2.999"
-            identity = trusted_ca.create_identity(**kwargs)
+            identity = cert_authority.create_identity(**kwargs)
             signed_statement = crypto.sign_json_statement(
                 identity, {"foo": "bar"}, cwt=True
             )
@@ -78,29 +78,34 @@ class TestAcceptedAlgorithms:
 
 class TestPolicyEngine:
     @pytest.fixture(scope="class")
-    def signed_statement(self, trusted_ca: X5ChainCertificateAuthority):
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec", add_eku="2.999")
+    def signed_statement(self, cert_authority: X5ChainCertificateAuthority):
+        identity = cert_authority.create_identity(
+            alg="ES256", kty="ec", add_eku="2.999"
+        )
         return crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
     def test_ietf_didx509_policy(
         self,
         client: Client,
         configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
-        untrusted_ca: X5ChainCertificateAuthority,
+        cert_authority: X5ChainCertificateAuthority,
     ):
         example_eku = "2.999"
+
+        untrusted_cert_authority = X5ChainCertificateAuthority(kty="ec")
 
         # We will apply a policy that only allows issuers endorsed by a specific trusted CA
         # and containing a specific EKU to be registered.
         identities = [
-            untrusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
-            trusted_ca.create_identity(alg="ES256", kty="ec"),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
-            trusted_ca.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            untrusted_cert_authority.create_identity(
+                alg="ES256", kty="ec", add_eku=example_eku
+            ),
+            cert_authority.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            cert_authority.create_identity(alg="ES256", kty="ec"),
+            cert_authority.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            cert_authority.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            cert_authority.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
+            cert_authority.create_identity(alg="ES256", kty="ec", add_eku=example_eku),
         ]
 
         def didx509_issuer(ca):
@@ -108,14 +113,14 @@ class TestPolicyEngine:
             root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
             return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
 
-        identities[0].issuer = didx509_issuer(untrusted_ca)
-        identities[1].issuer = didx509_issuer(trusted_ca)
-        identities[2].issuer = didx509_issuer(trusted_ca)
+        identities[0].issuer = didx509_issuer(untrusted_cert_authority)
+        identities[1].issuer = didx509_issuer(cert_authority)
+        identities[2].issuer = didx509_issuer(cert_authority)
 
-        identities[3].issuer = didx509_issuer(trusted_ca).strip(
+        identities[3].issuer = didx509_issuer(cert_authority).strip(
             example_eku
         )  # No EKU bits
-        identities[4].issuer = didx509_issuer(trusted_ca).strip(
+        identities[4].issuer = didx509_issuer(cert_authority).strip(
             f"::eku:{example_eku}"
         )  # No query
         identities[5].issuer = "did:x509:"  # Malformed
@@ -171,7 +176,7 @@ class TestPolicyEngine:
         policy_script = f"""
 export function apply(phdr) {{
     // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
+    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
 
     return true;
 }}"""
@@ -190,11 +195,11 @@ export function apply(phdr) {{
         self,
         client: Client,
         configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
+        cert_authority: X5ChainCertificateAuthority,
     ):
         example_eku = "2.999"
 
-        identity = trusted_ca.create_identity(
+        identity = cert_authority.create_identity(
             alg="ES256", kty="ec", add_eku=example_eku
         )
 
@@ -203,7 +208,7 @@ export function apply(phdr) {{
             root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
             return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
 
-        identity.issuer = didx509_issuer(trusted_ca)
+        identity.issuer = didx509_issuer(cert_authority)
         feed = "SomeFeed"
         # SBOMs
         statement = {"foo": "bar"}
@@ -228,7 +233,7 @@ export function apply(phdr) {{
         policy_script = f"""
 export function apply(phdr) {{
     // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(trusted_ca)}") {{ return "Invalid issuer"; }}
+    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
     if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
 
     return true;
@@ -299,12 +304,7 @@ export function apply(phdr) {{
             client.submit_signed_statement_and_wait(signed_statement)
 
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self,
-        tmp_path,
-        client: Client,
-        configure_service,
-        trusted_ca: X5ChainCertificateAuthority,
-        untrusted_ca: X5ChainCertificateAuthority,
+        self, tmp_path, client: Client, configure_service
     ):
 
         policy_script = f"""
