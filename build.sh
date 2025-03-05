@@ -19,7 +19,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.0-dev20"
+    CCF_SOURCE_VERSION="6.0.0-rc0"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
