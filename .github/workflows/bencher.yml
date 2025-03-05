@@ -11,7 +11,7 @@ on:
 jobs:
   run_benchmarks:
     name: Performance Regression Tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc0
       env:
