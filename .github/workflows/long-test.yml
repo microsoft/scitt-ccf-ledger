@@ -56,7 +56,7 @@ jobs:
     name: fuzz
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-dev20
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc0
     env:
       PLATFORM: virtual
     steps:
