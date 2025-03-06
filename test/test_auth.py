@@ -12,9 +12,11 @@ from .infra.jwt_issuer import JwtIssuer
 
 class TestAuthentication:
     @pytest.fixture(scope="class")
-    def signed_statement(self, trusted_ca):
-        identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
-        return crypto.sign_json_statement(identity, {"foo": "bar"})
+    def signed_statement(self, cert_authority):
+        identity = cert_authority.create_identity(
+            alg="PS384", kty="rsa", add_eku="2.999"
+        )
+        return crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
     @pytest.fixture(scope="class")
     def valid_issuer(self, client):
@@ -34,7 +36,10 @@ class TestAuthentication:
                     "authentication": {
                         "allowUnauthenticated": allow_unauthenticated,
                         "jwt": {"requiredClaims": required_claims},
-                    }
+                    },
+                    "policy": {
+                        "policyScript": "export function apply(phdr) { return true; }"
+                    },
                 }
             )
 

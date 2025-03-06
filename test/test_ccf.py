@@ -60,23 +60,29 @@ def test_jwks(client: Client):
 @pytest.mark.parametrize(
     "params",
     [
-        {"alg": "ES256", "kty": "ec", "ec_curve": "P-256"},
-        {"alg": "ES384", "kty": "ec", "ec_curve": "P-384"},
-        {"alg": "ES512", "kty": "ec", "ec_curve": "P-521"},
-        {"alg": "PS256", "kty": "rsa"},
-        {"alg": "PS384", "kty": "rsa"},
-        {"alg": "PS512", "kty": "rsa"},
+        {"alg": "ES256", "kty": "ec", "ec_curve": "P-256", "add_eku": "2.999"},
+        {"alg": "ES384", "kty": "ec", "ec_curve": "P-384", "add_eku": "2.999"},
+        {"alg": "PS256", "kty": "rsa", "add_eku": "2.999"},
+        {"alg": "PS384", "kty": "rsa", "add_eku": "2.999"},
+        {"alg": "PS512", "kty": "rsa", "add_eku": "2.999"},
     ],
 )
 def test_make_signed_statement_transparent(
-    client: Client, trusted_ca, trust_store, params
+    client: Client, cert_authority, trust_store, params, configure_service
 ):
     """
     Register a signed statement in the SCITT CCF ledger and verify the resulting transparent statement.
     """
-    identity = trusted_ca.create_identity(**params)
+    identity = cert_authority.create_identity(**params)
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
 
-    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
     transparent_statement = client.submit_signed_statement_and_wait(
         signed_statement
     ).response_bytes
@@ -89,10 +95,19 @@ def test_make_signed_statement_transparent(
 
 
 @pytest.mark.isolated_test
-def test_recovery(client, trusted_ca, restart_service):
-    identity = trusted_ca.create_identity(alg="PS384", kty="rsa")
+def test_recovery(client, cert_authority, restart_service, configure_service):
+    identity = cert_authority.create_identity(alg="PS384", kty="rsa", add_eku="2.999")
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
 
-    first_signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+    first_signed_statement = crypto.sign_json_statement(
+        identity, {"foo": "bar"}, cwt=True
+    )
     first_transparent_statement = client.submit_signed_statement_and_wait(
         first_signed_statement
     ).response_bytes
@@ -109,7 +124,9 @@ def test_recovery(client, trusted_ca, restart_service):
     new_jwk = pem_cert_to_ccf_jwk(new_network["service_certificate"])
 
     # Check that the service is still operating correctly
-    second_signed_statement = crypto.sign_json_statement(identity, {"foo": "hello"})
+    second_signed_statement = crypto.sign_json_statement(
+        identity, {"foo": "hello"}, cwt=True
+    )
     second_transparent_statement = client.submit_signed_statement_and_wait(
         second_signed_statement
     ).response_bytes

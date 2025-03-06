@@ -22,7 +22,7 @@ Example configuration proposal:
       "args": {
         "configuration": {
           "policy": {
-            "policyScript": "export function apply(profile, phdr) { if (profile !== 'IETF') { return 'Unexpected profile'; } if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
+            "policyScript": "export function apply(phdr) { if (!phdr.issuer) {return 'Issuer not found'} if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } }"
           },
           "authentication": {
             "allowUnauthenticated": false,
@@ -113,7 +113,7 @@ Policy scripts are executed by the [CCF JavaScript runtime](https://github.com/m
 Example `set_scitt_configuration` snippet:
 ```json
 "policy": {
-  "policyScript": "export function apply(profile, phdr) {\n  if (profile === \"X509\") { return true; }\n  return \"Only X509 claim profile is allowed\";\n}"
+  "policyScript": "export function apply (phdr) { return true; }"
 }
 ```
 
@@ -134,25 +134,4 @@ To use the specific values in the receipts please set it through the [CCF v6 con
 }
 ```
 
-Once the value is set it will be easy to discover the public keys via `$issuer/.well-known/transparency-configuration` endpoint.
-
-## Trust stores
-SCITT has a trust store that can be configured: `x509_roots`.
-
-### X509 Roots
-CA certificates which are used as trusted roots during verification of submitted claims which use an X509 certificate for identity rather than a DID.
-
-Example governance proposal:
-```json
-{
-  "actions": [
-    {
-      "name": "set_ca_cert_bundle",
-      "args": {
-        "name": "x509_roots",
-        "cert_bundle": "-----BEGIN CERTIFICATE-----\nMI...<Omitted for brevity>...Eo\n-----END CERTIFICATE-----\n"
-      }
-    }
-  ]
-}
-```
+Once the value is set, the public keys can be discoverd through the `$issuer/.well-known/transparency-configuration` endpoint.
