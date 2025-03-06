@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os.path
+
 import pycose
 import pytest
 
@@ -303,8 +305,15 @@ export function apply(phdr) {{
         with service_error("Invalid policy module"):
             client.submit_signed_statement_and_wait(signed_statement)
 
+    @pytest.mark.parametrize(
+        "filepath",
+        [
+            "test/payloads/cts-hashv-cwtclaims-b64url.cose",
+            "test/payloads/manifest.spdx.json.sha384.digest.cose",
+        ],
+    )
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self, tmp_path, client: Client, configure_service
+        self, tmp_path, client: Client, configure_service, filepath
     ):
 
         policy_script = f"""
@@ -320,7 +329,7 @@ return true;
 
         configure_service({"policy": {"policyScript": policy_script}})
 
-        with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+        with open(filepath, "rb") as f:
             cts_hashv_cwtclaims = f.read()
 
         statement = client.submit_signed_statement_and_wait(
@@ -328,5 +337,5 @@ return true;
         ).response_bytes
 
         # store statement
-        transparent_statement = tmp_path / "transparent_statement.cose"
+        transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
