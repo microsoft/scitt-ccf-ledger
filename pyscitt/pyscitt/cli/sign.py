@@ -97,19 +97,14 @@ def sign_statement(
     akv_configuration_path: Optional[Path],
     uses_cwt: bool = False,
 ):
+    if not x5c_path:
+        raise ValueError("The --x5c flag must be provided")
+    ca_certs = _parse_x5c_file(x5c_path)
+
     # If a Key Vault configuration is provided, we sign with AKV
     if akv_configuration_path:
-        if not x5c_path:
-            raise ValueError(
-                "The --x5c flag must be provided when signing with Azure Key Vault."
-            )
-
         # Parse the AKV configuration file
         akv_sign_configuration_dict = json.loads(akv_configuration_path.read_text())
-
-        # Parse the x5c file containing the x509 CA certificates
-        ca_certs = _parse_x5c_file(x5c_path)
-
         kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
         signed_statement = kv_client.cose_sign(
             statement_path.read_bytes(),
@@ -120,8 +115,9 @@ def sign_statement(
         )
     else:
         key = crypto.load_private_key(key_path)
-        ca_certs = _parse_x5c_file(x5c_path)
-        signer = crypto.Signer(key, kid=kid, issuer=issuer, algorithm=algorithm, x5c=ca_certs)
+        signer = crypto.Signer(
+            key, kid=kid, issuer=issuer, algorithm=algorithm, x5c=ca_certs
+        )
         statement = statement_path.read_bytes()
         registration_info = {arg.name: arg.value() for arg in registration_info_args}
         signed_statement = crypto.sign_statement(

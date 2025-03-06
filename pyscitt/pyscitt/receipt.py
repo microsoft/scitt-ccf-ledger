@@ -70,7 +70,9 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                             "protected": cbor_to_printable(parsed.phdr),
                             "unprotected": cbor_to_printable(parsed.uhdr),
                             "payload": (
-                                base64.b64encode(parsed.payload).decode("ascii") if parsed.payload else None
+                                base64.b64encode(parsed.payload).decode("ascii")
+                                if parsed.payload
+                                else None
                             ),
                         }
                     except Exception:
