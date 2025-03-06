@@ -119,8 +119,6 @@ class KeyVaultSignClient(MemberAuthenticationMethod):
             signature_algorithm, hash_algorithm = ("ES256", "sha256")
         elif key_size == 384:
             signature_algorithm, hash_algorithm = ("ES384", "sha384")
-        elif key_size == 521:
-            signature_algorithm, hash_algorithm = ("ES512", "sha512")
         else:
             raise ValueError(f"Unsupported EC size: {key_size}")
 

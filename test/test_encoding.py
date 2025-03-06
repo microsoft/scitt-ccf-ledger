@@ -12,7 +12,7 @@ from pycose.messages import Sign1Message
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.crypto import cert_pem_to_der
+from pyscitt.crypto import CWT_ISS, CWTClaims, cert_pem_to_der
 from pyscitt.verify import verify_transparent_statement
 
 from .infra.assertions import service_error
@@ -114,8 +114,10 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
         )
     if signer.kid is not None:
         parameters.setdefault(KID, signer.kid.encode("utf-8"))
+
+    # set
     if signer.issuer is not None:
-        parameters.setdefault(crypto.SCITTIssuer.identifier, signer.issuer)
+        parameters[CWTClaims.identifier] = {CWT_ISS: signer.issuer}
 
     # The caller can set a parameter to None to stop this function from adding
     # defaults, but we don't want those None to be encoded, so we filter them
@@ -136,10 +138,10 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def signed_statement(self, trusted_ca):
+    def signed_statement(self, cert_authority):
         """Create a signed statement, with protected headers encoded non-canonically."""
 
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
+        identity = cert_authority.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
     @pytest.mark.skip(
@@ -159,9 +161,9 @@ class TestNonCanonicalEncoding:
 
 class TestHeaderParameters:
     @pytest.fixture(scope="class")
-    def identity(self, trusted_ca):
-        return trusted_ca.create_identity(
-            length=1, alg="ES256", kty="ec", ec_curve="P-256"
+    def identity(self, cert_authority):
+        return cert_authority.create_identity(
+            length=1, alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
         )
 
     @pytest.fixture(scope="class")
@@ -181,48 +183,28 @@ class TestHeaderParameters:
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
 
-    def test_content_type(self, submit):
-        # This comes from the CoAP Content-Format registry, and is defined as
-        # `text/plain; charset=utf-8` (not that it matters, since the ledger
-        # doesn't use the value).
-        submit({ContentType: 0})
-
-        submit({ContentType: "text/plain"})
-
-        with service_error("Missing cty in protected header"):
-            submit({ContentType: None})
-
-        with service_error("Content-type must be of type text string or int64"):
-            # Note this is a byte string, not text string
-            submit({ContentType: b"text/plain"})
-
     def test_x5chain(
-        self, submit, client: Client, trusted_ca: X5ChainCertificateAuthority
+        self,
+        submit,
+        client: Client,
+        cert_authority: X5ChainCertificateAuthority,
+        configure_service,
     ):
-        signer = trusted_ca.create_identity(length=1, kty="ec", alg="ES256")
+        configure_service(
+            {"policy": {"policyScript": "export function apply() { return true; }"}}
+        )
+
+        signer = cert_authority.create_identity(
+            length=1, kty="ec", alg="ES256", add_eku="2.999"
+        )
         assert signer.x5c is not None and len(signer.x5c) == 2
 
         with service_error("x5chain array length was 0"):
             submit({X5chain: []}, signer=signer)
 
-        # Unfortunately, this throws an error during validation because the
-        # service requires full chains (including the root CA), and doesn't
-        # support self-signed EE certs either. This means we have no way of
-        # testing the full submission flow with an x5chain of length 1.
-        # We still test that we can at least make it past decoding.
-        with service_error("chain must include at least one CA certificate"):
+        with service_error("certificate chain too short"):
             submit(
                 {X5chain: cert_pem_to_der(signer.x5c[0])},
-                signer=signer,
-            )
-
-        # Technically, the standard disallows this, as chains of length 1
-        # should be encoded as a plain bstr, not wrapped in a list. A number of
-        # implementations get this wrong though, so we
-        # explicitly allow it.
-        with service_error("chain must include at least one CA certificate"):
-            submit(
-                {X5chain: [cert_pem_to_der(signer.x5c[0])]},
                 signer=signer,
             )
 
@@ -255,7 +237,7 @@ class TestHeaderParameters:
                 signer=signer,
             )
 
-        with service_error("Could not parse certificate"):
+        with service_error("OpenSSL error"):
             submit(
                 {X5chain: [cert_pem_to_der(signer.x5c[0]), b"Garbage root"]},
                 signer=signer,

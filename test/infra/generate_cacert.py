@@ -23,10 +23,10 @@ def generate_ca_cert_and_key(
     os.makedirs(output_dir, exist_ok=True)
 
     # Create a new X5ChainCertificateAuthority instance
-    untrusted_ca = X5ChainCertificateAuthority(kty=key_type)
+    cert_authority = X5ChainCertificateAuthority(kty=key_type)
 
     # Create a new identity with the input parameters
-    identity = untrusted_ca.create_identity(alg=alg, kty=key_type, ec_curve=ec_curve)
+    identity = cert_authority.create_identity(alg=alg, kty=key_type, ec_curve=ec_curve)
 
     # Write the private key to a file
     output_key_file = f"{output_dir}/{key_filename}"
