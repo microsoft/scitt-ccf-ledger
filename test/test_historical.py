@@ -12,9 +12,11 @@ from pyscitt.verify import verify_transparent_statement
 
 class TestHistorical:
     @pytest.fixture(scope="class")
-    def submissions(self, client: Client, trusted_ca, configure_service):
+    def submissions(self, client: Client, cert_authority, configure_service):
         COUNT = 5
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec", add_eku="2.999")
+        identity = cert_authority.create_identity(
+            alg="ES256", kty="ec", add_eku="2.999"
+        )
         configure_service(
             {
                 "policy": {

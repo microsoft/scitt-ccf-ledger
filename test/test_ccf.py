@@ -68,12 +68,12 @@ def test_jwks(client: Client):
     ],
 )
 def test_make_signed_statement_transparent(
-    client: Client, trusted_ca, trust_store, params, configure_service
+    client: Client, cert_authority, trust_store, params, configure_service
 ):
     """
     Register a signed statement in the SCITT CCF ledger and verify the resulting transparent statement.
     """
-    identity = trusted_ca.create_identity(**params)
+    identity = cert_authority.create_identity(**params)
     configure_service(
         {
             "policy": {
@@ -95,8 +95,8 @@ def test_make_signed_statement_transparent(
 
 
 @pytest.mark.isolated_test
-def test_recovery(client, trusted_ca, restart_service, configure_service):
-    identity = trusted_ca.create_identity(alg="PS384", kty="rsa", add_eku="2.999")
+def test_recovery(client, cert_authority, restart_service, configure_service):
+    identity = cert_authority.create_identity(alg="PS384", kty="rsa", add_eku="2.999")
     configure_service(
         {
             "policy": {

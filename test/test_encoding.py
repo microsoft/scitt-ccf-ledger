@@ -138,10 +138,10 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
 
 class TestNonCanonicalEncoding:
     @pytest.fixture
-    def signed_statement(self, trusted_ca):
+    def signed_statement(self, cert_authority):
         """Create a signed statement, with protected headers encoded non-canonically."""
 
-        identity = trusted_ca.create_identity(alg="ES256", kty="ec")
+        identity = cert_authority.create_identity(alg="ES256", kty="ec")
         return sign(identity, b"Hello World", {}, canonical=False)
 
     @pytest.mark.skip(
@@ -161,8 +161,8 @@ class TestNonCanonicalEncoding:
 
 class TestHeaderParameters:
     @pytest.fixture(scope="class")
-    def identity(self, trusted_ca):
-        return trusted_ca.create_identity(
+    def identity(self, cert_authority):
+        return cert_authority.create_identity(
             length=1, alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
         )
 
@@ -187,14 +187,14 @@ class TestHeaderParameters:
         self,
         submit,
         client: Client,
-        trusted_ca: X5ChainCertificateAuthority,
+        cert_authority: X5ChainCertificateAuthority,
         configure_service,
     ):
         configure_service(
             {"policy": {"policyScript": "export function apply() { return true; }"}}
         )
 
-        signer = trusted_ca.create_identity(
+        signer = cert_authority.create_identity(
             length=1, kty="ec", alg="ES256", add_eku="2.999"
         )
         assert signer.x5c is not None and len(signer.x5c) == 2

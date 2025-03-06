@@ -348,17 +348,6 @@ def client(base_client, configure_service):
 
 
 @pytest.fixture(scope="class")
-def trusted_ca(client) -> X5ChainCertificateAuthority:
-    """
-    Create a X5ChainCertificateAuthority and add its root to the SCITT service.
-
-    The service will accept statements signed using certificates issued by the CA.
-    """
-    ca = X5ChainCertificateAuthority(kty="ec")
-    return ca
-
-
-@pytest.fixture(scope="class")
 def cert_authority(client) -> X5ChainCertificateAuthority:
     """
     Create a X5ChainCertificateAuthority.
