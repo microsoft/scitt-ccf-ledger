@@ -126,10 +126,10 @@ policies, etc. If no authentication setting is specified, the service is left
 open to all (this differs from the usual ledger's default which is to reject
 all incoming requests).
 
-The `trusted_ca` fixture can be used to create
+The `cert_authority` fixture can be used to create
 new X509-based identities. The fixture creates a new Certificate Authority and
 the service is configured to trust its root certificate. New identities are
-created by calling `trusted_ca.create_identity()`.
+created by calling `cert_authority.create_identity()`.
 
 The `cchost` fixture gives direct access to the underlying `CCHost` instance
 that is managing the service. This fixture is only available if pytest was

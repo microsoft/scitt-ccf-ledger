@@ -22,8 +22,13 @@ class X5ChainCertificateAuthority:
         """
         Create a new identity for x5c signer
         """
+        eku = kwargs.get("add_eku")
         x5c, private_key = self.create_chain(length=length, ca=ca, **kwargs)
-        return crypto.Signer(private_key, algorithm=alg, x5c=x5c)
+        identity = crypto.Signer(private_key, algorithm=alg, x5c=x5c)
+        if eku is not None:
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(self.root_cert_pem)
+            identity.issuer = f"did:x509:0:sha256:{root_fingerprint}::eku:{eku}"
+        return identity
 
     def create_chain(
         self, *, length: int = 1, ca: bool = False, **kwargs
@@ -44,7 +49,7 @@ class X5ChainCertificateAuthority:
                 private_key_pem=private_key,
                 issuer=chain[-1],
                 ca=(i < length - 1) or ca,
-                **generate_cert_kwargs
+                **generate_cert_kwargs,
             )
             chain.append((cert_pem, private_key))
 

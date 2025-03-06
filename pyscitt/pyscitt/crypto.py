@@ -46,7 +46,7 @@ from cryptography.x509 import load_der_x509_certificate, load_pem_x509_certifica
 from cryptography.x509.oid import NameOID
 from pycose.headers import CoseHeaderAttribute
 from pycose.keys.cosekey import CoseKey
-from pycose.keys.curves import P256, P384, P521
+from pycose.keys.curves import P256, P384
 from pycose.messages import Sign1Message
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
@@ -54,7 +54,7 @@ RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 Pem = str
 RegistrationInfoValue = Union[str, bytes, int]
 RegistrationInfo = Dict[str, RegistrationInfoValue]
-CoseCurveTypes = Union[Type[P256], Type[P384], Type[P521]]
+CoseCurveTypes = Union[Type[P256], Type[P384]]
 CoseCurveType = Tuple[str, CoseCurveTypes]
 
 
@@ -104,8 +104,6 @@ def ec_curve_from_name(name: str) -> EllipticCurve:
         return ec.SECP256R1()
     elif name == "P-384":
         return ec.SECP384R1()
-    elif name == "P-521":
-        return ec.SECP521R1()
     else:
         raise ValueError(f"Unsupported EC curve: {name}")
 
@@ -115,8 +113,6 @@ def cose_curve_from_ec(curve: EllipticCurve) -> CoseCurveType:
         return ("P-256", P256)
     elif isinstance(curve, ec.SECP384R1):
         return ("P-384", P384)
-    elif isinstance(curve, ec.SECP521R1):
-        return ("P-521", P521)
     else:
         raise ValueError(f"Unsupported EC curve: {curve}")
 
@@ -394,8 +390,6 @@ def default_algorithm_for_key(key) -> str:
             return "ES256"
         elif isinstance(key.curve, ec.SECP384R1):
             return "ES384"
-        elif isinstance(key.curve, ec.SECP521R1):
-            return "ES512"
         else:
             raise NotImplementedError("unsupported curve")
 
