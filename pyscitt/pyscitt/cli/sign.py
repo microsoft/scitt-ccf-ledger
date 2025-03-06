@@ -83,23 +83,6 @@ def _parse_x5c_file(x5c_path: str) -> List[str]:
     return certs
 
 
-def create_signer_from_arguments(
-    key_path: Path,
-    kid: Optional[str],
-    issuer: Optional[str],
-    algorithm: Optional[str],
-    x5c_path: Optional[str],
-) -> crypto.Signer:
-    key = crypto.load_private_key(key_path)
-
-    if x5c_path:
-        ca_certs = _parse_x5c_file(x5c_path)
-
-        return crypto.Signer(key, algorithm=algorithm, x5c=ca_certs)
-    else:
-        return crypto.Signer(key, issuer, kid, algorithm)
-
-
 def sign_statement(
     statement_path: Path,
     key_path: Path,
@@ -112,6 +95,7 @@ def sign_statement(
     registration_info_args: List[RegistrationInfoArgument],
     x5c_path: Optional[str],
     akv_configuration_path: Optional[Path],
+    uses_cwt: bool = False,
 ):
     # If a Key Vault configuration is provided, we sign with AKV
     if akv_configuration_path:
@@ -135,14 +119,13 @@ def sign_statement(
             },
         )
     else:
-        signer = create_signer_from_arguments(
-            key_path, kid, issuer, algorithm, x5c_path
-        )
+        key = crypto.load_private_key(key_path)
+        ca_certs = _parse_x5c_file(x5c_path)
+        signer = crypto.Signer(key, kid=kid, issuer=issuer, algorithm=algorithm, x5c=ca_certs)
         statement = statement_path.read_bytes()
         registration_info = {arg.name: arg.value() for arg in registration_info_args}
-
         signed_statement = crypto.sign_statement(
-            signer, statement, content_type, feed, registration_info
+            signer, statement, content_type, feed, registration_info, cwt=uses_cwt
         )
 
     print(f"Writing {out_path}")
@@ -172,15 +155,21 @@ def cli(fn):
     )
 
     # Ad-hoc signing, without any on-disk document
+    parser.add_argument(
+        "--uses-cwt",
+        action="store_true",
+        help="Put issuer and feed information under CWT header as required in SCITT",
+    )
     parser.add_argument("--issuer", help="Issuer stored in envelope header")
     parser.add_argument("--alg", help="Signing algorithm to use.")
     parser.add_argument("--x5c", help="Path to PEM-encoded certificate authority")
-
     parser.add_argument(
         "--content-type", required=True, help="Content type of statement"
     )
     parser.add_argument("--kid", help='Key ID ("kid" field) to use if multiple')
     parser.add_argument("--feed", help='Optional "feed" stored in envelope header')
+
+    # TODO: remove --registration-info support as this is not part of SCITT anymore
     parser.add_argument(
         "--registration-info",
         metavar="[TYPE:]NAME=CONTENT",
@@ -208,6 +197,7 @@ def cli(fn):
             args.registration_info,
             args.x5c,
             args.akv_configuration,
+            args.uses_cwt,
         )
     )
 

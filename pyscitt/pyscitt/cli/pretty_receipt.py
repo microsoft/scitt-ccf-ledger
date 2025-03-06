@@ -14,16 +14,16 @@ from ..receipt import Receipt, cbor_to_printable
 
 def prettyprint_receipt(receipt_path: Path):
     """
-    Pretty-print a COSE receipt file
+    Pretty-print a receipt which could be a standalone cose file or a transparent statement.
     """
     with open(receipt_path, "rb") as f:
         buffer = f.read()
 
     parsed = Sign1Message.decode(buffer)
     unprotected = parsed.uhdr
-    assert 396 in unprotected, "Receipt does not contain any VDP"
-    inclusion_vdps = unprotected[396][-1]
-    unprotected[396][-1] = [cbor2.loads(vdp) for vdp in inclusion_vdps]
+    if 396 in unprotected:
+        inclusion_vdps = unprotected[396][-1]
+        unprotected[396][-1] = [cbor2.loads(vdp) for vdp in inclusion_vdps]
     output_dict = {
         "protected": cbor_to_printable(parsed.phdr),
         "unprotected": cbor_to_printable(unprotected),

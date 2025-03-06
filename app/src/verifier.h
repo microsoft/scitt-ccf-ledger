@@ -228,7 +228,14 @@ namespace scitt::verifier
             phdr.x5chain.has_value())
           {
             // IETF SCITT did:x509 claim
-            process_ietf_didx509_subprofile(phdr, data);
+            try
+            {
+              process_ietf_didx509_subprofile(phdr, data);
+            }
+            catch (const std::exception& e)
+            {
+              throw VerificationError(e.what());
+            }
           }
           else
           {

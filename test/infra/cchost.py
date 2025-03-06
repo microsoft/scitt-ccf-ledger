@@ -186,6 +186,8 @@ class CCHost(EventLoopThread):
             self.binary,
             "--config",
             self.workspace / "config.json",
+            "--enclave-log-level",
+            "debug",
             cwd=self.workspace,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
