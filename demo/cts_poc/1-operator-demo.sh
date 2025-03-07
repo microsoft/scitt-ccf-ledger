@@ -4,14 +4,12 @@
 
 ### Script to setup and configure a SCITT CCF instance with custom parameters
 
-set -e
+set -euo pipefail
 
 # Variables
 : "${MEMBER_CERT_PATH:?"variable not set. Please define the path to the CCF member certificate PEM file"}"
 : "${MEMBER_KEY_PATH:?"variable not set. Please define the path to the CCF member key PEM file"}"
 : "${SCITT_CONFIG_PATH:?"variable not set. Please define the path to SCITT configuration JSON file"}"
-
-X509_ROOT_PATH=${X509_ROOT_PATH:-""}
 
 SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 
@@ -34,17 +32,6 @@ scitt governance activate_member \
     --development
 
 echo -e "\nConfiguring CCF instance"
-
-# Send proposal to set CA certs
-if [ -n "$X509_ROOT_PATH" ]; then
-    scitt governance propose_ca_certs \
-        --name x509_roots \
-        --ca-certs "$X509_ROOT_PATH" \
-        --url "$SCITT_URL" \
-        --member-key "$MEMBER_KEY_PATH" \
-        --member-cert "$MEMBER_CERT_PATH" \
-        --development
-fi
 
 # Send proposal to set SCITT configuration 
 scitt governance propose_configuration \

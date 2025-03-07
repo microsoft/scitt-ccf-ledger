@@ -65,7 +65,16 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
             for item in cbor_obj:
                 if type(item) is bytes:
                     try:
-                        receipt_as_dict = Receipt.decode(item).as_dict()
+                        parsed = Sign1Message.decode(item)
+                        receipt_as_dict = {
+                            "protected": cbor_to_printable(parsed.phdr),
+                            "unprotected": cbor_to_printable(parsed.uhdr),
+                            "payload": (
+                                base64.b64encode(parsed.payload).decode("ascii")
+                                if parsed.payload
+                                else None
+                            ),
+                        }
                     except Exception:
                         receipt_as_dict = {
                             "error": "Failed to parse receipt",

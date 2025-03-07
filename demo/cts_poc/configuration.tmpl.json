@@ -1,0 +1,8 @@
+{
+    "authentication": {
+        "allowUnauthenticated": true
+    },
+    "policy": {
+        "policyScript": "export function apply(phdr) { if (!phdr.cwt.iss) {return 'Issuer not set'} else if (phdr.cwt.iss !== 'did:x509:0:sha256:<<ROOT_CA_B64_FINGERPRINT>>::eku:<<LEAF_EKU>>') { return 'Invalid issuer'; } return true; }"
+    }
+}

@@ -17,7 +17,8 @@ def generate_ca_cert_and_key(
     key_type: str,
     ec_curve: str,
     key_filename: str = "cacert_privk.pem",
-    cacert_filename="cacert.pem",
+    cacert_filename: str = "cacert.pem",
+    eku: str = "",
 ):
     # Create the output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
@@ -26,7 +27,14 @@ def generate_ca_cert_and_key(
     cert_authority = X5ChainCertificateAuthority(kty=key_type)
 
     # Create a new identity with the input parameters
-    identity = cert_authority.create_identity(alg=alg, kty=key_type, ec_curve=ec_curve)
+    if eku:
+        identity = cert_authority.create_identity(
+            alg=alg, kty=key_type, ec_curve=ec_curve, add_eku=eku
+        )
+    else:
+        identity = cert_authority.create_identity(
+            alg=alg, kty=key_type, ec_curve=ec_curve
+        )
 
     # Write the private key to a file
     output_key_file = f"{output_dir}/{key_filename}"
@@ -76,7 +84,14 @@ if __name__ == "__main__":
         help="The Elliptic Curve to use for the key.",
         default="P-256",
     )
+    parser.add_argument(
+        "--eku",
+        type=str,
+        help="Extended Key Usage to add to the end entity certificate, e.g. '1.3.6.1.5.5.7.3.36'",
+    )
     args = parser.parse_args()
 
     # Generate the CA cert and key
-    generate_ca_cert_and_key(args.output_dir, args.alg, args.key_type, args.ec_curve)
+    generate_ca_cert_and_key(
+        args.output_dir, args.alg, args.key_type, args.ec_curve, eku=args.eku
+    )

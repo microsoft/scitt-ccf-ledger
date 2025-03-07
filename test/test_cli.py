@@ -1,11 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import base64
 import json
 import shlex
 from pathlib import Path
 
+import pycose.headers
 import pytest
+from cryptography.x509 import ExtendedKeyUsage, load_der_x509_certificate
 from loguru import logger as LOG
 from pycose.messages import CoseMessage
 
@@ -45,20 +48,6 @@ def run(request):
     return f
 
 
-def test_smoke_test(run, client, tmp_path: Path):
-    trust_store_path = tmp_path / "store"
-    trust_store_path.mkdir()
-    (trust_store_path / "service.json").write_text(
-        json.dumps(client.get_parameters().as_dict())
-    )
-
-    (tmp_path / "claims.json").write_text(json.dumps({"foo": "bar"}))
-
-    (tmp_path / "config.json").write_text(
-        json.dumps({"authentication": {"allowUnauthenticated": True}})
-    )
-
-
 def test_local_development(run, service_url, tmp_path: Path):
     # Note that unlike other commands, we don't need to set the --development flag, since that is
     # the default.
@@ -74,18 +63,29 @@ def test_local_development(run, service_url, tmp_path: Path):
 
 
 def test_adhoc_signer(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair()
-    (tmp_path / "key.pem").write_text(private_key)
-    (tmp_path / "key_pub.pem").write_text(public_key)
+
+    generate_ca_cert_and_key(
+        output_dir=str(tmp_path),
+        key_filename="cacert_privk.pem",
+        cacert_filename="cacert.pem",
+        alg="ES256",
+        ec_curve="P-256",
+        key_type="ec",
+        eku="1.2.3",
+    )
     (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
-    # Sign without even an issuer.
-    # Note that the ledger wouldn't accept such a claim, we'd need to embed an x509 chain for it to
-    # work (which isn't supported by the CLI yet).
     run(
         "sign",
+        "--uses-cwt",
         "--key",
-        tmp_path / "key.pem",
+        tmp_path / "cacert_privk.pem",
+        "--x5c",
+        tmp_path / "cacert.pem",
+        "--issuer",
+        "foo.bar.baz",
+        "--feed",
+        "https://example.com/feed",
         "--statement",
         tmp_path / "statement.json",
         "--content-type",
@@ -94,28 +94,35 @@ def test_adhoc_signer(run, tmp_path: Path):
         tmp_path / "signed_statement.cose",
     )
 
-    # Sign with a custom issuer
-    # Also tests how to override the default algorithm.
-    run(
-        "sign",
-        "--key",
-        tmp_path / "key.pem",
-        "--issuer",
-        "foo.bar.baz",
-        "--statement",
-        tmp_path / "statement.json",
-        "--content-type",
-        "application/json",
-        "--alg",
-        "PS384",
-        "--out",
-        tmp_path / "signed_statement.cose",
-    )
+    data = (tmp_path / "signed_statement.cose").read_bytes()
+    msg = CoseMessage.decode(data)
+    x5c = msg.get_attr(pycose.headers.X5chain)
+    assert isinstance(x5c, list)
+    assert len(x5c) == 2
+    signing_cert = load_der_x509_certificate(x5c[0])
+    eku_extension = signing_cert.extensions.get_extension_for_class(ExtendedKeyUsage)
+    ekus = eku_extension.value
+    assert len(ekus) == 1
+    eku = ekus[0]
+    assert eku.dotted_string == "1.2.3"
+    content_type = msg.get_attr(pycose.headers.ContentType)
+    assert content_type == "application/json"
+    cwt = msg.get_attr(crypto.CWTClaims)
+    assert cwt == {
+        crypto.CWT_ISS: "foo.bar.baz",
+        crypto.CWT_SUB: "https://example.com/feed",
+    }
 
 
 def test_registration_info(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair()
-    (tmp_path / "key.pem").write_text(private_key)
+    generate_ca_cert_and_key(
+        output_dir=str(tmp_path),
+        key_filename="cacert_privk.pem",
+        cacert_filename="cacert.pem",
+        alg="ES256",
+        ec_curve="P-256",
+        key_type="ec",
+    )
     (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     binary_data = b"\xde\xad\xbe\xef"
@@ -136,7 +143,9 @@ def test_registration_info(run, tmp_path: Path):
         f"--registration-info=bytes:binary_data=@{binary_path}",
         f"--registration-info=text:unicode_data=@{unicode_path}",
         "--key",
-        tmp_path / "key.pem",
+        tmp_path / "cacert_privk.pem",
+        "--x5c",
+        tmp_path / "cacert.pem",
         "--content-type",
         "application/json",
         "--statement",
@@ -159,14 +168,22 @@ def test_registration_info(run, tmp_path: Path):
 
 
 def test_extract_payload_from_cose(run, tmp_path: Path):
-    private_key, public_key = crypto.generate_rsa_keypair()
-    (tmp_path / "key.pem").write_text(private_key)
+    generate_ca_cert_and_key(
+        output_dir=str(tmp_path),
+        key_filename="cacert_privk.pem",
+        cacert_filename="cacert.pem",
+        alg="ES256",
+        ec_curve="P-256",
+        key_type="ec",
+    )
     (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
 
     run(
         "sign",
         "--key",
-        tmp_path / "key.pem",
+        tmp_path / "cacert_privk.pem",
+        "--x5c",
+        tmp_path / "cacert.pem",
         "--content-type",
         "application/json",
         "--statement",

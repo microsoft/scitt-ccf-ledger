@@ -4,7 +4,7 @@
 
 ### Client script to submit a claim to the SCITT ledger and verify the receipt 
 
-set -e
+set -euo pipefail
 
 # Variables
 : "${COSE_CLAIMS_PATH:?"variable not set. Please define the path to the COSE claim to register into the ledger"}"
