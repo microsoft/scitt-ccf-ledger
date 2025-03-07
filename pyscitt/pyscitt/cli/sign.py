@@ -143,7 +143,7 @@ def cli(fn):
         help="Output path for signed statement (must end in .cose)",
     )
 
-    # Signing with a Key Vault certificate
+    # TODO: remove akv configuration is it is not used anymore and is untested
     parser.add_argument(
         "--akv-configuration",
         type=Path,
