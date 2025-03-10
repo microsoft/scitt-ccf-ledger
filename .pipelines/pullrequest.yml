@@ -97,7 +97,7 @@ extends:
           # unit tests run only on virtual platform
           - script: ./run_unit_tests.sh
             displayName: Run Unit tests
-          - template: .pipelines/python.yml@self
+          - template: .pipelines/ado_pipauth.yml@self
           - script: ./run_functional_tests.sh
             displayName: Run Functional Tests
 
@@ -121,7 +121,7 @@ extends:
             lfs: false
           - script: ./docker/build.sh
             displayName: Build virtual with Docker
-          - template: .pipelines/python.yml@self
+          - template: .pipelines/ado_pipauth.yml@self
           - script: ./run_functional_tests.sh
             displayName: Run Functional Tests
             env:
