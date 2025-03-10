@@ -1,9 +1,0 @@
-steps:
-- script: |
-    sudo apt-get -q update
-    sudo apt-get -qq install -y software-properties-common
-    sudo apt-get -q update
-    sudo apt-get -qq clean
-    sudo rm -rf /var/lib/apt/lists/*
-  displayName: Install python dependencies
-- template: ado_pipauth.yml@self
