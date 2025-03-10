@@ -60,7 +60,7 @@ jobs:
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
 
-      # Manually disable Launchpad repository
+      # Manually disable Launchpad repository to reduce the chances of a supply chain attack
       - name: Disable Launchpad and PPA repositories
         run: |
           sudo sed -i '/launchpad.net/d' /etc/apt/sources.list
