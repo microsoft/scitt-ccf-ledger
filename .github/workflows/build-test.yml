@@ -59,6 +59,15 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
+
+      # Manually disable Launchpad repository
+      - name: Disable Launchpad and PPA repositories
+        run: |
+          sudo sed -i.bak '/launchpad.net/s/^/#/' /etc/apt/sources.list
+          sudo sed -i.bak '/ppa.launchpad.net/s/^/#/' /etc/apt/sources.list
+          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i.bak '/launchpad.net/s/^/#/' {} \;
+          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i.bak '/ppa.launchpad.net/s/^/#/' {} \;
+
       - run: apt-get update && apt-get install -y clang-tidy-15
       - run: ./build.sh
       - run: ./run_unit_tests.sh
