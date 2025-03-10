@@ -63,10 +63,10 @@ jobs:
       # Manually disable Launchpad repository
       - name: Disable Launchpad and PPA repositories
         run: |
-          sudo sed -i.bak '/launchpad.net/s/^/#/' /etc/apt/sources.list
-          sudo sed -i.bak '/ppa.launchpad.net/s/^/#/' /etc/apt/sources.list
-          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i.bak '/launchpad.net/s/^/#/' {} \;
-          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i.bak '/ppa.launchpad.net/s/^/#/' {} \;
+          sudo sed -i '/launchpad.net/d' /etc/apt/sources.list
+          sudo sed -i '/ppa.launchpad.net/d' /etc/apt/sources.list
+          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i '/launchpad.net/d' {} \;
+          sudo find /etc/apt/sources.list.d/ -type f -exec sed -i '/ppa.launchpad.net/d' {} \;
 
       - run: apt-get update && apt-get install -y clang-tidy-15
       - run: ./build.sh
