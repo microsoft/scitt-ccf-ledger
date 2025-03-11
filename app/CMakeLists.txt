@@ -8,8 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER "clang++-11")
-  message("Set CMAKE_CXX_COMPILER to clang++-11")
+  set(CMAKE_CXX_COMPILER "clang++-15")
+  message("Set CMAKE_CXX_COMPILER to clang++-15")
 endif()
 
 project(scitt
@@ -37,7 +37,6 @@ configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 # add SAN options if CCF is built with them
 add_ccf_app(scitt
   SRCS src/main.cpp
-  INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private
   INSTALL_LIBS ON
 )
 
@@ -133,7 +132,6 @@ if (BUILD_TESTS)
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
-    ${CCF_DIR}/include/ccf/_private # public_key.h and verifier.h depend on crypto/openssl/openssl_wrappers.h
   )
 
   if (ENABLE_CLANG_TIDY)
