@@ -37,7 +37,6 @@ configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 # add SAN options if CCF is built with them
 add_ccf_app(scitt
   SRCS src/main.cpp
-  INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private
   INSTALL_LIBS ON
 )
 
