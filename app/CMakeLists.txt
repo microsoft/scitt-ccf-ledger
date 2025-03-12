@@ -8,8 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER "clang++-11")
-  message("Set CMAKE_CXX_COMPILER to clang++-11")
+  set(CMAKE_CXX_COMPILER "clang++-15")
+  message("Set CMAKE_CXX_COMPILER to clang++-15")
 endif()
 
 project(scitt
