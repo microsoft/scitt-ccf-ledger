@@ -10,8 +10,8 @@ BUILD_TESTS=${BUILD_TESTS:-ON}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
 NINJA_FLAGS=${NINJA_FLAGS:-}
 BUILD_CCF_FROM_SOURCE=${BUILD_CCF_FROM_SOURCE:-OFF}
-CC=${CC:-clang-15}
-CXX=${CXX:-clang++-15}
+CC=${CC:-clang-18}
+CXX=${CXX:-clang++-18}
 
 if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
