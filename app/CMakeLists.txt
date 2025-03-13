@@ -88,7 +88,7 @@ if (BUILD_TESTS)
   FetchContent_Declare(
     rapidcheck
     GIT_REPOSITORY https://github.com/emil-e/rapidcheck.git
-    GIT_TAG 8fafda42e732164db58003e542196e94a28481f9
+    GIT_TAG ff6af6fc683159deb51c543b065eba14dfcf329b
   )
 
   # We use an explicit GetProperties and Populate rather than the more concise MakeAvailable,
