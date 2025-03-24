@@ -14,4 +14,10 @@
 # Since we replace the shell process, it is not possible to run any additional logic in this script after this command is executed.
 # At the moment, this is not a problem as this script is only used to run cchost at the end. If we ever need in the future to run additional
 # logic after cchost completes, we will need a different solution (e.g., https://unix.stackexchange.com/a/146770).
-exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}"
+
+# If the OUTPUT_LOGS_FILE is not empty, redirect the command output to the file
+if [ -n "${OUTPUT_LOGS_FILE}" ]; then
+    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" 2>&1 | tee -a "$OUTPUT_LOGS_FILE"
+else
+    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}"
+fi
