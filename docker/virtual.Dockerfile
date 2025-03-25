@@ -4,6 +4,7 @@ ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 # remove all files that reference the ppa
 RUN find /etc/apt -type f -exec grep -Ril 'ppa.launchpad.net' {} \; -exec rm -f {} +
+RUN find /etc/apt -type f -exec grep -Ril 'apt.llvm.org' {} \; -exec rm -f {} +
 # Build CCF app
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \
