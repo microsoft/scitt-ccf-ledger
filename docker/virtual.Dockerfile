@@ -23,6 +23,7 @@ ARG CCF_VERSION
 WORKDIR /usr/src/app
 # remove all files that reference the ppa
 RUN find /etc/apt -type f -exec grep -Ril 'ppa.launchpad.net' {} \; -exec rm -f {} +
+RUN find /etc/apt -type f -exec grep -Ril 'apt.llvm.org' {} \; -exec rm -f {} +
 COPY --from=builder /usr/src/app/lib/libscitt.virtual.so libscitt.virtual.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 WORKDIR /host/node
