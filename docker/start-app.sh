@@ -16,8 +16,11 @@
 # logic after cchost completes, we will need a different solution (e.g., https://unix.stackexchange.com/a/146770).
 
 # If the OUTPUT_LOGS_FILE is not empty, redirect the command output to the file
+# If OUTPUT_LOCAL_PORT is not empty, redirect the command output to the specified port on localhost
 if [ -n "${OUTPUT_LOGS_FILE}" ]; then
     exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" 2>&1 | tee -a "$OUTPUT_LOGS_FILE"
+elif [ -n "${OUTPUT_LOCAL_PORT}" ]; then
+    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" 2>&1 | tee >(nc "127.0.0.1" "$OUTPUT_LOCAL_PORT")
 else
     exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}"
 fi
