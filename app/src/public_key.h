@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <crypto/openssl/openssl_wrappers.h>
+#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <optional>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
