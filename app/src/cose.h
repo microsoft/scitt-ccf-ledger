@@ -584,7 +584,7 @@ namespace scitt::cose
    * Beyond the basic verification of key usage and the signature
    * itself, no particular validation of the message is done.
    */
-  static void verify(
+  static std::span<uint8_t> verify(
     const std::vector<uint8_t>& cose_sign1,
     const PublicKey& key,
     bool allow_unknown_crit = false)
@@ -640,10 +640,14 @@ namespace scitt::cose
     t_cose_sign1_verify_set_auxiliary_buffer(
       &verify_ctx, {auxiliary_buffer.data(), auxiliary_buffer.size()});
 
-    error = t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, nullptr);
+    q_useful_buf_c payload;
+
+    error = t_cose_sign1_verify(&verify_ctx, signed_cose, &payload, nullptr);
     if (error)
     {
       throw COSESignatureValidationError("Signature verification failed");
     }
+
+    return {(uint8_t*)payload.ptr, payload.len};
   }
 }

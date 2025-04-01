@@ -72,7 +72,7 @@ namespace scitt::verifier
       }
     }
 
-    void process_signed_statement_with_didx509_issuer(
+    std::span<uint8_t> process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
@@ -83,9 +83,10 @@ namespace scitt::verifier
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
+      std::span<uint8_t> payload;
       try
       {
-        cose::verify(data, key);
+        payload = cose::verify(data, key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -173,17 +174,21 @@ namespace scitt::verifier
         throw VerificationError(
           "Resolved verification method public key does not match signing key");
       }
+
+      return payload;
     }
 
-    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_signed_statement(
-      const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
-      ::timespec current_time,
-      const Configuration& configuration)
+    std::
+      tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
+      verify_signed_statement(
+        const std::vector<uint8_t>& signed_statement,
+        ccf::kv::ReadOnlyTx& tx,
+        ::timespec current_time,
+        const Configuration& configuration)
     {
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
+      std::span<uint8_t> payload;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
@@ -201,7 +206,7 @@ namespace scitt::verifier
               "Signed statement protected header must contain an x5chain");
           }
 
-          process_signed_statement_with_didx509_issuer(
+          payload = process_signed_statement_with_didx509_issuer(
             phdr, configuration, signed_statement);
         }
         else
@@ -216,7 +221,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return {phdr, uhdr};
+      return {phdr, uhdr, payload};
     }
 
   private:

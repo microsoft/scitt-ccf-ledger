@@ -355,3 +355,14 @@ return true;
         )
 
         client.submit_signed_statement_and_wait(signed_statement)
+
+    def test_payload_policy(self, client: Client, configure_service, signed_statement):
+        configure_service(
+            {
+                "policy": {
+                    "policyScript": 'export function apply(phdr, uhdr, payload) { if (ccf.bufToStr(payload) !== "{\\"foo\\": \\"bar\\"}") { return `Invalid payload`; } return true; }'
+                }
+            }
+        )
+
+        client.submit_signed_statement_and_wait(signed_statement)

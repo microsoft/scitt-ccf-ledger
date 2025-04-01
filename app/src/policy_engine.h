@@ -159,7 +159,8 @@ namespace scitt
       const PolicyScript& script,
       const std::string& policy_name,
       const scitt::cose::ProtectedHeader& phdr,
-      const scitt::cose::UnprotectedHeader& uhdr)
+      const scitt::cose::UnprotectedHeader& uhdr,
+      std::span<uint8_t> payload)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
@@ -180,10 +181,11 @@ namespace scitt
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
       auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
+      auto payload_val = interpreter.new_array_buffer_copy(payload);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {phdr_val, uhdr_val},
+        {phdr_val, uhdr_val, payload_val},
         ccf::JSRuntimeOptions{
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
@@ -234,8 +236,9 @@ namespace scitt
     const PolicyScript& script,
     const std::string& policy_name,
     const cose::ProtectedHeader& phdr,
-    const cose::UnprotectedHeader& uhdr)
+    const cose::UnprotectedHeader& uhdr,
+    std::span<uint8_t> payload)
   {
-    return js::apply_js_policy(script, policy_name, phdr, uhdr);
+    return js::apply_js_policy(script, policy_name, phdr, uhdr, payload);
   }
 }
