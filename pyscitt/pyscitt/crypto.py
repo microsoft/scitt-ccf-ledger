@@ -577,6 +577,7 @@ def sign_statement(
     registration_info: Optional[RegistrationInfo] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
+    uhdr: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     headers: dict = {}
     headers[pycose.headers.Algorithm] = signer.algorithm
@@ -606,7 +607,7 @@ def sign_statement(
     if registration_info:
         headers[SCITTRegistrationInfo] = registration_info
 
-    msg = Sign1Message(phdr=headers, payload=statement)
+    msg = Sign1Message(phdr=headers, payload=statement, uhdr=(uhdr or {}))
     msg.key = CoseKey.from_pem_private_key(signer.private_key)
     return msg.encode(tag=True)
 
@@ -618,6 +619,7 @@ def sign_json_statement(
     feed: Optional[str] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
+    uhdr: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     return sign_statement(
         signer,
@@ -626,6 +628,7 @@ def sign_json_statement(
         feed=feed,
         svn=svn,
         cwt=cwt,
+        uhdr=(uhdr or {}),
     )
 
 

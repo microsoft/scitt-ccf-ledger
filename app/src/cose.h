@@ -60,6 +60,8 @@ namespace scitt::cose
 
   static constexpr const char* SVN_HEADER_PARAM = "svn";
 
+  static constexpr const char* ATTESTATION_HEADER_PARAM = "scitt.attestation";
+
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
@@ -181,6 +183,7 @@ namespace scitt::cose
   struct UnprotectedHeader
   {
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+    std::optional<std::string> attestation;
   };
 
   static std::vector<std::vector<uint8_t>> decode_x5chain(
@@ -490,12 +493,19 @@ namespace scitt::cose
     enum
     {
       X5CHAIN_INDEX,
+      ATTESTATION_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
     header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
     header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
+
+    header_items[ATTESTATION_INDEX].label.string =
+      UsefulBuf_FromSZ(ATTESTATION_HEADER_PARAM);
+    header_items[ATTESTATION_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[ATTESTATION_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     QCBORDecode_GetItemsInMap(&ctx, header_items);
@@ -509,6 +519,11 @@ namespace scitt::cose
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
+    }
+    if (header_items[ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.attestation =
+        cbor::as_string(header_items[ATTESTATION_INDEX].val.string);
     }
     QCBORDecode_ExitMap(&ctx);
 

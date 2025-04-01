@@ -288,7 +288,7 @@ namespace scitt
         if (cfg.policy.policy_script.has_value())
         {
           const auto policy_violation_reason = check_for_policy_violations(
-            cfg.policy.policy_script.value(), "configured_policy", phdr);
+            cfg.policy.policy_script.value(), "configured_policy", phdr, uhdr);
           if (policy_violation_reason.has_value())
           {
             SCITT_DEBUG(

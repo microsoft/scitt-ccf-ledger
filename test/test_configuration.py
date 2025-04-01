@@ -84,7 +84,12 @@ class TestPolicyEngine:
         identity = cert_authority.create_identity(
             alg="ES256", kty="ec", add_eku="2.999"
         )
-        return crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+        return crypto.sign_json_statement(
+            identity,
+            {"foo": "bar"},
+            cwt=True,
+            uhdr={"scitt.attestation": "testAttestation"},
+        )
 
     def test_ietf_didx509_policy(
         self,
@@ -339,3 +344,14 @@ return true;
         # store statement
         transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
+
+    def test_uhdr_policy(self, client: Client, configure_service, signed_statement):
+        configure_service(
+            {
+                "policy": {
+                    "policyScript": 'export function apply(phdr, uhdr) { if (uhdr["scitt.attestation"] !== "testAttestation") { return `Invalid uhdr`; } return true; }'
+                }
+            }
+        )
+
+        client.submit_signed_statement_and_wait(signed_statement)

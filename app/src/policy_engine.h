@@ -128,10 +128,38 @@ namespace scitt
       return obj;
     }
 
+    static inline ccf::js::core::JSWrappedValue unprotected_header_to_js_val(
+      ccf::js::core::Context& ctx, const scitt::cose::UnprotectedHeader uhdr)
+    {
+      auto obj = ctx.new_obj();
+
+      if (uhdr.x5chain.has_value())
+      {
+        auto x5_array = ctx.new_array();
+        size_t i = 0;
+
+        for (const auto& der_cert : uhdr.x5chain.value())
+        {
+          auto pem = ccf::crypto::cert_der_to_pem(der_cert);
+          x5_array.set_at_index(i++, ctx.new_string(pem.str()));
+        }
+
+        obj.set("x5chain", std::move(x5_array));
+      }
+
+      if (uhdr.attestation.has_value())
+      {
+        obj.set("scitt.attestation", ctx.new_string(uhdr.attestation.value()));
+      }
+
+      return obj;
+    }
+
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
-      const scitt::cose::ProtectedHeader& phdr)
+      const scitt::cose::ProtectedHeader& phdr,
+      const scitt::cose::UnprotectedHeader& uhdr)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
@@ -151,10 +179,11 @@ namespace scitt
       }
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
+      auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {phdr_val},
+        {phdr_val, uhdr_val},
         ccf::JSRuntimeOptions{
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
@@ -204,8 +233,9 @@ namespace scitt
   static inline std::optional<std::string> check_for_policy_violations(
     const PolicyScript& script,
     const std::string& policy_name,
-    const cose::ProtectedHeader& phdr)
+    const cose::ProtectedHeader& phdr,
+    const cose::UnprotectedHeader& uhdr)
   {
-    return js::apply_js_policy(script, policy_name, phdr);
+    return js::apply_js_policy(script, policy_name, phdr, uhdr);
   }
 }
