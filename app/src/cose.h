@@ -34,6 +34,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
   static constexpr int64_t COSE_HEADER_PARAM_CWT_CLAIMS = 15;
+  static constexpr int64_t COSE_HEADER_PARAM_CWT_CNF = 8;
 
   static const std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
@@ -43,7 +44,8 @@ namespace scitt::cose
     COSE_HEADER_PARAM_X5CHAIN,
   };
 
-  // Temporary assignments from draft-birkholz-scitt-architecture
+  // Temporary assignments from https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/09/
+  // Section 2
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
@@ -67,12 +69,19 @@ namespace scitt::cose
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  // cnf from https://www.rfc-editor.org/rfc/rfc8747.html
+  struct Confirmation
+  {
+    std::optional<std::vector<uint8_t>> kid;
+  };
+
   struct CWTClaims
   {
     std::optional<std::string> iss;
     std::optional<std::string> sub;
     std::optional<int64_t> iat;
     std::optional<int64_t> svn;
+    std::optional<Confirmation> cnf;
   };
 
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
@@ -313,6 +322,7 @@ namespace scitt::cose
       CWT_ISS_INDEX,
       CWT_SUB_INDEX,
       CWT_IAT_INDEX,
+      CWT_CNF_INDEX,
       CWT_SVN_INDEX,
       CWT_END_INDEX,
     };
@@ -329,6 +339,10 @@ namespace scitt::cose
     cwt_items[CWT_IAT_INDEX].label.int64 = COSE_CWT_CLAIM_IAT;
     cwt_items[CWT_IAT_INDEX].uLabelType = QCBOR_TYPE_INT64;
     cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+
+    cwt_items[CWT_CNF_INDEX].label.int64 = COSE_HEADER_PARAM_CWT_CNF;
+    cwt_items[CWT_CNF_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_CNF_INDEX].uDataType = QCBOR_TYPE_MAP;
 
     cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
     cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
@@ -459,6 +473,43 @@ namespace scitt::cose
       {
         parsed.cwt_claims.svn = cwt_items[CWT_SVN_INDEX].val.int64;
       }
+      if (cwt_items[CWT_CNF_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        QCBORDecode_EnterMapFromMapN(&ctx, COSE_HEADER_PARAM_CWT_CNF);
+        auto cnf_error = QCBORDecode_GetError(&ctx);
+        if (cnf_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(
+            fmt::format("Failed to decode cnf: {}", cnf_error));
+        }
+
+        parsed.cwt_claims.cnf = Confirmation{};
+
+        enum
+        {
+          CWT_CNF_KID_INDEX,
+          CWT_CNF_END_INDEX,
+        };
+        QCBORItem cnf_items[END_INDEX + 1];
+        cnf_items[CWT_CNF_KID_INDEX].label.int64 = COSE_HEADER_PARAM_KID;
+        cnf_items[CWT_CNF_KID_INDEX].uLabelType = QCBOR_TYPE_INT64;
+        cnf_items[CWT_CNF_KID_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+        QCBORDecode_GetItemsInMap(&ctx, cnf_items);
+        cnf_error = QCBORDecode_GetError(&ctx);
+        if (cnf_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(
+            fmt::format("Failed to decode cnf contents: {}", cnf_error));
+        }
+
+        if (cnf_items[CWT_CNF_KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+        {
+          parsed.cwt_claims.cnf->kid = cbor::as_vector(cnf_items[CWT_CNF_KID_INDEX].val.string);
+        }
+        QCBORDecode_ExitMap(&ctx);  
+      }
+
       QCBORDecode_ExitMap(&ctx);
     }
 
