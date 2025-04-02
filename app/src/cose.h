@@ -44,7 +44,8 @@ namespace scitt::cose
     COSE_HEADER_PARAM_X5CHAIN,
   };
 
-  // Temporary assignments from https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/09/
+  // Temporary assignments from
+  // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/09/
   // Section 2
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
@@ -505,9 +506,10 @@ namespace scitt::cose
 
         if (cnf_items[CWT_CNF_KID_INDEX].uDataType != QCBOR_TYPE_NONE)
         {
-          parsed.cwt_claims.cnf->kid = cbor::as_vector(cnf_items[CWT_CNF_KID_INDEX].val.string);
+          parsed.cwt_claims.cnf->kid =
+            cbor::as_vector(cnf_items[CWT_CNF_KID_INDEX].val.string);
         }
-        QCBORDecode_ExitMap(&ctx);  
+        QCBORDecode_ExitMap(&ctx);
       }
 
       QCBORDecode_ExitMap(&ctx);

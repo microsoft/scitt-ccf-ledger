@@ -128,9 +128,12 @@ namespace scitt
           auto cnf = ctx.new_obj();
           if (phdr.cwt_claims.cnf->kid.has_value())
           {
-            // kid is a bstr: https://www.rfc-editor.org/rfc/rfc8747.html#name-confirmation-claim
-            // map to ArrayBuffer in JS 
-            cnf.set("kid", ctx.new_array_buffer_copy(phdr.cwt_claims.cnf->kid.value()));
+            // kid is a bstr:
+            // https://www.rfc-editor.org/rfc/rfc8747.html#name-confirmation-claim
+            // map to ArrayBuffer in JS
+            cnf.set(
+              "kid",
+              ctx.new_array_buffer_copy(phdr.cwt_claims.cnf->kid.value()));
           }
           cwt.set("cnf", std::move(cnf));
         }
