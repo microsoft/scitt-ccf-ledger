@@ -138,6 +138,27 @@ namespace scitt
           cwt.set("cnf", std::move(cnf));
         }
         obj.set("cwt", std::move(cwt));
+
+        auto tss_map = ctx.new_obj();
+        if (phdr.tss_map.attestation.has_value())
+        {
+          tss_map.set(
+            "attestation",
+            ctx.new_array_buffer_copy(phdr.tss_map.attestation.value()));
+        }
+        if (phdr.tss_map.snp_endorsements.has_value())
+        {
+          tss_map.set(
+            "snp_endorsements",
+            ctx.new_array_buffer_copy(phdr.tss_map.snp_endorsements.value()));
+        }
+        if (phdr.tss_map.uvm_endorsements.has_value())
+        {
+          tss_map.set(
+            "uvm_endorsements",
+            ctx.new_array_buffer_copy(phdr.tss_map.uvm_endorsements.value()));
+        }
+        obj.set("tss", std::move(tss_map));
       }
 
       return obj;

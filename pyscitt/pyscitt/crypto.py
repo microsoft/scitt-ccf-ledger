@@ -578,8 +578,11 @@ def sign_statement(
     svn: Optional[int] = None,
     cwt: bool = False,
     uhdr: Optional[Dict[str, Any]] = None,
+    additional_phdr: Optional[Dict[Union[int, str], Any]] = None,
 ) -> bytes:
     headers: dict = {}
+    if additional_phdr is not None:
+        headers.update(additional_phdr)
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
 
@@ -588,7 +591,9 @@ def sign_statement(
     if signer.kid is not None:
         headers[pycose.headers.KID] = signer.kid.encode("utf-8")
     if cwt:
-        cwt_claims: Dict[Union[int, str], Union[int, str]] = {}
+        cwt_claims: Dict[Union[int, str], Union[int, str]] = headers.get(
+            CWTClaims.identifier, {}
+        )
         if signer.issuer is not None:
             cwt_claims[CWT_ISS] = signer.issuer
         if feed is not None:
@@ -620,6 +625,7 @@ def sign_json_statement(
     svn: Optional[int] = None,
     cwt: bool = False,
     uhdr: Optional[Dict[str, Any]] = None,
+    additional_phdr: Optional[Dict[Union[int, str], Any]] = None,
 ) -> bytes:
     return sign_statement(
         signer,
@@ -629,6 +635,7 @@ def sign_json_statement(
         svn=svn,
         cwt=cwt,
         uhdr=(uhdr or {}),
+        additional_phdr=(additional_phdr or {}),
     )
 
 
