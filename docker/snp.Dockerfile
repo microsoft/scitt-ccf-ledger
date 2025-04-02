@@ -4,6 +4,8 @@ ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 # remove all files that reference the ppa
 RUN find /etc/apt -type f -exec grep -Ril 'ppa.launchpad.net' {} \; -exec rm -f {} +
+RUN find /etc/apt -type f -exec grep -Ril 'apt.llvm.org' {} \; -exec rm -f {} +
+
 # Build CCF app
 COPY ./app /tmp/app/
 RUN mkdir /tmp/app-build && \
@@ -22,6 +24,11 @@ ARG CCF_VERSION
 WORKDIR /usr/src/app
 # remove all files that reference the ppa
 RUN find /etc/apt -type f -exec grep -Ril 'ppa.launchpad.net' {} \; -exec rm -f {} +
+RUN find /etc/apt -type f -exec grep -Ril 'apt.llvm.org' {} \; -exec rm -f {} +
+
+# Install ncat for logs forwarding
+RUN apt update && apt install -y ncat
+
 COPY --from=builder /usr/src/app/lib/libscitt.snp.so libscitt.snp.so
 COPY --from=builder /usr/src/app/share/VERSION VERSION
 WORKDIR /host/node
