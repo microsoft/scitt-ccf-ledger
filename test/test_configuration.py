@@ -474,11 +474,26 @@ return true;
     ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
-            snp_attestation.verifySnpAttestation(
+            var claims = snp_attestation.verifySnpAttestation(
                 phdr.tss.attestation,
                 phdr.tss.snp_endorsements,
                 phdr.tss.uvm_endorsements
             );
+
+            function toHexStr(arrayBuffer) {
+                var hex = "";
+                var bytes = new Uint8Array(arrayBuffer);
+                for (var i = 0; i < bytes.byteLength; i++) {
+                    hex += ('0' + bytes[i].toString(16)).slice(-2);
+                }
+                return hex;
+            }
+
+            const container_security_policy_digest = toHexStr(claims.attestation.host_data);
+            if (container_security_policy_digest !== "4f4448c67f3c8dfc8de8a5e37125d807dadcc41f06cf23f615dbd52eec777d10")
+            {
+                throw new Error("Invalid container security policy digest");
+            }
             return true;
         }
         """
