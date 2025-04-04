@@ -4,6 +4,7 @@
 import base64
 import json
 import os.path
+import time
 
 import pycose
 import pytest
@@ -415,12 +416,10 @@ return true;
         identity = cert_authority.create_identity(
             alg="ES256", kty="ec", add_eku="2.999"
         )
-        return crypto.sign_json_statement(
+        return crypto.sign_json_statement_cnf_kid(
             identity,
             {"foo": "bar"},
-            cwt=True,
             uhdr={"scitt.attestation": "testAttestation"},
-            additional_phdr={15: {8: {3: b"aKid"}}},
         )
 
     def test_cnf_kid(
@@ -428,7 +427,8 @@ return true;
     ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
-            if (ccf.bufToStr(phdr.cwt.cnf.kid) !== "aKid") {
+            // cnf.kid is authenticated against x5c[0]
+            if (phdr.cwt.cnf.kid.byteLength !== 32) {
                 return `Invalid cnf.kid`;
             } 
             return true;

@@ -639,6 +639,43 @@ def sign_json_statement(
     )
 
 
+def sign_json_statement_cnf_kid(
+    signer: Signer,
+    statement: Any,
+    content_type: str = "application/vnd.dummy+json",
+    feed: Optional[str] = None,
+    svn: Optional[int] = None,
+    uhdr: Optional[Dict[str, Any]] = None,
+    additional_phdr: Optional[Dict[Union[int, str], Any]] = None,
+) -> bytes:
+    headers: Dict[Any, Any] = {}
+    if additional_phdr is not None:
+        headers.update(additional_phdr)
+    headers[pycose.headers.Algorithm] = signer.algorithm
+    headers[pycose.headers.ContentType] = content_type
+
+    assert signer.x5c is not None
+    assert len(signer.x5c) > 0
+    headers[pycose.headers.X5chain] = [cert_pem_to_der(signer.x5c[0])]
+    signer_kid = hashlib.sha256(headers[pycose.headers.X5chain][0]).digest()
+
+    cwt_claims = headers.get(CWTClaims.identifier, {})
+    if signer.issuer is not None:
+        cwt_claims[CWT_ISS] = signer.issuer
+    if feed is not None:
+        cwt_claims[CWT_SUB] = feed
+    if svn is not None:
+        cwt_claims[CWT_SVN] = svn
+    # Add a cnf claim with the kid of the signer
+    cwt_claims[8] = {3: signer_kid}
+    headers[CWTClaims] = cwt_claims
+    msg = Sign1Message(
+        phdr=headers, payload=json.dumps(statement).encode("ascii"), uhdr=(uhdr or {})
+    )
+    msg.key = CoseKey.from_pem_private_key(signer.private_key)
+    return msg.encode(tag=True)
+
+
 def decode_p1363_signature(signature: bytes) -> Tuple[int, int]:
     """
     Decode an ECDSA signature from its IEEE P1363 encoding into its r and s
