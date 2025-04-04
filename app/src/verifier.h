@@ -99,6 +99,14 @@ namespace scitt::verifier
         phdr.cwt_claims.cnf->kid.value().size());
       auto cnf_kid = ccf::crypto::Sha256Hash::from_span(cnf_kid_raw);
 
+      auto x5chain_kid = ccf::crypto::Sha256Hash(
+        phdr.x5chain.value()[0].data(), phdr.x5chain.value()[0].size());
+      if (cnf_kid != x5chain_kid)
+      {
+        throw VerificationError(
+          "cnf.kid does not match the SHA256 digest of the x5chain[0]");
+      }
+
       // Verify the signature using the key of the leaf in the x5chain
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
