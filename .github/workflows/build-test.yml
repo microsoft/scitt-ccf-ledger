@@ -13,7 +13,7 @@ jobs:
   checks:
     name: Format and License Checks
     runs-on: ubuntu-latest
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc0
+    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.1
     steps:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Checkout repository
@@ -37,7 +37,7 @@ jobs:
             unit_tests_enabled: OFF
     runs-on: ${{ matrix.platform.nodes }}
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.0-rc0
+      image: ghcr.io/microsoft/ccf/app/dev/${{ matrix.platform.image }}:ccf-6.0.1
       options: ${{ matrix.platform.options }}
       env:
         # Helps to distinguish between CI and local builds.
@@ -68,7 +68,7 @@ jobs:
           sudo find /etc/apt/sources.list.d/ -type f -exec sed -i '/launchpad.net/d' {} \;
           sudo find /etc/apt/sources.list.d/ -type f -exec sed -i '/ppa.launchpad.net/d' {} \;
 
-      - run: apt-get update && apt-get install -y clang-tidy-15
+      - run: apt-get update && apt-get install -y clang-tidy-18
       - run: ./build.sh
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"

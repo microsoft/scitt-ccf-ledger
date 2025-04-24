@@ -121,13 +121,13 @@ Now it is clear that the contents of the policy (image layers) can be trusted in
 - Identify the expected CCF build image version by inspecting the Dockerfile used for building the binary:
 
     ```sh
-    $ cat docker/snp.Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=6.0.0-rc0
+    $ cat docker/Dockerfile | grep CCF_VERSION=
+    ARG CCF_VERSION=6.0.1
     ```
 - Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
 
     ```sh
-    $ export CCF_VERSION="6.0.0-rc0"
+    $ export CCF_VERSION="6.0.1"
     $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \

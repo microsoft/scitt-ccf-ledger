@@ -8,8 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if((NOT CMAKE_CXX_COMPILER)
    AND "$ENV{CXX}" STREQUAL ""
 )
-  set(CMAKE_CXX_COMPILER "clang++-11")
-  message("Set CMAKE_CXX_COMPILER to clang++-11")
+  set(CMAKE_CXX_COMPILER "clang++-18")
+  message("Set CMAKE_CXX_COMPILER to clang++-18")
 endif()
 
 project(scitt
@@ -22,7 +22,7 @@ option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(ccf_${COMPILE_TARGET} 6.0.0 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 6.0.1 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
@@ -37,7 +37,6 @@ configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 # add SAN options if CCF is built with them
 add_ccf_app(scitt
   SRCS src/main.cpp
-  INCLUDE_DIRS ${CCF_DIR}/include/ccf/_private
   INSTALL_LIBS ON
 )
 
@@ -54,7 +53,7 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-15" "clang-tidy" REQUIRED)
+  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-18" "clang-tidy" REQUIRED)
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
@@ -133,7 +132,6 @@ if (BUILD_TESTS)
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
     ${CCF_DIR}/include/3rdparty
-    ${CCF_DIR}/include/ccf/_private # public_key.h and verifier.h depend on crypto/openssl/openssl_wrappers.h
   )
 
   if (ENABLE_CLANG_TIDY)
