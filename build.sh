@@ -10,8 +10,8 @@ BUILD_TESTS=${BUILD_TESTS:-ON}
 ENABLE_CLANG_TIDY=${ENABLE_CLANG_TIDY:-OFF}
 NINJA_FLAGS=${NINJA_FLAGS:-}
 BUILD_CCF_FROM_SOURCE=${BUILD_CCF_FROM_SOURCE:-OFF}
-CC=${CC:-clang-15}
-CXX=${CXX:-clang++-15}
+CC=${CC:-clang-18}
+CXX=${CXX:-clang++-18}
 
 if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
@@ -19,7 +19,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.0-rc0"
+    CCF_SOURCE_VERSION="6.0.1"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
@@ -27,7 +27,7 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     pushd ccf-source/
     pushd getting_started/setup_vm/
     apt-get -y update
-    ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOURCE_VERSION" -e platform="$PLATFORM" -e clang_version=15
+    ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOURCE_VERSION" -e platform="$PLATFORM" -e clang_version=18
     popd
     echo "Compiling CCF $PLATFORM"
     mkdir -p build
@@ -43,8 +43,8 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
 fi
 
 if [ "$ENABLE_CLANG_TIDY" = "ON" ]; then
-    if ! command -v clang-tidy &> /dev/null && ! command -v clang-tidy-15 &> /dev/null; then
-        echo "clang-tidy could not be found, please install it, e.g. apt-get install -y clang-tidy-15"
+    if ! command -v clang-tidy &> /dev/null && ! command -v clang-tidy-18 &> /dev/null; then
+        echo "clang-tidy could not be found, please install it, e.g. apt-get install -y clang-tidy-18"
         exit 1
     fi
 fi
