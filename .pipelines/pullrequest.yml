@@ -15,7 +15,7 @@ variables:
   DEBIAN_FRONTEND: noninteractive # do not expect the user to provide answers to some commands
   SETUPTOOLS_USE_DISTUTILS: stdlib # python recommended fix for ubuntu 22.04
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
-  LinuxContainerImage: 'ghcr.io/microsoft/ccf/app/dev/virtual:ccf-${{ parameters.CCF_VERSION }}' # implicit default but otherwise could be set like => target: 'linux_build_container'
+  LinuxContainerImage: 'mcr.microsoft.com/azurelinux/base/core:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   # CodeQL settings to target the remote repository instead of this wrapper one
   Codeql.Language: 'cpp,python,javascript'
@@ -92,6 +92,8 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           - script: ./build.sh
             displayName: Build (local)
           # unit tests run only on virtual platform
@@ -102,7 +104,7 @@ extends:
             displayName: Run Functional Tests
 
       - job: test_virtual_docker
-        displayName: Build and test (Virtual) in Ubuntu with Docker 
+        displayName: Build and test (Virtual) with Docker 
         pool:
           type: linux
           isCustom: true
@@ -140,7 +142,7 @@ extends:
           PLATFORM: snp
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0 
-          LinuxContainerImage: 'ghcr.io/microsoft/ccf/app/dev/snp:ccf-${{ parameters.CCF_VERSION }}'
+          LinuxContainerImage: 'mcr.microsoft.com/azurelinux/base/core:3.0'
         steps:
           - checkout: SCITT
             path: s/
@@ -148,6 +150,8 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           - script: ./build.sh
             displayName: Build snp
             env:
@@ -155,7 +159,7 @@ extends:
               BUILD_TESTS: OFF
     
       - job: snp_docker_build
-        displayName: Build (SNP) in Ubuntu with Docker
+        displayName: Build (SNP) with Docker
         pool:
           type: linux
           isCustom: true

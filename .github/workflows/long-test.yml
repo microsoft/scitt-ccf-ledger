@@ -16,7 +16,7 @@ jobs:
     name: ASAN
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-long-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
-    container: ghcr.io/microsoft/ccf/ci/default:build-08-10-2024
+    container: mcr.microsoft.com/azurelinux/base/core:3.0
     env:
       # Fast unwinder only gives us partial stack traces in LeakSanitzer
       # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
       - name: Build
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./scripts/setup-env.sh
           ./build.sh
 
       - name: Unit tests
@@ -56,7 +56,7 @@ jobs:
     name: fuzz
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.1
+    container: mcr.microsoft.com/azurelinux/base/core:3.0
     env:
       PLATFORM: virtual
     steps:
@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0
       - name: Build
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./scripts/setup-env.sh
           ./build.sh
       
       - name: Fuzz tests

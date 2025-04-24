@@ -13,7 +13,7 @@ jobs:
     name: Performance Regression Tests
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.1
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
       env:
         PLATFORM: virtual
     steps:
@@ -26,6 +26,7 @@ jobs:
         run: chown -R $(id -u):$(id -g) $PWD          
       - name: Build and run virtual perf tests
         run: |
+          ./scripts/setup-env.sh
           ./build.sh
           ./run_functional_tests.sh -m bencher
         shell: bash
@@ -37,7 +38,7 @@ jobs:
           --project scitt-ccf-ledger \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch main \
-          --testbed ubuntu-20.04 \
+          --testbed ubuntu-latest \
           --adapter json \
           --err \
           --file bencher.json

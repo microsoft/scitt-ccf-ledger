@@ -26,7 +26,7 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     echo "Installing build dependencies for CCF"
     pushd ccf-source/
     pushd getting_started/setup_vm/
-    apt-get -y update
+    tdnf -y update
     ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOURCE_VERSION" -e platform="$PLATFORM" -e clang_version=18
     popd
     echo "Compiling CCF $PLATFORM"
@@ -34,17 +34,18 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     pushd build
     cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
     ninja
-    echo "Packaging CCF into deb"
-    cpack -D CPACK_DEBIAN_FILE_NAME=ccf_virtual_amd64.deb -G DEB
-    echo "Installing CCF deb"
-    dpkg -i "ccf_virtual_amd64.deb"
+    echo "Packaging CCF into rpm"
+    cpack -V -G RPM -D
+    RPM_PACKAGE=$(ls *devel*.rpm)
+    echo "Installing CCF RPM package"
+    tdnf install -y "$RPM_PACKAGE"
     popd
     popd
 fi
 
 if [ "$ENABLE_CLANG_TIDY" = "ON" ]; then
     if ! command -v clang-tidy &> /dev/null && ! command -v clang-tidy-18 &> /dev/null; then
-        echo "clang-tidy could not be found, please install it, e.g. apt-get install -y clang-tidy-18"
+        echo "clang-tidy could not be found, please install it, e.g. tdnf install -y clang-tools-extra-devel"
         exit 1
     fi
 fi

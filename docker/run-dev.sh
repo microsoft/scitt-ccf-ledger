@@ -4,9 +4,9 @@
 
 set -e
 
-if ! command -v python3 &> /dev/null && ! command -v python3 &> /dev/null; then
-    echo "Neither python3 nor python3 could be found."
-    echo "On Ubuntu, run: apt install python3 python3-venv or apt install python3 python3-venv"
+if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
+    echo "Neither python nor python3 could be found."
+    echo "On Azure Linux, run: tdnf install python3"
     exit 1
 fi
 
