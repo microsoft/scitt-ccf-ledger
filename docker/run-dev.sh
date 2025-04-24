@@ -4,9 +4,9 @@
 
 set -e
 
-if ! command -v python3.8 &> /dev/null && ! command -v python3.10 &> /dev/null; then
-    echo "Neither python3.8 nor python3.10 could be found."
-    echo "On Ubuntu, run: apt install python3.8 python3.8-venv or apt install python3.10 python3.10-venv"
+if ! command -v python3 &> /dev/null && ! command -v python3 &> /dev/null; then
+    echo "Neither python3 nor python3 could be found."
+    echo "On Ubuntu, run: apt install python3 python3-venv or apt install python3 python3-venv"
     exit 1
 fi
 
@@ -108,12 +108,12 @@ docker run --name "$CONTAINER_NAME" \
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    if command -v python3.10 &> /dev/null; then
-        PYTHON=python3.10
-    elif command -v python3.8 &> /dev/null; then
-        PYTHON=python3.8
+    if command -v python3 &> /dev/null; then
+        PYTHON=python3
+    elif command -v python3 &> /dev/null; then
+        PYTHON=python3
     else
-        echo "Neither python3.10 nor python3.8 is available. Please install one of them."
+        echo "Neither python3 nor python3 is available. Please install one of them."
         exit 1
     fi
     $PYTHON -m venv "venv"

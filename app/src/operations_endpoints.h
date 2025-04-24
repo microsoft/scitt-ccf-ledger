@@ -79,8 +79,7 @@ namespace scitt
             .operation_id = operation_id,
             .status = OperationStatus::Running,
             .entry_id = {},
-            .error = {}
-          };
+            .error = {}};
 
         case ccf::TxStatus::Invalid:
           // This state can arise even in a well-behaved client if the view
@@ -124,8 +123,7 @@ namespace scitt
           .operation_id = operation_id,
           .status = OperationStatus::Running,
           .entry_id = {},
-          .error = {}
-        };
+          .error = {}};
       }
       else if (auto it = operations_.find(operation_id.seqno);
                it != operations_.end())
@@ -456,8 +454,7 @@ namespace scitt
       .operation_id = {},
       .created_at = current_time.tv_sec,
       .context_digest = {},
-      .error = {}
-    });
+      .error = {}});
   }
 
   /**
@@ -495,8 +492,7 @@ namespace scitt
       .operation_id = tx_id,
       .status = OperationStatus::Running,
       .entry_id = {},
-      .error = {}
-    };
+      .error = {}};
 
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(

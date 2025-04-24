@@ -89,9 +89,8 @@ namespace
     LRU<int, int> cache(capacity);
     std::optional<std::pair<int, int>> last_culled;
 
-    cache.set_cull_callback([&last_culled](int k, int v) {
-      last_culled = {{k, v}};
-    });
+    cache.set_cull_callback(
+      [&last_culled](int k, int v) { last_culled = {{k, v}}; });
 
     for (size_t i = 0; i < insertions.size(); i++)
     {
