@@ -14,10 +14,5 @@
         "ms-python.python"
       ]
     }
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/docker-from-docker:1": {
-      "version": "20.10.8"
-    }
   }
 }

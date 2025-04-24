@@ -17,3 +17,4 @@ perf.json
 .mypy_cache/
 **/*.cose
 **/*.cbor
+demo-poc/
