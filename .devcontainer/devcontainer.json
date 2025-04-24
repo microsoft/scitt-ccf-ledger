@@ -11,7 +11,9 @@
     "vscode": {
       "extensions": [
         "ms-vscode.cpptools",
-        "ms-python.python"
+        "ms-python.python",
+        "github.copilot",
+        "eamodio.gitlens"
       ]
     }
   }
