@@ -85,8 +85,6 @@ extends:
           NINJA_FLAGS: -k 0
           CMAKE_BUILD_TYPE: Debug
         steps:
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
           # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
           - checkout: SCITT
             path: s/
@@ -94,6 +92,8 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           - script: ./build.sh
             displayName: Build (local)
           # unit tests run only on virtual platform
@@ -144,14 +144,14 @@ extends:
           NINJA_FLAGS: -k 0 
           LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0'
         steps:
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
           - checkout: SCITT
             path: s/
             submodules: recursive
             fetchTags: true
             fetchDepth: 0
             lfs: false
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           - script: ./build.sh
             displayName: Build snp
             env:

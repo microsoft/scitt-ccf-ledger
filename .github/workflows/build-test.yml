@@ -16,7 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
-      - run: ./scripts/setup-env.sh
+      - run: |
+          tdnf update -y
+          tdnf install -y build-essential
       - name: Checkout repository
         uses: actions/checkout@v4
       - run: ./scripts/ci-checks.sh
@@ -54,7 +56,8 @@ jobs:
     steps:
       - name: Setup environment
         run: |
-          ./scripts/setup-env.sh
+          tdnf update -y
+          tdnf install -y build-essential
       - name: Checkout repository with tags
         uses: actions/checkout@v4
         with:
@@ -64,6 +67,7 @@ jobs:
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
 
+      - run: ./scripts/setup-env.sh
       - run: ./build.sh
       - run: ./run_unit_tests.sh
         if: "${{ matrix.platform.name == 'virtual' }}"
