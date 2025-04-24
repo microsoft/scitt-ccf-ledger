@@ -12,6 +12,7 @@ RUN tdnf update -y && \
     build-essential \
     python3-pip \
     ca-certificates \
+    jq \
     clang-tools-extra-devel && \
     \
     # Install the CCF development package

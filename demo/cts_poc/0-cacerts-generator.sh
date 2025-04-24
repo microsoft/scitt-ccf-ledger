@@ -32,7 +32,7 @@ echo -e "Extracting root CA fingerprint";
 # find Root CA cert first
 awk -v outdir="$CACERT_OUTPUT_DIR" 'BEGIN {c=0} /-----BEGIN CERTIFICATE-----/ {c++} {print > outdir "/chain-cert-" c ".pem"}' "$CACERT_OUTPUT_DIR/cacert.pem"
 LAST_CERT_FILE=$(ls $CACERT_OUTPUT_DIR/chain-cert-*.pem | sort -V | tail -n 1)
-ROOT_CA_FINGERPRINT_SHA256=$(openssl x509 -in "$LAST_CERT_FILE" -noout -fingerprint -sha256 | sed 's/SHA256 Fingerprint=//g' | sed 's/://g')
+ROOT_CA_FINGERPRINT_SHA256=$(openssl x509 -in "$LAST_CERT_FILE" -noout -fingerprint -sha256 | sed 's/sha256 Fingerprint=//g' | sed 's/://g')
 echo -e "SHA256 fingerprint: $ROOT_CA_FINGERPRINT_SHA256";
 
 echo -e "Converting fingerprint to url safe base64";
