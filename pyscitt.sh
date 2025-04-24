@@ -6,7 +6,7 @@ set -e
 
 if [ ! -f "venv/bin/activate" ]; then
     echo "Setting up python virtual environment."
-    python3.8 -m venv "venv"
+    python3 -m venv "venv"
     source venv/bin/activate 
     pip install --disable-pip-version-check --quiet --editable ./pyscitt
 else

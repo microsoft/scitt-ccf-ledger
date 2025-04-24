@@ -15,7 +15,7 @@ SCITT_URL=${SCITT_URL:-"https://127.0.0.1:8000"}
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3 -m venv "venv"
 fi
 
 # Activate environment and install pyscitt local library

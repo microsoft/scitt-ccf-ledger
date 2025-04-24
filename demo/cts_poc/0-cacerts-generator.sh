@@ -14,7 +14,7 @@ CUSTOM_EKU="1.3.6.1.5.5.7.3.36"
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3 -m venv "venv"
 fi
 
 # Activate environment and install pyscitt local library and test dependencies
