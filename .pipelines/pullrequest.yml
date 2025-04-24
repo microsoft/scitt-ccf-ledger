@@ -15,7 +15,7 @@ variables:
   DEBIAN_FRONTEND: noninteractive # do not expect the user to provide answers to some commands
   SETUPTOOLS_USE_DISTUTILS: stdlib # python recommended fix for ubuntu 22.04
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
-  LinuxContainerImage: 'mcr.microsoft.com/azurelinux/base/core:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
+  LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   # CodeQL settings to target the remote repository instead of this wrapper one
   Codeql.Language: 'cpp,python,javascript'
@@ -85,6 +85,8 @@ extends:
           NINJA_FLAGS: -k 0
           CMAKE_BUILD_TYPE: Debug
         steps:
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
           - checkout: SCITT
             path: s/
@@ -92,8 +94,6 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
           - script: ./build.sh
             displayName: Build (local)
           # unit tests run only on virtual platform
@@ -142,16 +142,16 @@ extends:
           PLATFORM: snp
           CXXFLAGS: -ferror-limit=0
           NINJA_FLAGS: -k 0 
-          LinuxContainerImage: 'mcr.microsoft.com/azurelinux/base/core:3.0'
+          LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0'
         steps:
+          - script: ./scripts/setup-env.sh
+            displayName: Setup environment
           - checkout: SCITT
             path: s/
             submodules: recursive
             fetchTags: true
             fetchDepth: 0
             lfs: false
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
           - script: ./build.sh
             displayName: Build snp
             env:

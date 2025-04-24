@@ -17,6 +17,9 @@ jobs:
       env:
         PLATFORM: virtual
     steps:
+      - name: Setup environment
+        run: |
+          ./scripts/setup-env.sh
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -26,7 +29,6 @@ jobs:
         run: chown -R $(id -u):$(id -g) $PWD          
       - name: Build and run virtual perf tests
         run: |
-          ./scripts/setup-env.sh
           ./build.sh
           ./run_functional_tests.sh -m bencher
         shell: bash

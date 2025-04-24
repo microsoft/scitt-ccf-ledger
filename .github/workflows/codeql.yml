@@ -11,6 +11,7 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   analyze:
@@ -32,8 +33,11 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
+    - name: Setup environment
+      run: |
+        ./scripts/setup-env.sh
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
