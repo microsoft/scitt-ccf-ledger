@@ -12,6 +12,11 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
+  # use tag name for tags, commit hash for branches
+  ${{ if startsWith(Build.SourceBranch, 'refs/tags/') }}:
+    gitTagOrCommit: ${{ replace(Build.SourceBranch, 'refs/tags/', '') }}
+  ${{ if ne(startsWith(Build.SourceBranch, 'refs/tags/'), True) }}:
+    gitTagOrCommit: ${{ replace(Build.SourceBranch, '/', '-') }}
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
   LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
@@ -42,7 +47,7 @@ extends:
         sdl_sources:
           checkout_all_repos: true
       tsa:
-       enabled: false
+        enabled: false
       policheck:
         break: true
       codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
@@ -64,7 +69,14 @@ extends:
             major: '1'
             minor: '0'
             name: scitt-ccf-ledger
-
+        - script: |
+            echo "CCF_VERSION ${{ parameters.CCF_VERSION }}"
+            echo "SCITT_REF ${{ parameters.SCITT_REF }}"
+            echo "SCITT_CI ${{ variables.SCITT_CI }}"
+            echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
+            echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
+          displayName: Print variables
+    
     - stage: virtual_build
       jobs:
       - job: test_virtual
@@ -118,7 +130,7 @@ extends:
             submodules: recursive
             fetchTags: true
             fetchDepth: 0
-            lfs: false          
+            lfs: false
           - script: ./docker/build.sh
             displayName: Build virtual with Docker
           - template: .pipelines/ado_pipauth.yml@self
@@ -155,7 +167,7 @@ extends:
             env:
               PLATFORM: snp
               BUILD_TESTS: OFF
-    
+
       - job: snp_docker_build
         displayName: Build (SNP) with Docker
         pool:
@@ -178,3 +190,33 @@ extends:
             displayName: Build snp with Docker
             env:
               PLATFORM: snp
+
+    - stage: docker
+      dependsOn:
+      - setup
+      - virtual_build
+      - snp_build
+      jobs:
+      # Build one image per each platform and push it to the Prod ACR
+      
+      # Virtual
+      - template: .pipelines/obpdocker.yml@self
+        parameters:
+          Name: scitt_virtual
+          DisplayName: Build Virtual Docker image - Prod
+          AcrName: 'confidentialledgeracrstaging'
+          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
+          Platform: virtual
+          DockerFile: Dockerfile
+          AcrEndpoint: 'acl-acr-staging-2'
+      
+      # SNP
+      - template: .pipelines/obpdocker.yml@self
+        parameters:
+          Name: scitt_snp
+          DisplayName: Build SNP Docker image - Prod
+          AcrName: 'confidentialledgeracrstaging'
+          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
+          Platform: snp
+          DockerFile: Dockerfile
+          AcrEndpoint: 'acl-acr-staging-2'
