@@ -22,12 +22,13 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     CCF_SOURCE_VERSION="6.0.1"
     echo "Cloning CCF sources"
     rm -rf ccf-source
+    rm -rf /opt/h2spec
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
     echo "Installing build dependencies for CCF"
     pushd ccf-source/
     pushd scripts/
     tdnf -y update
-    ./scripts/setup-ci.sh
+    ./setup-ci.sh
     popd
     echo "Compiling CCF $PLATFORM"
     mkdir -p build
@@ -35,7 +36,7 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
     ninja
     echo "Packaging CCF into rpm"
-    cpack -V -G RPM -D
+    cpack -V -G RPM
     RPM_PACKAGE=$(ls *devel*.rpm)
     echo "Installing CCF RPM package"
     tdnf install -y "$RPM_PACKAGE"

@@ -106,7 +106,7 @@ extends:
         pool:
           type: linux
           isCustom: true
-          name: scitt-dc-pool
+          name: ado-scitt-pool
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: virtual
@@ -163,7 +163,7 @@ extends:
         pool:
           type: linux
           isCustom: true
-          name: scitt-dc-pool
+          name: ado-scitt-pool
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: snp

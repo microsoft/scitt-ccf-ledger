@@ -8,7 +8,7 @@ on:
 jobs:
   build_pyscitt:
     name: "Build pyscitt"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
 
     steps:
       - name: Checkout code
@@ -33,7 +33,7 @@ jobs:
 
   create_github_release:
     name: "Create GitHub Release"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     needs: build_pyscitt
 
     permissions:
@@ -60,7 +60,7 @@ jobs:
 
   publish_pyscitt_to_pypi:
     name: "Publish pyscitt to PyPI"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     needs: build_pyscitt
 
     permissions:

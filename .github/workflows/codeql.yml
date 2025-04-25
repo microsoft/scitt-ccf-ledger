@@ -16,7 +16,7 @@ jobs:
   analyze:
     name: Analyze
     
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     
     permissions:
