@@ -58,13 +58,13 @@ jobs:
       # save image to scitt-${PLATFORM}.tar and use it in the Ev2 release pipeline
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage
       - task: onebranch.pipeline.containercontrol@1
-        displayName: "Login to Prod ACR ${{ parameters.AcrName }}"
+        displayName: "Login to ACR ${{ parameters.AcrName }}"
         inputs:
             command: login
             acr_name: ${{ parameters.AcrName }}
             endpoint: ${{ parameters.AcrEndpoint }}
       - task: onebranch.pipeline.imagebuildinfo@1
-        displayName: 'Build and Push to PROD ACR ${{ parameters.AcrName }}'
+        displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
         retryCountOnTaskFailure: 1 
         inputs:
           repositoryName: scitt-${{ parameters.Platform }}

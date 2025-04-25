@@ -196,13 +196,13 @@ extends:
       - virtual_build
       - snp_build
       jobs:
-      # Build one image per each platform and push it to the Prod ACR
+      # Build one image per each platform and push it to ACR
       
       # Virtual
       - template: .pipelines/obpdocker.yml@self
         parameters:
           Name: scitt_virtual
-          DisplayName: Build Virtual Docker image - Prod
+          DisplayName: Build Virtual Docker image
           AcrName: 'confidentialledgeracrstaging'
           DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
           Platform: virtual
@@ -213,7 +213,7 @@ extends:
       - template: .pipelines/obpdocker.yml@self
         parameters:
           Name: scitt_snp
-          DisplayName: Build SNP Docker image - Prod
+          DisplayName: Build SNP Docker image
           AcrName: 'confidentialledgeracrstaging'
           DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
           Platform: snp
