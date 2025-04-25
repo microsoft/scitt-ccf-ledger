@@ -119,8 +119,6 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
           - script: ./docker/build.sh
             displayName: Build virtual with Docker
           - template: .pipelines/ado_pipauth.yml@self
