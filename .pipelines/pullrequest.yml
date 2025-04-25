@@ -13,10 +13,10 @@ parameters: # parameters are shown up in ADO UI in a build queue time
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
   # use tag name for tags, commit hash for branches
-  ${{ if startsWith(Build.SourceBranch, 'refs/tags/') }}:
-    gitTagOrCommit: ${{ replace(Build.SourceBranch, 'refs/tags/', '') }}
-  ${{ if ne(startsWith(Build.SourceBranch, 'refs/tags/'), True) }}:
-    gitTagOrCommit: ${{ replace(Build.SourceBranch, '/', '-') }}
+  ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
+    gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
+  ${{ if ne(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), True) }}:
+    gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], '/', '-') }}
   # Docker image which is used to build and test "virtual" platform https://aka.ms/obpipelines/containers
   LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
@@ -71,7 +71,6 @@ extends:
             name: scitt-ccf-ledger
         - script: |
             echo "CCF_VERSION ${{ parameters.CCF_VERSION }}"
-            echo "SCITT_REF ${{ parameters.SCITT_REF }}"
             echo "SCITT_CI ${{ variables.SCITT_CI }}"
             echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
             echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
