@@ -64,7 +64,7 @@ namespace scitt
    * Returns std::nullopt if the parameter is missing.
    */
   template <typename T>
-  static std::optional<T> get_query_value(
+  std::optional<T> get_query_value(
     const ccf::http::ParsedQuery& pq, std::string_view name)
   {
     SCITT_DEBUG("Get parameter value from parsed query");
@@ -162,10 +162,9 @@ namespace scitt
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
     {
       SCITT_DEBUG("Get transaction status");
-      ccf::ApiResult result;
 
       ccf::View view_of_seqno;
-      result = get_view_for_seqno_v1(seqno, view_of_seqno);
+      ccf::ApiResult result = get_view_for_seqno_v1(seqno, view_of_seqno);
       if (result == ccf::ApiResult::OK)
       {
         ccf::TxStatus status;

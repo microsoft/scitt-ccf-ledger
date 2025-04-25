@@ -90,14 +90,8 @@ if (BUILD_TESTS)
     GIT_TAG ff6af6fc683159deb51c543b065eba14dfcf329b
   )
 
-  # We use an explicit GetProperties and Populate rather than the more concise MakeAvailable,
-  # as this allows us to pass EXCLUDE_FROM_ALL to add_subdirectory. This stops RapidCheck
-  # files from being installed with scitt.
-  FetchContent_GetProperties(rapidcheck)
-  if(NOT rapidcheck_POPULATED)
-    FetchContent_Populate(rapidcheck)
-    add_subdirectory(${rapidcheck_SOURCE_DIR} ${rapidcheck_BINARY_DIR} EXCLUDE_FROM_ALL)
-  endif()
+  # Use FetchContent_MakeAvailable to simplify the inclusion of RapidCheck
+  FetchContent_MakeAvailable(rapidcheck)
 
   add_san(gtest)
   add_san(rapidcheck)
