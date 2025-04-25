@@ -13,6 +13,8 @@ RUN tdnf update -y && \
     python3-pip \
     ca-certificates \
     jq \
+    docker-cli \
+    docker-buildx \
     clang-tools-extra-devel && \
     \
     # Install the CCF development package

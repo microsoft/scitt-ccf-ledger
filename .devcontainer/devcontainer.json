@@ -7,6 +7,8 @@
   "remoteEnv": {
     "PLATFORM": "virtual"
   },
+  "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"],
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   "customizations": {
     "vscode": {
       "extensions": [

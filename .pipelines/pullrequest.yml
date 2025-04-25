@@ -119,11 +119,6 @@ extends:
             fetchTags: true
             fetchDepth: 0
             lfs: false          
-          - script: |
-              gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
-              sudo tdnf update -y
-              sudo tdnf install -y build-essential ca-certificates git
-            displayName: setup environment
           - script: ./docker/build.sh
             displayName: Build virtual with Docker
           - template: .pipelines/ado_pipauth.yml@self

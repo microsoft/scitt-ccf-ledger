@@ -104,6 +104,7 @@ docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
     -v "$VOLUME_NAME":/host \
+    --entrypoint "cchost" \
     "$DOCKER_TAG" --config /host/dev-config.json
 
 echo "Setting up python virtual environment."

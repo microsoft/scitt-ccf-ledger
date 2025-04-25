@@ -39,6 +39,7 @@ WORKDIR /usr/src/app
 RUN tdnf install -y \
     ca-certificates \
     tini \
+    tar \
     nc && \
     \
     # Use the CCF runtime package which contains the minimal dependencies for running CCF applications
