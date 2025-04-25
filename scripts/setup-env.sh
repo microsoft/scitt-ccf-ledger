@@ -15,6 +15,7 @@ tdnf install -y \
     python3-pip \
     ca-certificates \
     jq \
+    which \
     procps \
     clang-tools-extra-devel
 
