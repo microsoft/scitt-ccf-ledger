@@ -13,6 +13,7 @@ RUN tdnf update -y && \
     python3-pip \
     ca-certificates \
     jq \
+    procps \
     docker-cli \
     docker-buildx \
     clang-tools-extra-devel && \

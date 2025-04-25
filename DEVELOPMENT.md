@@ -41,8 +41,8 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
     ```sh
     wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.1.tar.gz
     tar xvzf ccf-6.0.1.tar.gz
-    cd CCF-ccf-6.0.1/getting_started/setup_vm/
-    ./run.sh app-dev.yml -e ccf_ver=6.0.1 -e platform=<virtual|snp> -e clang_version=18
+    cd CCF-ccf-6.0.1/scripts/
+    ./setup-dev.sh
     ```
 
 ## Compiling

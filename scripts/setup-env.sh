@@ -25,6 +25,7 @@ tdnf install -y ./ccf.rpm
 rm -f ccf.rpm
 
 # If GITHUB_WORKSPACE is set, add it to the git safe directory list
+# Otherwise, add all directories
 if [ -n "$GITHUB_WORKSPACE" ]; then
     git config --global --add safe.directory "$GITHUB_WORKSPACE"
 else

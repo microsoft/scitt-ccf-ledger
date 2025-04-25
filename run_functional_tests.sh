@@ -55,12 +55,12 @@ fi
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    if command -v python3 &> /dev/null; then
-        PYTHON=python3
+    if command -v python &> /dev/null; then
+        PYTHON=python
     elif command -v python3 &> /dev/null; then
         PYTHON=python3
     else
-        echo "Neither python3 nor python3 is available. Please install one of them."
+        echo "Neither python nor python3 is available. Please install one of them."
         exit 1
     fi
     $PYTHON -m venv "venv"
