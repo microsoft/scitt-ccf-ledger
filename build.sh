@@ -25,9 +25,9 @@ if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
     git clone --single-branch -b "ccf-${CCF_SOURCE_VERSION}" https://github.com/microsoft/CCF ccf-source
     echo "Installing build dependencies for CCF"
     pushd ccf-source/
-    pushd getting_started/setup_vm/
+    pushd scripts/
     tdnf -y update
-    ./run.sh ccf-dev.yml -e ccf_ver="$CCF_SOURCE_VERSION" -e platform="$PLATFORM" -e clang_version=18
+    ./scripts/setup-ci.sh
     popd
     echo "Compiling CCF $PLATFORM"
     mkdir -p build

@@ -24,4 +24,9 @@ curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/c
 tdnf install -y ./ccf.rpm
 rm -f ccf.rpm
 
-git config --global --add safe.directory "*"
+# If GITHUB_WORKSPACE is set, add it to the git safe directory list
+if [ -n "$GITHUB_WORKSPACE" ]; then
+    git config --global --add safe.directory "$GITHUB_WORKSPACE"
+else
+    git config --global --add safe.directory "*"
+fi
