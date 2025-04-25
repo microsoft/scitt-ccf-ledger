@@ -22,6 +22,7 @@ jobs:
           tdnf install -y build-essential ca-certificates git
       - name: Checkout repository
         uses: actions/checkout@v4
+      - run: ./scripts/setup-env.sh
       - run: ./scripts/ci-checks.sh
   build-test:
     name: CI
