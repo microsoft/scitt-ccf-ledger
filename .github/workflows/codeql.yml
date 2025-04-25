@@ -34,6 +34,7 @@ jobs:
     steps:
     - name: Setup environment
       run: |
+        gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
         tdnf update -y
         tdnf install -y build-essential
     - name: Checkout repository

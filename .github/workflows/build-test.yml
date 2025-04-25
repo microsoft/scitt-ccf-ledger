@@ -17,6 +17,7 @@ jobs:
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
       - run: |
+          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
           tdnf update -y
           tdnf install -y build-essential
       - name: Checkout repository
@@ -56,6 +57,7 @@ jobs:
     steps:
       - name: Setup environment
         run: |
+          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
           tdnf update -y
           tdnf install -y build-essential
       - name: Checkout repository with tags
