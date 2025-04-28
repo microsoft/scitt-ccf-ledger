@@ -22,7 +22,7 @@ fi
 
 echo -e "\nSetting up environment"
 if [ ! -f "venv/bin/activate" ]; then
-    python3 -m venv "venv"
+    python3.12 -m venv "venv"
 fi
 
 # Activate environment and install pyscitt local library

@@ -4,9 +4,9 @@
 
 set -e
 
-if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
-    echo "Neither python nor python3 could be found."
-    echo "On Azure Linux, run: tdnf install python3"
+if ! command -v python &> /dev/null && ! command -v python3.12 &> /dev/null; then
+    echo "Neither python nor python3.12 could be found."
+    echo "On Azure Linux, run: tdnf install python3.12"
     exit 1
 fi
 
@@ -111,10 +111,10 @@ echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
     if command -v python &> /dev/null; then
         PYTHON=python
-    elif command -v python3 &> /dev/null; then
-        PYTHON=python3
+    elif command -v python3.12 &> /dev/null; then
+        PYTHON=python3.12
     else
-        echo "Neither python nor python3 is available. Please install one of them."
+        echo "Neither python nor python3.12 is available. Please install one of them."
         exit 1
     fi
     $PYTHON -m venv "venv"

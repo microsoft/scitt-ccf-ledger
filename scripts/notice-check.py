@@ -21,7 +21,7 @@ PREFIXES = [
 ]
 PREFIXES.extend(
     os.linesep.join([f"#!{interpreter}"] + ["# " + line for line in NOTICE_LINES])
-    for interpreter in ["/bin/bash", "/usr/bin/env python3"]
+    for interpreter in ["/bin/bash", "/usr/bin/env python3.12"]
 )
 
 # Only files which match these patterns will be scanned.

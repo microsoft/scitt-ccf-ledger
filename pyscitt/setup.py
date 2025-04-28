@@ -23,7 +23,7 @@ setup(
     entry_points={
         "console_scripts": ["scitt=pyscitt.cli.main:main"],
     },
-    python_requires=">=3.8",
+    python_requires=">=3.12",
     install_requires=[
         "ccf==6.0.1",
         "cryptography==44.*",  # needs to match ccf
