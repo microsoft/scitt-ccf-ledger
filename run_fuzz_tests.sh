@@ -62,4 +62,4 @@ else
     wait_for_service "$CCF_URL/parameters"
 fi
 
-python.12 -m test.fuzz_api_submissions
+python3.12 -m test.fuzz_api_submissions
