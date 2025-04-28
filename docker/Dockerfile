@@ -9,7 +9,8 @@ ARG CCF_VERSION
 ARG CCF_PLATFORM
 ARG SCITT_VERSION_OVERRIDE
 
-RUN tdnf install -y ca-certificates && \
+RUN tdnf install -y \
+    ca-certificates-1:3.0.0-8.azl3 && \
     \
     # Download the CCF development package
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
@@ -37,10 +38,10 @@ ARG CCF_PLATFORM
 WORKDIR /usr/src/app
 
 RUN tdnf install -y \
-    ca-certificates \
-    tini \
-    tar \
-    nc && \
+    ca-certificates-1:3.0.0-8.azl3 \
+    tini-0.19.0-19.azl3 \
+    tar-1.35-1.azl3 \
+    nmap-ncat-7.95-2.azl3 && \
     \
     # Use the CCF runtime package which contains the minimal dependencies for running CCF applications
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
