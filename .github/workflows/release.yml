@@ -31,54 +31,54 @@ jobs:
           name: dist
           path: pyscitt/dist
 
-  create_github_release:
-    name: "Create GitHub Release"
-    runs-on: ubuntu-latest
-    needs: build_pyscitt
+  # create_github_release:
+  #   name: "Create GitHub Release"
+  #   runs-on: ubuntu-latest
+  #   needs: build_pyscitt
 
-    permissions:
-      contents: write # IMPORTANT: this permission is mandatory for creating a GitHub Release
+  #   permissions:
+  #     contents: write # IMPORTANT: this permission is mandatory for creating a GitHub Release
     
-    steps:
+  #   steps:
 
-      - name: Checkout code
-        uses: actions/checkout@v4
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Download pyscitt dist folder
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: pyscitt/dist
+  #     - name: Download pyscitt dist folder
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: pyscitt/dist
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            pyscitt/dist/*.whl
-            pyscitt/dist/*.tar.gz
-            LICENSE.txt
+  #     - name: Create GitHub Release
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         files: |
+  #           pyscitt/dist/*.whl
+  #           pyscitt/dist/*.tar.gz
+  #           LICENSE.txt
 
-  publish_pyscitt_to_pypi:
-    name: "Publish pyscitt to PyPI"
-    runs-on: ubuntu-latest
-    needs: build_pyscitt
+  # publish_pyscitt_to_pypi:
+  #   name: "Publish pyscitt to PyPI"
+  #   runs-on: ubuntu-latest
+  #   needs: build_pyscitt
 
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing to PyPi
+  #   permissions:
+  #     id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing to PyPi
     
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pyscitt
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/pyscitt
       
-    steps:
-      - name: Download pyscitt dist folder
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: pyscitt/dist
+  #   steps:
+  #     - name: Download pyscitt dist folder
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: pyscitt/dist
 
-      - name: Publish pyscitt to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: pyscitt/dist
-          skip-existing: true
+  #     - name: Publish pyscitt to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         packages-dir: pyscitt/dist
+  #         skip-existing: true
