@@ -23,7 +23,7 @@ wait_for_service() {
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    python3.8 -m venv "venv"
+    python3.12 -m venv "venv"
 fi
 source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt
@@ -62,4 +62,4 @@ else
     wait_for_service "$CCF_URL/parameters"
 fi
 
-python -m test.fuzz_api_submissions
+python3.12 -m test.fuzz_api_submissions

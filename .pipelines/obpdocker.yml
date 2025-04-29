@@ -1,0 +1,83 @@
+parameters:
+  - name: Name
+    type: string
+  - name: DisplayName
+    type: string
+  - name: DockerTag
+    type: string
+    default: 'unset'
+  - name: Platform
+    type: string
+  - name: DockerFile
+    type: string
+  - name: AcrName
+    type: string
+  - name: AcrEndpoint
+    type: string
+
+jobs:
+  - job: ${{ parameters.Name }}
+    displayName: ${{ parameters.DisplayName }}
+    pool:
+      type: linux
+    variables:
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
+      PLATFORM: ${{ parameters.Platform }}
+      # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage#examples
+      ob_git_checkout: true 
+      OB_build_container: true
+
+    steps:
+      - script: |
+          echo "Name: ${{ parameters.Name }}"
+          echo "DisplayName: ${{ parameters.DisplayName }}"
+          echo "DockerTag: ${{ parameters.DockerTag }}"
+          echo "AcrName: ${{ parameters.AcrName }}"
+          echo "AcrEndpoint: ${{ parameters.AcrEndpoint }}"
+        displayName: Print job parameters
+
+      # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
+      - checkout: SCITT
+        path: s/
+        submodules: recursive
+        fetchTags: true
+        fetchDepth: 0
+        lfs: false
+
+      # copy sources to the output dir and it will be then used by the docker build task
+      - task: CopyFiles@2
+        displayName: Prepare sources for docker build
+        inputs:
+          SourceFolder: $(Build.SourcesDirectory)
+          Contents: |
+              **/*
+              !env/**/*
+          TargetFolder: '$(Build.SourcesDirectory)/out'
+
+      # use custom docker task based on parameters in docker/build.sh
+      # save image to scitt-${PLATFORM}.tar and use it in the Ev2 release pipeline
+      # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage
+      - task: onebranch.pipeline.containercontrol@1
+        displayName: "Login to ACR ${{ parameters.AcrName }}"
+        inputs:
+            command: login
+            acr_name: ${{ parameters.AcrName }}
+            endpoint: ${{ parameters.AcrEndpoint }}
+      - task: onebranch.pipeline.imagebuildinfo@1
+        displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
+        retryCountOnTaskFailure: 1 
+        inputs:
+          repositoryName: scitt-${{ parameters.Platform }}
+          dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
+          dockerFileContextPath: artifacts
+          registry: ${{ parameters.AcrName }}.azurecr.io
+          saveImageToPath: ${{ parameters.Name }}.tar
+          buildkit: 1
+          build_tag: ${{ parameters.DockerTag }}
+          enable_network: true
+          enable_cache: false
+          enable_acr_push: true 
+          enable_service_tree_acr_path: false
+          arguments: --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}" --build-arg CCF_PLATFORM="${{ parameters.Platform }}"
+          endpoint: ${{ parameters.AcrEndpoint }}
+          

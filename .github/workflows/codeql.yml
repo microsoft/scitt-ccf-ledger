@@ -16,8 +16,8 @@ jobs:
   analyze:
     name: Analyze
     
-    runs-on: ubuntu-latest
-    container: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc0
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    container: mcr.microsoft.com/azurelinux/base/core:3.0
     
     permissions:
       actions: read
@@ -32,8 +32,13 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
+    - name: Setup environment
+      run: |
+        gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
+        tdnf update -y
+        tdnf install -y build-essential ca-certificates git
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -41,9 +46,12 @@ jobs:
     - name: Work around git safe.directory in container
       run: chown -R $(id -u):$(id -g) $PWD
 
+    - name: Setup dependencies
+      run: ./scripts/setup-env.sh
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         queries: security-extended
@@ -73,6 +81,6 @@ jobs:
         CMAKE_BUILD_TYPE=Debug PLATFORM=virtual BUILD_TESTS=OFF ./build.sh
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"

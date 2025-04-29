@@ -26,7 +26,7 @@ echo "-- Python dependencies"
 # Virtual Environment w/ dependencies for Python steps
 if [ ! -f "scripts/venv/bin/activate" ]
 then
-  python3.8 -m venv scripts/venv
+  python3.12 -m venv scripts/venv
 fi
 
 source scripts/venv/bin/activate
@@ -52,4 +52,4 @@ else
 fi
 
 echo "-- Copyright notices headers"
-python3.8 "$SCRIPT_DIR"/notice-check.py
+python3.12 "$SCRIPT_DIR"/notice-check.py

@@ -7,12 +7,10 @@ set -e
 PLATFORM=${PLATFORM:-snp}
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
 DOCKER_TAG=${DOCKER_TAG:-"scitt-$PLATFORM"}
+DOCKERFILE="Dockerfile"
 
-if [ "$PLATFORM" = "virtual" ]; then
-    DOCKERFILE="virtual.Dockerfile"
-elif [ "$PLATFORM" = "snp" ]; then
-    DOCKERFILE="snp.Dockerfile"
-else
+# If platform is not snp or virtual, exit
+if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
     echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
     exit 1
 fi
@@ -26,6 +24,7 @@ DOCKER_BUILDKIT=1 docker build \
     -t "$DOCKER_TAG" \
     -f docker/$DOCKERFILE \
     --build-arg SCITT_VERSION_OVERRIDE="$SCITT_VERSION_OVERRIDE" \
+    --build-arg CCF_PLATFORM="$PLATFORM" \
     .
 
 echo "Inspecting Docker image $DOCKER_TAG"

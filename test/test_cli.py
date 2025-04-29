@@ -130,7 +130,7 @@ def test_registration_info(run, tmp_path: Path):
     binary_path.write_bytes(binary_data)
 
     # This is a Grinning Face emoji
-    unicode_data = "\U0001F600"
+    unicode_data = "\U0001f600"
     unicode_path = tmp_path / "unicode.txt"
     unicode_path.write_text(unicode_data, encoding="utf-8")
 

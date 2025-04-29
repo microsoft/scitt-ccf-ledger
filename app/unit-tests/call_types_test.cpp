@@ -18,33 +18,6 @@
 using namespace testing;
 using namespace scitt;
 
-// Utility function to convert a vector of bytes to a hex string
-static std::string to_hex_string(const std::vector<std::uint8_t>& data)
-{
-  std::ostringstream oss;
-  for (auto byte : data)
-  {
-    oss << std::hex << std::setw(2) << std::setfill('0')
-        << static_cast<int>(byte);
-  }
-  return oss.str();
-}
-
-// Utility function to convert hex string to a vector of bytes
-static const int HEX_BASE = 16;
-static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
-{
-  std::vector<std::uint8_t> bytes;
-  for (size_t i = 0; i < hex.length(); i += 2)
-  {
-    const std::string byteString = hex.substr(i, 2);
-    char byte =
-      static_cast<char>(strtol(byteString.c_str(), nullptr, HEX_BASE));
-    bytes.push_back(static_cast<std::uint8_t>(byte));
-  }
-  return bytes;
-}
-
 // The error should look like the one in RFC, OperationId is not shown in RFC
 // but we always render it:
 // {
@@ -65,6 +38,33 @@ const std::string expected_error_hex =
 
 namespace
 {
+  // Utility function to convert a vector of bytes to a hex string
+  std::string to_hex_string(const std::vector<std::uint8_t>& data)
+  {
+    std::ostringstream oss;
+    for (auto byte : data)
+    {
+      oss << std::hex << std::setw(2) << std::setfill('0')
+          << static_cast<int>(byte);
+    }
+    return oss.str();
+  }
+
+  // Utility function to convert hex string to a vector of bytes
+  const int HEX_BASE = 16;
+  std::vector<std::uint8_t> from_hex_string(const std::string& hex)
+  {
+    std::vector<std::uint8_t> bytes;
+    for (size_t i = 0; i < hex.length(); i += 2)
+    {
+      const std::string byteString = hex.substr(i, 2);
+      char byte =
+        static_cast<char>(strtol(byteString.c_str(), nullptr, HEX_BASE));
+      bytes.push_back(static_cast<std::uint8_t>(byte));
+    }
+    return bytes;
+  }
+
   TEST(UtilityFunctionTest, bytesToHexToBytes)
   {
     const std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};

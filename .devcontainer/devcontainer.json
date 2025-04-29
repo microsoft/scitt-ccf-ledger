@@ -7,17 +7,16 @@
   "remoteEnv": {
     "PLATFORM": "virtual"
   },
+  "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"],
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-vscode.cpptools",
-        "ms-python.python"
+        "ms-python.python",
+        "github.copilot",
+        "eamodio.gitlens"
       ]
-    }
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/docker-from-docker:1": {
-      "version": "20.10.8"
     }
   }
 }

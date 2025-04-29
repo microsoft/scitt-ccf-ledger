@@ -11,12 +11,17 @@ on:
 jobs:
   run_benchmarks:
     name: Performance Regression Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container:
-      image: ghcr.io/microsoft/ccf/app/dev/virtual:ccf-6.0.0-rc0
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
       env:
         PLATFORM: virtual
     steps:
+      - name: Setup environment
+        run: |
+          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
+          tdnf update -y
+          tdnf install -y build-essential ca-certificates git
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -26,6 +31,7 @@ jobs:
         run: chown -R $(id -u):$(id -g) $PWD          
       - name: Build and run virtual perf tests
         run: |
+          ./scripts/setup-env.sh
           ./build.sh
           ./run_functional_tests.sh -m bencher
         shell: bash
@@ -37,7 +43,7 @@ jobs:
           --project scitt-ccf-ledger \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch main \
-          --testbed ubuntu-20.04 \
+          --testbed gha-scitt-pool \
           --adapter json \
           --err \
           --file bencher.json

@@ -99,7 +99,7 @@ def test_fuzz_api_submissions_random_payload():
 
     # Add a fuzzable payload
     with boofuzz.s_block("Body-Content"):
-        boofuzz.s_delim(b"\xD2", name="COSE tag")
+        boofuzz.s_delim(b"\xd2", name="COSE tag")
         boofuzz.s_delim(b"\x84", name="CBOR array tag")
         boofuzz.s_string(
             "Body content ...", name="Body-Content-Value", max_len=(1 << 20 - 2)
