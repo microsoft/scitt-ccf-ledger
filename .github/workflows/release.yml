@@ -8,14 +8,14 @@ on:
 jobs:
   build_pyscitt:
     name: "Build pyscitt"
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       
@@ -33,7 +33,7 @@ jobs:
 
   create_github_release:
     name: "Create GitHub Release"
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: ubuntu-latest
     needs: build_pyscitt
 
     permissions:
@@ -60,7 +60,7 @@ jobs:
 
   publish_pyscitt_to_pypi:
     name: "Publish pyscitt to PyPI"
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: ubuntu-latest
     needs: build_pyscitt
 
     permissions:
