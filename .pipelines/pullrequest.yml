@@ -204,7 +204,7 @@ extends:
           Name: scitt_virtual
           DisplayName: Build Virtual Docker image
           AcrName: 'confidentialledgeracrstaging'
-          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
+          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)_pr
           Platform: virtual
           DockerFile: Dockerfile
           AcrEndpoint: 'acl-acr-staging-2'
@@ -215,7 +215,7 @@ extends:
           Name: scitt_snp
           DisplayName: Build SNP Docker image
           AcrName: 'confidentialledgeracrstaging'
-          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
+          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)_pr
           Platform: snp
           DockerFile: Dockerfile
           AcrEndpoint: 'acl-acr-staging-2'
