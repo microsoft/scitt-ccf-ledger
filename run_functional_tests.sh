@@ -66,9 +66,10 @@ if [ ! -f "venv/bin/activate" ]; then
     $PYTHON -m venv "venv"
 fi
 source venv/bin/activate
-pip install --disable-pip-version-check -q -e ./pyscitt
-pip install --disable-pip-version-check -q wheel
-pip install --disable-pip-version-check -q -r test/requirements.txt
+echo "Pip index URL: $PIP_INDEX_URL"
+pip install --disable-pip-version-check -e ./pyscitt
+pip install --disable-pip-version-check wheel
+pip install --disable-pip-version-check -r test/requirements.txt
 
 # Enable performance tests if the variable is set
 if [ -n "$ENABLE_PERF_TESTS" ]; then
