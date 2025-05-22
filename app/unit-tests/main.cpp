@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-
 #include <ccf/ds/logger.h>
 #include <gmock/gmock.h>
 
