@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include <cstdint>
 #include <cstdlib>
 #include <iomanip> // setw
 #include <string>
 #include <vector>
-#include <cstdint>
 
 namespace testutils
 {
@@ -26,13 +26,17 @@ namespace testutils
   static std::vector<uint8_t> from_hex_string(const std::string& hex)
   {
     // Check if string length is even
-    if (hex.length() % 2 != 0) {
-      throw std::invalid_argument("Hex string must have an even number of characters");
+    if (hex.length() % 2 != 0)
+    {
+      throw std::invalid_argument(
+        "Hex string must have an even number of characters");
     }
 
     // Validate all characters are valid hex digits
-    for (char c : hex) {
-      if (!std::isxdigit(c)) {
+    for (char c : hex)
+    {
+      if (!std::isxdigit(c))
+      {
         throw std::invalid_argument("Invalid hex character in string");
       }
     }
@@ -44,7 +48,8 @@ namespace testutils
       const std::string byteString = hex.substr(i, 2);
       char* end_ptr = nullptr;
       const long value = std::strtol(byteString.c_str(), &end_ptr, HEX_BASE);
-      if (*end_ptr != '\0' || value < 0 || value > 255) {
+      if (*end_ptr != '\0' || value < 0 || value > 255)
+      {
         throw std::invalid_argument("Invalid hex value: " + byteString);
       }
       bytes.push_back(static_cast<uint8_t>(value));
