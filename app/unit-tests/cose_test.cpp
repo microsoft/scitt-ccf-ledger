@@ -3,7 +3,7 @@
 
 #include "cose.h"
 
-#include "testutils.cpp"
+#include "testutils.h"
 
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
@@ -60,7 +60,17 @@ namespace
     cose::ProtectedHeader phdr;
     cose::UnprotectedHeader uhdr;
     std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
+
+    if (!phdr.alg.has_value())
+    {
+      throw std::runtime_error("Algorithm not found in protected header");
+    }
     EXPECT_EQ(phdr.alg.value(), -7);
+
+    if (!phdr.cwt_claims.iss.has_value())
+    {
+      throw std::runtime_error("Issuer not found in protected header");
+    }
     EXPECT_EQ(
       phdr.cwt_claims.iss.value(),
       "did:x509:0:sha256:jGUeSuDcpdma5bXmdgAvzhAu3jbV5-jAuS8IX8XcokE::subject:"

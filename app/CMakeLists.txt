@@ -104,7 +104,6 @@ if (BUILD_TESTS)
   list(APPEND UNIT_TEST_SOURCES ${UNIT_TEST_SOURCES_RECURSE})
   add_executable(
     unit_tests
-    unit-tests/testutils.cpp
     unit-tests/main.cpp
     ${UNIT_TEST_SOURCES}
   )

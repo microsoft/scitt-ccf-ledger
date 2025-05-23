@@ -4,7 +4,7 @@
 #include "call_types.h"
 
 #include "cbor.h"
-#include "testutils.cpp"
+#include "testutils.h"
 
 #include <cstdlib>
 #include <gmock/gmock.h>
