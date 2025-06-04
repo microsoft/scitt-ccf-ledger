@@ -6,7 +6,12 @@ from typing import Optional
 
 from pycose.messages import Sign1Message
 
-from ..verify import StaticTrustStore, DynamicTrustStore, verify_transparent_statement
+from ..verify import (
+    DynamicTrustStore,
+    StaticTrustStore,
+    TrustStore,
+    verify_transparent_statement,
+)
 
 
 def strip_uhdr(cose: bytes) -> bytes:
@@ -24,6 +29,7 @@ def validate_transparent_statement(
 ):
     transparent_statment_bytes = statement.read_bytes()
     signed_statement = strip_uhdr(transparent_statment_bytes)
+    service_trust_store: TrustStore
     if service_trust_store_path is not None:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
     else:

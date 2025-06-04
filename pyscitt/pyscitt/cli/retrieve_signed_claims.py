@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Optional
 
 from ..client import Client
-from ..verify import StaticTrustStore, DynamicTrustStore, verify_transparent_statement
+from ..verify import (
+    DynamicTrustStore,
+    StaticTrustStore,
+    TrustStore,
+    verify_transparent_statement,
+)
 from .client_arguments import add_client_arguments, create_client
 
 
@@ -19,6 +24,7 @@ def retrieve_signed_claimsets(
 ):
     base_path.mkdir(parents=True, exist_ok=True)
 
+    service_trust_store: TrustStore
     if service_trust_store_path:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
     else:

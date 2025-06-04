@@ -13,12 +13,12 @@ from loguru import logger as LOG
 from pycose.messages import CoseMessage
 
 from pyscitt import crypto
-from pyscitt.client import Client
 from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_END,
     SCITT_CONSTITUTION_MARKER_START,
 )
 from pyscitt.cli.main import main
+from pyscitt.client import Client
 from pyscitt.governance import ProposalNotAccepted
 
 from .infra.assertions import service_error
@@ -227,8 +227,7 @@ def test_submit_and_validate(tmp_path, client: Client, configure_service):
         "pretty-receipt",
         tmp_path / "transparent_statement.cose",
     )
-    
-    
+
 
 @pytest.mark.isolated_test
 class TestUpdateScittConstitution:
