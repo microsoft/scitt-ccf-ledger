@@ -13,6 +13,7 @@ from loguru import logger as LOG
 from pycose.messages import CoseMessage
 
 from pyscitt import crypto
+from pyscitt.client import Client
 from pyscitt.cli.governance import (
     SCITT_CONSTITUTION_MARKER_END,
     SCITT_CONSTITUTION_MARKER_START,
@@ -203,6 +204,31 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     claims = json.loads(data)
     assert claims.get("foo") == "bar"
 
+
+def test_submit_and_validate(tmp_path, client: Client, configure_service):
+    allow_all_policy_script = "export function apply(phdr) {return true}"
+    configure_service({"policy": {"policyScript": allow_all_policy_script}})
+
+    with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+        cts_hashv_cwtclaims = f.read()
+
+    statement = client.submit_signed_statement_and_wait(
+        cts_hashv_cwtclaims
+    ).response_bytes
+
+    (tmp_path / "transparent_statement.cose").write_bytes(statement)
+
+    run(
+        "validate",
+        tmp_path / "transparent_statement.cose",
+    )
+
+    run(
+        "pretty-receipt",
+        tmp_path / "transparent_statement.cose",
+    )
+    
+    
 
 @pytest.mark.isolated_test
 class TestUpdateScittConstitution:

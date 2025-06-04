@@ -2,17 +2,17 @@
 # Licensed under the MIT License.
 
 import base64
+import httpx
+import ssl
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import cbor2
 import ccf.cose
-import httpx
-import pycose
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
@@ -28,7 +28,6 @@ from pycose.messages import Sign1Message
 
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims
-from .receipt import Receipt
 
 
 @dataclass
@@ -166,27 +165,20 @@ class DynamicTrustStore(TrustStore):
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
     """
+    def __init__(self, client = None):
+        if client is None:
+            client = DynamicTrustStoreClient()
+        self.client = client
 
-    services: Dict[str, ServiceParameters] = {}
-
-    def __init__(self, getter):
-        self.services = {}
-        self.getter = getter
+    @property
+    def services(self):
+        raise NotImplementedError()
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         cwt = parsed.phdr[CWTClaims]
         issuer = cwt[CWT_ISS]
-
-        transparency_configuration = self.getter(
-            f"https://{issuer}/.well-known/transparency-configuration",
-            headers={"Accept": "application/cbor"},
-        )
-        transparency_configuration.raise_for_status()
-        config_response = cbor2.loads(transparency_configuration.content)
-
-        jwks_uri = config_response["jwks_uri"]
-        jwk_set = self.getter(jwks_uri)
+        jwk_set = self.client.get_jwks(issuer)
         jwk_set.raise_for_status()
         jwks = jwk_set.json()["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
@@ -194,3 +186,75 @@ class DynamicTrustStore(TrustStore):
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
         key = load_pem_public_key(pem_key, default_backend())
         return key
+
+
+class DynamicTrustStoreClient:
+    """
+    A client for retrieving public keys from a transparency service identified by an issuer.
+    """
+    clients: Dict[str, httpx.Client] = {}
+
+    def __init__(self):
+        self.retries = 5
+
+    def _client(self, cadata: Optional[str] = None) -> httpx.Client:
+        if cadata:
+            ssl_context = ssl.create_default_context()
+            ssl_context.load_verify_locations(cadata=cadata)
+            transport = httpx.HTTPTransport(verify=ssl_context, retries=self.retries)
+        else:
+            transport = httpx.HTTPTransport(retries=self.retries)
+        return httpx.Client(transport=transport)
+    
+    def _client_for_issuer(self, issuer: str) -> httpx.Client:
+        """
+        Lightweight caching of clients based on issuer.
+        """
+        if issuer not in self.clients:
+            if self.is_confidential_ledger_issuer(issuer):
+                pem = self.get_confidential_ledger_tls_pem(issuer)
+                self.clients[issuer] = self._client(cadata=pem)
+            else:
+                self.clients[issuer] = self._client()
+        return self.clients[issuer]
+
+    def get_jwks(self, issuer: str) -> httpx.Response:
+        """
+        Retrieve the JWKS from the issuer.
+        """
+        transparency_configuration = self.get_configuration(issuer)
+        transparency_configuration.raise_for_status()
+        config_response = cbor2.loads(transparency_configuration.content)
+        jwks_uri = config_response["jwks_uri"]
+        return self._client_for_issuer(issuer).get(jwks_uri, headers={"Accept": "application/json"})
+
+    def get_configuration(self, issuer: str):
+        """
+        Retrieve the transparency configuration from the issuer.
+        """
+        if not issuer:
+            raise ValueError("Issuer cannot be empty")
+
+        return self._client_for_issuer(issuer).get("https://" + issuer + "/.well-known/transparency-configuration", headers={"Accept": "application/cbor"})
+    
+    def is_confidential_ledger_issuer(self, issuer: str) -> bool:
+        return issuer.endswith(".confidential-ledger.azure.com")
+
+    def get_confidential_ledger_tls_pem(self, issuer: str):
+        """
+        Retrieve the TLS certificate for a Confidential Ledger issuer.
+        """
+        if not self.is_confidential_ledger_issuer(issuer):
+            raise ValueError("Issuer is not a Confidential Ledger issuer")
+        service_name = issuer.split(".")[0]
+        response = self._client().get(f"https://identity.confidential-ledger.core.azure.com/ledgerIdentity/{service_name}", headers={"Accept": "application/json"})
+        response.raise_for_status()
+        ledger_identity = response.json()
+        if "ledgerTlsCertificate" not in ledger_identity:
+            raise ValueError("TLS certificate not found in ledger identity")
+        if not isinstance(ledger_identity["ledgerTlsCertificate"], str):
+            raise ValueError("TLS certificate is not a string")
+        if "-----BEGIN CERTIFICATE-----" not in ledger_identity["ledgerTlsCertificate"]:
+            raise ValueError("TLS certificate is not in PEM format")
+        return ledger_identity["ledgerTlsCertificate"]
+        

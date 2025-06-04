@@ -6,7 +6,6 @@ from typing import Optional
 
 from pycose.messages import Sign1Message
 
-from ..client import Client
 from ..verify import StaticTrustStore, DynamicTrustStore, verify_transparent_statement
 
 
@@ -28,8 +27,7 @@ def validate_transparent_statement(
     if service_trust_store_path is not None:
         service_trust_store = StaticTrustStore.load(service_trust_store_path)
     else:
-        client = Client()
-        service_trust_store = DynamicTrustStore(client.get)
+        service_trust_store = DynamicTrustStore()
 
     verify_transparent_statement(
         transparent_statment_bytes, service_trust_store, signed_statement
