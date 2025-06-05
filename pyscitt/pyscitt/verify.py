@@ -196,10 +196,15 @@ class DynamicTrustStoreClient:
 
     clients: Dict[str, httpx.Client] = {}
 
-    def __init__(self):
+    def __init__(self, forced_httpclient: Optional[httpx.Client] = None):
         self.retries = 5
+        # forced client is used in testing
+        self._forced_httpclient = forced_httpclient
 
     def _client(self, cadata: Optional[str] = None) -> httpx.Client:
+        if self._forced_httpclient is not None:
+            return self._forced_httpclient
+
         if cadata:
             ssl_context = ssl.create_default_context()
             ssl_context.load_verify_locations(cadata=cadata)
