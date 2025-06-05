@@ -12,7 +12,11 @@ from jwcrypto import jwk
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from pyscitt.verify import DynamicTrustStore, DynamicTrustStoreClient, verify_transparent_statement
+from pyscitt.verify import (
+    DynamicTrustStore,
+    DynamicTrustStoreClient,
+    verify_transparent_statement,
+)
 
 from .infra.assertions import service_error
 
@@ -88,7 +92,9 @@ def test_make_signed_statement_transparent(
     ).response_bytes
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
-    dynamic_trust_store = DynamicTrustStore(client=DynamicTrustStoreClient(forced_httpclient=client.session))
+    dynamic_trust_store = DynamicTrustStore(
+        client=DynamicTrustStoreClient(forced_httpclient=client.session)
+    )
     verify_transparent_statement(
         transparent_statement, dynamic_trust_store, signed_statement
     )
@@ -136,7 +142,9 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
     assert old_jwk in jwks["keys"]
     assert new_jwk in jwks["keys"]
 
-    dynamic_trust_store = DynamicTrustStore(client=DynamicTrustStoreClient(forced_httpclient=client.session))
+    dynamic_trust_store = DynamicTrustStore(
+        client=DynamicTrustStoreClient(forced_httpclient=client.session)
+    )
     verify_transparent_statement(
         first_transparent_statement, dynamic_trust_store, first_signed_statement
     )
