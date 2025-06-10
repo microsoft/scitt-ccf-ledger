@@ -14,7 +14,7 @@ import ccf.cose
 import httpx
 import pycose
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
+from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes, PublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
@@ -68,7 +68,7 @@ class TrustStore(ABC):
         pass
 
     @abstractmethod
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
         """
         Look up a service's public key based on the protected headers from a
         receipt. Raises an exception if not matching service is found.
@@ -155,7 +155,7 @@ class StaticTrustStore(TrustStore):
 
         return StaticTrustStore(store)
 
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         kid = parsed.phdr[KID]
         return self.trust_store_keys[kid]
@@ -173,7 +173,7 @@ class DynamicTrustStore(TrustStore):
         self.services = {}
         self.getter = getter
 
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         cwt = parsed.phdr[CWTClaims]
         issuer = cwt[CWT_ISS]
