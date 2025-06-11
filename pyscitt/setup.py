@@ -35,6 +35,7 @@ setup(
         "types-jwcrypto",
         "azure-keyvault",
         "azure-identity",
+        "azure-confidentialledger==1.*",
     ],
     license="Apache License 2.0",
     author="SCITT CCF Team",

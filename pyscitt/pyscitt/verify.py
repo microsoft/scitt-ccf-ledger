@@ -13,6 +13,7 @@ from typing import Dict, Optional
 import cbor2
 import ccf.cose
 import httpx
+from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
@@ -256,19 +257,11 @@ class DynamicTrustStoreClient:
         """
         Retrieve the TLS certificate for a Confidential Ledger issuer.
         """
-        if not self.is_confidential_ledger_issuer(issuer):
-            raise ValueError("Issuer is not a Confidential Ledger issuer")
+        if not issuer:
+            raise ValueError("Issuer is required")
         service_name = issuer.split(".")[0]
-        response = self._client().get(
-            f"https://identity.confidential-ledger.core.azure.com/ledgerIdentity/{service_name}",
-            headers={"Accept": "application/json"},
-        )
-        response.raise_for_status()
-        ledger_identity = response.json()
-        if "ledgerTlsCertificate" not in ledger_identity:
-            raise ValueError("TLS certificate not found in ledger identity")
-        if not isinstance(ledger_identity["ledgerTlsCertificate"], str):
-            raise ValueError("TLS certificate is not a string")
-        if "-----BEGIN CERTIFICATE-----" not in ledger_identity["ledgerTlsCertificate"]:
-            raise ValueError("TLS certificate is not in PEM format")
-        return ledger_identity["ledgerTlsCertificate"]
+        identity_client = ConfidentialLedgerCertificateClient()  # type: ignore
+        network_identity = identity_client.get_ledger_identity(ledger_id=service_name)
+        if not network_identity or "ledgerTlsCertificate" not in network_identity:
+            raise ValueError(f"No TLS certificate found for issuer: {issuer}")
+        return network_identity["ledgerTlsCertificate"]
