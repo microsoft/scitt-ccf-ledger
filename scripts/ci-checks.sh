@@ -35,9 +35,11 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
 echo "-- Python types"
+mypy -V
 git ls-files | grep -e '\.py$' | xargs mypy
 
 echo "-- Python imports"
+isort --version
 if [ $FIX -ne 0 ]; then
    git ls-files | grep -e '\.py$' | xargs isort
 else
@@ -45,6 +47,7 @@ else
 fi
 
 echo "-- Python format"
+black --version
 if [ $FIX -ne 0 ]; then
    git ls-files | grep -e '\.py$' | xargs black
 else
