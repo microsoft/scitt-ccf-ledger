@@ -14,6 +14,7 @@ import ccf.cose
 import httpx
 import pycose
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
@@ -193,4 +194,9 @@ class DynamicTrustStore(TrustStore):
         key = keys[parsed.phdr[KID]]
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
         key = load_pem_public_key(pem_key, default_backend())
+        # Only allow expected key types
+        if isinstance(key, dh.DHPublicKey):
+            raise TypeError(
+                "DHPublicKey is not a valid public key type for this context"
+            )
         return key
