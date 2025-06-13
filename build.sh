@@ -19,7 +19,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 if [ "$BUILD_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.4"
+    CCF_SOURCE_VERSION="6.0.5"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     rm -rf /opt/h2spec

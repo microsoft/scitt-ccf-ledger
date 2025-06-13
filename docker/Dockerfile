@@ -1,4 +1,4 @@
-ARG CCF_VERSION="6.0.4"
+ARG CCF_VERSION="6.0.5"
 
 # Use fixed image version to ensure reproducibility
 ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250402
