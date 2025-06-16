@@ -161,41 +161,13 @@ class StaticTrustStore(TrustStore):
         return self.trust_store_keys[kid]
 
 
-class DynamicTrustStore(TrustStore):
-    """
-    A dynamic trust store, based on a single service identity used to retrieve
-    all keys from the service's transparency configuration endpoint.
-    """
-
-    def __init__(self, client=None):
-        if client is None:
-            client = DynamicTrustStoreClient()
-        self.client = client
-
-    @property
-    def services(self):
-        raise NotImplementedError()
-
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
-        parsed = Sign1Message.decode(receipt)
-        cwt = parsed.phdr[CWTClaims]
-        issuer = cwt[CWT_ISS]
-        jwk_set = self.client.get_jwks(issuer)
-        jwk_set.raise_for_status()
-        jwks = jwk_set.json()["keys"]
-        keys = {key["kid"].encode(): key for key in jwks}
-        key = keys[parsed.phdr[KID]]
-        pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
-        key = load_pem_public_key(pem_key, default_backend())
-        return key  # type: ignore
-
-
 class DynamicTrustStoreClient:
     """
     A client for retrieving public keys from a transparency service identified by an issuer.
     """
 
     clients: Dict[str, httpx.Client] = {}
+    confidential_ledger_certs: Dict[str, str] = {}
 
     def __init__(self, forced_httpclient: Optional[httpx.Client] = None):
         self.retries = 5
@@ -221,6 +193,7 @@ class DynamicTrustStoreClient:
         if issuer not in self.clients:
             if self.is_confidential_ledger_issuer(issuer):
                 pem = self.get_confidential_ledger_tls_pem(issuer)
+                self.confidential_ledger_certs[issuer] = pem
                 self.clients[issuer] = self._client(cadata=pem)
             else:
                 self.clients[issuer] = self._client()
@@ -265,3 +238,60 @@ class DynamicTrustStoreClient:
         if not network_identity or "ledgerTlsCertificate" not in network_identity:
             raise ValueError(f"No TLS certificate found for issuer: {issuer}")
         return network_identity["ledgerTlsCertificate"]
+
+
+class DynamicTrustStore(TrustStore):
+    """
+    A dynamic trust store, based on a single service identity used to retrieve
+    all keys from the service's transparency configuration endpoint.
+    """
+
+    def __init__(self, client: Optional[DynamicTrustStoreClient] = None):
+        if client is None:
+            client = DynamicTrustStoreClient()
+        self.client = client
+
+    @property
+    def services(self):
+        raise NotImplementedError()
+
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        """
+        Look up a service's public key based on the protected headers from a receipt.
+        Raises an exception if not matching service is found.
+        Raises an exception if the Confidential Ledger TLS certificate is not in the list of JWKS keys.
+        """
+        parsed = Sign1Message.decode(receipt)
+        cwt = parsed.phdr[CWTClaims]
+        key_id = parsed.phdr[KID]
+        issuer = cwt[CWT_ISS]
+        jwk_set = self.client.get_jwks(issuer)
+        jwk_set.raise_for_status()
+        jwks = jwk_set.json()["keys"]
+        keys = {key["kid"].encode(): key for key in jwks}
+
+        if self.client.is_confidential_ledger_issuer(issuer):
+            pem = self.client.confidential_ledger_certs.get(issuer)
+            if pem is None:
+                raise ValueError(f"No TLS certificate for issuer {issuer}.")
+            # calculate pem public key sha256
+            key = load_pem_public_key(pem.encode(), default_backend())
+            kid = (
+                sha256(
+                    key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                )
+                .digest()
+                .hex()
+                .encode()
+            )
+            if kid not in keys:
+                raise ValueError(
+                    f"TLS public key KID {kid!r} not found in JWKS for issuer {issuer}"
+                )
+
+        if key_id not in keys:
+            raise ValueError(f"Key ID {key_id} not found in JWKS for issuer {issuer}")
+        key = keys[key_id]
+        pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
+        key = load_pem_public_key(pem_key, default_backend())
+        return key  # type: ignore
