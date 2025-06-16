@@ -279,7 +279,9 @@ class DynamicTrustStore(TrustStore):
             cert = x509.load_pem_x509_certificate(pem.encode(), default_backend())
             kid = (
                 sha256(
-                    cert.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                    cert.public_key().public_bytes(
+                        Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                    )
                 )
                 .digest()
                 .hex()
