@@ -3,14 +3,18 @@
 
 import base64
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 import httpx
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from cryptography.x509 import load_pem_x509_certificate
+from cryptography.x509 import Certificate, load_pem_x509_certificate
+from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
@@ -73,12 +77,35 @@ class TestDynamicTrustStore:
         )
         assert result == mock_key
 
+    @patch("pyscitt.verify.x509.load_pem_x509_certificate")
     @patch("pyscitt.verify.Sign1Message")
     @patch("pyscitt.verify.load_pem_public_key")
     @patch("pyscitt.verify.sha256")
     def test_get_key_validates_cl_tls_cert(
-        self, mock_sha256, mock_load_key, mock_sign1
+        self, mock_sha256, mock_load_key, mock_sign1, mock_load_cert
     ):
+        # create test certificate
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "FR"),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Pays de la Loire"),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, "Nantes"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "My Company"),
+                x509.NameAttribute(NameOID.COMMON_NAME, "mycompany.com"),
+            ]
+        )
+        test_cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(datetime.utcnow())
+            .not_valid_after(datetime.utcnow() + timedelta(days=365))
+            .sign(key, hashes.SHA256())
+        )
+
         # Setup mocks
         mock_receipt = b"test_receipt"
         mock_parsed = Mock()
@@ -108,17 +135,19 @@ class TestDynamicTrustStore:
 
         # Mock the key loading
         mock_key = Mock()
-        mock_load_key.side_effect = [mock_key, mock_key]
+        mock_load_key.side_effect = [mock_key]
 
         mock_jwk = MagicMock()
         mock_jwk.export_to_pem.return_value = b"mock_pem"
+
+        mock_load_cert.return_value = test_cert
 
         with patch("pyscitt.verify.jwk.JWK.from_json", return_value=mock_jwk):
             trust_store = DynamicTrustStore(mock_client)
             result = trust_store.get_key(mock_receipt)
 
-        # Assertions
-        assert mock_load_key.call_count == 2  # Called for both TLS cert and JWKS
+        mock_load_cert.assert_called_once_with(b"mock_pem_cert", ANY)
+        assert mock_load_key.call_count == 1  # Called for both TLS cert and JWKS
         assert result == mock_key
 
 
