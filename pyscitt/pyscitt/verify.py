@@ -14,6 +14,7 @@ import cbor2
 import ccf.cose
 import httpx
 from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
+from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
@@ -275,10 +276,10 @@ class DynamicTrustStore(TrustStore):
             if pem is None:
                 raise ValueError(f"No TLS certificate for issuer {issuer}.")
             # calculate pem public key sha256
-            key = load_pem_public_key(pem.encode(), default_backend())
+            cert = x509.load_pem_x509_certificate(pem.encode(), default_backend())
             kid = (
                 sha256(
-                    key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                    cert.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
                 )
                 .digest()
                 .hex()
