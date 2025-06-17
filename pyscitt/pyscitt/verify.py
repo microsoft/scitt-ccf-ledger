@@ -222,10 +222,10 @@ class DynamicTrustStoreClient:
         for jwks_key in jwks["keys"]:
             try:
                 pem_b = jwk.JWK.from_json(json.dumps(jwks_key)).export_to_pem()
-                cert = x509.load_pem_x509_certificate(pem_b, default_backend())
+                pub_key = load_pem_public_key(pem_b, default_backend())
                 pubhash = (
                     sha256(
-                        cert.public_key().public_bytes(
+                        pub_key.public_bytes(
                             Encoding.DER, PublicFormat.SubjectPublicKeyInfo
                         )
                     )

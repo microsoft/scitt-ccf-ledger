@@ -150,27 +150,6 @@ class TestDynamicTrustStoreClient:
     def test_get_jwks_validates_tls_cert(
         self, mock_assert_tls_in_jwks, mock_get_confidential_ledger_tls_pem
     ):
-        # key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        # subject = issuer = x509.Name(
-        #     [
-        #         x509.NameAttribute(NameOID.COUNTRY_NAME, "FR"),
-        #         x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Pays de la Loire"),
-        #         x509.NameAttribute(NameOID.LOCALITY_NAME, "Nantes"),
-        #         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "My Company"),
-        #         x509.NameAttribute(NameOID.COMMON_NAME, "mycompany.com"),
-        #     ]
-        # )
-        # test_cert = (
-        #     x509.CertificateBuilder()
-        #     .subject_name(subject)
-        #     .issuer_name(issuer)
-        #     .public_key(key.public_key())
-        #     .serial_number(x509.random_serial_number())
-        #     .not_valid_before(datetime.utcnow())
-        #     .not_valid_after(datetime.utcnow() + timedelta(days=365))
-        #     .sign(key, hashes.SHA256())
-        # )
-
         # Setup mocks
         mock_get_confidential_ledger_tls_pem.return_value = "mock_pem_cert"
         mock_httpx_client = Mock()
@@ -230,25 +209,21 @@ class TestDynamicTrustStoreClient:
         with pytest.raises(ValueError, match="JWKS does not contain 'keys'"):
             client._assert_tls_in_jwks("certificate", {"other_key": []})
 
+    @patch("pyscitt.verify.load_pem_public_key")
     @patch("pyscitt.verify.x509.load_pem_x509_certificate")
     @patch("pyscitt.verify.sha256")
     @patch("pyscitt.verify.jwk.JWK.from_json")
     def test_assert_tls_in_jwks_raises_when_key_not_found(
-        self, mock_jwk_from_json, mock_sha256, mock_load_cert
+        self, mock_jwk_from_json, mock_sha256, mock_load_cert, mock_load_pub_key
     ):
         # Mock certificate loading and hashing
         mock_cert = Mock()
         mock_public_key = Mock()
         mock_cert.public_key.return_value = mock_public_key
         mock_public_key.public_bytes.return_value = b"mock_public_bytes"
-        mock_jwks_cert = Mock()
-        mock_jwks_public_key = Mock()
-        mock_jwks_cert.public_key.return_value = mock_jwks_public_key
-        mock_jwks_public_key.public_bytes.return_value = b"jwks_public_bytes"
-        # Second call is for JWKS key
-        mock_load_cert.side_effect = [mock_cert, mock_jwks_cert]
+        mock_load_cert.return_value = mock_cert
 
-        # cert digests
+        # Mock digests
         mock_tls_digest = Mock()
         mock_tls_digest.digest.return_value.hex.return_value = "tls_cert_digest"
         mock_sha256.side_effect = lambda x: (
@@ -260,6 +235,11 @@ class TestDynamicTrustStoreClient:
         mock_jwks_key.export_to_pem.return_value = b"jwks_pem"
         mock_jwk_from_json.return_value = mock_jwks_key
 
+        # Mock JWK pub key loading
+        mock_jwks_public_key = Mock()
+        mock_jwks_public_key.public_bytes.return_value = b"jwks_public_bytes"
+        mock_load_pub_key.return_value = mock_jwks_public_key
+
         jwks = {"keys": [{"kid": "test_kid"}]}
         client = DynamicTrustStoreClient()
 
@@ -269,17 +249,18 @@ class TestDynamicTrustStoreClient:
             client._assert_tls_in_jwks("certificate", jwks)
 
         # Verify all expected calls
-        mock_load_cert.assert_called()
-        assert len(mock_load_cert.call_args_list) == 2
+        mock_load_cert.assert_called_once()
+        mock_load_pub_key.assert_called_once()
         mock_sha256.assert_called()
         assert len(mock_sha256.call_args_list) == 2
         mock_jwk_from_json.assert_called_once_with('{"kid": "test_kid"}')
 
+    @patch("pyscitt.verify.load_pem_public_key")
     @patch("pyscitt.verify.x509.load_pem_x509_certificate")
     @patch("pyscitt.verify.sha256")
     @patch("pyscitt.verify.jwk.JWK.from_json")
     def test_assert_tls_in_jwks_succeeds_when_key_found(
-        self, mock_jwk_from_json, mock_sha256, mock_load_cert
+        self, mock_jwk_from_json, mock_sha256, mock_load_cert, mock_load_pub_key
     ):
         # Mock certificate loading and hashing
         mock_cert = Mock()
@@ -288,7 +269,7 @@ class TestDynamicTrustStoreClient:
         mock_public_key.public_bytes.return_value = b"mock_public_bytes"
         mock_load_cert.return_value = mock_cert
 
-        # Same digest for both TLS cert and JWKS key
+        # Mock digests
         mock_digest = Mock()
         mock_digest.digest.return_value.hex.return_value = "same_digest"
         mock_sha256.return_value = mock_digest
@@ -298,12 +279,17 @@ class TestDynamicTrustStoreClient:
         mock_jwks_key.export_to_pem.return_value = b"jwks_pem"
         mock_jwk_from_json.return_value = mock_jwks_key
 
+        # Mock JWK pub key loading
+        mock_jwks_public_key = Mock()
+        mock_jwks_public_key.public_bytes.return_value = b"jwks_public_bytes"
+        mock_load_pub_key.return_value = mock_jwks_public_key
+
         client = DynamicTrustStoreClient()
         client._assert_tls_in_jwks("certificate", {"keys": [{"kid": "test_kid"}]})
 
         # Verify all expected calls
-        mock_load_cert.assert_called()
-        assert len(mock_load_cert.call_args_list) == 2
+        mock_load_cert.assert_called_once()
+        mock_load_pub_key.assert_called_once()
         mock_sha256.assert_called()
         assert len(mock_sha256.call_args_list) == 2
         mock_jwk_from_json.assert_called_once_with('{"kid": "test_kid"}')
