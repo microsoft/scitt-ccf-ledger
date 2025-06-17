@@ -200,7 +200,46 @@ class DynamicTrustStoreClient:
                 self.clients[issuer] = self._client()
         return self.clients[issuer]
 
-    def get_jwks(self, issuer: str) -> httpx.Response:
+    def _assert_tls_in_jwks(self, tls_pem: str, jwks: dict):
+        """Parse JSON web keys to find the KID of the TLS certificate public key."""
+        if not tls_pem:
+            raise ValueError("TLS PEM certificate is required")
+        if not jwks:
+            raise ValueError("JWKS is required")
+        if not "keys" in jwks:
+            raise ValueError("JWKS does not contain 'keys'")
+        cert = x509.load_pem_x509_certificate(tls_pem.encode(), default_backend())
+        cert_digest = (
+            sha256(
+                cert.public_key().public_bytes(
+                    Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                )
+            )
+            .digest()
+            .hex()
+        )
+        jwks_keys_digests = []
+        for jwks_key in jwks["keys"]:
+            try:
+                pem_b = jwk.JWK.from_json(json.dumps(jwks_key)).export_to_pem()
+                cert = x509.load_pem_x509_certificate(pem_b, default_backend())
+                pubhash = (
+                    sha256(
+                        cert.public_key().public_bytes(
+                            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                        )
+                    )
+                    .digest()
+                    .hex()
+                )
+                jwks_keys_digests.append(pubhash)
+            except Exception as e:
+                print(f"Warning: Could not parse JWKS key: {e}")
+
+        if cert_digest not in jwks_keys_digests:
+            raise ValueError(f"TLS public key digest {cert_digest} not found in JWKS")
+
+    def get_jwks(self, issuer: str) -> dict:
         """
         Retrieve the JWKS from the issuer.
         """
@@ -208,9 +247,21 @@ class DynamicTrustStoreClient:
         transparency_configuration.raise_for_status()
         config_response = cbor2.loads(transparency_configuration.content)
         jwks_uri = config_response["jwks_uri"]
-        return self._client_for_issuer(issuer).get(
+        jwks_response = self._client_for_issuer(issuer).get(
             jwks_uri, headers={"Accept": "application/json"}
         )
+        jwks_response.raise_for_status()
+        jwks = jwks_response.json()
+
+        # If issuer is a Confidential Ledger issuer, ensure the TLS certificate public key is in the JWKS.
+        # This step adds an additional layer of trustworthiness of the public keys used for verification.
+        if self.is_confidential_ledger_issuer(issuer):
+            pem = self.confidential_ledger_certs.get(issuer)
+            if pem is None:
+                raise ValueError(f"No TLS certificate for issuer {issuer}.")
+            self._assert_tls_in_jwks(pem, jwks)
+
+        return jwks
 
     def get_configuration(self, issuer: str):
         """
@@ -259,39 +310,14 @@ class DynamicTrustStore(TrustStore):
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
         Look up a service's public key based on the protected headers from a receipt.
-        Raises an exception if not matching service is found.
-        Raises an exception if the Confidential Ledger TLS certificate is not in the list of JWKS keys.
         """
         parsed = Sign1Message.decode(receipt)
         cwt = parsed.phdr[CWTClaims]
         key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]
         jwk_set = self.client.get_jwks(issuer)
-        jwk_set.raise_for_status()
-        jwks = jwk_set.json()["keys"]
+        jwks = jwk_set["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
-
-        if self.client.is_confidential_ledger_issuer(issuer):
-            pem = self.client.confidential_ledger_certs.get(issuer)
-            if pem is None:
-                raise ValueError(f"No TLS certificate for issuer {issuer}.")
-            # calculate pem public key sha256
-            cert = x509.load_pem_x509_certificate(pem.encode(), default_backend())
-            kid = (
-                sha256(
-                    cert.public_key().public_bytes(
-                        Encoding.DER, PublicFormat.SubjectPublicKeyInfo
-                    )
-                )
-                .digest()
-                .hex()
-                .encode()
-            )
-            if kid not in keys:
-                raise ValueError(
-                    f"TLS public key KID {kid!r} not found in JWKS for issuer {issuer}"
-                )
-
         if key_id not in keys:
             raise ValueError(f"Key ID {key_id} not found in JWKS for issuer {issuer}")
         key = keys[key_id]
