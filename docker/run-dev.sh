@@ -4,9 +4,9 @@
 
 set -e
 
-if ! command -v python3.8 &> /dev/null && ! command -v python3.10 &> /dev/null; then
-    echo "Neither python3.8 nor python3.10 could be found."
-    echo "On Ubuntu, run: apt install python3.8 python3.8-venv or apt install python3.10 python3.10-venv"
+if ! command -v python &> /dev/null && ! command -v python3.12 &> /dev/null; then
+    echo "Neither python nor python3.12 could be found."
+    echo "On Azure Linux, run: tdnf install python3.12"
     exit 1
 fi
 
@@ -104,16 +104,17 @@ docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
     -v "$VOLUME_NAME":/host \
+    --entrypoint "cchost" \
     "$DOCKER_TAG" --config /host/dev-config.json
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    if command -v python3.10 &> /dev/null; then
-        PYTHON=python3.10
-    elif command -v python3.8 &> /dev/null; then
-        PYTHON=python3.8
+    if command -v python &> /dev/null; then
+        PYTHON=python
+    elif command -v python3.12 &> /dev/null; then
+        PYTHON=python3.12
     else
-        echo "Neither python3.10 nor python3.8 is available. Please install one of them."
+        echo "Neither python nor python3.12 is available. Please install one of them."
         exit 1
     fi
     $PYTHON -m venv "venv"

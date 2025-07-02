@@ -78,7 +78,8 @@ namespace scitt
           return {
             .operation_id = operation_id,
             .status = OperationStatus::Running,
-          };
+            .entry_id = {},
+            .error = {}};
 
         case ccf::TxStatus::Invalid:
           // This state can arise even in a well-behaved client if the view
@@ -89,6 +90,7 @@ namespace scitt
           return {
             .operation_id = operation_id,
             .status = OperationStatus::Failed,
+            .entry_id = {},
             .error =
               ODataError{
                 .code = ccf::errors::TransactionInvalid,
@@ -120,7 +122,8 @@ namespace scitt
         return {
           .operation_id = operation_id,
           .status = OperationStatus::Running,
-        };
+          .entry_id = {},
+          .error = {}};
       }
       else if (auto it = operations_.find(operation_id.seqno);
                it != operations_.end())
@@ -448,8 +451,10 @@ namespace scitt
     auto operations_table = tx.template rw<OperationsTable>(OPERATIONS_TABLE);
     operations_table->put(OperationLog{
       .status = OperationStatus::Succeeded,
+      .operation_id = {},
       .created_at = current_time.tv_sec,
-    });
+      .context_digest = {},
+      .error = {}});
   }
 
   /**
@@ -486,7 +491,8 @@ namespace scitt
     GetOperation::Out operation{
       .operation_id = tx_id,
       .status = OperationStatus::Running,
-    };
+      .entry_id = {},
+      .error = {}};
 
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
     ctx.rpc_ctx->set_response_header(

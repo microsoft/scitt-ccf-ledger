@@ -4,11 +4,11 @@
 #include "call_types.h"
 
 #include "cbor.h"
+#include "testutils.h"
 
 #include <cstdlib>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <iomanip> // setw
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -17,33 +17,7 @@
 
 using namespace testing;
 using namespace scitt;
-
-// Utility function to convert a vector of bytes to a hex string
-static std::string to_hex_string(const std::vector<std::uint8_t>& data)
-{
-  std::ostringstream oss;
-  for (auto byte : data)
-  {
-    oss << std::hex << std::setw(2) << std::setfill('0')
-        << static_cast<int>(byte);
-  }
-  return oss.str();
-}
-
-// Utility function to convert hex string to a vector of bytes
-static const int HEX_BASE = 16;
-static std::vector<std::uint8_t> from_hex_string(const std::string& hex)
-{
-  std::vector<std::uint8_t> bytes;
-  for (size_t i = 0; i < hex.length(); i += 2)
-  {
-    const std::string byteString = hex.substr(i, 2);
-    char byte =
-      static_cast<char>(strtol(byteString.c_str(), nullptr, HEX_BASE));
-    bytes.push_back(static_cast<std::uint8_t>(byte));
-  }
-  return bytes;
-}
+using namespace testutils;
 
 // The error should look like the one in RFC, OperationId is not shown in RFC
 // but we always render it:
@@ -67,7 +41,7 @@ namespace
 {
   TEST(UtilityFunctionTest, bytesToHexToBytes)
   {
-    const std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+    const std::vector<uint8_t> data = {0x01, 0x02, 0x03, 0x04};
     EXPECT_EQ(to_hex_string(data), "01020304");
     EXPECT_EQ(from_hex_string("01020304"), data);
   }
@@ -79,7 +53,7 @@ namespace
       .status = OperationStatus::Running,
     };
 
-    const std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
+    const std::vector<uint8_t> cbor_value = operation_to_cbor(out);
 
     EXPECT_EQ(
       to_hex_string(cbor_value),
@@ -95,7 +69,7 @@ namespace
         .code = "Bad Signature Algorithm",
         .message = "Signed Statement contained a non supported algorithm"}};
 
-    const std::vector<std::uint8_t> cbor_value = operation_to_cbor(out);
+    const std::vector<uint8_t> cbor_value = operation_to_cbor(out);
 
     EXPECT_EQ(to_hex_string(cbor_value), expected_error_hex);
   }

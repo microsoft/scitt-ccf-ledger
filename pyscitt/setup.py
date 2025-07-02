@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.10.1"
+PACKAGE_VERSION = "0.11.2"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -23,9 +23,9 @@ setup(
     entry_points={
         "console_scripts": ["scitt=pyscitt.cli.main:main"],
     },
-    python_requires=">=3.8",
+    python_requires=">=3.12",
     install_requires=[
-        "ccf==6.0.0-rc0",
+        "ccf==6.*",
         "cryptography==44.*",  # needs to match ccf
         "httpx",
         "cbor2==5.4.*",
@@ -35,6 +35,7 @@ setup(
         "types-jwcrypto",
         "azure-keyvault",
         "azure-identity",
+        "azure-confidentialledger==1.*",
     ],
     license="Apache License 2.0",
     author="SCITT CCF Team",

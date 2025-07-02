@@ -3,16 +3,18 @@
 
 import base64
 import json
+import ssl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import cbor2
 import ccf.cose
 import httpx
-import pycose
+from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
+from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
@@ -28,7 +30,6 @@ from pycose.messages import Sign1Message
 
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims
-from .receipt import Receipt
 
 
 @dataclass
@@ -161,36 +162,165 @@ class StaticTrustStore(TrustStore):
         return self.trust_store_keys[kid]
 
 
+class DynamicTrustStoreClient:
+    """
+    A client for retrieving public keys from a transparency service identified by an issuer.
+    """
+
+    clients: Dict[str, httpx.Client] = {}
+    confidential_ledger_certs: Dict[str, str] = {}
+
+    def __init__(self, forced_httpclient: Optional[httpx.Client] = None):
+        self.retries = 5
+        # forced client is used in testing
+        self._forced_httpclient = forced_httpclient
+
+    def _client(self, cadata: Optional[str] = None) -> httpx.Client:
+        if self._forced_httpclient is not None:
+            return self._forced_httpclient
+
+        if cadata:
+            ssl_context = ssl.create_default_context()
+            ssl_context.load_verify_locations(cadata=cadata)
+            transport = httpx.HTTPTransport(verify=ssl_context, retries=self.retries)
+        else:
+            transport = httpx.HTTPTransport(retries=self.retries)
+        return httpx.Client(transport=transport)
+
+    def _client_for_issuer(self, issuer: str) -> httpx.Client:
+        """
+        Lightweight caching of clients based on issuer.
+        """
+        if issuer not in self.clients:
+            if self.is_confidential_ledger_issuer(issuer):
+                pem = self.get_confidential_ledger_tls_pem(issuer)
+                self.confidential_ledger_certs[issuer] = pem
+                self.clients[issuer] = self._client(cadata=pem)
+            else:
+                self.clients[issuer] = self._client()
+        return self.clients[issuer]
+
+    def _assert_tls_in_jwks(self, tls_pem: str, jwks: dict):
+        """Parse JSON web keys to find the KID of the TLS certificate public key."""
+        if not tls_pem:
+            raise ValueError("TLS PEM certificate is required")
+        if not jwks:
+            raise ValueError("JWKS is required")
+        if not "keys" in jwks:
+            raise ValueError("JWKS does not contain 'keys'")
+        cert = x509.load_pem_x509_certificate(tls_pem.encode(), default_backend())
+        cert_digest = (
+            sha256(
+                cert.public_key().public_bytes(
+                    Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                )
+            )
+            .digest()
+            .hex()
+        )
+        jwks_keys_digests = []
+        for jwks_key in jwks["keys"]:
+            try:
+                pem_b = jwk.JWK.from_json(json.dumps(jwks_key)).export_to_pem()
+                pub_key = load_pem_public_key(pem_b, default_backend())
+                pubhash = (
+                    sha256(
+                        pub_key.public_bytes(
+                            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                        )
+                    )
+                    .digest()
+                    .hex()
+                )
+                jwks_keys_digests.append(pubhash)
+            except Exception as e:
+                print(f"Warning: Could not parse JWKS key: {e}")
+
+        if cert_digest not in jwks_keys_digests:
+            raise ValueError(f"TLS public key digest {cert_digest} not found in JWKS")
+
+    def get_jwks(self, issuer: str) -> dict:
+        """
+        Retrieve the JWKS from the issuer.
+        """
+        transparency_configuration = self.get_configuration(issuer)
+        transparency_configuration.raise_for_status()
+        config_response = cbor2.loads(transparency_configuration.content)
+        jwks_uri = config_response["jwks_uri"]
+        jwks_response = self._client_for_issuer(issuer).get(
+            jwks_uri, headers={"Accept": "application/json"}
+        )
+        jwks_response.raise_for_status()
+        jwks = jwks_response.json()
+
+        # If issuer is a Confidential Ledger issuer, ensure the TLS certificate public key is in the JWKS.
+        # This step adds an additional layer of trustworthiness of the public keys used for verification.
+        if self.is_confidential_ledger_issuer(issuer):
+            pem = self.confidential_ledger_certs.get(issuer)
+            if pem is None:
+                raise ValueError(f"No TLS certificate for issuer {issuer}.")
+            self._assert_tls_in_jwks(pem, jwks)
+
+        return jwks
+
+    def get_configuration(self, issuer: str):
+        """
+        Retrieve the transparency configuration from the issuer.
+        """
+        if not issuer:
+            raise ValueError("Issuer cannot be empty")
+
+        return self._client_for_issuer(issuer).get(
+            "https://" + issuer + "/.well-known/transparency-configuration",
+            headers={"Accept": "application/cbor"},
+        )
+
+    def is_confidential_ledger_issuer(self, issuer: str) -> bool:
+        return issuer.endswith(".confidential-ledger.azure.com")
+
+    def get_confidential_ledger_tls_pem(self, issuer: str):
+        """
+        Retrieve the TLS certificate for a Confidential Ledger issuer.
+        """
+        if not issuer:
+            raise ValueError("Issuer is required")
+        service_name = issuer.split(".")[0]
+        identity_client = ConfidentialLedgerCertificateClient()  # type: ignore
+        network_identity = identity_client.get_ledger_identity(ledger_id=service_name)
+        if not network_identity or "ledgerTlsCertificate" not in network_identity:
+            raise ValueError(f"No TLS certificate found for issuer: {issuer}")
+        return network_identity["ledgerTlsCertificate"]
+
+
 class DynamicTrustStore(TrustStore):
     """
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
     """
 
-    services: Dict[str, ServiceParameters] = {}
+    def __init__(self, client: Optional[DynamicTrustStoreClient] = None):
+        if client is None:
+            client = DynamicTrustStoreClient()
+        self.client = client
 
-    def __init__(self, getter):
-        self.services = {}
-        self.getter = getter
+    @property
+    def services(self):
+        raise NotImplementedError()
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        """
+        Look up a service's public key based on the protected headers from a receipt.
+        """
         parsed = Sign1Message.decode(receipt)
         cwt = parsed.phdr[CWTClaims]
+        key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]
-
-        transparency_configuration = self.getter(
-            f"https://{issuer}/.well-known/transparency-configuration",
-            headers={"Accept": "application/cbor"},
-        )
-        transparency_configuration.raise_for_status()
-        config_response = cbor2.loads(transparency_configuration.content)
-
-        jwks_uri = config_response["jwks_uri"]
-        jwk_set = self.getter(jwks_uri)
-        jwk_set.raise_for_status()
-        jwks = jwk_set.json()["keys"]
+        jwk_set = self.client.get_jwks(issuer)
+        jwks = jwk_set["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
-        key = keys[parsed.phdr[KID]]
+        if key_id not in keys:
+            raise ValueError(f"Key ID {key_id} not found in JWKS for issuer {issuer}")
+        key = keys[key_id]
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
         key = load_pem_public_key(pem_key, default_backend())
-        return key
+        return key  # type: ignore

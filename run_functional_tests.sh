@@ -55,12 +55,12 @@ fi
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
-    if command -v python3.10 &> /dev/null; then
-        PYTHON=python3.10
-    elif command -v python3.8 &> /dev/null; then
-        PYTHON=python3.8
+    if command -v python &> /dev/null; then
+        PYTHON=python
+    elif command -v python3.12 &> /dev/null; then
+        PYTHON=python3.12
     else
-        echo "Neither python3.10 nor python3.8 is available. Please install one of them."
+        echo "Neither python nor python3.12 is available. Please install one of them."
         exit 1
     fi
     $PYTHON -m venv "venv"

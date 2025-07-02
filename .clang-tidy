@@ -4,12 +4,15 @@ Checks: >
   cert-*,
   -cert-err58-cpp,
   clang-analyzer-*,
+  -clang-analyzer-deadcode.DeadStores,
+  -clang-analyzer-optin.cplusplus.VirtualCall,
   concurrency-*,
   misc-*,
   modernize-*,
   -modernize-avoid-bind,
   -modernize-use-trailing-return-type,
   performance-*,
+  -performance-avoid-endl,
   portability-*,
   readability-*,
   -readability-else-after-return,
@@ -17,6 +20,8 @@ Checks: >
   -cert-dcl58-cpp,
   -bugprone-easily-swappable-parameters,
   -readability-function-cognitive-complexity,
+  -misc-const-correctness,
+  -misc-include-cleaner
 
 WarningsAsErrors: '*'
 # Include current directory files and exclude ccf imported code

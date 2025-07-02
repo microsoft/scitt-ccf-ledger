@@ -11,10 +11,10 @@
 #include "signature_algorithms.h"
 #include "tracing.h"
 
+#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
-#include <crypto/openssl/openssl_wrappers.h>
 #include <fmt/format.h>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3

@@ -2,10 +2,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# This script just runs cchost with some input arguments. Due to SNP cce policy limitations, we cannot
+# This script just runs cchost with some arguments. Due to cce policy limitations, we cannot
 # express a container command containing an environment variable as the value is dynamic. By
-# "hiding" the environment variable usage, the policy can hardcode a static startup command of
-# ./start-app.sh.
+# "hiding" the environment variable usage, the policy can hardcode a static startup command.
 
 # Usage:
 # ./start-app.sh $CONFIG_ROOT $CONFIG_FILE_NAME $ADDITIONAL_ARGS
@@ -18,9 +17,9 @@
 # If the OUTPUT_LOGS_FILE is not empty, redirect the command output to the file
 # If OUTPUT_LOCAL_PORT is not empty, redirect the command output to the specified port on localhost
 if [ -n "${OUTPUT_LOGS_FILE}" ]; then
-    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" 2>&1 | tee -a "$OUTPUT_LOGS_FILE"
+    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" > >(tee -a "$OUTPUT_LOGS_FILE") 2>&1
 elif [ -n "${OUTPUT_LOCAL_PORT}" ]; then
-    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" 2>&1 | tee >(nc "127.0.0.1" "$OUTPUT_LOCAL_PORT")
+    exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}" > >(tee >(nc "127.0.0.1" "$OUTPUT_LOCAL_PORT")) 2>&1
 else
     exec cchost --config="${1}/${NODE_NAME}/${2}" "${@:3}"
 fi

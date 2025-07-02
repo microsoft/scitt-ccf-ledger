@@ -58,7 +58,6 @@ namespace
     EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_))
       .WillOnce([](const std::vector<uint8_t>& body) {
         // Decode the CBOR body and check its contents
-        QCBORError err;
         QCBORDecodeContext decode_ctx;
         const UsefulBufC input_buf{body.data(), body.size()};
         QCBORDecode_Init(&decode_ctx, input_buf, QCBOR_DECODE_MODE_NORMAL);
@@ -78,7 +77,7 @@ namespace
           std::string(cbor::as_string(item.val.string)).c_str(),
           "This is a bad request");
         QCBORDecode_ExitMap(&decode_ctx);
-        err = QCBORDecode_Finish(&decode_ctx);
+        QCBORError err = QCBORDecode_Finish(&decode_ctx);
         EXPECT_EQ(err, QCBOR_SUCCESS);
       });
 

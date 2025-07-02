@@ -26,7 +26,7 @@ echo "-- Python dependencies"
 # Virtual Environment w/ dependencies for Python steps
 if [ ! -f "scripts/venv/bin/activate" ]
 then
-  python3.8 -m venv scripts/venv
+  python3.12 -m venv scripts/venv
 fi
 
 source scripts/venv/bin/activate
@@ -35,9 +35,11 @@ pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
 echo "-- Python types"
+mypy -V
 git ls-files | grep -e '\.py$' | xargs mypy
 
 echo "-- Python imports"
+isort --version
 if [ $FIX -ne 0 ]; then
    git ls-files | grep -e '\.py$' | xargs isort
 else
@@ -45,6 +47,7 @@ else
 fi
 
 echo "-- Python format"
+black --version
 if [ $FIX -ne 0 ]; then
    git ls-files | grep -e '\.py$' | xargs black
 else
@@ -52,4 +55,4 @@ else
 fi
 
 echo "-- Copyright notices headers"
-python3.8 "$SCRIPT_DIR"/notice-check.py
+python3.12 "$SCRIPT_DIR"/notice-check.py
