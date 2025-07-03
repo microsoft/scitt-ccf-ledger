@@ -30,6 +30,12 @@ namespace scitt::verifier
     return phdr.cwt_claims.iss.has_value();
   }
 
+  inline static bool contains_cnf_kid(const cose::ProtectedHeader& phdr)
+  {
+    return phdr.cwt_claims.cnf.has_value() &&
+      phdr.cwt_claims.cnf->kid.has_value();
+  }
+
   struct VerificationError : public std::runtime_error
   {
     VerificationError(const std::string& msg) : std::runtime_error(msg) {}
@@ -72,7 +78,53 @@ namespace scitt::verifier
       }
     }
 
-    void process_signed_statement_with_didx509_issuer(
+    std::span<uint8_t> process_signed_statment_with_cnf_kid(
+      const cose::ProtectedHeader& phdr,
+      const Configuration& configuration,
+      const std::vector<uint8_t>& data)
+    {
+      check_is_accepted_algorithm(phdr, configuration);
+
+      // Check binding of x5chain[0] to kid in the cnf claim
+      // before verifying the signature
+      if (
+        phdr.cwt_claims.cnf->kid.value().size() !=
+        ccf::crypto::Sha256Hash::SIZE)
+      {
+        throw VerificationError(
+          "cnf.kid must be a SHA256 digest of the public key");
+      }
+      std::span<const uint8_t, ccf::crypto::Sha256Hash::SIZE> cnf_kid_raw(
+        phdr.cwt_claims.cnf->kid.value().data(),
+        phdr.cwt_claims.cnf->kid.value().size());
+      auto cnf_kid = ccf::crypto::Sha256Hash::from_span(cnf_kid_raw);
+
+      auto x5chain_kid = ccf::crypto::Sha256Hash(
+        phdr.x5chain.value()[0].data(), phdr.x5chain.value()[0].size());
+      if (cnf_kid != x5chain_kid)
+      {
+        throw VerificationError(
+          "cnf.kid does not match the SHA256 digest of the x5chain[0]");
+      }
+
+      // Verify the signature using the key of the leaf in the x5chain
+      ccf::crypto::OpenSSL::Unique_X509 leaf =
+        parse_certificate(phdr.x5chain.value()[0]);
+      PublicKey key(leaf, std::nullopt);
+      std::span<uint8_t> payload;
+      try
+      {
+        payload = cose::verify(data, key);
+      }
+      catch (const cose::COSESignatureValidationError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      return payload;
+    }
+
+    std::span<uint8_t> process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
@@ -83,9 +135,10 @@ namespace scitt::verifier
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
+      std::span<uint8_t> payload;
       try
       {
-        cose::verify(data, key);
+        payload = cose::verify(data, key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -173,36 +226,59 @@ namespace scitt::verifier
         throw VerificationError(
           "Resolved verification method public key does not match signing key");
       }
+
+      return payload;
     }
 
-    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_signed_statement(
-      const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
-      ::timespec current_time,
-      const Configuration& configuration)
+    std::
+      tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
+      verify_signed_statement(
+        const std::vector<uint8_t>& signed_statement,
+        ccf::kv::ReadOnlyTx& tx,
+        ::timespec current_time,
+        const Configuration& configuration)
     {
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
+      std::span<uint8_t> payload;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
 
-        if (contains_cwt_issuer(phdr))
+        if (contains_cnf_kid(phdr))
         {
-          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
-          {
-            throw VerificationError("CWT_Claims issuer must be a did:x509");
-          }
-
-          if (!phdr.x5chain.has_value())
+          // FIXME: make sure does not collide with cnf in TSS case
+          if (!(phdr.x5chain.has_value() && phdr.x5chain->size() == 1))
           {
             throw VerificationError(
-              "Signed statement protected header must contain an x5chain");
+              "Signed statement protected header must contain a single-element "
+              "x5chain");
           }
 
-          process_signed_statement_with_didx509_issuer(
+          payload = process_signed_statment_with_cnf_kid(
             phdr, configuration, signed_statement);
+        }
+        else if (contains_cwt_issuer(phdr))
+        {
+          if (phdr.cwt_claims.iss->starts_with("did:x509"))
+          {
+            if (!phdr.x5chain.has_value())
+            {
+              throw VerificationError(
+                "Signed statement protected header must contain an x5chain");
+            }
+
+            payload = process_signed_statement_with_didx509_issuer(
+              phdr, configuration, signed_statement);
+          }
+          else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
+          {
+            throw VerificationError("did:attestedsvc is not supported yet");
+          }
+          else
+          {
+            throw VerificationError("CWT_Claims issuer is unsupported");
+          }
         }
         else
         {
@@ -216,7 +292,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return {phdr, uhdr};
+      return {phdr, uhdr, payload};
     }
 
   private:

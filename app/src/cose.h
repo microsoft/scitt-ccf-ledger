@@ -34,6 +34,16 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_KID = 4;
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
   static constexpr int64_t COSE_HEADER_PARAM_CWT_CLAIMS = 15;
+  static constexpr int64_t COSE_HEADER_PARAM_CWT_CNF = 8;
+  static constexpr int64_t COSE_HEADER_PARAM_CWT_CNF_KID = 3;
+
+  static constexpr const char* COSE_HEADER_PARAM_TSS = "msft-css-dev";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION =
+    "attestation";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS =
+    "snp_endorsements";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS =
+    "uvm_endorsements";
 
   static const std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
@@ -43,7 +53,9 @@ namespace scitt::cose
     COSE_HEADER_PARAM_X5CHAIN,
   };
 
-  // Temporary assignments from draft-birkholz-scitt-architecture
+  // Temporary assignments from
+  // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/09/
+  // Section 2
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
@@ -60,9 +72,24 @@ namespace scitt::cose
 
   static constexpr const char* SVN_HEADER_PARAM = "svn";
 
+  static constexpr const char* ATTESTATION_HEADER_PARAM = "scitt.attestation";
+
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
+  };
+
+  struct TSSMap
+  {
+    std::optional<std::vector<uint8_t>> attestation;
+    std::optional<std::vector<uint8_t>> snp_endorsements;
+    std::optional<std::vector<uint8_t>> uvm_endorsements;
+  };
+
+  // cnf from https://www.rfc-editor.org/rfc/rfc8747.html
+  struct Confirmation
+  {
+    std::optional<std::vector<uint8_t>> kid;
   };
 
   struct CWTClaims
@@ -71,6 +98,7 @@ namespace scitt::cose
     std::optional<std::string> sub;
     std::optional<int64_t> iat;
     std::optional<int64_t> svn;
+    std::optional<Confirmation> cnf;
   };
 
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
@@ -94,6 +122,9 @@ namespace scitt::cose
     // CWT Claims header, as defined in
     // https://datatracker.ietf.org/doc/rfc9597/
     CWTClaims cwt_claims;
+
+    // Microsoft Trusted Signing Service (TSS) parameters
+    TSSMap tss_map;
 
     bool is_present(const std::variant<int64_t, std::string>& label) const
     {
@@ -181,6 +212,7 @@ namespace scitt::cose
   struct UnprotectedHeader
   {
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+    std::optional<std::string> attestation;
   };
 
   static std::vector<std::vector<uint8_t>> decode_x5chain(
@@ -265,6 +297,7 @@ namespace scitt::cose
       CTY_INDEX,
       X5CHAIN_INDEX,
       CWT_CLAIMS_INDEX,
+      TSS_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
@@ -310,6 +343,7 @@ namespace scitt::cose
       CWT_ISS_INDEX,
       CWT_SUB_INDEX,
       CWT_IAT_INDEX,
+      CWT_CNF_INDEX,
       CWT_SVN_INDEX,
       CWT_END_INDEX,
     };
@@ -327,11 +361,46 @@ namespace scitt::cose
     cwt_items[CWT_IAT_INDEX].uLabelType = QCBOR_TYPE_INT64;
     cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
 
+    cwt_items[CWT_CNF_INDEX].label.int64 = COSE_HEADER_PARAM_CWT_CNF;
+    cwt_items[CWT_CNF_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cwt_items[CWT_CNF_INDEX].uDataType = QCBOR_TYPE_MAP;
+
     cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
     cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     cwt_items[CWT_SVN_INDEX].uDataType = QCBOR_TYPE_INT64;
 
     cwt_items[CWT_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
+
+    header_items[TSS_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS);
+    header_items[TSS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[TSS_INDEX].uDataType = QCBOR_TYPE_MAP;
+
+    enum
+    {
+      TSS_ATTESTATION_INDEX,
+      TSS_SNP_ENDORSEMENTS_INDEX,
+      TSS_UVM_ENDORSEMENTS_INDEX,
+      TSS_END_INDEX,
+    };
+    QCBORItem tss_items[TSS_END_INDEX + 1];
+
+    tss_items[TSS_ATTESTATION_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION);
+    tss_items[TSS_ATTESTATION_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_ATTESTATION_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS);
+    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS);
+    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    tss_items[TSS_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
@@ -456,6 +525,87 @@ namespace scitt::cose
       {
         parsed.cwt_claims.svn = cwt_items[CWT_SVN_INDEX].val.int64;
       }
+      if (cwt_items[CWT_CNF_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        QCBORDecode_EnterMapFromMapN(&ctx, COSE_HEADER_PARAM_CWT_CNF);
+        auto cnf_error = QCBORDecode_GetError(&ctx);
+        if (cnf_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(
+            fmt::format("Failed to decode cnf: {}", cnf_error));
+        }
+
+        parsed.cwt_claims.cnf = Confirmation{};
+
+        enum
+        {
+          CWT_CNF_KID_INDEX,
+          CWT_CNF_END_INDEX,
+        };
+        QCBORItem cnf_items[END_INDEX + 1];
+
+        cnf_items[CWT_CNF_KID_INDEX].label.int64 =
+          COSE_HEADER_PARAM_CWT_CNF_KID;
+        cnf_items[CWT_CNF_KID_INDEX].uLabelType = QCBOR_TYPE_INT64;
+        cnf_items[CWT_CNF_KID_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+        cnf_items[CWT_CNF_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
+
+        QCBORDecode_GetItemsInMap(&ctx, cnf_items);
+        cnf_error = QCBORDecode_GetError(&ctx);
+        if (cnf_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(
+            fmt::format("Failed to decode cnf contents: {}", cnf_error));
+        }
+
+        if (cnf_items[CWT_CNF_KID_INDEX].uDataType != QCBOR_TYPE_NONE)
+        {
+          parsed.cwt_claims.cnf->kid =
+            cbor::as_vector(cnf_items[CWT_CNF_KID_INDEX].val.string);
+        }
+        QCBORDecode_ExitMap(&ctx);
+      }
+
+      QCBORDecode_ExitMap(&ctx);
+    }
+
+    if (header_items[TSS_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      QCBORDecode_EnterMapFromMapSZ(&ctx, COSE_HEADER_PARAM_TSS);
+      auto tss_error = QCBORDecode_GetError(&ctx);
+      if (tss_error != QCBOR_SUCCESS)
+      {
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map: {}", COSE_HEADER_PARAM_TSS, tss_error));
+      }
+
+      QCBORDecode_GetItemsInMap(&ctx, tss_items);
+      tss_error = QCBORDecode_GetError(&ctx);
+      if (tss_error != QCBOR_SUCCESS)
+      {
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map contents: {}",
+          COSE_HEADER_PARAM_TSS,
+          tss_error));
+      }
+
+      if (tss_items[TSS_ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.attestation =
+          cbor::as_vector(tss_items[TSS_ATTESTATION_INDEX].val.string);
+      }
+      if (tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.snp_endorsements =
+          cbor::as_vector(tss_items[TSS_SNP_ENDORSEMENTS_INDEX].val.string);
+      }
+      if (tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.uvm_endorsements =
+          cbor::as_vector(tss_items[TSS_UVM_ENDORSEMENTS_INDEX].val.string);
+      }
+
       QCBORDecode_ExitMap(&ctx);
     }
 
@@ -490,12 +640,19 @@ namespace scitt::cose
     enum
     {
       X5CHAIN_INDEX,
+      ATTESTATION_INDEX,
       END_INDEX,
     };
     QCBORItem header_items[END_INDEX + 1];
     header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
     header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
     header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
+
+    header_items[ATTESTATION_INDEX].label.string =
+      UsefulBuf_FromSZ(ATTESTATION_HEADER_PARAM);
+    header_items[ATTESTATION_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    header_items[ATTESTATION_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
+
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     QCBORDecode_GetItemsInMap(&ctx, header_items);
@@ -509,6 +666,11 @@ namespace scitt::cose
     if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
     {
       parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
+    }
+    if (header_items[ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
+    {
+      parsed.attestation =
+        cbor::as_string(header_items[ATTESTATION_INDEX].val.string);
     }
     QCBORDecode_ExitMap(&ctx);
 
@@ -569,7 +731,7 @@ namespace scitt::cose
    * Beyond the basic verification of key usage and the signature
    * itself, no particular validation of the message is done.
    */
-  static void verify(
+  static std::span<uint8_t> verify(
     const std::vector<uint8_t>& cose_sign1,
     const PublicKey& key,
     bool allow_unknown_crit = false)
@@ -625,10 +787,14 @@ namespace scitt::cose
     t_cose_sign1_verify_set_auxiliary_buffer(
       &verify_ctx, {auxiliary_buffer.data(), auxiliary_buffer.size()});
 
-    error = t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, nullptr);
+    q_useful_buf_c payload;
+
+    error = t_cose_sign1_verify(&verify_ctx, signed_cose, &payload, nullptr);
     if (error)
     {
       throw COSESignatureValidationError("Signature verification failed");
     }
+
+    return {(uint8_t*)payload.ptr, payload.len};
   }
 }

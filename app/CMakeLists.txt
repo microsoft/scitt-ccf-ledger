@@ -108,6 +108,9 @@ if (BUILD_TESTS)
     ${UNIT_TEST_SOURCES}
   )
   add_san(unit_tests)
+  # add test payloads to unit_tests from test/payloads directory
+  file(GLOB TEST_PAYLOADS "../test/payloads/*")
+  target_sources(unit_tests PRIVATE ${TEST_PAYLOADS})
   target_link_system_libraries(unit_tests PRIVATE
     GTest::gmock
     rapidcheck
