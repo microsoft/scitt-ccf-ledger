@@ -306,7 +306,7 @@ class CCHost(EventLoopThread):
 
         Returns the service's port number if it is ready, and None otherwise.
         """
-        ssl_ctx = ssl.SSLContext()
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         try:
             # cchost writes its actual RPC port to this file. This works even if
             # it tried to bind on port 0 and was given a random port by the
