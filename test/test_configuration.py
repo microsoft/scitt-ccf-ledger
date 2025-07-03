@@ -91,7 +91,6 @@ class TestPolicyEngine:
             identity,
             {"foo": "bar"},
             cwt=True,
-            uhdr={"scitt.attestation": "testAttestation"},
         )
 
     def test_ietf_didx509_policy(
@@ -348,17 +347,6 @@ return true;
         transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
 
-    def test_uhdr_policy(self, client: Client, configure_service, signed_statement):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": 'export function apply(phdr, uhdr) { if (uhdr["scitt.attestation"] !== "testAttestation") { return `Invalid uhdr`; } return true; }'
-                }
-            }
-        )
-
-        client.submit_signed_statement_and_wait(signed_statement)
-
     def test_payload_policy(self, client: Client, configure_service, signed_statement):
         configure_service(
             {
@@ -379,7 +367,6 @@ return true;
             identity,
             {"foo": "bar"},
             cwt=True,
-            uhdr={"scitt.attestation": "testAttestation"},
             additional_phdr={
                 "tss": {
                     "attestation": b"testAttestation",
@@ -419,7 +406,6 @@ return true;
         return crypto.sign_json_statement_cnf_kid(
             identity,
             {"foo": "bar"},
-            uhdr={"scitt.attestation": "testAttestation"},
         )
 
     def test_cnf_kid(

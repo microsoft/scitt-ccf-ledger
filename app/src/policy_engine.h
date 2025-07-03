@@ -183,11 +183,6 @@ namespace scitt
         obj.set("x5chain", std::move(x5_array));
       }
 
-      if (uhdr.attestation.has_value())
-      {
-        obj.set("scitt.attestation", ctx.new_string(uhdr.attestation.value()));
-      }
-
       return obj;
     }
 
