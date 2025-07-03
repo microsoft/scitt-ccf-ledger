@@ -2,13 +2,8 @@
 # Licensed under the MIT License.
 
 import argparse
-import json
 from pathlib import Path
 from typing import List, Optional
-
-import pycose.headers
-
-from pyscitt.key_vault_sign_client import KeyVaultSignClient
 
 from .. import crypto
 
@@ -36,34 +31,20 @@ def sign_statement(
     kid: Optional[str],
     feed: Optional[str],
     x5c_path: Optional[str],
-    akv_configuration_path: Optional[Path],
     uses_cwt: bool = False,
 ):
     if not x5c_path:
         raise ValueError("The --x5c flag must be provided")
     ca_certs = _parse_x5c_file(x5c_path)
 
-    # If a Key Vault configuration is provided, we sign with AKV
-    if akv_configuration_path:
-        # Parse the AKV configuration file
-        akv_sign_configuration_dict = json.loads(akv_configuration_path.read_text())
-        kv_client = KeyVaultSignClient(akv_sign_configuration_dict)
-        signed_statement = kv_client.cose_sign(
-            statement_path.read_bytes(),
-            {
-                pycose.headers.ContentType: content_type,
-                pycose.headers.X5chain: [crypto.cert_pem_to_der(x5) for x5 in ca_certs],
-            },
-        )
-    else:
-        key = crypto.load_private_key(key_path)
-        signer = crypto.Signer(
-            key, kid=kid, issuer=issuer, algorithm=algorithm, x5c=ca_certs
-        )
-        statement = statement_path.read_bytes()
-        signed_statement = crypto.sign_statement(
-            signer, statement, content_type, feed, cwt=uses_cwt
-        )
+    key = crypto.load_private_key(key_path)
+    signer = crypto.Signer(
+        key, kid=kid, issuer=issuer, algorithm=algorithm, x5c=ca_certs
+    )
+    statement = statement_path.read_bytes()
+    signed_statement = crypto.sign_statement(
+        signer, statement, content_type, feed, cwt=uses_cwt
+    )
 
     print(f"Writing {out_path}")
     out_path.write_bytes(signed_statement)
@@ -82,13 +63,6 @@ def cli(fn):
         type=Path,
         required=True,
         help="Output path for signed statement (must end in .cose)",
-    )
-
-    # TODO: remove akv configuration is it is not used anymore and is untested
-    parser.add_argument(
-        "--akv-configuration",
-        type=Path,
-        help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
     )
 
     # Ad-hoc signing, without any on-disk document
@@ -117,7 +91,6 @@ def cli(fn):
             args.kid,
             args.feed,
             args.x5c,
-            args.akv_configuration,
             args.uses_cwt,
         )
     )
