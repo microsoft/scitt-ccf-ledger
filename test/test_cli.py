@@ -204,6 +204,7 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     claims = json.loads(data)
     assert claims.get("foo") == "bar"
 
+
 @pytest.mark.parametrize(
     "filepath",
     [
@@ -212,7 +213,9 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
         "test/payloads/css-attested-cosesign1-20250617.cose",
     ],
 )
-def test_submit_and_validate(run, tmp_path, client: Client, configure_service, filepath):
+def test_submit_and_validate(
+    run, tmp_path, client: Client, configure_service, filepath
+):
     allow_all_policy_script = "export function apply(phdr) {return true}"
     configure_service({"policy": {"policyScript": allow_all_policy_script}})
 

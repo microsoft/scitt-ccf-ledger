@@ -241,7 +241,9 @@ def generate_cert(
         .public_key(subject_pub_key)
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.now(datetime.UTC))
-        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=10))
+        .not_valid_after(
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=10)
+        )
         .add_extension(
             x509.KeyUsage(
                 digital_signature=not ca,
