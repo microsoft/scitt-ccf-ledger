@@ -115,59 +115,6 @@ def test_adhoc_signer(run, tmp_path: Path):
     }
 
 
-def test_registration_info(run, tmp_path: Path):
-    generate_ca_cert_and_key(
-        output_dir=str(tmp_path),
-        key_filename="cacert_privk.pem",
-        cacert_filename="cacert.pem",
-        alg="ES256",
-        ec_curve="P-256",
-        key_type="ec",
-    )
-    (tmp_path / "statement.json").write_text(json.dumps({"foo": "bar"}))
-
-    binary_data = b"\xde\xad\xbe\xef"
-    binary_path = tmp_path / "binary.txt"
-    binary_path.write_bytes(binary_data)
-
-    # This is a Grinning Face emoji
-    unicode_data = "\U0001f600"
-    unicode_path = tmp_path / "unicode.txt"
-    unicode_path.write_text(unicode_data, encoding="utf-8")
-
-    run(
-        "sign",
-        "--registration-info=int:foo=42",
-        "--registration-info=int:negative=-42",
-        "--registration-info=text:bar=hello",
-        "--registration-info=with_default_type=world",
-        f"--registration-info=bytes:binary_data=@{binary_path}",
-        f"--registration-info=text:unicode_data=@{unicode_path}",
-        "--key",
-        tmp_path / "cacert_privk.pem",
-        "--x5c",
-        tmp_path / "cacert.pem",
-        "--content-type",
-        "application/json",
-        "--statement",
-        tmp_path / "statement.json",
-        "--out",
-        tmp_path / "signed_statement.cose",
-    )
-
-    data = (tmp_path / "signed_statement.cose").read_bytes()
-    msg = CoseMessage.decode(data)
-    info = msg.get_attr(crypto.SCITTRegistrationInfo)
-    assert info == {
-        "foo": 42,
-        "negative": -42,
-        "bar": "hello",
-        "with_default_type": "world",
-        "binary_data": binary_data,
-        "unicode_data": unicode_data,
-    }
-
-
 def test_extract_payload_from_cose(run, tmp_path: Path):
     generate_ca_cert_and_key(
         output_dir=str(tmp_path),

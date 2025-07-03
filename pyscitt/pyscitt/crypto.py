@@ -15,7 +15,6 @@ warnings.filterwarnings("ignore", category=Warning)
 
 import cbor2
 import jwt
-import pycose.algorithms
 import pycose.headers
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
@@ -52,8 +51,6 @@ from pycose.messages import Sign1Message
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
 Pem = str
-RegistrationInfoValue = Union[str, bytes, int]
-RegistrationInfo = Dict[str, RegistrationInfoValue]
 CoseCurveTypes = Union[Type[P256], Type[P384]]
 CoseCurveType = Tuple[str, CoseCurveTypes]
 
@@ -77,12 +74,6 @@ class SCITTIssuer(CoseHeaderAttribute):
 class SCITTFeed(CoseHeaderAttribute):
     identifier = 392
     fullname = "SCITT_FEED"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTRegistrationInfo(CoseHeaderAttribute):
-    identifier = 393
-    fullname = "SCITT_REGISTRATION_INFO"
 
 
 @CoseHeaderAttribute.register_attribute()
@@ -574,7 +565,6 @@ def sign_statement(
     statement: bytes,
     content_type: str,
     feed: Optional[str] = None,
-    registration_info: Optional[RegistrationInfo] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
     uhdr: Optional[Dict[str, Any]] = None,
@@ -608,9 +598,6 @@ def sign_statement(
             headers[SCITTFeed] = feed
         if svn is not None:
             headers["svn"] = svn
-
-    if registration_info:
-        headers[SCITTRegistrationInfo] = registration_info
 
     msg = Sign1Message(phdr=headers, payload=statement, uhdr=(uhdr or {}))
     msg.key = CoseKey.from_pem_private_key(signer.private_key)
