@@ -37,7 +37,7 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_CWT_CNF = 8;
   static constexpr int64_t COSE_HEADER_PARAM_CWT_CNF_KID = 3;
 
-  static constexpr const char* COSE_HEADER_PARAM_TSS = "tss";
+  static constexpr const char* COSE_HEADER_PARAM_TSS = "msft-css-dev";
   static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION =
     "attestation";
   static constexpr const char* COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS =
@@ -121,7 +121,7 @@ namespace scitt::cose
     // https://datatracker.ietf.org/doc/rfc9597/
     CWTClaims cwt_claims;
 
-    // TSS-specific parameters
+    // Microsoft Trusted Signing Service (TSS) parameters
     TSSMap tss_map;
 
     bool is_present(const std::variant<int64_t, std::string>& label) const
@@ -573,16 +573,18 @@ namespace scitt::cose
       auto tss_error = QCBORDecode_GetError(&ctx);
       if (tss_error != QCBOR_SUCCESS)
       {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode TSS map: {}", tss_error));
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map: {}", COSE_HEADER_PARAM_TSS, tss_error));
       }
 
       QCBORDecode_GetItemsInMap(&ctx, tss_items);
       tss_error = QCBORDecode_GetError(&ctx);
       if (tss_error != QCBOR_SUCCESS)
       {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode TSS map contents: {}", tss_error));
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map contents: {}",
+          COSE_HEADER_PARAM_TSS,
+          tss_error));
       }
 
       if (tss_items[TSS_ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)

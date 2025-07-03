@@ -368,7 +368,7 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
-                "tss": {
+                "msft-css-dev": {
                     "attestation": b"testAttestation",
                     "snp_endorsements": b"testSnpEndorsements",
                     "uvm_endorsements": b"testUvmEndorsements",
@@ -379,14 +379,14 @@ return true;
     def test_tss_map(self, client: Client, configure_service, tss_signed_statement):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
-            if (ccf.bufToStr(phdr.tss.attestation) !== "testAttestation") {
-                return `Invalid tss.attestation`;
+            if (ccf.bufToStr(phdr["msft-css-dev"].attestation) !== "testAttestation") {
+                return `Invalid msft-css-dev.attestation`;
             }
-            if (ccf.bufToStr(phdr.tss.snp_endorsements) !== "testSnpEndorsements") {
-                return `Invalid tss.snp_endorsements`;
+            if (ccf.bufToStr(phdr["msft-css-dev"].snp_endorsements) !== "testSnpEndorsements") {
+                return `Invalid msft-css-dev.snp_endorsements`;
             }
-            if (ccf.bufToStr(phdr.tss.uvm_endorsements) !== "testUvmEndorsements") {
-                return `Invalid tss.uvm_endorsements`;
+            if (ccf.bufToStr(phdr["msft-css-dev"].uvm_endorsements) !== "testUvmEndorsements") {
+                return `Invalid msft-css-dev.uvm_endorsements`;
             }
             return true;
         }
@@ -447,7 +447,7 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
-                "tss": {
+                "msft-css-dev": {
                     "attestation": snp_r,
                     "snp_endorsements": snp_e,
                     "uvm_endorsements": uvm_e,
@@ -461,9 +461,9 @@ return true;
         policy_script = """
         export function apply(phdr, uhdr, payload) {
             var claims = snp_attestation.verifySnpAttestation(
-                phdr.tss.attestation,
-                phdr.tss.snp_endorsements,
-                phdr.tss.uvm_endorsements
+                phdr["msft-css-dev"].attestation,
+                phdr["msft-css-dev"].snp_endorsements,
+                phdr["msft-css-dev"].uvm_endorsements
             );
 
             function toHexStr(arrayBuffer) {

@@ -247,6 +247,7 @@ namespace scitt::verifier
 
         if (contains_cnf_kid(phdr))
         {
+          // FIXME: make sure does not collide with cnf in TSS case
           if (!(phdr.x5chain.has_value() && phdr.x5chain->size() == 1))
           {
             throw VerificationError(
@@ -259,19 +260,25 @@ namespace scitt::verifier
         }
         else if (contains_cwt_issuer(phdr))
         {
-          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
+          if (phdr.cwt_claims.iss->starts_with("did:x509"))
           {
-            throw VerificationError("CWT_Claims issuer must be a did:x509");
-          }
+            if (!phdr.x5chain.has_value())
+            {
+              throw VerificationError(
+                "Signed statement protected header must contain an x5chain");
+            }
 
-          if (!phdr.x5chain.has_value())
+            payload = process_signed_statement_with_didx509_issuer(
+              phdr, configuration, signed_statement);
+          }
+          else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
           {
-            throw VerificationError(
-              "Signed statement protected header must contain an x5chain");
+            throw VerificationError("did:attestedsvc is not supported yet");
           }
-
-          payload = process_signed_statement_with_didx509_issuer(
-            phdr, configuration, signed_statement);
+          else
+          {
+            throw VerificationError("CWT_Claims issuer is unsupported");
+          }
         }
         else
         {

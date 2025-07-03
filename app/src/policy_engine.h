@@ -158,7 +158,7 @@ namespace scitt
             "uvm_endorsements",
             ctx.new_array_buffer_copy(phdr.tss_map.uvm_endorsements.value()));
         }
-        obj.set("tss", std::move(tss_map));
+        obj.set("msft-css-dev", std::move(tss_map));
       }
 
       return obj;

@@ -183,6 +183,10 @@ class TestHeaderParameters:
         with service_error("Missing algorithm in protected header"):
             submit({Algorithm: None})
 
+    def test_tss_map(self, submit):
+        with service_error("Failed to decode msft-css-dev map"):
+            submit({"msft-css-dev": "invalid"})
+
     def test_x5chain(
         self,
         submit,

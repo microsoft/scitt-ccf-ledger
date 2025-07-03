@@ -152,11 +152,21 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     assert claims.get("foo") == "bar"
 
 
-def test_submit_and_validate(run, tmp_path, client: Client, configure_service):
+@pytest.mark.parametrize(
+    "filepath",
+    [
+        "test/payloads/cts-hashv-cwtclaims-b64url.cose",
+        "test/payloads/manifest.spdx.json.sha384.digest.cose",
+        "test/payloads/css-attested-cosesign1-20250617.cose",
+    ],
+)
+def test_submit_and_validate(
+    run, tmp_path, client: Client, configure_service, filepath
+):
     allow_all_policy_script = "export function apply(phdr) {return true}"
     configure_service({"policy": {"policyScript": allow_all_policy_script}})
 
-    with open("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rb") as f:
+    with open(filepath, "rb") as f:
         cts_hashv_cwtclaims = f.read()
 
     statement = client.submit_signed_statement_and_wait(
@@ -165,9 +175,16 @@ def test_submit_and_validate(run, tmp_path, client: Client, configure_service):
 
     (tmp_path / "transparent_statement.cose").write_bytes(statement)
 
+    params_resp = client.get("/parameters")
+    params_resp.raise_for_status()
+    (tmp_path / "params").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "params" / "scitt.json").write_bytes(params_resp.content)
+
     run(
         "validate",
         tmp_path / "transparent_statement.cose",
+        "--service-trust-store",
+        (tmp_path / "params"),
     )
 
     run(
