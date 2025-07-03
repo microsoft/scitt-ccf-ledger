@@ -22,6 +22,46 @@ using namespace testutils;
 
 namespace
 {
+  // add a test case to use payloads from test/payloads directory
+  TEST(CoseTest, DecodeTSSHeaders)
+  {
+    std::string filepath = "test/payloads/css-attested-cosesign1-20250617.cose";
+    std::ifstream file(filepath, std::ios::binary);
+    ASSERT_TRUE(file.is_open());
+    
+    // Get file size
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    // Read file into vector
+    std::vector<uint8_t> signed_statement(size);
+    file.read(reinterpret_cast<char*>(signed_statement.data()), size);
+    ASSERT_EQ(file.gcount(), size);
+
+    cose::ProtectedHeader phdr;
+    cose::UnprotectedHeader uhdr;
+    std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
+
+    if (!phdr.alg.has_value())
+    {
+      throw std::runtime_error("Algorithm not found in protected header");
+    }
+    EXPECT_EQ(phdr.alg.value(), -35);
+
+    if (!phdr.cwt_claims.iss.has_value())
+    {
+      throw std::runtime_error("Issuer not found in protected header");
+    }
+    EXPECT_EQ(
+      phdr.cwt_claims.iss.value(),
+      "did:attestedsvc:msft-css-dev::3d7961c9-84b2-44d2-a9e0-33c040d168b3:test-account1:profile1"
+    );
+    EXPECT_EQ(phdr.tss_map.attestation.has_value(), true);
+    EXPECT_EQ(phdr.tss_map.snp_endorsements.has_value(), true);
+    EXPECT_EQ(phdr.tss_map.uvm_endorsements.has_value(), true);
+  }
+
   TEST(CoseTest, GetHeaders)
   {
     const std::vector<uint8_t>& signed_statement = from_hex_string(
