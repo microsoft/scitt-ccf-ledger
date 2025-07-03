@@ -270,7 +270,8 @@ namespace scitt::verifier
 
             payload = process_signed_statement_with_didx509_issuer(
               phdr, configuration, signed_statement);
-          } else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
+          }
+          else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
           {
             throw VerificationError("did:attestedsvc is not supported yet");
           }

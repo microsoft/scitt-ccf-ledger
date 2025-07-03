@@ -576,16 +576,18 @@ namespace scitt::cose
       auto tss_error = QCBORDecode_GetError(&ctx);
       if (tss_error != QCBOR_SUCCESS)
       {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode {} map: {}", COSE_HEADER_PARAM_TSS, tss_error));
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map: {}", COSE_HEADER_PARAM_TSS, tss_error));
       }
 
       QCBORDecode_GetItemsInMap(&ctx, tss_items);
       tss_error = QCBORDecode_GetError(&ctx);
       if (tss_error != QCBOR_SUCCESS)
       {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode {} map contents: {}", COSE_HEADER_PARAM_TSS, tss_error));
+        throw COSEDecodeError(fmt::format(
+          "Failed to decode {} map contents: {}",
+          COSE_HEADER_PARAM_TSS,
+          tss_error));
       }
 
       if (tss_items[TSS_ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
