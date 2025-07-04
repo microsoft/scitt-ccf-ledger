@@ -178,6 +178,40 @@ namespace scitt::verifier
       return payload;
     }
 
+    std::span<uint8_t> process_signed_statement_with_didattestedsvc_issuer(
+      const cose::ProtectedHeader& phdr,
+      const Configuration& configuration,
+      const std::vector<uint8_t>& data)
+    {
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.tss_map.cose_key.has_value())
+      {
+        throw VerificationError(
+          "Signed statement protected header must contain a COSE key");
+      }
+
+      PublicKey key = cose::to_public_key(phdr.tss_map.cose_key.value());
+
+      std::span<uint8_t> payload;
+      try
+      {
+        payload = cose::verify(data, key);
+      }
+      catch (const cose::COSESignatureValidationError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // FIXME: validate the attestation in the corresponding protected header
+      // against the AMD certificate chain contained in “snp_endorsements”.
+      // Headers to use: attestation, snp_endorsements and uvm_endorsements
+      // see
+      // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
+
+      return payload;
+    }
+
     std::
       tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
       verify_signed_statement(
@@ -208,7 +242,23 @@ namespace scitt::verifier
           }
           else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
           {
-            throw VerificationError("did:attestedsvc is not supported yet");
+            if (
+              !phdr.tss_map.attestation.has_value() ||
+              !phdr.tss_map.snp_endorsements.has_value() ||
+              !phdr.tss_map.uvm_endorsements.has_value())
+            {
+              // FIXME: parse cose key
+              throw VerificationError(fmt::format(
+                "Signed statement protected header must contain a {} map with "
+                "{}, {}, {}, {}",
+                cose::COSE_HEADER_PARAM_TSS,
+                cose::COSE_HEADER_PARAM_TSS_ATTESTATION,
+                cose::COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_COSE_KEY));
+            }
+            payload = process_signed_statement_with_didattestedsvc_issuer(
+              phdr, configuration, signed_statement);
           }
           else
           {

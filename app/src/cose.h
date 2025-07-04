@@ -38,10 +38,14 @@ namespace scitt::cose
   static constexpr const char* COSE_HEADER_PARAM_TSS = "msft-css-dev";
   static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION =
     "attestation";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE =
+    "attestation_type";
   static constexpr const char* COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS =
     "snp_endorsements";
   static constexpr const char* COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS =
     "uvm_endorsements";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_COSE_KEY = "cose_key";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_VER = "ver";
 
   static const std::set<std::variant<int64_t, std::string>> BASIC_HEADER_PARAMS{
     COSE_HEADER_PARAM_ALG,
@@ -62,6 +66,11 @@ namespace scitt::cose
   static constexpr int64_t COSE_CWT_CLAIM_SUB = 2;
   static constexpr int64_t COSE_CWT_CLAIM_IAT = 6;
 
+  static constexpr int64_t COSE_KEY_KTY = 1;
+  static constexpr int64_t COSE_KEY_CRV_N_K_PUB = -1;
+  static constexpr int64_t COSE_KEY_X_E = -2;
+  static constexpr int64_t COSE_KEY_Y = -3;
+
   static const std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
     COSE_HEADER_PARAM_ISSUER,
     COSE_HEADER_PARAM_FEED,
@@ -75,11 +84,60 @@ namespace scitt::cose
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  // Cose Key https://www.rfc-editor.org/rfc/rfc9679.html
+  // Presence of values depends on kty
+  struct CoseKeyMap
+  {
+    std::optional<int64_t> kty;
+    std::optional<std::variant<int64_t, std::vector<uint8_t>>> crv_n_k_pub;
+    std::optional<std::vector<uint8_t>> x_e;
+    std::optional<std::vector<uint8_t>> y;
+  };
+
+  static PublicKey to_public_key(const CoseKeyMap& key_map)
+  {
+    if (!key_map.kty.has_value() || key_map.kty.value() != 2)
+    {
+      throw COSEDecodeError(
+        "CoseKeyMap kty is not set or not equal to 2 (EC2).");
+    }
+    if (
+      !key_map.crv_n_k_pub.has_value() ||
+      !std::holds_alternative<int64_t>(key_map.crv_n_k_pub.value()))
+    {
+      throw COSEDecodeError("CoseKeyMap crv is not set or not an int64_t.");
+    }
+    if (!key_map.x_e.has_value() || key_map.x_e.value().empty())
+    {
+      throw COSEDecodeError("CoseKeyMap x is not set or empty.");
+    }
+    if (!key_map.y.has_value() || key_map.y.value().empty())
+    {
+      throw COSEDecodeError("CoseKeyMap y is not set or empty.");
+    }
+    auto crv = std::get<int64_t>(key_map.crv_n_k_pub.value());
+    std::vector<uint8_t> x = key_map.x_e.value();
+    std::vector<uint8_t> y = key_map.y.value();
+    PublicKey key(x, y, crv, std::nullopt);
+    return key;
+  }
+
+  /**
+  "attestation": bstr,       ; raw hardware attestation report
+  "attestation_type": tstr,  ; "SEV-SNP:ContainerPlat-AMD-UVM"
+  "cose_key": { ... },       ; canonical COSE_Key map (embedded directly)
+  "snp_endorsements": bstr,  ; concatenated PEM-encoded AMD cert chain
+  "uvm_endorsements": bstr,  ; opaque endorsement from Azure or UVM authority
+  "ver": int                 ; version number of the format (e.g., 0)
+   */
   struct TSSMap
   {
     std::optional<std::vector<uint8_t>> attestation;
+    std::optional<std::string> attestation_type;
+    std::optional<CoseKeyMap> cose_key;
     std::optional<std::vector<uint8_t>> snp_endorsements;
     std::optional<std::vector<uint8_t>> uvm_endorsements;
+    std::optional<int64_t> ver;
   };
 
   struct CWTClaims
@@ -92,12 +150,7 @@ namespace scitt::cose
 
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
-    // All headers are optional here but optionality will later be validated
-    // according to the COSE profile of the claim.
-
-    // Vanilla SCITT protected header parameters
-    // Issuer is used when verifying with did:web
-    // x5chain is used when verification is done with the x509 certificate chain
+    // The headers used in this codebase
     std::optional<int64_t> alg;
     std::optional<std::vector<std::variant<int64_t, std::string>>> crit;
     std::optional<std::string> kid;
@@ -114,88 +167,6 @@ namespace scitt::cose
 
     // Microsoft Trusted Signing Service (TSS) parameters
     TSSMap tss_map;
-
-    bool is_present(const std::variant<int64_t, std::string>& label) const
-    {
-      // Helper function checking if a known label has a value in the protected
-      // header.
-      // Intended for checking if critical parameters are present in the
-      // protected header. Hence this should only be called once it is
-      // established that the label is known.
-      if (
-        label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_ALG) and
-        alg.has_value())
-      {
-        return true;
-      }
-      if (
-        label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_CRIT) and
-        crit.has_value())
-      {
-        return true;
-      }
-      if (
-        label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_CTY) and
-        cty.has_value())
-      {
-        return true;
-      }
-      if (
-        label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_KID) and
-        kid.has_value())
-      {
-        return true;
-      }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(COSE_HEADER_PARAM_X5CHAIN) and
-        x5chain.has_value())
-      {
-        return true;
-      }
-      if (
-        label ==
-          std::variant<int64_t, std::string>(COSE_HEADER_PARAM_ISSUER) and
-        issuer.has_value())
-      {
-        return true;
-      }
-      if (
-        label == std::variant<int64_t, std::string>(COSE_HEADER_PARAM_FEED) and
-        feed.has_value())
-      {
-        return true;
-      }
-      return false;
-    }
-
-    bool is_critical(const std::variant<int64_t, std::string>& label) const
-    {
-      if (!crit.has_value())
-      {
-        return false;
-      }
-      for (const auto& crit_label : crit.value())
-      {
-        if (crit_label == label)
-        {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // Returns a bool representing whether the input label is a known
-    // parameter in the context of a profile.
-    bool is_known(
-      const std::variant<int64_t, std::string>& label,
-      const std::set<std::variant<int64_t, std::string>>& profile_parameters)
-      const
-    {
-      return BASIC_HEADER_PARAMS.contains(label) ||
-        EXTRA_HEADER_PARAMS.contains(label) ||
-        profile_parameters.contains(label);
-    }
   };
 
   struct UnprotectedHeader
@@ -362,8 +333,11 @@ namespace scitt::cose
     enum
     {
       TSS_ATTESTATION_INDEX,
+      TSS_ATTESTATION_TYPE_INDEX,
       TSS_SNP_ENDORSEMENTS_INDEX,
       TSS_UVM_ENDORSEMENTS_INDEX,
+      TSS_VER_INDEX,
+      TSS_COSE_KEY_INDEX,
       TSS_END_INDEX,
     };
     QCBORItem tss_items[TSS_END_INDEX + 1];
@@ -372,6 +346,11 @@ namespace scitt::cose
       UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION);
     tss_items[TSS_ATTESTATION_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     tss_items[TSS_ATTESTATION_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    tss_items[TSS_ATTESTATION_TYPE_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE);
+    tss_items[TSS_ATTESTATION_TYPE_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_ATTESTATION_TYPE_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
 
     tss_items[TSS_SNP_ENDORSEMENTS_INDEX].label.string =
       UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS);
@@ -382,6 +361,46 @@ namespace scitt::cose
       UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS);
     tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    tss_items[TSS_VER_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_VER);
+    tss_items[TSS_VER_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_VER_INDEX].uDataType = QCBOR_TYPE_INT64;
+
+    tss_items[TSS_COSE_KEY_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_COSE_KEY);
+    tss_items[TSS_COSE_KEY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_COSE_KEY_INDEX].uDataType = QCBOR_TYPE_MAP;
+
+    enum
+    {
+      TSS_COSE_KEY_KTY_INDEX,
+      TSS_COSE_KEY_CRV_N_K_PUB_INDEX,
+      TSS_COSE_KEY_X_E_INDEX,
+      TSS_COSE_KEY_Y_INDEX,
+      TSS_COSE_KEY_END_INDEX,
+    };
+    QCBORItem cose_key_items[TSS_COSE_KEY_END_INDEX + 1];
+
+    cose_key_items[TSS_COSE_KEY_KTY_INDEX].label.int64 = COSE_KEY_KTY;
+    cose_key_items[TSS_COSE_KEY_KTY_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cose_key_items[TSS_COSE_KEY_KTY_INDEX].uDataType = QCBOR_TYPE_INT64;
+
+    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].label.int64 =
+      COSE_KEY_CRV_N_K_PUB;
+    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uLabelType =
+      QCBOR_TYPE_INT64;
+    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType = QCBOR_TYPE_ANY;
+
+    cose_key_items[TSS_COSE_KEY_X_E_INDEX].label.int64 = COSE_KEY_X_E;
+    cose_key_items[TSS_COSE_KEY_X_E_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cose_key_items[TSS_COSE_KEY_X_E_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    cose_key_items[TSS_COSE_KEY_Y_INDEX].label.int64 = COSE_KEY_Y;
+    cose_key_items[TSS_COSE_KEY_Y_INDEX].uLabelType = QCBOR_TYPE_INT64;
+    cose_key_items[TSS_COSE_KEY_Y_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
+
+    cose_key_items[TSS_COSE_KEY_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     tss_items[TSS_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
@@ -536,6 +555,11 @@ namespace scitt::cose
         parsed.tss_map.attestation =
           cbor::as_vector(tss_items[TSS_ATTESTATION_INDEX].val.string);
       }
+      if (tss_items[TSS_ATTESTATION_TYPE_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.attestation_type =
+          cbor::as_string(tss_items[TSS_ATTESTATION_TYPE_INDEX].val.string);
+      }
       if (tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
         parsed.tss_map.snp_endorsements =
@@ -545,6 +569,80 @@ namespace scitt::cose
       {
         parsed.tss_map.uvm_endorsements =
           cbor::as_vector(tss_items[TSS_UVM_ENDORSEMENTS_INDEX].val.string);
+      }
+      if (tss_items[TSS_VER_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.ver = tss_items[TSS_VER_INDEX].val.int64;
+      }
+
+      if (tss_items[TSS_COSE_KEY_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        QCBORDecode_EnterMapFromMapSZ(&ctx, COSE_HEADER_PARAM_TSS_COSE_KEY);
+        auto cose_key_error = QCBORDecode_GetError(&ctx);
+        if (cose_key_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(fmt::format(
+            "Failed to decode {} map: {}",
+            COSE_HEADER_PARAM_TSS_COSE_KEY,
+            tss_error));
+        }
+
+        QCBORDecode_GetItemsInMap(&ctx, cose_key_items);
+        cose_key_error = QCBORDecode_GetError(&ctx);
+        if (cose_key_error != QCBOR_SUCCESS)
+        {
+          throw COSEDecodeError(fmt::format(
+            "Failed to decode {} map contents: {}",
+            COSE_HEADER_PARAM_TSS_COSE_KEY,
+            tss_error));
+        }
+
+        if (cose_key_items[TSS_COSE_KEY_KTY_INDEX].uDataType != QCBOR_TYPE_NONE)
+        {
+          parsed.tss_map.cose_key = CoseKeyMap();
+          parsed.tss_map.cose_key->kty =
+            cose_key_items[TSS_COSE_KEY_KTY_INDEX].val.int64;
+
+          // save other fields only if KTY is present
+
+          if (
+            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType ==
+            QCBOR_TYPE_BYTE_STRING)
+          {
+            parsed.tss_map.cose_key->crv_n_k_pub = cbor::as_vector(
+              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].val.string);
+          }
+          else if (
+            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType ==
+            QCBOR_TYPE_INT64)
+          {
+            parsed.tss_map.cose_key->crv_n_k_pub =
+              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].val.int64;
+          }
+          else if (
+            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType !=
+            QCBOR_TYPE_NONE)
+          {
+            throw COSEDecodeError(fmt::format(
+              "Cose Key value must be of type int64 or byte string, got {}",
+              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType));
+          }
+
+          if (
+            cose_key_items[TSS_COSE_KEY_X_E_INDEX].uDataType != QCBOR_TYPE_NONE)
+          {
+            parsed.tss_map.cose_key->x_e = cbor::as_vector(
+              cose_key_items[TSS_COSE_KEY_X_E_INDEX].val.string);
+          }
+
+          if (cose_key_items[TSS_COSE_KEY_Y_INDEX].uDataType != QCBOR_TYPE_NONE)
+          {
+            parsed.tss_map.cose_key->y =
+              cbor::as_vector(cose_key_items[TSS_COSE_KEY_Y_INDEX].val.string);
+          }
+        }
+
+        QCBORDecode_ExitMap(&ctx);
       }
 
       QCBORDecode_ExitMap(&ctx);
