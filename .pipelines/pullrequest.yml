@@ -89,10 +89,6 @@ extends:
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: virtual
-          # These make CI print all the errors, rather than stopping early.
-          CXXFLAGS: -ferror-limit=0
-          NINJA_FLAGS: -k 0
-          CMAKE_BUILD_TYPE: Debug
         steps:
           # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
           - checkout: SCITT
@@ -105,9 +101,6 @@ extends:
             displayName: Setup environment
           - script: ./build.sh
             displayName: Build (local)
-          # unit tests run only on virtual platform
-          - script: ./run_unit_tests.sh
-            displayName: Run Unit tests
           - template: .pipelines/ado_pipauth.yml@self
           - script: ./run_functional_tests.sh
             displayName: Run Functional Tests
@@ -121,8 +114,6 @@ extends:
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: virtual
-          CXXFLAGS: -ferror-limit=0
-          NINJA_FLAGS: -k 0
         steps:
           - checkout: SCITT
             path: s/
@@ -149,8 +140,6 @@ extends:
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: snp
-          CXXFLAGS: -ferror-limit=0
-          NINJA_FLAGS: -k 0 
           LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0'
         steps:
           - checkout: SCITT
@@ -165,7 +154,6 @@ extends:
             displayName: Build snp
             env:
               PLATFORM: snp
-              BUILD_TESTS: OFF
 
       - job: snp_docker_build
         displayName: Build (SNP) with Docker
@@ -176,8 +164,6 @@ extends:
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
           PLATFORM: snp
-          CXXFLAGS: -ferror-limit=0
-          NINJA_FLAGS: -k 0 
         steps:
           - checkout: SCITT
             path: s/

@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.11.2"
+PACKAGE_VERSION = "0.12.0"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -33,7 +33,6 @@ setup(
         "pyjwt",
         "jwcrypto==1.5.*",
         "types-jwcrypto",
-        "azure-keyvault",
         "azure-identity",
         "azure-confidentialledger==1.*",
     ],

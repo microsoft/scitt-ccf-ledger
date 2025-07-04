@@ -29,10 +29,9 @@ To add a unit test for a function `new_function()` in `app/src/foo/bar.h`:
         )
         ```
   - In `app/unit-tests/foo/bar_test.cpp` create TEST()s using the [GoogleTest framework](https://google.github.io/googletest/).
-  - To test the new unit test(s) run:
+  - The test will be run as part of the virtual platform build:
       ```
-      ./build.sh
-      ./run_unit_tests.sh
+      PLATFORM=virtual ./build.sh
       ```
 
 ### Adding a functional test

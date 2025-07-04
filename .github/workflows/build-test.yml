@@ -34,12 +34,10 @@ jobs:
             image: virtual
             nodes: [self-hosted, 1ES.Pool=gha-scitt-pool]
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
-            unit_tests_enabled: ON
           - name: snp
             image: snp
             nodes: [self-hosted, 1ES.Pool=gha-scitt-pool]
             options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
-            unit_tests_enabled: OFF
     runs-on: ${{ matrix.platform.nodes }}
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
@@ -49,12 +47,7 @@ jobs:
         SCITT_CI: 1
         # Additional CMake flags.
         PLATFORM: ${{ matrix.platform.name }}
-        CMAKE_BUILD_TYPE: Debug
         ENABLE_CLANG_TIDY: ON
-        BUILD_TESTS: ${{ matrix.platform.unit_tests_enabled }}
-        # These make CI print all the errors, rather than stopping early.
-        CXXFLAGS: -ferror-limit=0
-        NINJA_FLAGS: -k 0
     steps:
       - name: Setup environment
         run: |
@@ -72,8 +65,6 @@ jobs:
 
       - run: ./scripts/setup-env.sh
       - run: ./build.sh
-      - run: ./run_unit_tests.sh
-        if: "${{ matrix.platform.name == 'virtual' }}"
       - run: ./run_functional_tests.sh
         if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform for the moment
       - name: "Upload logs for ${{ matrix.platform.name }}"

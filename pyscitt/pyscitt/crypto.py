@@ -15,7 +15,6 @@ warnings.filterwarnings("ignore", category=Warning)
 
 import cbor2
 import jwt
-import pycose.algorithms
 import pycose.headers
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
@@ -52,8 +51,6 @@ from pycose.messages import Sign1Message
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 
 Pem = str
-RegistrationInfoValue = Union[str, bytes, int]
-RegistrationInfo = Dict[str, RegistrationInfoValue]
 CoseCurveTypes = Union[Type[P256], Type[P384]]
 CoseCurveType = Tuple[str, CoseCurveTypes]
 
@@ -77,12 +74,6 @@ class SCITTIssuer(CoseHeaderAttribute):
 class SCITTFeed(CoseHeaderAttribute):
     identifier = 392
     fullname = "SCITT_FEED"
-
-
-@CoseHeaderAttribute.register_attribute()
-class SCITTRegistrationInfo(CoseHeaderAttribute):
-    identifier = 393
-    fullname = "SCITT_REGISTRATION_INFO"
 
 
 @CoseHeaderAttribute.register_attribute()
@@ -240,8 +231,10 @@ def generate_cert(
         .issuer_name(issuer_name)
         .public_key(subject_pub_key)
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=10))
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=10)
+        )
         .add_extension(
             x509.KeyUsage(
                 digital_signature=not ca,
@@ -574,11 +567,14 @@ def sign_statement(
     statement: bytes,
     content_type: str,
     feed: Optional[str] = None,
-    registration_info: Optional[RegistrationInfo] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
+    uhdr: Optional[Dict[str, Any]] = None,
+    additional_phdr: Optional[Dict[Union[int, str], Any]] = None,
 ) -> bytes:
     headers: dict = {}
+    if additional_phdr is not None:
+        headers.update(additional_phdr)
     headers[pycose.headers.Algorithm] = signer.algorithm
     headers[pycose.headers.ContentType] = content_type
 
@@ -587,7 +583,9 @@ def sign_statement(
     if signer.kid is not None:
         headers[pycose.headers.KID] = signer.kid.encode("utf-8")
     if cwt:
-        cwt_claims: Dict[Union[int, str], Union[int, str]] = {}
+        cwt_claims: Dict[Union[int, str], Union[int, str]] = headers.get(
+            CWTClaims.identifier, {}
+        )
         if signer.issuer is not None:
             cwt_claims[CWT_ISS] = signer.issuer
         if feed is not None:
@@ -603,10 +601,7 @@ def sign_statement(
         if svn is not None:
             headers["svn"] = svn
 
-    if registration_info:
-        headers[SCITTRegistrationInfo] = registration_info
-
-    msg = Sign1Message(phdr=headers, payload=statement)
+    msg = Sign1Message(phdr=headers, payload=statement, uhdr=(uhdr or {}))
     msg.key = CoseKey.from_pem_private_key(signer.private_key)
     return msg.encode(tag=True)
 
@@ -618,6 +613,8 @@ def sign_json_statement(
     feed: Optional[str] = None,
     svn: Optional[int] = None,
     cwt: bool = False,
+    uhdr: Optional[Dict[str, Any]] = None,
+    additional_phdr: Optional[Dict[Union[int, str], Any]] = None,
 ) -> bytes:
     return sign_statement(
         signer,
@@ -626,6 +623,8 @@ def sign_json_statement(
         feed=feed,
         svn=svn,
         cwt=cwt,
+        uhdr=(uhdr or {}),
+        additional_phdr=(additional_phdr or {}),
     )
 
 

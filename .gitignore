@@ -16,5 +16,6 @@ perf.json
 **/*.pid
 .mypy_cache/
 **/*.cose
+!test/payloads/*
 **/*.cbor
 demo-poc/

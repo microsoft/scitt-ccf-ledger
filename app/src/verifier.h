@@ -72,7 +72,7 @@ namespace scitt::verifier
       }
     }
 
-    void process_signed_statement_with_didx509_issuer(
+    std::span<uint8_t> process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
@@ -83,9 +83,10 @@ namespace scitt::verifier
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
+      std::span<uint8_t> payload;
       try
       {
-        cose::verify(data, key);
+        payload = cose::verify(data, key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -173,36 +174,96 @@ namespace scitt::verifier
         throw VerificationError(
           "Resolved verification method public key does not match signing key");
       }
+
+      return payload;
     }
 
-    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_signed_statement(
-      const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
-      ::timespec current_time,
-      const Configuration& configuration)
+    std::span<uint8_t> process_signed_statement_with_didattestedsvc_issuer(
+      const cose::ProtectedHeader& phdr,
+      const Configuration& configuration,
+      const std::vector<uint8_t>& data)
+    {
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.tss_map.cose_key.has_value())
+      {
+        throw VerificationError(
+          "Signed statement protected header must contain a COSE key");
+      }
+
+      PublicKey key = cose::to_public_key(phdr.tss_map.cose_key.value());
+
+      std::span<uint8_t> payload;
+      try
+      {
+        payload = cose::verify(data, key);
+      }
+      catch (const cose::COSESignatureValidationError& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // FIXME: validate the attestation in the corresponding protected header
+      // against the AMD certificate chain contained in “snp_endorsements”.
+      // Headers to use: attestation, snp_endorsements and uvm_endorsements
+      // see
+      // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
+
+      return payload;
+    }
+
+    std::
+      tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
+      verify_signed_statement(
+        const std::vector<uint8_t>& signed_statement,
+        ccf::kv::ReadOnlyTx& tx,
+        ::timespec current_time,
+        const Configuration& configuration)
     {
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
+      std::span<uint8_t> payload;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
 
         if (contains_cwt_issuer(phdr))
         {
-          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
+          if (phdr.cwt_claims.iss->starts_with("did:x509"))
           {
-            throw VerificationError("CWT_Claims issuer must be a did:x509");
-          }
+            if (!phdr.x5chain.has_value())
+            {
+              throw VerificationError(
+                "Signed statement protected header must contain an x5chain");
+            }
 
-          if (!phdr.x5chain.has_value())
+            payload = process_signed_statement_with_didx509_issuer(
+              phdr, configuration, signed_statement);
+          }
+          else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
           {
-            throw VerificationError(
-              "Signed statement protected header must contain an x5chain");
+            if (
+              !phdr.tss_map.attestation.has_value() ||
+              !phdr.tss_map.snp_endorsements.has_value() ||
+              !phdr.tss_map.uvm_endorsements.has_value())
+            {
+              // FIXME: parse cose key
+              throw VerificationError(fmt::format(
+                "Signed statement protected header must contain a {} map with "
+                "{}, {}, {}, {}",
+                cose::COSE_HEADER_PARAM_TSS,
+                cose::COSE_HEADER_PARAM_TSS_ATTESTATION,
+                cose::COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_COSE_KEY));
+            }
+            payload = process_signed_statement_with_didattestedsvc_issuer(
+              phdr, configuration, signed_statement);
           }
-
-          process_signed_statement_with_didx509_issuer(
-            phdr, configuration, signed_statement);
+          else
+          {
+            throw VerificationError("CWT_Claims issuer is unsupported");
+          }
         }
         else
         {
@@ -216,7 +277,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return {phdr, uhdr};
+      return {phdr, uhdr, payload};
     }
 
   private:

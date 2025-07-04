@@ -37,11 +37,6 @@ jobs:
         run: |
           ./scripts/setup-env.sh
           ./build.sh
-
-      - name: Unit tests
-        run: |
-          set +x
-          ./run_unit_tests.sh
       
       - name: E2E tests
         run: |
