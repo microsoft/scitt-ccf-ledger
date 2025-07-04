@@ -53,10 +53,16 @@ endif ()
 target_include_directories(${SCITT_TARGET} PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src)
 
 if (ENABLE_CLANG_TIDY)
-  find_program (CLANG_TIDY_EXE NAMES "clang-tidy-18" "clang-tidy" REQUIRED)
+  message("Enabling clang-tidy for target ${SCITT_TARGET}")
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy-18" "clang-tidy")
+  if(NOT CLANG_TIDY_EXE)
+    message(FATAL_ERROR "clang-tidy not found. Please install clang-tidy-18 or clang-tidy to enable static analysis, e.g. tdnf install -y clang-tools-extra-devel")
+  endif()
   set_target_properties(${SCITT_TARGET} PROPERTIES
     C_CLANG_TIDY "${CLANG_TIDY_EXE}"
     CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+else()
+  message("clang-tidy is disabled for target ${SCITT_TARGET}")
 endif ()
 
 install(
@@ -109,8 +115,14 @@ if (BUILD_TESTS)
   )
   add_san(unit_tests)
   # add test payloads to unit_tests from test/payloads directory
-  file(GLOB TEST_PAYLOADS "../test/payloads/*")
+  file(GLOB TEST_PAYLOADS_EXTERNAL "${CMAKE_CURRENT_SOURCE_DIR}/../test/payloads/*")
+  foreach(FILE ${TEST_PAYLOADS_EXTERNAL})
+    get_filename_component(FILENAME ${FILE} NAME)
+    configure_file(${FILE} ${CMAKE_CURRENT_BINARY_DIR}/test_payloads/${FILENAME} COPYONLY)
+  endforeach()
+  file(GLOB_RECURSE TEST_PAYLOADS "${CMAKE_CURRENT_BINARY_DIR}/test_payloads/*")
   target_sources(unit_tests PRIVATE ${TEST_PAYLOADS})
+  # end adding test payloads
   target_link_system_libraries(unit_tests PRIVATE
     GTest::gmock
     rapidcheck

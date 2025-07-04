@@ -78,7 +78,7 @@ jobs:
     - if: matrix.language == 'cpp'
       name: Build C++
       run: |
-        CMAKE_BUILD_TYPE=Debug PLATFORM=virtual BUILD_TESTS=OFF ./build.sh
+        PLATFORM=virtual ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

@@ -25,7 +25,7 @@ namespace
   // add a test case to use payloads from test/payloads directory
   TEST(CoseTest, DecodeTSSHeaders)
   {
-    std::string filepath = "test/payloads/css-attested-cosesign1-20250617.cose";
+    std::string filepath = "test_payloads/css-attested-cosesign1-20250617.cose";
     std::ifstream file(filepath, std::ios::binary);
     ASSERT_TRUE(file.is_open());
 

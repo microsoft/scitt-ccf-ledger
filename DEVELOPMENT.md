@@ -124,13 +124,12 @@ scitt-ccf-ledger has unit tests, covering individual components of the source co
 
 ### Unit tests
 
-The unit tests can be run with `run_unit_tests.sh` script.
+Unit tests will be run as part of the virtual plaftorm build workflow in cmake.
 
 **Using your host environment**
 
 ```sh
-PLATFORM=virtual CMAKE_BUILD_TYPE=Debug ./build.sh
-./run_unit_tests.sh
+PLATFORM=virtual ./build.sh
 ```
 
 ### Functional (e2e) tests
@@ -163,8 +162,6 @@ To enable ASan it is necessary to build CCF from source:
 
 ```sh
 PLATFORM=virtual CMAKE_BUILD_TYPE=Debug BUILD_CCF_FROM_SOURCE=ON ./build.sh
-# once complete you run the tests
-./run_unit_tests.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 
