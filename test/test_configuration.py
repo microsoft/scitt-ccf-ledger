@@ -397,35 +397,6 @@ return true;
         client.submit_signed_statement_and_wait(tss_signed_statement)
 
     @pytest.fixture(scope="class")
-    def signed_statement_with_cnf_kid(
-        self, cert_authority: X5ChainCertificateAuthority
-    ):
-        identity = cert_authority.create_identity(
-            alg="ES256", kty="ec", add_eku="2.999"
-        )
-        return crypto.sign_json_statement_cnf_kid(
-            identity,
-            {"foo": "bar"},
-        )
-
-    def test_cnf_kid(
-        self, client: Client, configure_service, signed_statement_with_cnf_kid
-    ):
-        policy_script = """
-        export function apply(phdr, uhdr, payload) {
-            // cnf.kid is authenticated against x5c[0]
-            if (phdr.cwt.cnf.kid.byteLength !== 32) {
-                return `Invalid cnf.kid`;
-            } 
-            return true;
-        }
-        """
-
-        configure_service({"policy": {"policyScript": policy_script}})
-
-        client.submit_signed_statement_and_wait(signed_statement_with_cnf_kid)
-
-    @pytest.fixture(scope="class")
     def signed_statement_with_attestation(
         self, cert_authority: X5ChainCertificateAuthority
     ):
