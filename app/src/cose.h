@@ -783,7 +783,8 @@ namespace scitt::cose
       t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, &params);
     if (error)
     {
-      throw COSESignatureValidationError("COSE decoding failed");
+      throw COSESignatureValidationError(
+        fmt::format("COSE decoding failed: {}", error));
     }
 
     auto key_alg = key.get_cose_alg();

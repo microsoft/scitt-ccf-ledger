@@ -15,6 +15,10 @@
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
+#include <ccf/pal/attestation.h>
+#include <ccf/pal/attestation_sev_snp.h>
+#include <ccf/pal/uvm_endorsements.h>
+#include <ccf/ds/quote_info.h>
 #include <fmt/format.h>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
@@ -193,10 +197,12 @@ namespace scitt::verifier
 
       PublicKey key = cose::to_public_key(phdr.tss_map.cose_key.value());
 
+      // First verify the signature to then trust the structure integrity
+      // and the attestation contained in the protected header.
       std::span<uint8_t> payload;
       try
       {
-        payload = cose::verify(data, key);
+        payload = cose::verify(data, key, true);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -208,6 +214,45 @@ namespace scitt::verifier
       // Headers to use: attestation, snp_endorsements and uvm_endorsements
       // see
       // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
+
+      // Verify the attestation report contained in the protected header
+      // against the AMD certificate chain contained in “snp_endorsements”.
+      ccf::QuoteInfo quote_info = {};
+      quote_info.format = ccf::QuoteFormat::amd_sev_snp_v1;
+      quote_info.quote = phdr.tss_map.attestation.value();
+      quote_info.endorsements = phdr.tss_map.snp_endorsements.value();
+
+      ccf::pal::PlatformAttestationMeasurement measurement = {};
+      ccf::pal::PlatformAttestationReportData report_data = {};
+      std::optional<ccf::pal::UVMEndorsements> parsed_uvm_endorsements;
+
+      try
+      {
+        ccf::pal::verify_snp_attestation_report(quote_info, measurement, report_data);
+      }
+      catch (const std::exception& e)
+      {
+        throw VerificationError(e.what());
+      }
+
+      // Now check that the attestation report data matches the cose key
+      // This allows us to verify that the enclave knew about the key
+      std::vector<uint8_t> cose_key_hash;
+      try
+      {
+        cose_key_hash = key.public_key_sha256();
+      }
+      catch (const std::exception& e)
+      {        throw VerificationError(fmt::format(
+          "Failed to compute COSE key hash: {}", e.what()));
+      }
+
+      // throws COSE key hash: 
+      // [208, 95, 128, 27, 127, 194, 91, 197, 68, 166, 200, 1, 173, 201, 55, 216, 141, 140, 218, 190, 228, 198, 110, 40, 189, 118, 194, 26, 115, 80, 21, 119], 
+      // report data: 
+      // [163, 252, 93, 242, 145, 200, 102, 209, 174, 127, 233, 5, 25, 56, 78, 238, 43, 132, 212, 18, 237, 74, 190, 34, 199, 19, 149, 182, 253, 227, 5, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      throw VerificationError(fmt::format(
+          "COSE key hash: {}, report data: {}", cose_key_hash, report_data.data));
 
       return payload;
     }
@@ -247,7 +292,6 @@ namespace scitt::verifier
               !phdr.tss_map.snp_endorsements.has_value() ||
               !phdr.tss_map.uvm_endorsements.has_value())
             {
-              // FIXME: parse cose key
               throw VerificationError(fmt::format(
                 "Signed statement protected header must contain a {} map with "
                 "{}, {}, {}, {}",
