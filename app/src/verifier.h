@@ -196,7 +196,7 @@ namespace scitt::verifier
           cose::COSE_HEADER_PARAM_TSS));
       }
 
-      PublicKey key = cose::to_public_key(phdr.tss_map.cose_key.value());
+      PublicKey key = phdr.tss_map.cose_key->to_public_key();
 
       // First verify the signature to then trust the structure integrity
       // and the attestation contained in the protected header.
@@ -250,7 +250,7 @@ namespace scitt::verifier
       std::vector<uint8_t> cose_key_hash;
       try
       {
-        cose_key_hash = cose::to_sha256_thumb(phdr.tss_map.cose_key.value());
+        cose_key_hash = phdr.tss_map.cose_key->to_sha256_thumb();
       }
       catch (const std::exception& e)
       {
