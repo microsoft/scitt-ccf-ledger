@@ -191,8 +191,9 @@ namespace scitt::verifier
 
       if (!phdr.tss_map.cose_key.has_value())
       {
-        throw VerificationError(
-          "Signed statement protected header must contain a COSE key");
+        throw VerificationError(fmt::format(
+          "Signed statement protected header {} must contain a COSE key",
+          cose::COSE_HEADER_PARAM_TSS));
       }
 
       PublicKey key = cose::to_public_key(phdr.tss_map.cose_key.value());
@@ -202,21 +203,18 @@ namespace scitt::verifier
       std::span<uint8_t> payload;
       try
       {
+        // ignore unknown critical headers due to the presence of a custom TSS header
         payload = cose::verify(data, key, true);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
-        throw VerificationError(e.what());
+        throw VerificationError(fmt::format(
+          "Failed to validate cose signature using the COSE key: {}", e.what()));
       }
-
-      // FIXME: validate the attestation in the corresponding protected header
-      // against the AMD certificate chain contained in “snp_endorsements”.
-      // Headers to use: attestation, snp_endorsements and uvm_endorsements
-      // see
-      // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
 
       // Verify the attestation report contained in the protected header
       // against the AMD certificate chain contained in “snp_endorsements”.
+      // see https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
       ccf::QuoteInfo quote_info = {};
       quote_info.format = ccf::QuoteFormat::amd_sev_snp_v1;
       quote_info.quote = phdr.tss_map.attestation.value();
@@ -232,27 +230,41 @@ namespace scitt::verifier
       }
       catch (const std::exception& e)
       {
-        throw VerificationError(e.what());
+        throw VerificationError(fmt::format(
+          "Failed to validate SNP attestation report: {}", e.what()));
       }
 
       // Now check that the attestation report data matches the cose key
       // This allows us to verify that the enclave knew about the key
+      if (report_data.data.size() < 32)
+      {
+        throw VerificationError(fmt::format(
+          "Report data length is less than 32 bytes: {}",
+          report_data.data.size()));
+      }
+
       std::vector<uint8_t> cose_key_hash;
       try
       {
-        cose_key_hash = key.public_key_sha256();
+        cose_key_hash = cose::to_sha256_thumb(phdr.tss_map.cose_key.value());
       }
       catch (const std::exception& e)
       {        throw VerificationError(fmt::format(
           "Failed to compute COSE key hash: {}", e.what()));
       }
 
-      // throws COSE key hash: 
-      // [208, 95, 128, 27, 127, 194, 91, 197, 68, 166, 200, 1, 173, 201, 55, 216, 141, 140, 218, 190, 228, 198, 110, 40, 189, 118, 194, 26, 115, 80, 21, 119], 
-      // report data: 
-      // [163, 252, 93, 242, 145, 200, 102, 209, 174, 127, 233, 5, 25, 56, 78, 238, 43, 132, 212, 18, 237, 74, 190, 34, 199, 19, 149, 182, 253, 227, 5, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      throw VerificationError(fmt::format(
-          "COSE key hash: {}, report data: {}", cose_key_hash, report_data.data));
+      // select first 32 bytes of the report data
+      std::span<uint8_t> report_data_span(
+        report_data.data.data(), std::min(report_data.data.size(), size_t(32)));
+      
+      if (!std::equal(cose_key_hash.begin(), cose_key_hash.end(), 
+                      report_data_span.begin(), report_data_span.end()))
+      {
+        throw VerificationError(fmt::format(
+          "COSE key hash does not match report data: "
+          "COSE key hash: {}, report data: {}",
+          cose_key_hash, report_data_span));
+      }
 
       return payload;
     }

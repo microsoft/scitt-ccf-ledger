@@ -153,4 +153,39 @@ namespace scitt::cbor
     output.shrink_to_fit();
     return output;
   }
+
+  // see https://www.ietf.org/rfc/rfc9679.html
+  inline std::vector<uint8_t> cose_key_to_cbor(
+    const int64_t kty,
+    const int64_t crv,
+    const std::vector<uint8_t>& x,
+    const std::vector<uint8_t>& y)
+  {
+    /**
+     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
+     */
+    size_t approx_buff_size =
+      (1 + 4 + 4) * QCBOR_HEAD_BUFFER_SIZE + sizeof(kty) + sizeof(crv) + x.size() + y.size();
+    std::vector<uint8_t> output(approx_buff_size);
+
+    UsefulBuf output_buf{output.data(), output.size()};
+    QCBOREncodeContext ectx;
+    QCBOREncode_Init(&ectx, output_buf);
+    QCBOREncode_OpenMap(&ectx);
+    QCBOREncode_AddInt64ToMapN(&ectx, 1, kty);
+    QCBOREncode_AddInt64ToMapN(&ectx, -1, crv);
+    QCBOREncode_AddBytesToMapN(&ectx, -2, from_bytes(x));
+    QCBOREncode_AddBytesToMapN(&ectx, -3, from_bytes(y));
+    QCBOREncode_CloseMap(&ectx);
+    UsefulBufC encoded_cbor;
+    QCBORError err;
+    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
+    if (err != QCBOR_SUCCESS)
+    {
+      throw std::logic_error("Failed to encode CBOR error");
+    }
+    output.resize(encoded_cbor.len);
+    output.shrink_to_fit();
+    return output;
+  }
 }

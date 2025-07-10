@@ -12,6 +12,8 @@
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/key_pair.h>
 #include <ccf/crypto/verifier.h>
+#include <ccf/crypto/sha256.h>
+#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/ds/logger.h>
 #include <openssl/ec.h>
 #include <openssl/engine.h>
@@ -94,7 +96,7 @@ namespace scitt::cose
     std::optional<std::vector<uint8_t>> y;
   };
 
-  static PublicKey to_public_key(const CoseKeyMap& key_map)
+  static void validate_cosekeymap(const CoseKeyMap& key_map)
   {
     if (!key_map.kty.has_value() || key_map.kty.value() != 2)
     {
@@ -115,11 +117,35 @@ namespace scitt::cose
     {
       throw COSEDecodeError("CoseKeyMap y is not set or empty.");
     }
+  }
+
+  static PublicKey to_public_key(const CoseKeyMap& key_map)
+  {
+    validate_cosekeymap(key_map);
     auto crv = std::get<int64_t>(key_map.crv_n_k_pub.value());
     std::vector<uint8_t> x = key_map.x_e.value();
     std::vector<uint8_t> y = key_map.y.value();
     PublicKey key(x, y, crv, std::nullopt);
     return key;
+  }
+
+  // see https://www.ietf.org/rfc/rfc9679.html
+  static std::vector<uint8_t> to_sha256_thumb(const CoseKeyMap& key_map)
+  {
+    validate_cosekeymap(key_map);
+    std::vector<uint8_t> key_cbor = cbor::cose_key_to_cbor(
+      key_map.kty.value(),
+      std::get<int64_t>(key_map.crv_n_k_pub.value()),
+      key_map.x_e.value(),
+      key_map.y.value());
+    
+    std::shared_ptr<ccf::crypto::HashProvider> hash_provider = ccf::crypto::make_hash_provider();
+    if (hash_provider == nullptr)
+    {
+      throw std::runtime_error("Failed to create hash provider");
+    }
+    // Hash the CBOR representation of the COSE key using SHA-256
+    return hash_provider->Hash(key_cbor.data(), key_cbor.size(), ccf::crypto::MDType::SHA256);
   }
 
   /**
