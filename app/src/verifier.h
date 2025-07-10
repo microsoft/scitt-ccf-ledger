@@ -14,11 +14,11 @@
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
-#include <ccf/service/tables/cert_bundles.h>
+#include <ccf/ds/quote_info.h>
 #include <ccf/pal/attestation.h>
 #include <ccf/pal/attestation_sev_snp.h>
 #include <ccf/pal/uvm_endorsements.h>
-#include <ccf/ds/quote_info.h>
+#include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
 #if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
@@ -203,18 +203,21 @@ namespace scitt::verifier
       std::span<uint8_t> payload;
       try
       {
-        // ignore unknown critical headers due to the presence of a custom TSS header
+        // ignore unknown critical headers due to the presence of a custom TSS
+        // header
         payload = cose::verify(data, key, true);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
         throw VerificationError(fmt::format(
-          "Failed to validate cose signature using the COSE key: {}", e.what()));
+          "Failed to validate cose signature using the COSE key: {}",
+          e.what()));
       }
 
       // Verify the attestation report contained in the protected header
       // against the AMD certificate chain contained in “snp_endorsements”.
-      // see https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
+      // see
+      // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
       ccf::QuoteInfo quote_info = {};
       quote_info.format = ccf::QuoteFormat::amd_sev_snp_v1;
       quote_info.quote = phdr.tss_map.attestation.value();
@@ -226,7 +229,8 @@ namespace scitt::verifier
 
       try
       {
-        ccf::pal::verify_snp_attestation_report(quote_info, measurement, report_data);
+        ccf::pal::verify_snp_attestation_report(
+          quote_info, measurement, report_data);
       }
       catch (const std::exception& e)
       {
@@ -249,21 +253,26 @@ namespace scitt::verifier
         cose_key_hash = cose::to_sha256_thumb(phdr.tss_map.cose_key.value());
       }
       catch (const std::exception& e)
-      {        throw VerificationError(fmt::format(
-          "Failed to compute COSE key hash: {}", e.what()));
+      {
+        throw VerificationError(
+          fmt::format("Failed to compute COSE key hash: {}", e.what()));
       }
 
       // select first 32 bytes of the report data
       std::span<uint8_t> report_data_span(
         report_data.data.data(), std::min(report_data.data.size(), size_t(32)));
-      
-      if (!std::equal(cose_key_hash.begin(), cose_key_hash.end(), 
-                      report_data_span.begin(), report_data_span.end()))
+
+      if (!std::equal(
+            cose_key_hash.begin(),
+            cose_key_hash.end(),
+            report_data_span.begin(),
+            report_data_span.end()))
       {
         throw VerificationError(fmt::format(
           "COSE key hash does not match report data: "
           "COSE key hash: {}, report data: {}",
-          cose_key_hash, report_data_span));
+          cose_key_hash,
+          report_data_span));
       }
 
       return payload;

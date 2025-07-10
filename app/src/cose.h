@@ -11,9 +11,9 @@
 #include <ccf/crypto/base64.h>
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/key_pair.h>
-#include <ccf/crypto/verifier.h>
-#include <ccf/crypto/sha256.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
+#include <ccf/crypto/sha256.h>
+#include <ccf/crypto/verifier.h>
 #include <ccf/ds/logger.h>
 #include <openssl/ec.h>
 #include <openssl/engine.h>
@@ -81,6 +81,21 @@ namespace scitt::cose
 
   static constexpr const char* SVN_HEADER_PARAM = "svn";
 
+  static std::shared_ptr<ccf::crypto::HashProvider>& get_hash_provider()
+  {
+    static thread_local std::shared_ptr<ccf::crypto::HashProvider>
+      hash_provider;
+    if (!hash_provider)
+    {
+      hash_provider = ccf::crypto::make_hash_provider();
+      if (!hash_provider)
+      {
+        throw std::runtime_error("Failed to create hash provider");
+      }
+    }
+    return hash_provider;
+  }
+
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
@@ -138,14 +153,11 @@ namespace scitt::cose
       std::get<int64_t>(key_map.crv_n_k_pub.value()),
       key_map.x_e.value(),
       key_map.y.value());
-    
-    std::shared_ptr<ccf::crypto::HashProvider> hash_provider = ccf::crypto::make_hash_provider();
-    if (hash_provider == nullptr)
-    {
-      throw std::runtime_error("Failed to create hash provider");
-    }
+
+    auto& hash_provider = get_hash_provider();
     // Hash the CBOR representation of the COSE key using SHA-256
-    return hash_provider->Hash(key_cbor.data(), key_cbor.size(), ccf::crypto::MDType::SHA256);
+    return hash_provider->Hash(
+      key_cbor.data(), key_cbor.size(), ccf::crypto::MDType::SHA256);
   }
 
   /**

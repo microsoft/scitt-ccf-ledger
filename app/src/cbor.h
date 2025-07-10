@@ -164,8 +164,8 @@ namespace scitt::cbor
     /**
      * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
      */
-    size_t approx_buff_size =
-      (1 + 4 + 4) * QCBOR_HEAD_BUFFER_SIZE + sizeof(kty) + sizeof(crv) + x.size() + y.size();
+    size_t approx_buff_size = (1 + 4 + 4) * QCBOR_HEAD_BUFFER_SIZE +
+      sizeof(kty) + sizeof(crv) + x.size() + y.size();
     std::vector<uint8_t> output(approx_buff_size);
 
     UsefulBuf output_buf{output.data(), output.size()};

@@ -83,22 +83,24 @@ namespace scitt
       pub_key.push_back(0x04); // Uncompressed point
       pub_key.insert(pub_key.end(), x.begin(), x.end());
       pub_key.insert(pub_key.end(), y.begin(), y.end());
-      
+
       OSSL_PARAM params[3];
       // https://www.rfc-editor.org/rfc/rfc9053#section-7.1
       params[0] = OSSL_PARAM_construct_utf8_string(
-        OSSL_PKEY_PARAM_GROUP_NAME, (char*)OSSL_EC_curve_nid2name(NID_secp384r1), 0);
+        OSSL_PKEY_PARAM_GROUP_NAME,
+        (char*)OSSL_EC_curve_nid2name(NID_secp384r1),
+        0);
       params[1] = OSSL_PARAM_construct_octet_string(
         OSSL_PKEY_PARAM_PUB_KEY, pub_key.data(), pub_key.size());
       params[2] = OSSL_PARAM_construct_end();
-      
+
       ccf::crypto::OpenSSL::Unique_EVP_PKEY_CTX pctx("EC");
       ccf::crypto::OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
-      
+
       EVP_PKEY* raw_key = nullptr;
       ccf::crypto::OpenSSL::CHECK1(
         EVP_PKEY_fromdata(pctx, &raw_key, EVP_PKEY_PUBLIC_KEY, params));
-      
+
       // set the key using the raw pointer
       key = ccf::crypto::OpenSSL::Unique_EVP_PKEY(raw_key);
     }
@@ -125,8 +127,8 @@ namespace scitt
     std::vector<uint8_t> public_key_sha256() const
     {
       ccf::crypto::OpenSSL::Unique_EVP_MD_CTX md_ctx;
-      ccf::crypto::OpenSSL::CHECK1(EVP_DigestInit_ex(
-        md_ctx, EVP_sha256(), nullptr));
+      ccf::crypto::OpenSSL::CHECK1(
+        EVP_DigestInit_ex(md_ctx, EVP_sha256(), nullptr));
       ccf::crypto::OpenSSL::CHECK1(EVP_DigestUpdate(md_ctx, key, sizeof(key)));
       std::vector<uint8_t> hash(EVP_MD_size(EVP_sha256()));
       unsigned int hash_len = 0;
