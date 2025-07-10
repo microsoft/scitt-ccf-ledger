@@ -23,6 +23,7 @@ using namespace testutils;
 namespace
 {
   // add a test case to use payloads from test/payloads directory
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
   TEST(CoseTest, DecodeTSSHeaders)
   {
     std::string filepath = "test_payloads/css-attested-cosesign1-20250617.cose";
@@ -59,13 +60,15 @@ namespace
       phdr.cwt_claims.iss.value(),
       "did:attestedsvc:msft-css-dev::3d7961c9-84b2-44d2-a9e0-33c040d168b3:test-"
       "account1:profile1");
-    EXPECT_EQ(phdr.tss_map.attestation.has_value(), true);
+    EXPECT_TRUE(phdr.tss_map.attestation.has_value());
+    EXPECT_TRUE(phdr.tss_map.attestation_type.has_value());
     EXPECT_EQ(
       phdr.tss_map.attestation_type.value(), "SEV-SNP:ContainerPlat-AMD-UVM");
-    EXPECT_EQ(phdr.tss_map.snp_endorsements.has_value(), true);
-    EXPECT_EQ(phdr.tss_map.uvm_endorsements.has_value(), true);
+    EXPECT_TRUE(phdr.tss_map.snp_endorsements.has_value());
+    EXPECT_TRUE(phdr.tss_map.uvm_endorsements.has_value());
+    EXPECT_TRUE(phdr.tss_map.ver.has_value());
     EXPECT_EQ(phdr.tss_map.ver.value(), 0);
-    EXPECT_EQ(phdr.tss_map.cose_key.has_value(), true);
+    EXPECT_TRUE(phdr.tss_map.cose_key.has_value());
     EXPECT_EQ(phdr.tss_map.cose_key->kty(), 2);
     /*
     cose_key:
@@ -94,6 +97,7 @@ namespace
       from_hex_string("2D0FFD0127F1C015E1F5D2BA86DE32ECC872EED7F84F9CD961452756"
                       "32297903CD246D87F29912D0CE19F81C7F6CAB3A"));
   }
+  // NOLINTEND(bugprone-unchecked-optional-access)
 
   TEST(CoseTest, GetHeaders)
   {
