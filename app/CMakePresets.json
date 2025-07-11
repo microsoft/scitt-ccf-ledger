@@ -12,10 +12,13 @@
         "CMAKE_C_COMPILER": "clang-18",
         "CMAKE_CXX_COMPILER": "clang++-18",
         "CMAKE_BUILD_WITH_INSTALL_RPATH":"ON",
-        "NINJA_FLAGS": "-k 0",
-        "CXXFLAGS": "-ferror-limit=0",
         "BUILD_TESTS": "OFF",
         "ENABLE_CLANG_TIDY": "$env{ENABLE_CLANG_TIDY}"
+      },
+      "environment": {
+        "NINJA_FLAGS": "-k 0",
+        "CXXFLAGS": "-ferror-limit=0",
+        "GTEST_COLOR": "1"
       }
     },
     {
@@ -26,6 +29,10 @@
       "cacheVariables": {
         "COMPILE_TARGET": "virtual",
         "BUILD_TESTS": "ON"
+      },
+      "environment": {
+        "CTEST_OUTPUT_ON_FAILURE": "1",
+        "GTEST_CATCH_EXCEPTIONS": "0"
       }
     },
     {

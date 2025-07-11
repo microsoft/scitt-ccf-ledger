@@ -196,6 +196,21 @@ namespace scitt::verifier
           cose::COSE_HEADER_PARAM_TSS));
       }
 
+      if (!phdr.kid.has_value())
+      {
+        throw VerificationError("Protected header KID is missing");
+      }
+      auto cose_key_thumb = phdr.tss_map.cose_key->to_sha256_thumb();
+      std::vector<uint8_t> kid_bytes(phdr.kid->begin(), phdr.kid->end());
+      if (!std::equal(
+            cose_key_thumb.begin(),
+            cose_key_thumb.end(),
+            kid_bytes.begin(),
+            kid_bytes.end()))
+      {
+        throw VerificationError("COSE key thumbprint does not match KID");
+      }
+
       PublicKey key = phdr.tss_map.cose_key->to_public_key();
 
       // First verify the signature to then trust the structure integrity

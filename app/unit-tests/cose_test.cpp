@@ -207,6 +207,7 @@ namespace
     EXPECT_ANY_THROW(cose_key.validate());
 
     // Valid EC P-256 key parameters
+    // from rfc9679 example
     cose_key.set_kty(2); // EC key type
     cose_key.set_crv_n_k_pub(1); // P-256 curve
     cose_key.set_x_e(from_hex_string(
@@ -218,7 +219,7 @@ namespace
     EXPECT_EQ(
       cose_key.to_sha256_thumb(),
       from_hex_string("496bd8afadf307e5b08c64b0421bf9dc01528a344a43bda88fadd166"
-                      "9da253ec")); // from rfc9679 example
+                      "9da253ec"));
 
     // Valid EC P-384 key parameters
     cose_key.set_kty(2); // EC key type

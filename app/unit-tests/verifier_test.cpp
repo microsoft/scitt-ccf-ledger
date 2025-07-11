@@ -47,8 +47,17 @@ namespace
     ccf::kv::ReadOnlyTx* tx_ptr = nullptr; // Or use your test framework's mock
     timespec time = {0, 0}; // Use a fixed time for testing
     scitt::Configuration configuration; // Use a default or mock configuration
-    verifier->verify_signed_statement(
+    cose::ProtectedHeader phdr;
+    cose::UnprotectedHeader uhdr;
+    std::span<uint8_t> payload;
+    std::tie(phdr, uhdr, payload) = verifier->verify_signed_statement(
       signed_statement, *tx_ptr, time, configuration);
+
+    EXPECT_TRUE(phdr.tss_map.attestation.has_value());
+    EXPECT_TRUE(phdr.tss_map.snp_endorsements.has_value());
+    EXPECT_TRUE(phdr.tss_map.uvm_endorsements.has_value());
+    EXPECT_TRUE(phdr.tss_map.cose_key.has_value());
+    EXPECT_TRUE(phdr.alg.has_value());
   }
 
 }
