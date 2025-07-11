@@ -1,0 +1,105 @@
+{
+  "version": 9,
+  "configurePresets": [
+    {
+      "name": "dev",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/app",
+      "installDir": "/tmp/scitt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-18",
+        "CMAKE_CXX_COMPILER": "clang++-18",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH":"ON",
+        "BUILD_TESTS": "OFF",
+        "ENABLE_CLANG_TIDY": "$env{ENABLE_CLANG_TIDY}"
+      },
+      "environment": {
+        "NINJA_FLAGS": "-k 0",
+        "CXXFLAGS": "-ferror-limit=0",
+        "GTEST_COLOR": "1"
+      }
+    },
+    {
+      "name": "dev-virtual",
+      "inherits": "dev",
+      "displayName": "Dev Virtual",
+      "description": "Dev build for virtual platform",
+      "cacheVariables": {
+        "COMPILE_TARGET": "virtual",
+        "BUILD_TESTS": "ON"
+      },
+      "environment": {
+        "CTEST_OUTPUT_ON_FAILURE": "1",
+        "GTEST_CATCH_EXCEPTIONS": "0"
+      }
+    },
+    {
+      "name": "dev-snp",
+      "inherits": "dev",
+      "displayName": "Dev SNP",
+      "description": "Dev build for SNP platform",
+      "cacheVariables": {
+        "COMPILE_TARGET": "snp",
+        "BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "virtual",
+      "configurePreset": "dev-virtual"
+    },
+    {
+      "name": "snp",
+      "configurePreset": "dev-snp"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "virtual",
+      "configurePreset": "dev-virtual",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "virtual",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "dev-virtual"
+        },
+        {
+          "type": "build",
+          "name": "virtual"
+        },
+        {
+          "type": "test",
+          "name": "virtual"
+        }
+      ]
+    },
+    {
+      "name": "snp",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "dev-snp"
+        },
+        {
+          "type": "build",
+          "name": "snp"
+        }
+      ]
+    }
+  ],
+  "vendor": {
+    "microsoft.com/VisualStudioSettings/CMake/1.0": {
+      "hostOS": "Linux"
+    }
+  }
+}

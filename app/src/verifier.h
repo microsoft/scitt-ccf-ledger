@@ -14,6 +14,10 @@
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
+#include <ccf/ds/quote_info.h>
+#include <ccf/pal/attestation.h>
+#include <ccf/pal/attestation_sev_snp.h>
+#include <ccf/pal/uvm_endorsements.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
 
@@ -72,7 +76,7 @@ namespace scitt::verifier
       }
     }
 
-    void process_signed_statement_with_didx509_issuer(
+    std::span<uint8_t> process_signed_statement_with_didx509_issuer(
       const cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
@@ -83,9 +87,10 @@ namespace scitt::verifier
       ccf::crypto::OpenSSL::Unique_X509 leaf =
         parse_certificate(phdr.x5chain.value()[0]);
       PublicKey key(leaf, std::nullopt);
+      std::span<uint8_t> payload;
       try
       {
-        cose::verify(data, key);
+        payload = cose::verify(data, key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -173,36 +178,172 @@ namespace scitt::verifier
         throw VerificationError(
           "Resolved verification method public key does not match signing key");
       }
+
+      return payload;
     }
 
-    std::pair<cose::ProtectedHeader, cose::UnprotectedHeader>
-    verify_signed_statement(
-      const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
-      ::timespec current_time,
-      const Configuration& configuration)
+    std::span<uint8_t> process_signed_statement_with_didattestedsvc_issuer(
+      const cose::ProtectedHeader& phdr,
+      const Configuration& configuration,
+      const std::vector<uint8_t>& data)
+    {
+      check_is_accepted_algorithm(phdr, configuration);
+
+      if (!phdr.tss_map.cose_key.has_value())
+      {
+        throw VerificationError(fmt::format(
+          "Signed statement protected header {} must contain a COSE key",
+          cose::COSE_HEADER_PARAM_TSS));
+      }
+
+      if (!phdr.kid.has_value())
+      {
+        throw VerificationError("Protected header KID is missing");
+      }
+      auto cose_key_thumb = phdr.tss_map.cose_key->to_sha256_thumb();
+      std::vector<uint8_t> kid_bytes(phdr.kid->begin(), phdr.kid->end());
+      if (!std::equal(
+            cose_key_thumb.begin(),
+            cose_key_thumb.end(),
+            kid_bytes.begin(),
+            kid_bytes.end()))
+      {
+        throw VerificationError("COSE key thumbprint does not match KID");
+      }
+
+      PublicKey key = phdr.tss_map.cose_key->to_public_key();
+
+      // First verify the signature to then trust the structure integrity
+      // and the attestation contained in the protected header.
+      std::span<uint8_t> payload;
+      try
+      {
+        // ignore unknown critical headers due to the presence of a custom TSS
+        // header
+        payload = cose::verify(data, key, true);
+      }
+      catch (const cose::COSESignatureValidationError& e)
+      {
+        throw VerificationError(fmt::format(
+          "Failed to validate cose signature using the COSE key: {}",
+          e.what()));
+      }
+
+      // Verify the attestation report contained in the protected header
+      // against the AMD certificate chain contained in “snp_endorsements”.
+      // see
+      // https://github.com/microsoft/CCF/blob/afc7ef5eca00d413474de47f91a1827f16618de6/src/js/extensions/snp_attestation.cpp#L35
+      ccf::QuoteInfo quote_info = {};
+      quote_info.format = ccf::QuoteFormat::amd_sev_snp_v1;
+      quote_info.quote = phdr.tss_map.attestation.value();
+      quote_info.endorsements = phdr.tss_map.snp_endorsements.value();
+
+      ccf::pal::PlatformAttestationMeasurement measurement = {};
+      ccf::pal::PlatformAttestationReportData report_data = {};
+      std::optional<ccf::pal::UVMEndorsements> parsed_uvm_endorsements;
+
+      try
+      {
+        ccf::pal::verify_snp_attestation_report(
+          quote_info, measurement, report_data);
+      }
+      catch (const std::exception& e)
+      {
+        throw VerificationError(fmt::format(
+          "Failed to validate SNP attestation report: {}", e.what()));
+      }
+
+      // Now check that the attestation report data matches the cose key
+      // This allows us to verify that the enclave knew about the key
+      if (report_data.data.size() < 32)
+      {
+        throw VerificationError(fmt::format(
+          "Report data length is less than 32 bytes: {}",
+          report_data.data.size()));
+      }
+
+      std::vector<uint8_t> cose_key_hash;
+      try
+      {
+        cose_key_hash = phdr.tss_map.cose_key->to_sha256_thumb();
+      }
+      catch (const std::exception& e)
+      {
+        throw VerificationError(
+          fmt::format("Failed to compute COSE key hash: {}", e.what()));
+      }
+
+      // select first 32 bytes of the report data
+      std::span<uint8_t> report_data_span(
+        report_data.data.data(), std::min(report_data.data.size(), size_t(32)));
+
+      if (!std::equal(
+            cose_key_hash.begin(),
+            cose_key_hash.end(),
+            report_data_span.begin(),
+            report_data_span.end()))
+      {
+        throw VerificationError(fmt::format(
+          "COSE key hash does not match report data: "
+          "COSE key hash: {}, report data: {}",
+          cose_key_hash,
+          report_data_span));
+      }
+
+      return payload;
+    }
+
+    std::
+      tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
+      verify_signed_statement(
+        const std::vector<uint8_t>& signed_statement,
+        ccf::kv::ReadOnlyTx& tx,
+        ::timespec current_time,
+        const Configuration& configuration)
     {
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
+      std::span<uint8_t> payload;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
 
         if (contains_cwt_issuer(phdr))
         {
-          if (!phdr.cwt_claims.iss->starts_with("did:x509"))
+          if (phdr.cwt_claims.iss->starts_with("did:x509"))
           {
-            throw VerificationError("CWT_Claims issuer must be a did:x509");
-          }
+            if (!phdr.x5chain.has_value())
+            {
+              throw VerificationError(
+                "Signed statement protected header must contain an x5chain");
+            }
 
-          if (!phdr.x5chain.has_value())
+            payload = process_signed_statement_with_didx509_issuer(
+              phdr, configuration, signed_statement);
+          }
+          else if (phdr.cwt_claims.iss->starts_with("did:attestedsvc"))
           {
-            throw VerificationError(
-              "Signed statement protected header must contain an x5chain");
+            if (
+              !phdr.tss_map.attestation.has_value() ||
+              !phdr.tss_map.snp_endorsements.has_value() ||
+              !phdr.tss_map.uvm_endorsements.has_value())
+            {
+              throw VerificationError(fmt::format(
+                "Signed statement protected header must contain a {} map with "
+                "{}, {}, {}, {}",
+                cose::COSE_HEADER_PARAM_TSS,
+                cose::COSE_HEADER_PARAM_TSS_ATTESTATION,
+                cose::COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
+                cose::COSE_HEADER_PARAM_TSS_COSE_KEY));
+            }
+            payload = process_signed_statement_with_didattestedsvc_issuer(
+              phdr, configuration, signed_statement);
           }
-
-          process_signed_statement_with_didx509_issuer(
-            phdr, configuration, signed_statement);
+          else
+          {
+            throw VerificationError("CWT_Claims issuer is unsupported");
+          }
         }
         else
         {
@@ -216,7 +357,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return {phdr, uhdr};
+      return {phdr, uhdr, payload};
     }
 
   private:
