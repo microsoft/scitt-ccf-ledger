@@ -127,12 +127,13 @@ if (BUILD_TESTS)
     GTest::gmock
     rapidcheck
     rapidcheck_gtest
+    quickjs.host
+    ccf_js.host
+    ccfcrypto.host
+    ccf_kv.host
+    ccf_endpoints.host
     t_cose.host
     qcbor.host
-
-    ccf_endpoints.host
-    ccf_kv.host
-    ccfcrypto.host
     http_parser.host
   )
 

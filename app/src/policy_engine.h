@@ -22,7 +22,6 @@ namespace scitt
     {
       auto obj = ctx.new_obj();
 
-      // Vanilla SCITT protected header parameters
       {
         if (phdr.alg.has_value())
         {
@@ -131,6 +130,46 @@ namespace scitt
             "attestation",
             ctx.new_array_buffer_copy(phdr.tss_map.attestation.value()));
         }
+        if (phdr.tss_map.attestation_type.has_value())
+        {
+          tss_map.set(
+            "attestation_type",
+            ctx.new_string(phdr.tss_map.attestation_type.value()));
+        }
+        if (phdr.tss_map.cose_key.has_value())
+        {
+          auto cose_key = phdr.tss_map.cose_key.value();
+          auto cose_key_obj = ctx.new_obj();
+
+          if (cose_key.kty().has_value())
+          {
+            cose_key_obj.set_int64("kty", cose_key.kty().value());
+          }
+          if (cose_key.crv_n_k_pub().has_value())
+          {
+            if (std::holds_alternative<int64_t>(cose_key.crv_n_k_pub().value()))
+            {
+              cose_key_obj.set_int64(
+                "crv", std::get<int64_t>(cose_key.crv_n_k_pub().value()));
+            }
+          }
+          if (cose_key.x_e().has_value())
+          {
+            cose_key_obj.set(
+              "x", ctx.new_array_buffer_copy(cose_key.x_e().value()));
+          }
+          if (cose_key.y().has_value())
+          {
+            cose_key_obj.set(
+              "y", ctx.new_array_buffer_copy(cose_key.y().value()));
+          }
+
+          tss_map.set("cose_key", std::move(cose_key_obj));
+
+          auto cose_key_sha256 = cose_key.to_sha256_thumb();
+          tss_map.set(
+            "cose_key_sha256", ctx.new_string(ccf::crypto::Sha256Hash(cose_key_sha256).hex_str()));
+        }
         if (phdr.tss_map.snp_endorsements.has_value())
         {
           tss_map.set(
@@ -142,6 +181,10 @@ namespace scitt
           tss_map.set(
             "uvm_endorsements",
             ctx.new_array_buffer_copy(phdr.tss_map.uvm_endorsements.value()));
+        }
+        if (phdr.tss_map.ver.has_value())
+        {
+          tss_map.set_int64("ver", phdr.tss_map.ver.value());
         }
         obj.set("msft-css-dev", std::move(tss_map));
       }
