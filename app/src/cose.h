@@ -502,8 +502,9 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError(
-        fmt::format("Failed to decode protected header: {}", qcbor_result));
+      throw COSEDecodeError(fmt::format(
+        "Failed to decode protected header: {}",
+        qcbor_err_to_str(qcbor_result)));
     }
 
     if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
@@ -750,8 +751,9 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError(
-        fmt::format("Failed to decode protected header: {}", qcbor_result));
+      throw COSEDecodeError(fmt::format(
+        "Failed to decode protected header: {}",
+        qcbor_err_to_str(qcbor_result)));
     }
 
     return parsed;

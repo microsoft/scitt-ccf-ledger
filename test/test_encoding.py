@@ -184,7 +184,9 @@ class TestHeaderParameters:
             submit({Algorithm: None})
 
     def test_tss_map(self, submit):
-        with service_error("Failed to decode msft-css-dev map"):
+        with service_error(
+            "Failed to decode protected header: QCBOR_ERR_UNEXPECTED_TYPE"
+        ):
             submit({"msft-css-dev": "invalid"})
 
     def test_x5chain(

@@ -147,7 +147,7 @@ class TestPolicyEngine:
         eku_not_found = "EKU not found"
         openssl_error = "OpenSSL error"
         invalid_did = "invalid DID string"
-        not_supported = "CWT_Claims issuer must be a did:x509"
+        not_supported = "CWT_Claims issuer is unsupported"
 
         # Keyed by expected error, values are lists of signed statements which should trigger this error
         refused_signed_statements = {
