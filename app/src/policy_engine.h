@@ -22,7 +22,6 @@ namespace scitt
     {
       auto obj = ctx.new_obj();
 
-      // Vanilla SCITT protected header parameters
       {
         if (phdr.alg.has_value())
         {
@@ -123,6 +122,94 @@ namespace scitt
           cwt.set_int64("svn", phdr.cwt_claims.svn.value());
         }
         obj.set("cwt", std::move(cwt));
+
+        auto tss_map = ctx.new_obj();
+        if (phdr.tss_map.attestation.has_value())
+        {
+          tss_map.set(
+            "attestation",
+            ctx.new_array_buffer_copy(phdr.tss_map.attestation.value()));
+        }
+        if (phdr.tss_map.attestation_type.has_value())
+        {
+          tss_map.set(
+            "attestation_type",
+            ctx.new_string(phdr.tss_map.attestation_type.value()));
+        }
+        if (phdr.tss_map.cose_key.has_value())
+        {
+          auto cose_key = phdr.tss_map.cose_key.value();
+          auto cose_key_obj = ctx.new_obj();
+
+          if (cose_key.kty().has_value())
+          {
+            cose_key_obj.set_int64("kty", cose_key.kty().value());
+          }
+          if (cose_key.crv_n_k_pub().has_value())
+          {
+            if (std::holds_alternative<int64_t>(cose_key.crv_n_k_pub().value()))
+            {
+              cose_key_obj.set_int64(
+                "crv", std::get<int64_t>(cose_key.crv_n_k_pub().value()));
+            }
+          }
+          if (cose_key.x_e().has_value())
+          {
+            cose_key_obj.set(
+              "x", ctx.new_array_buffer_copy(cose_key.x_e().value()));
+          }
+          if (cose_key.y().has_value())
+          {
+            cose_key_obj.set(
+              "y", ctx.new_array_buffer_copy(cose_key.y().value()));
+          }
+
+          tss_map.set("cose_key", std::move(cose_key_obj));
+
+          auto cose_key_sha256 = cose_key.to_sha256_thumb();
+          tss_map.set(
+            "cose_key_sha256",
+            ctx.new_string(ccf::crypto::Sha256Hash(cose_key_sha256).hex_str()));
+        }
+        if (phdr.tss_map.snp_endorsements.has_value())
+        {
+          tss_map.set(
+            "snp_endorsements",
+            ctx.new_array_buffer_copy(phdr.tss_map.snp_endorsements.value()));
+        }
+        if (phdr.tss_map.uvm_endorsements.has_value())
+        {
+          tss_map.set(
+            "uvm_endorsements",
+            ctx.new_array_buffer_copy(phdr.tss_map.uvm_endorsements.value()));
+        }
+        if (phdr.tss_map.ver.has_value())
+        {
+          tss_map.set_int64("ver", phdr.tss_map.ver.value());
+        }
+        obj.set("msft-css-dev", std::move(tss_map));
+      }
+
+      return obj;
+    }
+
+    static inline ccf::js::core::JSWrappedValue unprotected_header_to_js_val(
+      ccf::js::core::Context& ctx, const scitt::cose::UnprotectedHeader uhdr)
+    {
+      auto obj = ctx.new_obj();
+
+      if (uhdr.x5chain.has_value())
+      {
+        auto x5_array = ctx.new_array();
+        size_t i = 0;
+
+        for (const auto& der_cert : uhdr.x5chain.value())
+        {
+          auto pem = ccf::crypto::cert_der_to_pem(der_cert);
+          x5_array.set_at_index(i++, ctx.new_string(pem.str()));
+        }
+
+        obj.set("x5chain", std::move(x5_array));
       }
 
       return obj;
@@ -131,7 +218,9 @@ namespace scitt
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
-      const scitt::cose::ProtectedHeader& phdr)
+      const scitt::cose::ProtectedHeader& phdr,
+      const scitt::cose::UnprotectedHeader& uhdr,
+      std::span<uint8_t> payload)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
@@ -151,10 +240,12 @@ namespace scitt
       }
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
+      auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
+      auto payload_val = interpreter.new_array_buffer_copy(payload);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {phdr_val},
+        {phdr_val, uhdr_val, payload_val},
         ccf::JSRuntimeOptions{
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
@@ -204,8 +295,10 @@ namespace scitt
   static inline std::optional<std::string> check_for_policy_violations(
     const PolicyScript& script,
     const std::string& policy_name,
-    const cose::ProtectedHeader& phdr)
+    const cose::ProtectedHeader& phdr,
+    const cose::UnprotectedHeader& uhdr,
+    std::span<uint8_t> payload)
   {
-    return js::apply_js_policy(script, policy_name, phdr);
+    return js::apply_js_policy(script, policy_name, phdr, uhdr, payload);
   }
 }

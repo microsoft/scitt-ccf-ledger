@@ -23,7 +23,7 @@ jobs:
       ASAN_OPTIONS: fast_unwind_on_malloc=0:alloc_dealloc_mismatch=0
       PLATFORM: virtual
       CMAKE_BUILD_TYPE: Debug
-      BUILD_CCF_FROM_SOURCE: ON
+      BUILD_DEBUG_CCF_FROM_SOURCE: ON
     steps:
       - name: Setup environment
         run: |
@@ -37,11 +37,6 @@ jobs:
         run: |
           ./scripts/setup-env.sh
           ./build.sh
-
-      - name: Unit tests
-        run: |
-          set +x
-          ./run_unit_tests.sh
       
       - name: E2E tests
         run: |

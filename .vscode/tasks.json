@@ -1,0 +1,24 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "CMake build virtual",
+			"command": "cmake",
+			"problemMatcher": [],
+			"detail": "CMake build workflow task",
+			"options": {
+				"cwd": "${workspaceFolder}/app"
+			},
+			"args": [
+				"--workflow",
+				"--preset",
+				"virtual"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
