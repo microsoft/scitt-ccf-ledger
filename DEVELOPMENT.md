@@ -161,7 +161,7 @@ PLATFORM=virtual ./run_functional_tests.sh
 To enable ASan it is necessary to build CCF from source:
 
 ```sh
-PLATFORM=virtual CMAKE_BUILD_TYPE=Debug BUILD_CCF_FROM_SOURCE=ON ./build.sh
+PLATFORM=virtual BUILD_DEBUG_CCF_FROM_SOURCE=ON ./build.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 
