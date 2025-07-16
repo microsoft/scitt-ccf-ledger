@@ -58,8 +58,7 @@ namespace scitt::cose
   };
 
   // Temporary assignments from
-  // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/09/
-  // Section 2
+  // https://www.ietf.org/archive/id/draft-ietf-cose-merkle-tree-proofs-14.html#name-new-cose-header-parameters
   static constexpr int64_t COSE_HEADER_PARAM_ISSUER = 391;
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
