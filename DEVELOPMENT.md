@@ -124,7 +124,7 @@ scitt-ccf-ledger has unit tests, covering individual components of the source co
 
 ### Unit tests
 
-Unit tests will be run as part of the virtual plaftorm build workflow in cmake.
+Unit tests will be run as part of the virtual platform build workflow in cmake.
 
 **Using your host environment**
 
