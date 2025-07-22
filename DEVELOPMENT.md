@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.5.tar.gz
-    tar xvzf ccf-6.0.5.tar.gz
-    cd CCF-ccf-6.0.5/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.9.tar.gz
+    tar xvzf ccf-6.0.9.tar.gz
+    cd CCF-ccf-6.0.9/scripts/
     ./setup-dev.sh
     ```
 
@@ -124,7 +124,7 @@ scitt-ccf-ledger has unit tests, covering individual components of the source co
 
 ### Unit tests
 
-Unit tests will be run as part of the virtual plaftorm build workflow in cmake.
+Unit tests will be run as part of the virtual platform build workflow in cmake.
 
 **Using your host environment**
 
@@ -161,7 +161,7 @@ PLATFORM=virtual ./run_functional_tests.sh
 To enable ASan it is necessary to build CCF from source:
 
 ```sh
-PLATFORM=virtual CMAKE_BUILD_TYPE=Debug BUILD_CCF_FROM_SOURCE=ON ./build.sh
+PLATFORM=virtual BUILD_DEBUG_CCF_FROM_SOURCE=ON ./build.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 

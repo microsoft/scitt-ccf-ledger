@@ -16,7 +16,7 @@ if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
 fi
 
 # uses longer version of tags to avoid situations when tag is reassigned to a different commit, e.g. 0.12.1-2-g0b45e35
-SCITT_VERSION_OVERRIDE=$(git describe --tags --long)
+SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
 
 echo "Building Dockerfile=$DOCKERFILE tag=$DOCKER_TAG SCITT_VERSION_OVERRIDE=$SCITT_VERSION_OVERRIDE"
 

@@ -154,7 +154,7 @@ namespace scitt::cbor
     return output;
   }
 
-  // see https://www.ietf.org/rfc/rfc9679.html
+  // see https://www.ietf.org/rfc/rfc9679.html#section-4.2
   inline std::vector<uint8_t> cose_key_to_cbor(
     const int64_t kty,
     const int64_t crv,
