@@ -211,7 +211,7 @@ namespace scitt::verifier
         throw VerificationError("COSE key thumbprint does not match KID");
       }
 
-      PublicKey key = phdr.tss_map.cose_key->to_public_key();
+      PublicKey public_key = phdr.tss_map.cose_key->to_public_key();
 
       // First verify the signature to then trust the structure integrity
       // and the attestation contained in the protected header.
@@ -220,7 +220,7 @@ namespace scitt::verifier
       {
         // ignore unknown critical headers due to the presence of a custom TSS
         // header
-        payload = cose::verify(data, key, true);
+        payload = cose::verify(data, public_key, true);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -273,21 +273,31 @@ namespace scitt::verifier
           fmt::format("Failed to compute COSE key hash: {}", e.what()));
       }
 
-      // select first 32 bytes of the report data
-      std::span<uint8_t> report_data_span(
-        report_data.data.data(), std::min(report_data.data.size(), size_t(32)));
+      // create a span of data which starts with cose_key_hash bytes and then is
+      // padded with zeros to match the report data bytes
+      if (cose_key_hash.size() > report_data.data.size())
+      {
+        throw VerificationError(fmt::format(
+          "COSE key hash size {} is larger than report data size {}",
+          cose_key_hash.size(),
+          report_data.data.size()));
+      }
+      if (cose_key_hash.size() < report_data.data.size())
+      {
+        cose_key_hash.resize(report_data.data.size(), 0);
+      }
 
       if (!std::equal(
             cose_key_hash.begin(),
             cose_key_hash.end(),
-            report_data_span.begin(),
-            report_data_span.end()))
+            report_data.data.begin(),
+            report_data.data.end()))
       {
         throw VerificationError(fmt::format(
           "COSE key hash does not match report data: "
           "COSE key hash: {}, report data: {}",
-          cose_key_hash,
-          report_data_span));
+          ccf::ds::to_hex(cose_key_hash),
+          ccf::ds::to_hex(report_data.data)));
       }
 
       return payload;
