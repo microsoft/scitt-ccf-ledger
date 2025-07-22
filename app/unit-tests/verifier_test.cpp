@@ -29,10 +29,7 @@ namespace
     std::ifstream file(filepath, std::ios::binary);
     ASSERT_TRUE(file.is_open());
 
-    // Get file size
-    file.seekg(0, std::ios::end);
-    size_t size = file.tellg();
-    file.seekg(0, std::ios::beg);
+    size_t size = std::filesystem::file_size(filepath);
 
     // Read file into vector
     std::vector<uint8_t> signed_statement(size);
