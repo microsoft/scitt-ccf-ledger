@@ -169,7 +169,7 @@ namespace scitt
           auto cose_key_sha256 = cose_key.to_sha256_thumb();
           tss_map.set(
             "cose_key_sha256",
-            ctx.new_string(ccf::crypto::Sha256Hash(cose_key_sha256).hex_str()));
+            ctx.new_string(ccf::ds::to_hex(cose_key_sha256)));
         }
         if (phdr.tss_map.snp_endorsements.has_value())
         {
