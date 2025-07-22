@@ -8,6 +8,7 @@
 #include "profiles.h"
 #include "tracing.h"
 
+#include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
 #include <string>
 

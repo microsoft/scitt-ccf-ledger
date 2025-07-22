@@ -14,6 +14,7 @@
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
+#include <ccf/ds/hex.h>
 #include <ccf/ds/quote_info.h>
 #include <ccf/pal/attestation.h>
 #include <ccf/pal/attestation_sev_snp.h>
