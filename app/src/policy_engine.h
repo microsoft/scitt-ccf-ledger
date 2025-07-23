@@ -7,6 +7,7 @@
 #include "http_error.h"
 #include "profiles.h"
 #include "tracing.h"
+#include "verified_details.h"
 
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
@@ -153,11 +154,19 @@ namespace scitt
               cose_key_obj.set_int64(
                 "crv", std::get<int64_t>(cose_key.crv_n_k_pub().value()));
             }
+            else if (std::holds_alternative<std::vector<uint8_t>>(
+                       cose_key.crv_n_k_pub().value()))
+            {
+              cose_key_obj.set(
+                "n",
+                ctx.new_array_buffer_copy(std::get<std::vector<uint8_t>>(
+                  cose_key.crv_n_k_pub().value())));
+            }
           }
           if (cose_key.x_e().has_value())
           {
             cose_key_obj.set(
-              "x", ctx.new_array_buffer_copy(cose_key.x_e().value()));
+              "x_e", ctx.new_array_buffer_copy(cose_key.x_e().value()));
           }
           if (cose_key.y().has_value())
           {
@@ -216,12 +225,39 @@ namespace scitt
       return obj;
     }
 
+    static inline ccf::js::core::JSWrappedValue verified_details_to_js_val(
+      ccf::js::core::Context& ctx,
+      std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
+    {
+      auto obj = ctx.new_obj();
+      if (!details.has_value())
+      {
+        return obj;
+      }
+
+      const auto& measurement = details->get_measurement();
+      obj.set("measurement", ctx.new_string(measurement.hex_str()));
+      const auto& report_data = details->get_report_data();
+      obj.set("report_data", ctx.new_string(report_data.hex_str()));
+      if (details->get_uvm_endorsements().has_value())
+      {
+        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        auto uvm_obj = ctx.new_obj();
+        uvm_obj.set("did", ctx.new_string(uvm_endorsements.did));
+        uvm_obj.set("feed", ctx.new_string(uvm_endorsements.feed));
+        uvm_obj.set("svn", ctx.new_string(uvm_endorsements.svn));
+        obj.set("uvm_endorsements", std::move(uvm_obj));
+      }
+      return obj;
+    }
+
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
       const scitt::cose::ProtectedHeader& phdr,
       const scitt::cose::UnprotectedHeader& uhdr,
-      std::span<uint8_t> payload)
+      std::span<uint8_t> payload,
+      std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
@@ -243,10 +279,11 @@ namespace scitt
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
       auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
       auto payload_val = interpreter.new_array_buffer_copy(payload);
+      auto details_val = verified_details_to_js_val(interpreter, details);
 
       const auto result = interpreter.call_with_rt_options(
         apply_func,
-        {phdr_val, uhdr_val, payload_val},
+        {phdr_val, uhdr_val, payload_val, details_val},
         ccf::JSRuntimeOptions{
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
@@ -298,8 +335,10 @@ namespace scitt
     const std::string& policy_name,
     const cose::ProtectedHeader& phdr,
     const cose::UnprotectedHeader& uhdr,
-    std::span<uint8_t> payload)
+    std::span<uint8_t> payload,
+    std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
   {
-    return js::apply_js_policy(script, policy_name, phdr, uhdr, payload);
+    return js::apply_js_policy(
+      script, policy_name, phdr, uhdr, payload, details);
   }
 }

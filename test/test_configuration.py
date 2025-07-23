@@ -425,7 +425,7 @@ return true;
                 }
             },
         )
-
+    
     def test_attestation_verification(
         self, client: Client, configure_service, signed_statement_with_attestation
     ):
@@ -450,6 +450,26 @@ return true;
             if (container_security_policy_digest !== "4f4448c67f3c8dfc8de8a5e37125d807dadcc41f06cf23f615dbd52eec777d10")
             {
                 throw new Error("Invalid container security policy digest");
+            }
+            return true;
+        }
+        """
+        configure_service({"policy": {"policyScript": policy_script}})
+
+        client.submit_signed_statement_and_wait(signed_statement_with_attestation)
+
+    def test_attestation_details(
+        self, client: Client, configure_service, signed_statement_with_attestation
+    ):
+        policy_script = """
+        export function apply(phdr, uhdr, payload, details) {
+            if (details.measurement !== "4f4448c67f3c8dfc8de8a5e37125d807dadcc41f06cf23f615dbd52eec777d10")
+            {
+                throw new Error("Invalid container security policy digest", details.measurement);
+            }
+            if (details.uvm_endorsements.feed !== "ContainerPlat-AMD-UVM")
+            {
+                throw new Error("Invalid feed");
             }
             return true;
         }

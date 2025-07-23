@@ -273,10 +273,11 @@ namespace scitt
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;
         std::span<uint8_t> payload;
+        std::optional<verifier::VerifiedSevSnpAttestationDetails> details;
         try
         {
           SCITT_DEBUG("Verify submitted signed statement");
-          std::tie(phdr, uhdr, payload) =
+          std::tie(phdr, uhdr, payload, details) =
             verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
@@ -292,7 +293,8 @@ namespace scitt
             "configured_policy",
             phdr,
             uhdr,
-            payload);
+            payload,
+            details);
           if (policy_violation_reason.has_value())
           {
             SCITT_DEBUG(

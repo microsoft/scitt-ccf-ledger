@@ -14,7 +14,7 @@ Once SCITT is appropriately configured members can vote to [open the service](ht
 SCITT configuration can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
 
 Example configuration proposal:
-```
+```json
 {
   "actions": [
     {
@@ -86,36 +86,119 @@ Example `set_scitt_configuration` snippet:
 ```
 
 ### Policy script
-JS code that determines whether an entry should be accepted. Should export an `apply` function taking 2 arguments `(claim_profile, protected_header)`, and return true if the entry should be accepted or a string describing why the entry has failed the policy.
-
-`claim_profile` is a string representation of a [`scitt::SignedStatementProfile`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/profiles.h#L10) value, mapped through [`scitt::js::claim_profile_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L20).
-
-`protected_header` is an object representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger, namely:
-
-- alg (Number)
-- crit (Array containing values of type Number or String)
-- kid (String)
-- issuer (String)
-- feed (String)
-- svn (Number)
-- cty (Number or String)
-- x5chain (Array of String values)
-- cwt (object), containing
-  - iss (string)
-  - sub (string)
-  - iat (Number)
-  - svn (Number)
-
-The mapping takes place in [`scitt::js::protected_header_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h#L44).
+JS code that determines whether an entry should be accepted. Should export an `apply` function taking multiple arguments, and return true if the entry should be accepted or a string describing why the entry has failed the policy.
 
 Policy scripts are executed by the [CCF JavaScript runtime](https://github.com/microsoft/CCF/blob/main/include/ccf/js/core/runtime.h), which wraps and extends [QuickJS](https://bellard.org/quickjs/). Most ES2023 features are [supported](https://test262.fyi/#|qjs).
 
 Example `set_scitt_configuration` snippet:
 ```json
 "policy": {
-  "policyScript": "export function apply (phdr) { return true; }"
+  "policyScript": "export function apply (phdr, uhdr, payload, details) { return true; }"
 }
 ```
+
+Function argument mapping takes place in [`scitt::js::protected_header_to_js_val()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h).
+
+Function arguments:
+1. `protected_headers` (Object) representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger
+
+    ```
+    {
+      // Algorithm identifier (integer)
+      alg?: number,
+      
+      // Critical headers array
+      crit?: Array<number | string>,
+      
+      // Key ID
+      kid?: string,
+      
+      // Issuer
+      issuer?: string,
+      
+      // Feed
+      feed?: string,
+      
+      // Issued at timestamp
+      iat?: number,
+      
+      // Software version number
+      svn?: number,
+      
+      // Content type (can be integer or string)
+      cty?: number | string,
+      
+      // X.509 certificate chain (array of PEM strings)
+      x5chain?: string[],
+      
+      // CWT Claims object
+      cwt: {
+        iss?: string,  // Issuer
+        sub?: string,  // Subject
+        iat?: number,  // Issued at
+        svn?: number   // Software version number
+      },
+      
+      // Microsoft CSS Dev TSS Map
+      "msft-css-dev": {
+        attestation?: ArrayBuffer,
+        attestation_type?: string,
+        
+        // COSE Key object
+        cose_key?: {
+          kty?: number,           // Key type
+          crv?: number,           // Curve (for EC keys)
+          n?: ArrayBuffer,        // Modulus (for RSA keys)
+          x_e?: ArrayBuffer,      // X coordinate (EC) or exponent (RSA)
+          y?: ArrayBuffer         // Y coordinate (EC only)
+        },
+        
+        // SHA-256 hash of COSE key (hex string)
+        cose_key_sha256?: string,
+        
+        snp_endorsements?: ArrayBuffer,
+        uvm_endorsements?: ArrayBuffer,
+        ver?: number  // Version
+      }
+    }
+    ```
+
+2. `unprotected_headers` (Object) object representation of the subset of COSE unprotected header parameters parsed by scitt-ccf-ledger
+
+    ```
+    {
+      // X.509 certificate chain (array of PEM strings)
+      x5chain?: string[]
+    }
+    ```
+
+3. `payload` (ArrayBuffer)
+
+    ```
+    ArrayBuffer
+    ```
+
+4. `verified_sev_snp_details` (Object) present when signature issuer is `did:attestedsvc`, details added after the signature and the attestation verification
+
+    ```
+    {
+      // Empty object if no attestation details
+      // OR if attestation details exist:
+      
+      // Measurement (hex string)
+      measurement?: string,
+      
+      // Report data (hex string)
+      report_data?: string,
+      
+      // UVM Endorsements object
+      uvm_endorsements?: {
+        did: string,   // Decentralized identifier
+        feed: string,  // Feed identifier
+        svn: string    // Software version number
+      }
+    }
+    ```
 
 ## CCF specific configuration
 

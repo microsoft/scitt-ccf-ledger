@@ -10,6 +10,7 @@
 #include "public_key.h"
 #include "signature_algorithms.h"
 #include "tracing.h"
+#include "verified_details.h"
 
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
@@ -183,7 +184,8 @@ namespace scitt::verifier
       return payload;
     }
 
-    std::span<uint8_t> process_signed_statement_with_didattestedsvc_issuer(
+    std::tuple<std::span<uint8_t>, VerifiedSevSnpAttestationDetails>
+    process_signed_statement_with_didattestedsvc_issuer(
       const cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
@@ -269,6 +271,9 @@ namespace scitt::verifier
         }
       }
 
+      VerifiedSevSnpAttestationDetails details(
+        measurement, report_data, parsed_uvm_endorsements);
+
       // Now check that the attestation report data matches the cose key
       // This allows us to verify that the enclave knew about the key
       if (report_data.data.size() < 32)
@@ -316,20 +321,24 @@ namespace scitt::verifier
           ccf::ds::to_hex(report_data.data)));
       }
 
-      return payload;
+      return {payload, details};
     }
 
-    std::
-      tuple<cose::ProtectedHeader, cose::UnprotectedHeader, std::span<uint8_t>>
-      verify_signed_statement(
-        const std::vector<uint8_t>& signed_statement,
-        ccf::kv::ReadOnlyTx& tx,
-        ::timespec current_time,
-        const Configuration& configuration)
+    std::tuple<
+      cose::ProtectedHeader,
+      cose::UnprotectedHeader,
+      std::span<uint8_t>,
+      std::optional<VerifiedSevSnpAttestationDetails>>
+    verify_signed_statement(
+      const std::vector<uint8_t>& signed_statement,
+      ccf::kv::ReadOnlyTx& tx,
+      ::timespec current_time,
+      const Configuration& configuration)
     {
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       std::span<uint8_t> payload;
+      std::optional<VerifiedSevSnpAttestationDetails> details;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
@@ -363,8 +372,9 @@ namespace scitt::verifier
                 cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
                 cose::COSE_HEADER_PARAM_TSS_COSE_KEY));
             }
-            payload = process_signed_statement_with_didattestedsvc_issuer(
-              phdr, configuration, signed_statement);
+            std::tie(payload, details) =
+              process_signed_statement_with_didattestedsvc_issuer(
+                phdr, configuration, signed_statement);
           }
           else
           {
@@ -383,7 +393,7 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      return {phdr, uhdr, payload};
+      return {phdr, uhdr, payload, details};
     }
 
   private:
