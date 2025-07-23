@@ -30,6 +30,7 @@ namespace scitt
       cose_alg(cose_alg)
     {}
 
+    // RSA public key from n and e
     PublicKey(
       std::vector<uint8_t>& n_raw,
       std::vector<uint8_t>& e_raw,
@@ -45,10 +46,15 @@ namespace scitt
 
       ccf::crypto::OpenSSL::Unique_EVP_PKEY_CTX pctx("RSA");
       ccf::crypto::OpenSSL::CHECK1(EVP_PKEY_fromdata_init(pctx));
+
+      EVP_PKEY* raw_key = nullptr;
       ccf::crypto::OpenSSL::CHECK1(
-        EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
+        EVP_PKEY_fromdata(pctx, &raw_key, EVP_PKEY_PUBLIC_KEY, params));
+
+      key = ccf::crypto::OpenSSL::Unique_EVP_PKEY(raw_key);
     }
 
+    // EC public key pubkey buffer and curve NID
     PublicKey(
       std::vector<uint8_t>& buf, int nid, std::optional<int64_t> cose_alg) :
       cose_alg(cose_alg)
@@ -66,6 +72,7 @@ namespace scitt
         EVP_PKEY_fromdata(pctx, (EVP_PKEY**)&key, EVP_PKEY_PUBLIC_KEY, params));
     }
 
+    // EC public key from x, y coordinates and curve type
     PublicKey(
       std::vector<uint8_t>& x,
       std::vector<uint8_t>& y,

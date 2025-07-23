@@ -191,7 +191,7 @@ namespace
     EXPECT_EQ(uhdr.x5chain.has_value(), false);
   }
 
-  TEST(CoseTest, CoseKeyMap)
+  TEST(CoseTest, ECCoseKeyMap)
   {
     // Create a CoseKeyMap with a valid EC key
     cose::CoseKeyMap cose_key = cose::CoseKeyMap();
@@ -240,6 +240,30 @@ namespace
     cose_key.set_y(from_hex_string(
       "010941e39ea4cd64b28c4e4df601faf227188c2c79ccd1640781d4677fafb684ee0cacbd"
       "464fd424187680103899bcf458c7467a023da710acc69ab853f7e291d06c"));
+    EXPECT_NO_THROW(cose_key.validate());
+    EXPECT_NO_THROW(cose_key.to_public_key());
+    EXPECT_NO_THROW(cose_key.to_sha256_thumb());
+  }
+
+  TEST(CoseTest, RSACoseKeyMap)
+  {
+    // Create a CoseKeyMap with a valid EC key
+    cose::CoseKeyMap cose_key = cose::CoseKeyMap();
+
+    // Valid RSA 2048 key parameters
+    // manually generated using openssl
+    cose_key.set_kty(3); // RSA key type
+    cose_key.set_crv_n_k_pub(from_hex_string(
+      "00d3ee08a208d1f77305370d8caf1573927be7bd07965f386f8b07bff4b489dfad93ed95"
+      "b5b48a5e5e1c541970bc8d9a5c32b7c140e70dc84133e730e74ee9563d64772dc35c8bf8"
+      "16e4b12b5b91e662fd903f73e5009f48e1c0317658d0fb869e10852af6bfa16564571852"
+      "5049ea4425f37e891614957be33aac2fe812d7b2f3cb4bcb3356a4939975427e5bc76b87"
+      "1a697729eb81ca80b378492849aeee6aa339e97c853dcba5ce2ced58fd6d4bbadcbd1214"
+      "5c7fb24f22ae32078efe8a302d856388a79e86aafc33bc129103b757f26455c82d7fbec6"
+      "4318ca9bd74635b5a6601c6cbc9ce128a0c8ba9a50c2ba64d413be21f59dc3f38ece2126"
+      "1e0b9362d5"));
+    cose_key.set_x_e(from_hex_string("010001"));
+
     EXPECT_NO_THROW(cose_key.validate());
     EXPECT_NO_THROW(cose_key.to_public_key());
     EXPECT_NO_THROW(cose_key.to_sha256_thumb());

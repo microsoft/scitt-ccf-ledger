@@ -67,6 +67,8 @@ namespace scitt::cose
   static constexpr int64_t COSE_CWT_CLAIM_SUB = 2;
   static constexpr int64_t COSE_CWT_CLAIM_IAT = 6;
 
+  static constexpr int64_t COSE_KEY_KTY_EC = 2;
+  static constexpr int64_t COSE_KEY_KTY_RSA = 3;
   static constexpr int64_t COSE_KEY_KTY = 1;
   static constexpr int64_t COSE_KEY_CRV_N_K_PUB = -1;
   static constexpr int64_t COSE_KEY_X_E = -2;
@@ -102,6 +104,8 @@ namespace scitt::cose
 
   // Cose Key https://www.rfc-editor.org/rfc/rfc9679.html
   // Presence of values depends on kty
+  // Can fit any key parameters as expressed in rfc9679,
+  // but instance methods support only RSA,EC2 keys.
   class CoseKeyMap
   {
   private:
@@ -164,34 +168,74 @@ namespace scitt::cose
 
     void validate() const
     {
-      if (!kty_.has_value() || kty_.value() != 2)
+      if (!kty_.has_value())
       {
-        throw COSEDecodeError(
-          "CoseKeyMap kty is not set or not equal to 2 (EC2).");
+        throw COSEDecodeError("CoseKeyMap kty is not set");
       }
-      if (
-        !crv_n_k_pub_.has_value() ||
-        !std::holds_alternative<int64_t>(crv_n_k_pub_.value()))
+
+      switch (kty_.value())
       {
-        throw COSEDecodeError("CoseKeyMap crv is not set or not an int64_t.");
-      }
-      if (!x_e_.has_value() || x_e_.value().empty())
-      {
-        throw COSEDecodeError("CoseKeyMap x is not set or empty.");
-      }
-      if (!y_.has_value() || y_.value().empty())
-      {
-        throw COSEDecodeError("CoseKeyMap y is not set or empty.");
+        case COSE_KEY_KTY_EC:
+          if (
+            !crv_n_k_pub_.has_value() ||
+            !std::holds_alternative<int64_t>(crv_n_k_pub_.value()))
+          {
+            throw COSEDecodeError(
+              "CoseKeyMap crv is not set or not an int64_t.");
+          }
+          if (!x_e_.has_value() || x_e_.value().empty())
+          {
+            throw COSEDecodeError("CoseKeyMap x is not set or empty.");
+          }
+          if (!y_.has_value() || y_.value().empty())
+          {
+            throw COSEDecodeError("CoseKeyMap y is not set or empty.");
+          }
+          break;
+        case COSE_KEY_KTY_RSA:
+          if (
+            !crv_n_k_pub_.has_value() ||
+            !std::holds_alternative<std::vector<uint8_t>>(crv_n_k_pub_.value()))
+          {
+            throw COSEDecodeError(
+              "CoseKeyMap crv is not set or not a vector of bytes.");
+          }
+          if (!x_e_.has_value() || x_e_.value().empty())
+          {
+            throw COSEDecodeError("CoseKeyMap x is not set or empty.");
+          }
+          break;
+        default:
+          throw COSEDecodeError(fmt::format(
+            "Unsupported kty value, only EC2 and RSA are supported: {}",
+            kty_.value()));
       }
     }
 
     PublicKey to_public_key() const
     {
       validate();
-      auto crv = std::get<int64_t>(crv_n_k_pub_.value());
-      std::vector<uint8_t> x = x_e_.value();
-      std::vector<uint8_t> y = y_.value();
-      PublicKey key(x, y, crv, std::nullopt);
+      PublicKey key;
+      switch (kty_.value())
+      {
+        case COSE_KEY_KTY_EC:
+        {
+          auto crv = std::get<int64_t>(crv_n_k_pub_.value());
+          std::vector<uint8_t> x = x_e_.value();
+          std::vector<uint8_t> y = y_.value();
+          key = PublicKey(x, y, crv, std::nullopt);
+          break;
+        }
+        case COSE_KEY_KTY_RSA:
+        {
+          auto n = std::get<std::vector<uint8_t>>(crv_n_k_pub_.value());
+          auto e = x_e_.value();
+          key = PublicKey(n, e, std::nullopt);
+          break;
+        }
+        default:
+          throw COSEDecodeError("Unsupported kty value");
+      }
       return key;
     }
 
@@ -199,12 +243,28 @@ namespace scitt::cose
     std::vector<uint8_t> to_sha256_thumb() const
     {
       validate();
-      std::vector<uint8_t> key_cbor = cbor::cose_key_to_cbor(
-        kty_.value(),
-        std::get<int64_t>(crv_n_k_pub_.value()),
-        x_e_.value(),
-        y_.value());
-
+      std::vector<uint8_t> key_cbor;
+      switch (kty_.value())
+      {
+        case COSE_KEY_KTY_EC:
+        {
+          key_cbor = cbor::ec_cose_key_to_cbor(
+            kty_.value(),
+            std::get<int64_t>(crv_n_k_pub_.value()),
+            x_e_.value(),
+            y_.value());
+          break;
+        }
+        case COSE_KEY_KTY_RSA:
+        {
+          auto n = std::get<std::vector<uint8_t>>(crv_n_k_pub_.value());
+          auto e = x_e_.value();
+          key_cbor = cbor::rsa_cose_key_to_cbor(kty_.value(), n, e);
+          break;
+        }
+        default:
+          throw COSEDecodeError("Unsupported kty value");
+      }
       auto& hash_provider = get_hash_provider();
       // Hash the CBOR representation of the COSE key using SHA-256
       return hash_provider->Hash(
