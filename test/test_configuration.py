@@ -425,7 +425,7 @@ return true;
                 }
             },
         )
-    
+
     def test_attestation_verification(
         self, client: Client, configure_service, signed_statement_with_attestation
     ):
