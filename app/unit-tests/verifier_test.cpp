@@ -24,6 +24,7 @@ using namespace testutils;
 
 namespace
 {
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
   TEST(VerifierTest, VerifyTSSStatement)
   {
     std::string filepath = "test_payloads/css-attested-cosesign1-20250617.cose";
@@ -76,5 +77,6 @@ namespace
       details->get_uvm_endorsements().value().feed, "ContainerPlat-AMD-UVM");
     EXPECT_EQ(details->get_uvm_endorsements().value().svn, "101");
   }
+  // NOLINTEND(bugprone-unchecked-optional-access)
 
 }
