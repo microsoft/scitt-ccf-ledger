@@ -254,6 +254,21 @@ namespace scitt::verifier
           "Failed to validate SNP attestation report: {}", e.what()));
       }
 
+      if (phdr.tss_map.uvm_endorsements.has_value())
+      {
+        try
+        {
+          parsed_uvm_endorsements =
+            ccf::pal::verify_uvm_endorsements_descriptor(
+              phdr.tss_map.uvm_endorsements.value(), measurement);
+        }
+        catch (const std::exception& e)
+        {
+          throw VerificationError(
+            fmt::format("Failed to validate UVM endorsements: {}", e.what()));
+        }
+      }
+
       // Now check that the attestation report data matches the cose key
       // This allows us to verify that the enclave knew about the key
       if (report_data.data.size() < 32)

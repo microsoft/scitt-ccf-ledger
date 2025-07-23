@@ -135,6 +135,7 @@ if (BUILD_TESTS)
     t_cose.host
     qcbor.host
     http_parser.host
+    ccf.virtual
   )
 
   target_include_directories(unit_tests PRIVATE src unit-tests)
