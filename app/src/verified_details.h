@@ -38,5 +38,10 @@ namespace scitt::verifier
     {
       return uvm_endorsements;
     }
+    bool is_empty() const
+    {
+      return measurement.data.empty() && report_data.data.empty() &&
+        !uvm_endorsements;
+    }
   };
 }

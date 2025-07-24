@@ -23,11 +23,18 @@ class X5ChainCertificateAuthority:
         Create a new identity for x5c signer
         """
         eku = kwargs.get("add_eku")
+        iss = kwargs.get("use_issuer")
+        if eku is not None and iss is not None:
+            raise ValueError(
+                "Cannot set both 'add_eku' and 'use_issuer' at the same time."
+            )
         x5c, private_key = self.create_chain(length=length, ca=ca, **kwargs)
         identity = crypto.Signer(private_key, algorithm=alg, x5c=x5c)
         if eku is not None:
             root_fingerprint = crypto.get_cert_fingerprint_b64url(self.root_cert_pem)
             identity.issuer = f"did:x509:0:sha256:{root_fingerprint}::eku:{eku}"
+        if iss is not None:
+            identity.issuer = iss
         return identity
 
     def create_chain(
@@ -41,6 +48,9 @@ class X5ChainCertificateAuthority:
         if add_eku in kwargs:
             generate_cert_kwargs[add_eku] = kwargs[add_eku]
             del kwargs[add_eku]
+        use_issuer = "use_issuer"
+        if use_issuer in kwargs:
+            del kwargs[use_issuer]
 
         chain = [(self.root_cert_pem, self.root_key_pem)]
         for i in range(length):

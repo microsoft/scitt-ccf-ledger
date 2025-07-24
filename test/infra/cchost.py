@@ -404,6 +404,10 @@ class CCHost(EventLoopThread):
         with open(self.workspace / "config.json", "w") as f:
             json.dump(config, f)
 
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        LOG.info("Exiting CCHost context manager, terminating cchost process")
+        return super().__exit__(exc_type, exc_val, exc_tb)
+
 
 def get_enclave_path(platform: str, enclave_package) -> Path:
     ENCLAVE_SUFFIX = {

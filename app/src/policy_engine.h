@@ -227,21 +227,22 @@ namespace scitt
 
     static inline ccf::js::core::JSWrappedValue verified_details_to_js_val(
       ccf::js::core::Context& ctx,
-      std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
+      const verifier::VerifiedSevSnpAttestationDetails& details)
     {
       auto obj = ctx.new_obj();
-      if (!details.has_value())
+
+      if (details.is_empty())
       {
         return obj;
       }
 
-      const auto& measurement = details->get_measurement();
+      const auto& measurement = details.get_measurement();
       obj.set("measurement", ctx.new_string(measurement.hex_str()));
-      const auto& report_data = details->get_report_data();
+      const auto& report_data = details.get_report_data();
       obj.set("report_data", ctx.new_string(report_data.hex_str()));
-      if (details->get_uvm_endorsements().has_value())
+      if (details.get_uvm_endorsements().has_value())
       {
-        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        const auto& uvm_endorsements = details.get_uvm_endorsements().value();
         auto uvm_obj = ctx.new_obj();
         uvm_obj.set("did", ctx.new_string(uvm_endorsements.did));
         uvm_obj.set("feed", ctx.new_string(uvm_endorsements.feed));
@@ -257,7 +258,7 @@ namespace scitt
       const scitt::cose::ProtectedHeader& phdr,
       const scitt::cose::UnprotectedHeader& uhdr,
       std::span<uint8_t> payload,
-      std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
+      const verifier::VerifiedSevSnpAttestationDetails& details)
     {
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
@@ -336,7 +337,7 @@ namespace scitt
     const cose::ProtectedHeader& phdr,
     const cose::UnprotectedHeader& uhdr,
     std::span<uint8_t> payload,
-    std::optional<verifier::VerifiedSevSnpAttestationDetails> details)
+    const verifier::VerifiedSevSnpAttestationDetails& details)
   {
     return js::apply_js_policy(
       script, policy_name, phdr, uhdr, payload, details);

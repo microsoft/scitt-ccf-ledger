@@ -538,7 +538,7 @@ def jwk_from_public_key(
 class Signer:
     private_key: Pem
     issuer: Optional[str]
-    kid: Optional[str]
+    kid: Optional[Union[str, bytes]]
     algorithm: str
     x5c: Optional[List[Pem]]
 
@@ -546,7 +546,7 @@ class Signer:
         self,
         private_key: Pem,
         issuer: Optional[str] = None,
-        kid: Optional[str] = None,
+        kid: Optional[Union[str, bytes]] = None,
         algorithm: Optional[str] = None,
         x5c: Optional[List[Pem]] = None,
     ):
@@ -561,7 +561,6 @@ class Signer:
         self.x5c = x5c
 
 
-# TODO: merge with Key Vault signer implementation
 def sign_statement(
     signer: Signer,
     statement: bytes,
@@ -581,7 +580,9 @@ def sign_statement(
     if signer.x5c is not None:
         headers[pycose.headers.X5chain] = [cert_pem_to_der(x5) for x5 in signer.x5c]
     if signer.kid is not None:
-        headers[pycose.headers.KID] = signer.kid.encode("utf-8")
+        headers[pycose.headers.KID] = (
+            signer.kid.encode("utf-8") if isinstance(signer.kid, str) else signer.kid
+        )
     if cwt:
         cwt_claims: Dict[Union[int, str], Union[int, str]] = headers.get(
             CWTClaims.identifier, {}
