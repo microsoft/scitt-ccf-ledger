@@ -11,14 +11,14 @@ else()
 
   execute_process(
     # use the long version in the form of <tag>-<commits since tag>-g<commit hash>
-    COMMAND "bash" "-c" "${GIT_EXECUTABLE} describe --tags --long"
+    COMMAND "bash" "-c" "${GIT_EXECUTABLE} describe --tags --long --always"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     OUTPUT_VARIABLE "SCITT_VERSION"
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE RETURN_CODE
   )
   if(NOT RETURN_CODE STREQUAL "0")
-    message(FATAL_ERROR "Error calling git describe")
+    message(FATAL_ERROR "Error getting version from git")
   endif()
 endif()
 

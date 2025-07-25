@@ -113,7 +113,10 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
             [cert_pem_to_der(x5) for x5 in signer.x5c],
         )
     if signer.kid is not None:
-        parameters.setdefault(KID, signer.kid.encode("utf-8"))
+        parameters.setdefault(
+            KID,
+            signer.kid.encode("utf-8") if isinstance(signer.kid, str) else signer.kid,
+        )
 
     # set
     if signer.issuer is not None:

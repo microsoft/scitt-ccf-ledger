@@ -2,10 +2,8 @@
 # Licensed under the MIT License.
 
 import argparse
-import json
 from pathlib import Path
 
-from pyscitt.key_vault_sign_client import KeyVaultSignClient
 from pyscitt.local_key_sign_client import LocalKeySignClient
 
 from ..client import Client
@@ -76,11 +74,6 @@ def add_client_arguments(
             type=Path,
             help="Path to CCF member certificate file",
         )
-        parser.add_argument(
-            "--akv-configuration",
-            type=Path,
-            help="Path to an Azure key vault configuration file. The configuration is a JSON file containing the following fields: keyVaultName, certificateName, certificateVersion.",
-        )
 
     if with_auth_token:
         parser.add_argument("--auth-token", help="JWT bearer token")
@@ -98,11 +91,7 @@ def create_client(args: argparse.Namespace):
         "development": args.development,
     }
 
-    if "akv_configuration" in args and args.akv_configuration:
-        akv_configuration = args.akv_configuration.read_text()
-        akv_sign_configuration_dict = json.loads(akv_configuration)
-        kwargs["member_auth"] = KeyVaultSignClient(akv_sign_configuration_dict)
-    elif "member_cert" in args:
+    if "member_cert" in args:
         cert = args.member_cert.read_text()
         key = args.member_key.read_text()
         kwargs["member_auth"] = LocalKeySignClient(cert, key)
