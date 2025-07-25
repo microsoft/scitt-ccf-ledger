@@ -46,19 +46,33 @@ class Proxy(EventLoopThread):
 
     async def run(self) -> None:
         """Invoked by EventLoopThread when the Proxy is started."""
-        async with aiotools.TaskGroup() as tg:
-            server = await asyncio.start_server(
-                lambda reader, writer: tg.create_task(
-                    self._handle_connection(reader, writer)
-                ),
-                "127.0.0.1",
-            )
+        self.server = None
+        self.stop_request = asyncio.Event()
+        try:
+            async with aiotools.TaskGroup() as tg:
+                self.server = await asyncio.start_server(
+                    lambda reader, writer: tg.create_task(
+                        self._handle_connection(reader, writer)
+                    ),
+                    "127.0.0.1",
+                )
 
-            self.port = server.sockets[0].getsockname()[1]
-            LOG.debug(f"Proxy is listening on port {self.port}")
+                self.port = self.server.sockets[0].getsockname()[1]
+                LOG.debug(f"Proxy is listening on port {self.port}")
 
-            self.set_ready()
-            await server.serve_forever()
+                self.set_ready()
+                await self.server.start_serving()
+                await self.stop_request.wait()
+                self.stop_request.clear()
+
+        except asyncio.CancelledError:
+            LOG.debug("Proxy server cancelled, shutting down gracefully")
+            raise
+        finally:
+            if self.server:
+                self.server.close()
+                await self.server.wait_closed()
+                LOG.debug("Proxy server closed")
 
     async def _handle_connection(
         self,
@@ -97,3 +111,10 @@ class Proxy(EventLoopThread):
             if not data:
                 break
             writer.write(data)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        LOG.info("Exiting Proxy context manager, terminating proxy process")
+        if self.stop_request:
+            LOG.debug("Triggering shutdown request") 
+            self.stop_request.set()
+        return super().__exit__(exc_type, exc_val, exc_tb)
