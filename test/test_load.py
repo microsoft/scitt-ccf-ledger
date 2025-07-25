@@ -19,10 +19,13 @@ LOCUST_RUNTIME_SEC = 60
 @pytest.mark.perf
 @pytest.mark.disable_proxy
 class TestLoad:
-    def test_load(self, client: Client, cert_authority, tmp_path: Path):
+    def test_load(self, client: Client, cert_authority, configure_service, tmp_path: Path):
+        configure_service(
+            {"policy": {"policyScript": "export function apply() { return true; }"}}
+        )
         for i in range(NUM_STATEMENTS):
-            identity = cert_authority.create_identity(alg="ES256", kty="ec")
-            signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"})
+            identity = cert_authority.create_identity(alg="ES256", kty="ec", add_eku="2.999")
+            signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
             (tmp_path / f"signed_statement{i}.cose").write_bytes(signed_statement)
 
         try:

@@ -95,11 +95,15 @@ class TestPolicyEngine:
         identity = cert_authority.create_identity(
             alg="ES256", kty="ec", add_eku="2.999"
         )
-        return crypto.sign_json_statement(
-            identity,
-            {"foo": "bar"},
-            cwt=True,
-        )
+
+        def f(json_payload: dict = {"foo": "bar"}) -> bytes:
+            return crypto.sign_json_statement(
+                identity,
+                json_payload,
+                cwt=True,
+            )
+
+        return f
 
     def test_ietf_didx509_policy(
         self,
@@ -273,7 +277,7 @@ export function apply(phdr) {{
             {"policy": {"policyScript": "export function apply() { return true }"}}
         )
 
-        client.submit_signed_statement_and_wait(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement())
 
     def test_trivial_fail_policy(
         self, client: Client, configure_service, signed_statement
@@ -287,7 +291,7 @@ export function apply(phdr) {{
         )
 
         with service_error("Policy was not met"):
-            client.submit_signed_statement_and_wait(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement())
 
     def test_exceptional_policy(
         self, client: Client, configure_service, signed_statement
@@ -301,7 +305,7 @@ export function apply(phdr) {{
         )
 
         with service_error("Error while applying policy"):
-            client.submit_signed_statement_and_wait(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
         "script",
@@ -318,7 +322,7 @@ export function apply(phdr) {{
         configure_service({"policy": {"policyScript": script}})
 
         with service_error("Invalid policy module"):
-            client.submit_signed_statement_and_wait(signed_statement)
+            client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
         "filepath",
@@ -364,10 +368,36 @@ return true;
             }
         )
 
-        client.submit_signed_statement_and_wait(signed_statement)
+        client.submit_signed_statement_and_wait(signed_statement())
+
+    def test_payload_policy_with_large_payload(
+        self, client: Client, configure_service, signed_statement
+    ):
+        policy_script = """
+        export function apply(phdr, uhdr, payload) {
+            const parsed = JSON.parse(ccf.bufToStr(payload));
+            if (parsed.foo.length < 1000) {
+                return `Invalid payload`; 
+            } 
+            return true; 
+        }
+        """
+        configure_service({"policy": {"policyScript": policy_script}})
+
+        # Create a large JSON payload
+        big_json: dict = {"foo": []}
+        for _ in range(1000):
+            big_json["foo"].append("a" * 1024)
+        print(f"JSON payload size: {len(json.dumps(big_json))} bytes")
+        statement = signed_statement(big_json)
+        print(f"Signed statement size: {len(statement)} bytes")
+
+        client.submit_signed_statement_and_wait(statement)
 
     @pytest.fixture(scope="class")
-    def tss_signed_statement(self, cert_authority: X5ChainCertificateAuthority):
+    def didx509_signed_statement_with_attestation(
+        self, cert_authority: X5ChainCertificateAuthority
+    ):
         identity = cert_authority.create_identity(
             alg="ES256", kty="ec", add_eku="2.999"
         )
@@ -384,7 +414,12 @@ return true;
             },
         )
 
-    def test_tss_map(self, client: Client, configure_service, tss_signed_statement):
+    def test_tss_map(
+        self,
+        client: Client,
+        configure_service,
+        didx509_signed_statement_with_attestation,
+    ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
             if (ccf.bufToStr(phdr["msft-css-dev"].attestation) !== "testAttestation") {
@@ -402,7 +437,9 @@ return true;
 
         configure_service({"policy": {"policyScript": policy_script}})
 
-        client.submit_signed_statement_and_wait(tss_signed_statement)
+        client.submit_signed_statement_and_wait(
+            didx509_signed_statement_with_attestation
+        )
 
     @pytest.fixture(scope="class")
     def signed_statement_with_attestation(self):

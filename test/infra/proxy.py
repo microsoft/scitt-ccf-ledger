@@ -115,6 +115,6 @@ class Proxy(EventLoopThread):
     def __exit__(self, exc_type, exc_val, exc_tb):
         LOG.info("Exiting Proxy context manager, terminating proxy process")
         if self.stop_request:
-            LOG.debug("Triggering shutdown request") 
+            LOG.debug("Triggering shutdown request")
             self.stop_request.set()
         return super().__exit__(exc_type, exc_val, exc_tb)
