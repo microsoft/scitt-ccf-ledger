@@ -5,10 +5,6 @@ parameters: # parameters are shown up in ADO UI in a build queue time
   displayName: Enable debug output
   type: boolean
   default: false
-- name: CCF_VERSION
-  displayName: Target CCF version to build for
-  type: string
-  default: 6.0.9
 
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
@@ -71,7 +67,6 @@ extends:
             minor: '0'
             name: scitt-ccf-ledger
         - script: |
-            echo "CCF_VERSION ${{ parameters.CCF_VERSION }}"
             echo "SCITT_CI ${{ variables.SCITT_CI }}"
             echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
             echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
