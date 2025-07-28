@@ -24,6 +24,7 @@ variables:
   Codeql.Language: 'cpp,python,javascript'
   Codeql.ADO.Build.Repository.Provider: override # reference another repository
   Codeql.ADO.Build.Repository.Uri: https://github.com/microsoft/scitt-ccf-ledger # reference another repository
+  PIP_INDEX_URL: https://github-private.pkgs.visualstudio.com/_packaging/accl-cts-ccf-external-dependencies/pypi/simple/ 
 
 resources:
   repositories:

@@ -121,6 +121,7 @@ if [ ! -f "venv/bin/activate" ]; then
 fi
 
 source venv/bin/activate 
+echo "Using pip index URL: ${PIP_INDEX_URL:-default}"
 pip install --disable-pip-version-check -q -e ./pyscitt
 
 timeout=15
