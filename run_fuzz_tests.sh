@@ -26,6 +26,7 @@ if [ ! -f "venv/bin/activate" ]; then
     python3.12 -m venv "venv"
 fi
 source venv/bin/activate
+echo "Using pip index URL: ${PIP_INDEX_URL:-default}"
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt

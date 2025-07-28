@@ -30,6 +30,7 @@ then
 fi
 
 source scripts/venv/bin/activate
+echo "Using pip index URL: ${PIP_INDEX_URL:-default}"
 pip install --disable-pip-version-check -q -U black isort mypy wheel
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
