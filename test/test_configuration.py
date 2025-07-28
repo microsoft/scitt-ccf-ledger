@@ -445,6 +445,7 @@ return true;
     def signed_statement_with_attestation(self):
         # Create static signer
         # because the public key has to be used when generating snp report
+        #[SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="Test key")]
         generated_test_key = "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgwsl9BwpcxTw79lQ8\n+rtsYyZ8CNVpgnJ9L9NuRmgiZ2qhRANCAATtJmmhf9hdySatQFUHh3+ILwBRlO4j\nantkQ/2KFzXseETRvTuZuyoYWi+hBg//qzfNJfvvjoEtiaa7426R82XZ\n-----END PRIVATE KEY-----\n"
         generated_test_x5c = [
             "-----BEGIN CERTIFICATE-----\nMIIBwTCCAWagAwIBAgIULfldx1HL14KvXqBMVEEq61q68+IwCgYIKoZIzj0EAwIw\nLzEtMCsGA1UEAwwkMGQ2MDMzOGYtYmQ4Yy00YmVmLWE5YjgtZWFjZThjNDRjMTFk\nMB4XDTI1MDcyNDE5MzIwOVoXDTI1MDgwMzE5MzIwOVowLzEtMCsGA1UEAwwkOGYz\nNDYyZmItMDVkYy00YjU0LWE0NDEtMjk2Nzk5NjE1ZWYzMFkwEwYHKoZIzj0CAQYI\nKoZIzj0DAQcDQgAE7SZpoX/YXckmrUBVB4d/iC8AUZTuI2p7ZEP9ihc17HhE0b07\nmbsqGFovoQYP/6s3zSX7746BLYmmu+NukfNl2aNgMF4wDgYDVR0PAQH/BAQDAgeA\nMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFGkP1dHhmW5Sw19dLNwa0udg3dncMB8G\nA1UdIwQYMBaAFDBndIFyJUU3FbqU8R8WytENgRYlMAoGCCqGSM49BAMCA0kAMEYC\nIQC7/2EGZdHD8tpNPIwDfqf0Sa7AXt5XDXRdeJTasbwi3QIhAN5VpmAntiniBJZ8\nGQurE+3XV4ZLWrskP5pSpyTt0Swc\n-----END CERTIFICATE-----\n",
