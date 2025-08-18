@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
-# Copyright (c) Microsoft Corporation. All rights reserved.
-# Licensed under the Apache 2.0 License.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 
 import argparse
-import re
-import sys
-import subprocess
 import os
-
+import re
+import subprocess
+import sys
 
 version_header = re.compile(r"## \[(.+)\]")
 link_definition = re.compile(r"\[(.+)\]:")
@@ -167,9 +165,7 @@ def main():
                         f"[{version}]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/{version}\n"
                     )
         else:
-            print(
-                "Run with --fix to automatically add missing links to the changelog."
-            )
+            print("Run with --fix to automatically add missing links to the changelog.")
             sys.exit(1)
 
     print("CHANGELOG is valid!")
