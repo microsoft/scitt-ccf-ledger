@@ -166,10 +166,11 @@ def main():
                     f.write(
                         f"[{version}]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/{version}\n"
                     )
-        print(
-            "Run with --fix to automatically add missing git tags to the changelog."
-        )
-        sys.exit(1)
+        else:
+            print(
+                "Run with --fix to automatically add missing links to the changelog."
+            )
+            sys.exit(1)
 
     print("CHANGELOG is valid!")
 
