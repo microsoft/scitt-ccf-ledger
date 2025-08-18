@@ -5,10 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.14.3]
+### Changes
+- f7cc892 Update CCF version from 6.0.5 to 6.0.9 across all configuration files and code (#306)
+
+## [0.14.2]
+### Changes
+- 06ddcc0 [CLI] Verify transparent statement using issuer endpoint in the receipt (#302)
+
+## [0.14.1]
+### Changes
+- 3c95b0b Update CCF version from 6.0.3 to 6.0.5 across all configuration files and code (#303)
+- cdcc431 Update CCF version from 6.0.1 to 6.0.3 across all configuration files (#301)
+- 284b286 adds simple cose unit test to check if headers get parsed (#300)
+
+## [0.14.0]
+### Changes
+- 535cf94 Fix release action after upgrade to Azure Linux 3 (#299)
+- c84db70 Update to CCF 6.0.1 and use Azure Linux 3.0 (#298)
+
+## [0.13.2]
+### Changes
+- e4e7473 Add option to redirect cchost logs to local port in SNP images (#296)
+- 2617335 Removed apt.llvm.org from Docker Images (#295)
+
+## [0.13.1]
+### Changes
+- 19b086d Add option to redirect cchost logs to file in SNP images (#294)
+- 3992622 Removed Python dependencies step and launchpad repositories (#289)
+
+## [0.13.0]
+### Changes
+- 6573a5c update demo readme and scripts and minor changes in pyscitt client and test infra module (#288)
+- 9a5bf53 Document standard alignment of the implementation (#252)
+- ea64668 Consolidate on IETF SCITT profile/policyScript (#278)
+- 0da0b47 Update CCF to 6.0.0-rc0 (#284)
+- 39470bf Add new test payload (#287)
+- 19d20f4 Update runners to ubuntu-latest (#286)
+- d8be7d0 Fix pretty receipt for COSE receipts (#271)
+- 2c63a86 Align with scrapi feb4 (#274)
+- 7fe83ed Support both python3.8 and 3.10 in docker (#281)
+- ccd1537 Upgraded to Python3.10  (#280)
+- 986fbb5 Removed launchpad.net repository (#279)
+
+## [0.12.2]
+### Changes
+- d3c851a Update change log 0.12.1 (#276)
+- a3ca4e5 update ccf to 6-dev20 (#275)
+- f94a47d Delete dpkg list files containing ppa.lauchpad.net from docker images (#273)
+- 8b87934 Move bencher from PoC to main readme (#269)
+- 7a921ed Dead code removal pass (#270)
+- 2e31535 Remove python from images, change version string, update reproducibility doc for amd sev snp (#265)
+- fbf7ca4 Remove support for Notary signatures (#261)
+
 ## [0.12.1]
 
 ### Changes
 * Upgrade to CCF 6.0.0-dev20 (#275)
+
+## [0.12.0]
+## [0.12.0-pre]
+### Changes
+- 1647ebe Update to CCF 6.0.0-dev16 (#259)
+- de20351 Remove unnecessary submodule init from build script (#257)
+- 7759208 Clean up SGX references (#258)
+- 46b7720 Add /.well-known/transparency-configuration and /jwks endpoints (#253)
+- 4ea33ee Use consistent camelCase in http api (#256)
+- ce11795 Remove unused code (#255)
+- 6877a7e Fix CTS demo scripts following the recent pyscitt CLI updates (#254)
+
+## [0.11.0]
+### Changes
+- bfd6592 Adds fuzzing to POST entries endpoint (#251)
+- 69b9f53 Upgrade to 6.0.0-dev8 and de-duplicate wrappers (#250)
+- 52c2f40 Drop did:web sample (#249)
+- 3328eeb Remove CCF_UNSAFE (#248)
+- 1cc543b Implement COSE receipts in scitt-ccf-ledger (#245)
+- 97799de Adds ASAN build to GH actions (#239)
+- 12bf0b0 Set up CODEOWNERS (#242)
+- 312bb89 Remove deprecated governance signing type (#235)
+
+## [0.10.3]
+### Changes
+- 474d31c Relax CCF version in Python dependencies in Pyscitt library (#234)
 
 ## [0.10.2]
 
@@ -26,6 +105,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 * Upgrade to CCF 5.0.6 (#223)
 * Add AMD SEV-SNP platform support (#224)
 * Add CI pipeline stages for the SNP platform (#225)
+
+## [0.9.1]
+### Changes
+- 2cd8fc9 CLI: extract payload from COSE envelopes (#222)
+- 5dbfa2d remove remaining prefix tree mentions
+- fd0a463 Azure DevOps to use private feeds for Python deps in PR builds (#221)
+- df76d5a Bump the pip cryptography to 43 and ccf to 5.0.4 (#220)
+- 64ba84f Remove unused prefix-tree support (#216)
+- 35f72ea Fixes pretty-receipt command for COSE envelopes with embedded receipts (#219)
+- c81408c Use PEM parsing provided in pycose library (#218)
 
 ## [0.9.0]
 
@@ -207,3 +296,31 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.2.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.1.0-dev.1...0.1.0
 [0.1.0-dev.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.1.0-dev.1
+[0.7.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.7.1
+[0.10.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.10.0
+[0.7.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.7.0
+[0.10.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.10.2
+[0.6.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.6.1
+[0.10.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.10.3
+[0.10.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.10.1
+[0.5.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.0
+[0.14.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.14.3
+[0.9.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.9.1
+[0.5.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.3
+[0.14.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.14.0
+[0.14.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.14.2
+[0.13.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.13.1
+[0.7.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.7.2
+[0.12.0-pre]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.12.0-pre
+[0.14.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.14.1
+[0.13.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.13.0
+[0.12.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.12.0
+[0.8.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.8.0
+[0.11.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.11.0
+[0.12.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.12.1
+[0.13.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.13.2
+[0.6.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.6.0
+[0.12.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.12.2
+[0.5.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.1
+[0.9.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.9.0
+[0.5.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.2
