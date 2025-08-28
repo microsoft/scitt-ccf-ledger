@@ -185,12 +185,22 @@ Function arguments:
       // Empty object if no attestation details
       // OR if attestation details exist:
       
+      // See https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 7.3 - Table 23 for the semantics and size of the following fields before their
+      // encoding to hex string.
+
       // Measurement (hex string)
       measurement?: string,
       
       // Report data (hex string)
       report_data?: string,
+
+      // Host data (hex string)
+      host_data?: string,
       
+      // See https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // for additional detail on the UVM Endorsements object and reference values for the Confidential ACI platform
+
       // UVM Endorsements object
       uvm_endorsements?: {
         did: string,   // Decentralized identifier

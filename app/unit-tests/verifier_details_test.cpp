@@ -18,7 +18,7 @@ namespace
   {
     verifier::VerifiedSevSnpAttestationDetails details;
     EXPECT_TRUE(details.is_empty());
-
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     const uint8_t host_data[32] = {0};
 
     details = verifier::VerifiedSevSnpAttestationDetails(
