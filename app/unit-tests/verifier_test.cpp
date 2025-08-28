@@ -77,6 +77,11 @@ namespace
     EXPECT_EQ(
       details->get_uvm_endorsements().value().feed, "ContainerPlat-AMD-UVM");
     EXPECT_EQ(details->get_uvm_endorsements().value().svn, "101");
+    auto host_data = details->get_host_data();
+    auto host_data_str = ccf::ds::to_hex(host_data);
+    EXPECT_EQ(
+      host_data_str,
+      "953e208258fc57d814c44a0b083dbe4e8f2e734a2fde32f1049a78890d98b730");
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
 

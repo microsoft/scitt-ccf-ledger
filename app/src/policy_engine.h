@@ -240,6 +240,8 @@ namespace scitt
       obj.set("measurement", ctx.new_string(measurement.hex_str()));
       const auto& report_data = details.get_report_data();
       obj.set("report_data", ctx.new_string(report_data.hex_str()));
+      auto host_data_str = ccf::ds::to_hex(details.get_host_data());
+      obj.set("host_data", ctx.new_string(host_data_str));
       if (details.get_uvm_endorsements().has_value())
       {
         const auto& uvm_endorsements = details.get_uvm_endorsements().value();

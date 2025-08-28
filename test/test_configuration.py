@@ -565,6 +565,10 @@ return true;
             {
                 throw new Error("Invalid report data hex " + details.report_data);
             }
+            if (details.host_data !== "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20")
+            {
+                throw new Error("Invalid host data hex " + details.host_data);
+            }
             if (details.uvm_endorsements.did !== "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2")
             {
                 throw new Error("Invalid uvm_endorsements did " + details.uvm_endorsements.did);
