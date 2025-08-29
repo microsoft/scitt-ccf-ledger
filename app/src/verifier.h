@@ -271,8 +271,15 @@ namespace scitt::verifier
         }
       }
 
+      const auto* snp_attestation =
+        reinterpret_cast<const ccf::pal::snp::Attestation*>(
+          quote_info.quote.data());
+
       VerifiedSevSnpAttestationDetails details(
-        measurement, report_data, parsed_uvm_endorsements);
+        measurement,
+        report_data,
+        parsed_uvm_endorsements,
+        snp_attestation->host_data);
 
       // Now check that the attestation report data matches the cose key
       // This allows us to verify that the enclave knew about the key
