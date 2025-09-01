@@ -22,6 +22,8 @@ namespace scitt::verifier
     ccf::pal::PlatformAttestationReportData report_data;
     std::optional<ccf::pal::UVMEndorsements> uvm_endorsements;
     HostData host_data = {0};
+    ccf::pal::snp::ProductName product_name;
+    ccf::pal::snp::TcbVersionPolicy tcb_version_policy;
 
   public:
     VerifiedSevSnpAttestationDetails() = default;
@@ -29,10 +31,14 @@ namespace scitt::verifier
       ccf::pal::PlatformAttestationMeasurement measurement,
       ccf::pal::PlatformAttestationReportData report_data,
       std::optional<ccf::pal::UVMEndorsements> uvm_endorsements,
-      const uint8_t host_data_[HOST_DATA_SIZE]) :
+      const uint8_t host_data_[HOST_DATA_SIZE],
+      ccf::pal::snp::ProductName product_name,
+      ccf::pal::snp::TcbVersionPolicy&& tcb_version_policy) :
       measurement(measurement),
       report_data(report_data),
-      uvm_endorsements(uvm_endorsements)
+      uvm_endorsements(uvm_endorsements),
+      product_name(product_name),
+      tcb_version_policy(tcb_version_policy)
     {
       if (host_data_ == nullptr)
       {
@@ -56,6 +62,14 @@ namespace scitt::verifier
     const HostData& get_host_data() const
     {
       return host_data;
+    }
+    const ccf::pal::snp::ProductName& get_product_name() const
+    {
+      return product_name;
+    }
+    const ccf::pal::snp::TcbVersionPolicy& get_tcb_version_policy() const
+    {
+      return tcb_version_policy;
     }
     bool is_empty() const
     {

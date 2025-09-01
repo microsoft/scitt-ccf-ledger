@@ -275,11 +275,18 @@ namespace scitt::verifier
         reinterpret_cast<const ccf::pal::snp::Attestation*>(
           quote_info.quote.data());
 
+      auto reported_tcb = snp_attestation->reported_tcb;
+      auto product_name = ccf::pal::snp::get_sev_snp_product(
+        snp_attestation->cpuid_fam_id, snp_attestation->cpuid_mod_id);
+      auto tcb_policy = reported_tcb.to_policy(product_name);
+
       VerifiedSevSnpAttestationDetails details(
         measurement,
         report_data,
         parsed_uvm_endorsements,
-        snp_attestation->host_data);
+        snp_attestation->host_data,
+        product_name,
+        std::move(tcb_policy));
 
       // Now check that the attestation report data matches the cose key
       // This allows us to verify that the enclave knew about the key

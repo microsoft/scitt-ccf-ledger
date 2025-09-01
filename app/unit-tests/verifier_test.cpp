@@ -82,6 +82,13 @@ namespace
     EXPECT_EQ(
       host_data_str,
       "953e208258fc57d814c44a0b083dbe4e8f2e734a2fde32f1049a78890d98b730");
+    EXPECT_EQ(details->get_product_name(), ccf::pal::snp::ProductName::Milan);
+    EXPECT_EQ(details->get_tcb_version_policy().microcode, 219);
+    EXPECT_EQ(details->get_tcb_version_policy().snp, 24);
+    EXPECT_EQ(details->get_tcb_version_policy().tee, 0);
+    EXPECT_EQ(details->get_tcb_version_policy().boot_loader, 4);
+    EXPECT_EQ(details->get_tcb_version_policy().fmc, std::nullopt);
+    EXPECT_EQ(details->get_tcb_version_policy().hexstring, "db18000000000004");
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
 

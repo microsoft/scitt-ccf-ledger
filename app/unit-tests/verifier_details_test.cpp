@@ -25,7 +25,9 @@ namespace
       ccf::pal::PlatformAttestationMeasurement(),
       ccf::pal::PlatformAttestationReportData(),
       std::nullopt,
-      host_data);
+      host_data,
+      ccf::pal::snp::ProductName(),
+      ccf::pal::snp::TcbVersionPolicy());
     EXPECT_TRUE(details.is_empty());
 
     ccf::pal::AttestationMeasurement<4> measurement("abababab");
@@ -33,7 +35,9 @@ namespace
       ccf::pal::PlatformAttestationMeasurement(measurement),
       ccf::pal::PlatformAttestationReportData(),
       std::nullopt,
-      host_data);
+      host_data,
+      ccf::pal::snp::ProductName(),
+      ccf::pal::snp::TcbVersionPolicy());
     EXPECT_FALSE(details.is_empty());
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
