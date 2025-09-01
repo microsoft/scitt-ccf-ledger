@@ -33,6 +33,14 @@ namespace scitt::verifier
       report_data(report_data),
       uvm_endorsements(uvm_endorsements)
     {
+      if (measurement.data.empty())
+      {
+        throw std::invalid_argument("measurement cannot be empty");
+      }
+      if (report_data.data.empty())
+      {
+        throw std::invalid_argument("report_data cannot be empty");
+      }
       if (host_data_ == nullptr)
       {
         throw std::invalid_argument("host_data cannot be null");
