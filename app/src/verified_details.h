@@ -24,7 +24,6 @@ namespace scitt::verifier
     HostData host_data = {0};
 
   public:
-    VerifiedSevSnpAttestationDetails() = default;
     VerifiedSevSnpAttestationDetails(
       ccf::pal::PlatformAttestationMeasurement measurement,
       ccf::pal::PlatformAttestationReportData report_data,
@@ -56,11 +55,6 @@ namespace scitt::verifier
     const HostData& get_host_data() const
     {
       return host_data;
-    }
-    bool is_empty() const
-    {
-      return measurement.data.empty() && report_data.data.empty() &&
-        !uvm_endorsements;
     }
   };
 }

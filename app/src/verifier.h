@@ -335,7 +335,7 @@ namespace scitt::verifier
       cose::ProtectedHeader,
       cose::UnprotectedHeader,
       std::span<uint8_t>,
-      VerifiedSevSnpAttestationDetails>
+      std::optional<VerifiedSevSnpAttestationDetails>>
     verify_signed_statement(
       const std::vector<uint8_t>& signed_statement,
       ccf::kv::ReadOnlyTx& tx,
@@ -345,7 +345,7 @@ namespace scitt::verifier
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       std::span<uint8_t> payload;
-      VerifiedSevSnpAttestationDetails details;
+      std::optional<VerifiedSevSnpAttestationDetails> details;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
