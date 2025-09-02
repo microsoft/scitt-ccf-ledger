@@ -4,17 +4,11 @@
 #pragma once
 
 #include <ccf/crypto/openssl/openssl_wrappers.h>
+#include <openssl/core_names.h>
+#include <openssl/encoder.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
 #include <optional>
-
-#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-#  include <openssl/core_names.h>
-#  include <openssl/encoder.h>
-#  include <openssl/evp.h>
-#  include <openssl/sha.h>
-#else
-throw std::runtime_error(
-  "PublicKey class requires OpenSSL version 3 or higher");
-#endif
 
 namespace scitt
 {

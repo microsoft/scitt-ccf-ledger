@@ -22,12 +22,9 @@
 #include <ccf/pal/uvm_endorsements.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
-
-#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-#  include <openssl/core_names.h>
-#  include <openssl/encoder.h>
-#  include <openssl/param_build.h>
-#endif
+#include <openssl/core_names.h>
+#include <openssl/encoder.h>
+#include <openssl/param_build.h>
 
 namespace scitt::verifier
 {
