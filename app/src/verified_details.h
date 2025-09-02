@@ -24,7 +24,6 @@ namespace scitt::verifier
     HostData host_data = {0};
 
   public:
-    VerifiedSevSnpAttestationDetails() = default;
     VerifiedSevSnpAttestationDetails(
       ccf::pal::PlatformAttestationMeasurement measurement,
       ccf::pal::PlatformAttestationReportData report_data,
@@ -34,6 +33,14 @@ namespace scitt::verifier
       report_data(report_data),
       uvm_endorsements(uvm_endorsements)
     {
+      if (measurement.data.empty())
+      {
+        throw std::invalid_argument("measurement cannot be empty");
+      }
+      if (report_data.data.empty())
+      {
+        throw std::invalid_argument("report_data cannot be empty");
+      }
       if (host_data_ == nullptr)
       {
         throw std::invalid_argument("host_data cannot be null");
@@ -56,11 +63,6 @@ namespace scitt::verifier
     const HostData& get_host_data() const
     {
       return host_data;
-    }
-    bool is_empty() const
-    {
-      return measurement.data.empty() && report_data.data.empty() &&
-        !uvm_endorsements;
     }
   };
 }

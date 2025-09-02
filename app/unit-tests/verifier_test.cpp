@@ -60,7 +60,6 @@ namespace
     EXPECT_TRUE(phdr.alg.has_value());
 
     EXPECT_TRUE(details.has_value());
-    EXPECT_FALSE(details.value().is_empty());
     EXPECT_EQ(
       details->get_measurement().hex_str(),
       "5feee30d6d7e1a29f403d70a4198237ddfb13051a2d6976439487c609388ed7f98189887"
