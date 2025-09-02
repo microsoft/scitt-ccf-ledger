@@ -197,6 +197,24 @@ Function arguments:
 
       // Host data (hex string)
       host_data?: string,
+
+      // Reported TCB
+      // See https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 2.2 (TCB_VERSION) for the semantics and size of the following fields
+      // Note that the fmc field is only present on Turin platforms
+      reported_tcb?: {
+        microcode: number,   // Lowest current patch level of all cores
+        snp: number,         // Security Version Number (SVN) of SNP firmware
+        tee: number,         // SVN of PSP operating system
+        boot_loader: number, // SVN of PSP bootloader
+        fmc?: number,        // SVN of FMC fw
+        hexstring: string    // Combined hexstring representation of the fields listed above
+                             // Often used as a compact representation in security advisories
+      },
+
+      // Product name of the architecture, computed from the CPUID_FAM_ID and CPUID_MOD_ID fields
+      // one of "Milan", "Genoa", "Turin".
+      product_name?: string,
       
       // See https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
       // for additional detail on the UVM Endorsements object and reference values for the Confidential ACI platform
