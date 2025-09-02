@@ -294,8 +294,7 @@ namespace scitt
             phdr,
             uhdr,
             payload,
-            details.has_value() ? details.value() :
-                                  verifier::VerifiedSevSnpAttestationDetails{});
+            details);
           if (policy_violation_reason.has_value())
           {
             SCITT_DEBUG(

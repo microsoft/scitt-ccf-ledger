@@ -26,20 +26,27 @@ namespace scitt::verifier
     ccf::pal::snp::TcbVersionPolicy tcb_version_policy;
 
   public:
-    VerifiedSevSnpAttestationDetails() = default;
     VerifiedSevSnpAttestationDetails(
       ccf::pal::PlatformAttestationMeasurement measurement,
       ccf::pal::PlatformAttestationReportData report_data,
       std::optional<ccf::pal::UVMEndorsements> uvm_endorsements,
       const uint8_t host_data_[HOST_DATA_SIZE],
-      ccf::pal::snp::ProductName product_name,
+      ccf::pal::snp::ProductName product_name_,
       ccf::pal::snp::TcbVersionPolicy&& tcb_version_policy) :
       measurement(measurement),
       report_data(report_data),
       uvm_endorsements(uvm_endorsements),
-      product_name(product_name),
+      product_name(product_name_),
       tcb_version_policy(tcb_version_policy)
     {
+      if (measurement.data.empty())
+      {
+        throw std::invalid_argument("measurement cannot be empty");
+      }
+      if (report_data.data.empty())
+      {
+        throw std::invalid_argument("report_data cannot be empty");
+      }
       if (host_data_ == nullptr)
       {
         throw std::invalid_argument("host_data cannot be null");
@@ -70,11 +77,6 @@ namespace scitt::verifier
     const ccf::pal::snp::TcbVersionPolicy& get_tcb_version_policy() const
     {
       return tcb_version_policy;
-    }
-    bool is_empty() const
-    {
-      return measurement.data.empty() && report_data.data.empty() &&
-        !uvm_endorsements;
     }
   };
 }

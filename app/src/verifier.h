@@ -22,12 +22,9 @@
 #include <ccf/pal/uvm_endorsements.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
-
-#if defined(OPENSSL_VERSION_MAJOR) && OPENSSL_VERSION_MAJOR >= 3
-#  include <openssl/core_names.h>
-#  include <openssl/encoder.h>
-#  include <openssl/param_build.h>
-#endif
+#include <openssl/core_names.h>
+#include <openssl/encoder.h>
+#include <openssl/param_build.h>
 
 namespace scitt::verifier
 {
@@ -342,7 +339,7 @@ namespace scitt::verifier
       cose::ProtectedHeader,
       cose::UnprotectedHeader,
       std::span<uint8_t>,
-      VerifiedSevSnpAttestationDetails>
+      std::optional<VerifiedSevSnpAttestationDetails>>
     verify_signed_statement(
       const std::vector<uint8_t>& signed_statement,
       ccf::kv::ReadOnlyTx& tx,
@@ -352,7 +349,7 @@ namespace scitt::verifier
       cose::ProtectedHeader phdr;
       cose::UnprotectedHeader uhdr;
       std::span<uint8_t> payload;
-      VerifiedSevSnpAttestationDetails details;
+      std::optional<VerifiedSevSnpAttestationDetails> details;
       try
       {
         std::tie(phdr, uhdr) = cose::decode_headers(signed_statement);
