@@ -581,6 +581,14 @@ return true;
             {
                 throw new Error("Invalid uvm_endorsements svn " + details.uvm_endorsements.svn);
             }
+            if (details.product_name != "Milan")
+            {
+                throw new Error("Invalid product name " + details.product_name);
+            }
+            if (details.reported_tcb.hexstring !== "db18000000000004")
+            {
+                throw new Error("Invalid reported TCB hexstring " + details.reported_tcb.hexstring);
+            }
             return true;
         }
         """

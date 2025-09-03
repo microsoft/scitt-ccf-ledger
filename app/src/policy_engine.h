@@ -249,7 +249,40 @@ namespace scitt
           uvm_obj.set("svn", ctx.new_string(uvm_endorsements.svn));
           obj.set("uvm_endorsements", std::move(uvm_obj));
         }
+
+        auto reported_tcb = ctx.new_obj();
+        const auto& tcb = details->get_tcb_version_policy();
+        if (tcb.microcode.has_value())
+        {
+          reported_tcb.set_uint32("microcode", tcb.microcode.value());
+        }
+        if (tcb.snp.has_value())
+        {
+          reported_tcb.set_uint32("snp", tcb.snp.value());
+        }
+        if (tcb.tee.has_value())
+        {
+          reported_tcb.set_uint32("tee", tcb.tee.value());
+        }
+        if (tcb.boot_loader.has_value())
+        {
+          reported_tcb.set_uint32("boot_loader", tcb.boot_loader.value());
+        }
+        if (tcb.fmc.has_value())
+        {
+          reported_tcb.set_uint32("fmc", tcb.fmc.value());
+        }
+        if (tcb.hexstring.has_value())
+        {
+          reported_tcb.set("hexstring", ctx.new_string(tcb.hexstring.value()));
+        }
+        obj.set("reported_tcb", std::move(reported_tcb));
+        obj.set(
+          "product_name",
+          ctx.new_string(
+            ccf::pal::snp::to_string(details->get_product_name())));
       }
+
       return obj;
     }
 
