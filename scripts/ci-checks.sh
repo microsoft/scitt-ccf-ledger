@@ -60,7 +60,7 @@ python3.12 "$SCRIPT_DIR"/notice-check.py
 
 echo "-- Release notes"
 if [ $FIX -ne 0 ]; then
-  python3.12 "$SCRIPT_DIR"/extract-release-notes.py -f
+  python3.12 "$SCRIPT_DIR"/extract-release-notes.py --fix
 else
   python3.12 "$SCRIPT_DIR"/extract-release-notes.py
 fi

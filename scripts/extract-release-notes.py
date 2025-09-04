@@ -110,7 +110,6 @@ def main():
         "--changelog", help="Path to CHANGELOG file to parse", default="CHANGELOG.md"
     )
     parser.add_argument(
-        "-f",
         "--fix",
         help="Fix any automatically correctable errors",
         action="store_true",

@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.15.1]
+### Changes
+- 6493384 Expose reported TCB to policy (#316)
+- df1a28d Remove default constructed attestation details (#315)
+- 40ead73 Remove now-unused ifdefs present for OpenSSL 1.1.1 (pre-3) support (#314)
+- a1cfc58 Expose host_data to registration policy (#313)
+
 ## [0.15.0]
 ### Changes
 - adds changelog checks
 - updates CCF to 6.0.10
-- 4c57779 (origin/main, origin/HEAD, main) Adds latest attested signature to functional tests (#310)
+- 4c57779 Adds latest attested signature to functional tests (#310)
 - 29bdb67 Use private pip feed when building in ADO (#308)
 - 2098d69 did:attestedsvc:msft-css-dev signature issuer verification with attestation verification and detail exposure to policy (#305)
 
@@ -333,3 +340,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.9.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.9.0
 [0.5.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.2
 [0.15.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.0
+[0.15.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.1
