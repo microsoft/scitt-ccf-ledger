@@ -44,6 +44,35 @@
         "COMPILE_TARGET": "snp",
         "BUILD_TESTS": "OFF"
       }
+    },
+    {
+      "name": "bench",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/app",
+      "installDir": "/tmp/scitt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang-18",
+        "CMAKE_CXX_COMPILER": "clang++-18",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH":"ON",
+        "BUILD_TESTS": "OFF",
+        "ENABLE_CLANG_TIDY": "$env{ENABLE_CLANG_TIDY}"
+      }
+    },
+    {
+      "name": "bench-virtual",
+      "inherits": "bench",
+      "displayName": "Bench Virtual",
+      "description": "Bench build for virtual platform",
+      "cacheVariables": {
+        "COMPILE_TARGET": "virtual",
+        "BUILD_TESTS": "ON"
+      },
+      "environment": {
+        "CTEST_OUTPUT_ON_FAILURE": "1",
+        "GTEST_CATCH_EXCEPTIONS": "0"
+      }
     }
   ],
   "buildPresets": [
@@ -54,6 +83,10 @@
     {
       "name": "snp",
       "configurePreset": "dev-snp"
+    },
+    {
+      "name": "bench-virtual",
+      "configurePreset": "bench-virtual"
     }
   ],
   "testPresets": [
@@ -80,6 +113,19 @@
         {
           "type": "test",
           "name": "virtual"
+        }
+      ]
+    },
+    {
+      "name": "bench-virtual",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "bench-virtual"
+        },
+        {
+          "type": "build",
+          "name": "bench-virtual"
         }
       ]
     },

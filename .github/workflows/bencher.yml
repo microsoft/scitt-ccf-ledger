@@ -32,8 +32,8 @@ jobs:
       - name: Build and run virtual perf tests
         run: |
           ./scripts/setup-env.sh
-          ./build.sh
-          ./run_functional_tests.sh -m bencher
+          PLATFORM=bench-virtual ./build.sh
+          PLATFORM=virtual ./run_functional_tests.sh -m bencher
         shell: bash
 
       - uses: bencherdev/bencher@main

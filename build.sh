@@ -7,8 +7,8 @@ set -ex
 PLATFORM=${PLATFORM:-virtual}
 BUILD_DEBUG_CCF_FROM_SOURCE=${BUILD_DEBUG_CCF_FROM_SOURCE:-OFF}
 
-if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
-    echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
+if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ] && [ "$PLATFORM" != "bench-virtual" ]; then
+    echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp', or 'bench-virtual'"
     exit 1
 fi
 
