@@ -3,6 +3,8 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+include(FetchContent)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if((NOT CMAKE_CXX_COMPILER)
@@ -32,6 +34,36 @@ set(CMAKE_GENERATED_COMMENT
 )
 configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    # Use a tag that has a fix for https://github.com/corrosion-rs/corrosion/issues/590
+    GIT_TAG 6be991bb34c348dfb8344be22f3606288ea5c7fd
+)
+FetchContent_MakeAvailable(Corrosion)
+
+FetchContent_Declare(
+  regorus
+  GIT_REPOSITORY https://github.com/microsoft/regorus.git
+  GIT_TAG        4ec9e76440828632484b369accdc42d9bdc0e54b
+)
+
+FetchContent_MakeAvailable(regorus)
+
+corrosion_import_crate(
+  # Path to <regorus-source-folder>/bindings/ffi/Cargo.toml
+  MANIFEST_PATH "${regorus_SOURCE_DIR}/bindings/ffi/Cargo.toml"
+  # Always build regorus in Release mode.
+  PROFILE "release"
+  # Only build the "regorus-ffi" crate.
+  CRATES "regorus-ffi"
+  # Select specific features in regorus.
+  FEATURES "regorus/semver"
+  LOCKED
+  # Link statically
+  CRATE_TYPES "staticlib")
+
+
 # add CCF dependencies
 # add linking options
 # add SAN options if CCF is built with them
@@ -39,6 +71,17 @@ add_ccf_app(scitt
   SRCS src/main.cpp
   INSTALL_LIBS ON
 )
+if (COMPILE_TARGET STREQUAL "virtual")
+  target_include_directories(scitt.virtual PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
+  target_include_directories(scitt.virtual PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
+  target_link_libraries(scitt.virtual PRIVATE regorus_ffi)
+  add_dependencies(scitt.virtual regorus_ffi)
+else ()
+  target_include_directories(scitt.snp PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
+  target_include_directories(scitt.snp PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
+  target_link_libraries(scitt.snp PRIVATE regorus_ffi)
+  add_dependencies(scitt.snp regorus_ffi)
+endif ()
 
 if (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
@@ -137,6 +180,9 @@ if (BUILD_TESTS)
     http_parser.host
     ccf.virtual
   )
+  target_include_directories(unit_tests PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
+  target_include_directories(unit_tests PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
+  target_link_libraries(unit_tests PRIVATE regorus_ffi)
 
   target_include_directories(unit_tests PRIVATE src unit-tests)
   target_include_directories(

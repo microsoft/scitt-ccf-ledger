@@ -13,6 +13,8 @@
 #include <ccf/js/common_context.h>
 #include <string>
 
+#include "regorus.hpp"
+
 namespace scitt
 {
   using PolicyScript = std::string;
@@ -294,6 +296,75 @@ namespace scitt
       std::span<uint8_t> payload,
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
+
+      regorus::Engine engine;
+
+      engine.set_rego_v0(true);
+      engine.set_enable_coverage(true);
+
+    // Add policies.
+    engine.add_policy("objects.rego",R"(package objects
+
+rect := {`width`: 2, "height": 4}
+cube := {"width": 3, `height`: 4, "depth": 5}
+a := 42
+b := false
+c := null
+d := {"a": a, "x": [b, c]}
+index := 1
+shapes := [rect, cube]
+names := ["prod", `smoke1`, "dev"]
+sites := [{"name": "prod"}, {"name": names[index]}, {"name": "dev"}]
+e := {
+    a: "foo",
+    "three": c,
+    names[2]: b,
+    "four": d,
+}
+f := e["dev"])");
+
+    // Add data.
+    engine.add_data_json(R"({
+    "one": {
+        "bar": "Foo",
+        "baz": 5,
+        "be": true,
+        "bop": 23.4
+    },
+    "two": {
+        "bar": "Bar",
+        "baz": 12.3,
+        "be": false,
+        "bop": 42
+    }
+})");
+
+    engine.add_data_json(R"({
+    "three": {
+        "bar": "Baz",
+        "baz": 15,
+        "be": true,
+        "bop": 4.23
+    }
+})");
+
+    // Set input.
+    engine.set_input_json(R"({
+    "a": 10,
+    "b": "20",
+    "c": 30.0,
+    "d": true
+})");
+
+    // Eval query.
+    auto rego_result = engine.eval_query("[data.one, input.b, data.objects.sites[1]] = x");
+std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+    if (rego_result) {
+	std::cout<<rego_result.output()<<std::endl;
+    } else {
+	std::cerr<<rego_result.error()<<std::endl;
+    }
+
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
