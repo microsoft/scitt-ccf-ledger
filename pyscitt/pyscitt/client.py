@@ -567,6 +567,23 @@ class Client(BaseClient):
         statement = self.get_transparent_statement(tx)
         return Submission(operation_id, tx, statement, False)
 
+    def submit_signed_statement_and_wait_for_receipt(
+        self,
+        signed_statement: bytes,
+    ) -> Submission:
+        headers = {"Content-Type": CT_APPLICATION_COSE}
+        resp = self.post(
+            "/entries",
+            headers=headers,
+            content=signed_statement,
+        )
+        resp.raise_for_status()
+        operation = cbor2.loads(resp.read())
+        operation_id = operation["OperationId"]
+        tx = self.wait_for_operation(operation_id)
+        receipt = self.get_receipt(tx)
+        return Submission(operation_id, tx, receipt, False)
+
     def wait_for_operation(self, operation: str) -> str:
         resp = self.get(
             f"/operations/{operation}",
