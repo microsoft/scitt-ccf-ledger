@@ -292,6 +292,7 @@ namespace scitt
         if (cfg.policy.policy_rego.has_value())
         {
           SCITT_DEBUG("Using Rego Policy");
+          auto start = std::chrono::system_clock::now();
           const auto policy_violation_reason = check_for_policy_violations_rego(
             cfg.policy.policy_rego.value(),
             "configured_policy",
@@ -308,11 +309,15 @@ namespace scitt
               fmt::format(
                 "Policy was not met: {}", policy_violation_reason.value()));
           }
-          SCITT_DEBUG("Rego Policy check passed");
+          auto end = std::chrono::system_clock::now();
+          auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          CCF_APP_DEBUG("Rego Policy check passed in {}us", elapsed.count());
         }
         else if (cfg.policy.policy_script.has_value())
         {
           SCITT_DEBUG("Using JS Policy");
+          auto start = std::chrono::system_clock::now();
           const auto policy_violation_reason = check_for_policy_violations(
             cfg.policy.policy_script.value(),
             "configured_policy",
@@ -329,7 +334,10 @@ namespace scitt
               fmt::format(
                 "Policy was not met: {}", policy_violation_reason.value()));
           }
-          SCITT_DEBUG("JS Policy check passed");
+          auto end = std::chrono::system_clock::now();
+          auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          CCF_APP_DEBUG("JS Policy check passed in {}us", elapsed.count());
         }
         else
         {

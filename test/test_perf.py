@@ -74,14 +74,16 @@ allow if {{
 }}
 """
 
-TEST_POLICY_SCRIPTS = {
+TEST_POLICIES = {
     "x509_hashv": X509_HASHV_POLICY_SCRIPT,
     "attested_svc": ATTESTEDSVC_POLICY_SCRIPT,
+    "x509_hashv_rego": X509_HASHV_POLICY_REGO,
 }
 
 TEST_VECTORS = [
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
     ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
+    ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
 ]
 
 
@@ -99,9 +101,12 @@ def test_statement_latency(
     client: Client, configure_service, signed_statement_path: str, test_name: str
 ):
     client.wait_time = 0.1
-    policy_script = TEST_POLICY_SCRIPTS[test_name]
+    policy = TEST_POLICIES[test_name]
+    policy_config = (
+        {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
+    )
 
-    configure_service({"policy": {"policyScript": policy_script}})
+    configure_service({"policy": policy_config})
 
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
@@ -132,41 +137,3 @@ def test_statement_latency(
     print(df.describe())
 
     bf.set(f"Fetch Receipt {test_name}", latency(df))
-
-
-@pytest.mark.bencher
-def test_statement_latency_rego(client: Client, configure_service):
-    client.wait_time = 0.1
-    signed_statement_path = "test/payloads/cts-hashv-cwtclaims-b64url.cose"
-    test_name = "x509_hashv"
-    configure_service({"policy": {"policyRego": X509_HASHV_POLICY_REGO}})
-
-    with open(signed_statement_path, "rb") as f:
-        signed_statement = f.read()
-
-    iterations = 10
-
-    latency_ns = []
-    for i in range(iterations):
-        start = time.time()
-        client.submit_signed_statement(signed_statement)
-        latency_ns.append((time.time() - start) * 1_000_000_000)
-
-    df = DataFrame({"latency (ns)": latency_ns})
-    print(f"Statement Registration (Rego) {test_name}")
-    print(df.describe())
-
-    bf = Bencher()
-    bf.set(f"Register Signed Statement (Rego) {test_name}", latency(df))
-
-    latency_ns = []
-    for i in range(iterations):
-        start = time.time()
-        client.submit_signed_statement_and_wait_for_receipt(signed_statement)
-        latency_ns.append((time.time() - start) * 1_000_000_000)
-
-    df = DataFrame({"latency (ns)": latency_ns})
-    print(f"Statement Receipt Fetching (Rego) {test_name}")
-    print(df.describe())
-
-    bf.set(f"Fetch Receipt (Rego) {test_name}", latency(df))
