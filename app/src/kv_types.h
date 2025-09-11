@@ -87,6 +87,11 @@ namespace scitt
        */
       std::optional<PolicyScript> policy_script;
 
+      /**
+       * Rego policy to be applied to each incoming entry.
+       */
+      std::optional<PolicyRego> policy_rego;
+
       std::vector<std::string> get_accepted_algorithms() const
       {
         if (accepted_algorithms.has_value())
@@ -137,7 +142,9 @@ namespace scitt
     accepted_algorithms,
     "acceptedAlgorithms",
     policy_script,
-    "policyScript");
+    "policyScript",
+    policy_rego,
+    "policyRego");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);

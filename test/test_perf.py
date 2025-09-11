@@ -46,6 +46,34 @@ export function apply(phdr, uhdr, payload, details) {{
 }}
 """
 
+X509_HASHV_POLICY_REGO = f"""
+package policy
+default allow := false
+issuer_allowed if {{
+    input.phdr.cwt.iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
+}}
+seconds_since_epoch := time.now_ns() / 1000000000
+iat_in_the_past if {{
+    input.phdr.cwt.iat < seconds_since_epoch
+}}
+svn_undefined if {{
+    not input.phdr.cwt.svn
+}}
+svn_positive if {{
+    input.phdr.cwt.svn >= 0
+}}
+allow if {{
+    issuer_allowed
+    iat_in_the_past
+    svn_undefined
+}}
+allow if {{
+    issuer_allowed
+    iat_in_the_past
+    svn_positive
+}}
+"""
+
 TEST_POLICY_SCRIPTS = {
     "x509_hashv": X509_HASHV_POLICY_SCRIPT,
     "attested_svc": ATTESTEDSVC_POLICY_SCRIPT,
@@ -104,3 +132,41 @@ def test_statement_latency(
     print(df.describe())
 
     bf.set(f"Fetch Receipt {test_name}", latency(df))
+
+
+@pytest.mark.bencher
+def test_statement_latency_rego(client: Client, configure_service):
+    client.wait_time = 0.1
+    signed_statement_path = "test/payloads/cts-hashv-cwtclaims-b64url.cose"
+    test_name = "x509_hashv"
+    configure_service({"policy": {"policyRego": X509_HASHV_POLICY_REGO}})
+
+    with open(signed_statement_path, "rb") as f:
+        signed_statement = f.read()
+
+    iterations = 10
+
+    latency_ns = []
+    for i in range(iterations):
+        start = time.time()
+        client.submit_signed_statement(signed_statement)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
+
+    df = DataFrame({"latency (ns)": latency_ns})
+    print(f"Statement Registration (Rego) {test_name}")
+    print(df.describe())
+
+    bf = Bencher()
+    bf.set(f"Register Signed Statement (Rego) {test_name}", latency(df))
+
+    latency_ns = []
+    for i in range(iterations):
+        start = time.time()
+        client.submit_signed_statement_and_wait_for_receipt(signed_statement)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
+
+    df = DataFrame({"latency (ns)": latency_ns})
+    print(f"Statement Receipt Fetching (Rego) {test_name}")
+    print(df.describe())
+
+    bf.set(f"Fetch Receipt (Rego) {test_name}", latency(df))

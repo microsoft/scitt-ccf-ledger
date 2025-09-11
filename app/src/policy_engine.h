@@ -6,14 +6,14 @@
 #include "cose.h"
 #include "http_error.h"
 #include "profiles.h"
+#include "regorus.hpp"
 #include "tracing.h"
 #include "verified_details.h"
 
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
+#include <chrono>
 #include <string>
-
-#include "regorus.hpp"
 
 namespace scitt
 {
@@ -296,75 +296,6 @@ namespace scitt
       std::span<uint8_t> payload,
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
-
-      regorus::Engine engine;
-
-      engine.set_rego_v0(true);
-      engine.set_enable_coverage(true);
-
-    // Add policies.
-    engine.add_policy("objects.rego",R"(package objects
-
-rect := {`width`: 2, "height": 4}
-cube := {"width": 3, `height`: 4, "depth": 5}
-a := 42
-b := false
-c := null
-d := {"a": a, "x": [b, c]}
-index := 1
-shapes := [rect, cube]
-names := ["prod", `smoke1`, "dev"]
-sites := [{"name": "prod"}, {"name": names[index]}, {"name": "dev"}]
-e := {
-    a: "foo",
-    "three": c,
-    names[2]: b,
-    "four": d,
-}
-f := e["dev"])");
-
-    // Add data.
-    engine.add_data_json(R"({
-    "one": {
-        "bar": "Foo",
-        "baz": 5,
-        "be": true,
-        "bop": 23.4
-    },
-    "two": {
-        "bar": "Bar",
-        "baz": 12.3,
-        "be": false,
-        "bop": 42
-    }
-})");
-
-    engine.add_data_json(R"({
-    "three": {
-        "bar": "Baz",
-        "baz": 15,
-        "be": true,
-        "bop": 4.23
-    }
-})");
-
-    // Set input.
-    engine.set_input_json(R"({
-    "a": 10,
-    "b": "20",
-    "c": 30.0,
-    "d": true
-})");
-
-    // Eval query.
-    auto rego_result = engine.eval_query("[data.one, input.b, data.objects.sites[1]] = x");
-std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-    if (rego_result) {
-	std::cout<<rego_result.output()<<std::endl;
-    } else {
-	std::cerr<<rego_result.error()<<std::endl;
-    }
-
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -446,5 +377,112 @@ std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
   {
     return js::apply_js_policy(
       script, policy_name, phdr, uhdr, payload, details);
+  }
+
+  using PolicyRego = std::string;
+
+  static inline nlohmann::json rego_input_from_profile_and_protected_header(
+    const cose::ProtectedHeader& phdr)
+  {
+    nlohmann::json rego_input;
+    nlohmann::json cwt;
+    cwt["iss"] = phdr.cwt_claims.iss;
+    cwt["sub"] = phdr.cwt_claims.sub;
+    cwt["iat"] = phdr.cwt_claims.iat;
+    cwt["svn"] = phdr.cwt_claims.svn;
+    nlohmann::json protected_header;
+    protected_header["cwt"] = cwt;
+    protected_header["alg"] = phdr.alg;
+    if (phdr.cty.has_value())
+    {
+      if (std::holds_alternative<int64_t>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<int64_t>(phdr.cty.value());
+      }
+      else if (std::holds_alternative<std::string>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<std::string>(phdr.cty.value());
+      }
+    }
+    rego_input["phdr"] = protected_header;
+    return rego_input;
+  }
+
+  static inline std::optional<std::string> check_for_policy_violations_rego(
+    const PolicyRego& rego,
+    const std::string& policy_name,
+    const cose::ProtectedHeader& phdr,
+    const cose::UnprotectedHeader& uhdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
+  {
+    regorus::Engine engine;
+
+    engine.set_rego_v0(false);
+
+    engine.add_policy("policy", rego.c_str());
+
+    auto input = rego_input_from_profile_and_protected_header(phdr);
+
+    engine.set_input_json(input.dump().c_str());
+
+    // Eval query.
+    auto rego_result = engine.eval_query("data.policy.allow");
+
+    if (!rego_result)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Failed to evaluate policy: {}", rego_result.error()));
+    }
+
+    auto rego_output = nlohmann::json::parse(rego_result.output());
+    if (!rego_output.contains("result"))
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Failed to evaluate policy: no result");
+    }
+    auto result = rego_output["result"];
+    if (!result.is_array() || result.size() != 1)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Failed to evaluate policy: did not evaluate to a single result");
+    }
+    auto only_result = result[0];
+    if (!only_result.contains("expressions"))
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Failed to evaluate policy: no expressions in result");
+    }
+    auto expressions = only_result["expressions"];
+    if (!expressions.is_array() || expressions.size() != 1)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Failed to evaluate policy: did not evaluate to a single expression");
+    }
+    if (!expressions[0].contains("value"))
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Failed to evaluate policy: no expression value");
+    }
+    auto value = expressions[0]["value"];
+    if (!value.is_boolean())
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Failed to evaluate policy: expression value not boolean");
+    }
+    if (value.get<bool>())
+    {
+      return std::nullopt;
+    }
+    else
+    {
+      return std::optional<std::string>("policy violation");
+    }
   }
 }
