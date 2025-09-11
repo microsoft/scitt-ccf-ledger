@@ -6,7 +6,6 @@
 #include "cose.h"
 #include "didx509cpp/didx509cpp.h"
 #include "kv_types.h"
-#include "profiles.h"
 #include "public_key.h"
 #include "signature_algorithms.h"
 #include "tracing.h"
