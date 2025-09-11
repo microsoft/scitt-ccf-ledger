@@ -17,7 +17,6 @@ LOCUST_RUNTIME_SEC = 60
 
 
 @pytest.mark.perf
-@pytest.mark.disable_proxy
 class TestLoad:
     def test_load(
         self, client: Client, cert_authority, configure_service, tmp_path: Path
