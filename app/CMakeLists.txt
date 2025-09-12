@@ -34,35 +34,20 @@ set(CMAKE_GENERATED_COMMENT
 )
 configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
-FetchContent_Declare(
-    Corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    # Use a tag that has a fix for https://github.com/corrosion-rs/corrosion/issues/590
-    GIT_TAG 6be991bb34c348dfb8344be22f3606288ea5c7fd
-)
-FetchContent_MakeAvailable(Corrosion)
+set(TRIESTE_USE_SNMALLOC OFF)
 
 FetchContent_Declare(
-  regorus
-  GIT_REPOSITORY https://github.com/microsoft/regorus.git
-  GIT_TAG        4ec9e76440828632484b369accdc42d9bdc0e54b
+  regocpp
+  GIT_REPOSITORY https://github.com/matajoh/rego-cpp
+  GIT_TAG        b99c0ee52ed11803312d022ed550996d16849c6e
 )
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+FetchContent_MakeAvailable(regocpp)
 
-FetchContent_MakeAvailable(regorus)
-
-corrosion_import_crate(
-  # Path to <regorus-source-folder>/bindings/ffi/Cargo.toml
-  MANIFEST_PATH "${regorus_SOURCE_DIR}/bindings/ffi/Cargo.toml"
-  # Always build regorus in Release mode.
-  PROFILE "release"
-  # Only build the "regorus-ffi" crate.
-  CRATES "regorus-ffi"
-  # Select specific features in regorus.
-  FEATURES "regorus/semver"
-  LOCKED
-  # Link statically
-  CRATE_TYPES "staticlib")
-
+set_property(TARGET rego PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET yaml PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET json PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET re2 PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # add CCF dependencies
 # add linking options
@@ -71,23 +56,14 @@ add_ccf_app(scitt
   SRCS src/main.cpp
   INSTALL_LIBS ON
 )
-if (COMPILE_TARGET STREQUAL "virtual")
-  target_include_directories(scitt.virtual PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
-  target_include_directories(scitt.virtual PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
-  target_link_libraries(scitt.virtual PRIVATE regorus_ffi)
-  add_dependencies(scitt.virtual regorus_ffi)
-else ()
-  target_include_directories(scitt.snp PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
-  target_include_directories(scitt.snp PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
-  target_link_libraries(scitt.snp PRIVATE regorus_ffi)
-  add_dependencies(scitt.snp regorus_ffi)
-endif ()
 
 if (COMPILE_TARGET STREQUAL "virtual")
   set(SCITT_TARGET scitt.virtual)
 elseif (COMPILE_TARGET STREQUAL "snp")
   set(SCITT_TARGET scitt.snp)
 endif ()
+add_dependencies(${SCITT_TARGET} regocpp::rego)
+target_link_libraries(${SCITT_TARGET} PRIVATE regocpp::rego)
 
 # The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
 # -isystem, which silences any warnings in them, which is undesirable for our
@@ -180,9 +156,7 @@ if (BUILD_TESTS)
     http_parser.host
     ccf.virtual
   )
-  target_include_directories(unit_tests PRIVATE ${regorus_SOURCE_DIR}/bindings/ffi)
-  target_include_directories(unit_tests PRIVATE ${regorus_SOURCE_DIR}/bindings/cpp)
-  target_link_libraries(unit_tests PRIVATE regorus_ffi)
+  target_link_libraries(unit_tests PRIVATE regocpp::rego)
 
   target_include_directories(unit_tests PRIVATE src unit-tests)
   target_include_directories(

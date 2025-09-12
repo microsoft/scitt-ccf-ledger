@@ -6,7 +6,7 @@
 #include "cose.h"
 #include "http_error.h"
 #include "profiles.h"
-#include "regorus.hpp"
+#include <rego/rego.hh>
 #include "tracing.h"
 #include "verified_details.h"
 
@@ -435,9 +435,19 @@ namespace scitt
     const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
     auto start = std::chrono::steady_clock::now();
-    regorus::Engine engine;
 
-    engine.add_policy("policy", rego.c_str());
+    rego::Interpreter interpreter;
+    auto rv = interpreter.add_module("policy", rego);
+    if (rv != nullptr)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy module");
+    }
+
+    trieste::Node bundle;
+    interpreter.set_query("data.policy.allow");
+    bundle = interpreter.compile({});
+    rego::CompiledPolicy policy(bundle, interpreter.builtins());
 
     auto end = std::chrono::steady_clock::now();
     auto elapsed =
@@ -445,68 +455,34 @@ namespace scitt
     CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
     start = std::chrono::steady_clock::now();
     auto input = rego_input_from_profile_and_protected_header(phdr, payload);
+    
+    auto tv = policy.set_input_json(input.dump());
+    if (tv != nullptr)
+    {
+      throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy input");
+    }
+    auto rego_result = policy.query();
 
-    engine.set_input_json(input.dump().c_str());
-    auto rego_result = engine.eval_query("data.policy.allow");
-
-    if (!rego_result)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        fmt::format("Failed to evaluate policy: {}", rego_result.error()));
-    }
-
-    auto rego_output = nlohmann::json::parse(rego_result.output());
-    if (!rego_output.contains("result"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Failed to evaluate policy: no result");
-    }
-    auto result = rego_output["result"];
-    if (!result.is_array() || result.size() != 1)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: did not evaluate to a single result");
-    }
-    auto only_result = result[0];
-    if (!only_result.contains("expressions"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: no expressions in result");
-    }
-    auto expressions = only_result["expressions"];
-    if (!expressions.is_array() || expressions.size() != 1)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: did not evaluate to a single expression");
-    }
-    if (!expressions[0].contains("value"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: no expression value");
-    }
-    auto value = expressions[0]["value"];
-    if (!value.is_boolean())
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: expression value not boolean");
-    }
     end = std::chrono::steady_clock::now();
     elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
-    if (value.get<bool>())
-    {
-      return std::nullopt;
-    }
-    else
-    {
-      return std::optional<std::string>("policy violation");
-    }
+
+    // auto rego_output = nlohmann::json::parse(rego_result);
+    // if(!rego_output.contains("expressions") || !rego_output["expressions"].is_array() || rego_output["expressions"].empty())
+    // {
+    //   throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy result");
+    // }
+    // auto expr = rego_output["expressions"][0];
+    // if(!expr.contains("value"))
+    // {
+    //   throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy result");
+    // }
+    // auto value = expr["value"];
+    // if(value.is_boolean() && !value.get<bool>())
+    // {
+    //   return "Input statement rejected";
+    // }
+    return std::nullopt;
   }
 }
