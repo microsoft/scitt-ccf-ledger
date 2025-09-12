@@ -394,16 +394,16 @@ namespace scitt
   using PolicyRego = std::string;
 
   static inline nlohmann::json rego_input_from_profile_and_protected_header(
-    const cose::ProtectedHeader& phdr)
+    const cose::ProtectedHeader& phdr, std::span<uint8_t> payload)
   {
     nlohmann::json rego_input;
     nlohmann::json cwt;
     cwt["iss"] = phdr.cwt_claims.iss;
     cwt["sub"] = phdr.cwt_claims.sub;
     cwt["iat"] = phdr.cwt_claims.iat;
-    cwt["svn"] = phdr.cwt_claims.svn;
+    cwt["_svn"] = phdr.cwt_claims.svn;
     nlohmann::json protected_header;
-    protected_header["cwt"] = cwt;
+    protected_header["CWT Claims"] = cwt;
     protected_header["alg"] = phdr.alg;
     if (phdr.cty.has_value())
     {
@@ -417,6 +417,12 @@ namespace scitt
       }
     }
     rego_input["phdr"] = protected_header;
+    // Note: uhdr is deliberately not mapped, since the current agreement is to
+    // manually expose only validated parts of the uhdr to policy, once there is
+    // a use case.
+
+    // Payload is exposed as a hex string, because rego has no byte array type.
+    rego_input["payload"] = ccf::ds::to_hex(payload);
     return rego_input;
   }
 
@@ -431,8 +437,6 @@ namespace scitt
     auto start = std::chrono::steady_clock::now();
     regorus::Engine engine;
 
-    engine.set_rego_v0(false);
-
     engine.add_policy("policy", rego.c_str());
 
     auto end = std::chrono::steady_clock::now();
@@ -440,11 +444,9 @@ namespace scitt
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
     start = std::chrono::steady_clock::now();
-    auto input = rego_input_from_profile_and_protected_header(phdr);
+    auto input = rego_input_from_profile_and_protected_header(phdr, payload);
 
     engine.set_input_json(input.dump().c_str());
-
-    // Eval query.
     auto rego_result = engine.eval_query("data.policy.allow");
 
     if (!rego_result)
