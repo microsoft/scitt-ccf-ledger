@@ -296,6 +296,7 @@ namespace scitt
       std::span<uint8_t> payload,
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
+      auto start = std::chrono::steady_clock::now();
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -312,6 +313,12 @@ namespace scitt
           scitt::errors::PolicyError,
           fmt::format("Invalid policy module: {}", e.what()));
       }
+
+      auto end = std::chrono::steady_clock::now();
+      auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS runtime setup in {}us", elapsed.count());
+      start = std::chrono::steady_clock::now();
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
       auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
@@ -343,6 +350,11 @@ namespace scitt
             reason,
             trace.value_or("<no trace>")));
       }
+
+      end = std::chrono::steady_clock::now();
+      elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS input construction and eval in {}us", elapsed.count());
 
       if (result.is_str())
       {
@@ -416,12 +428,18 @@ namespace scitt
     std::span<uint8_t> payload,
     const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
+    auto start = std::chrono::steady_clock::now();
     regorus::Engine engine;
 
     engine.set_rego_v0(false);
 
     engine.add_policy("policy", rego.c_str());
 
+    auto end = std::chrono::steady_clock::now();
+    auto elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
+    start = std::chrono::steady_clock::now();
     auto input = rego_input_from_profile_and_protected_header(phdr);
 
     engine.set_input_json(input.dump().c_str());
@@ -476,6 +494,10 @@ namespace scitt
         scitt::errors::PolicyError,
         "Failed to evaluate policy: expression value not boolean");
     }
+    end = std::chrono::steady_clock::now();
+    elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
     if (value.get<bool>())
     {
       return std::nullopt;

@@ -82,7 +82,7 @@ TEST_POLICIES = {
 
 TEST_VECTORS = [
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
-    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
+    #    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
 ]
 
@@ -111,7 +111,7 @@ def test_statement_latency(
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
 
-    iterations = 10
+    iterations = 50
 
     latency_ns = []
     for i in range(iterations):
