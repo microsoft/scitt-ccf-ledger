@@ -37,15 +37,14 @@ configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 FetchContent_Declare(
     Corrosion
     GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    # Use a tag that has a fix for https://github.com/corrosion-rs/corrosion/issues/590
-    GIT_TAG 6be991bb34c348dfb8344be22f3606288ea5c7fd
+    GIT_TAG a1a1aaa057a5da656c06c3d8505b767a4e941709 # v0.5.2
 )
 FetchContent_MakeAvailable(Corrosion)
 
 FetchContent_Declare(
   regorus
   GIT_REPOSITORY https://github.com/microsoft/regorus.git
-  GIT_TAG        4ec9e76440828632484b369accdc42d9bdc0e54b
+  GIT_TAG        6c5338228b36d9320f8ab9146e5ed55ade7239ce # v0.5.0
 )
 
 FetchContent_MakeAvailable(regorus)

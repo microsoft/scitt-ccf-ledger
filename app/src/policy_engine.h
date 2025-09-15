@@ -447,7 +447,28 @@ namespace scitt
     auto input = rego_input_from_profile_and_protected_header(phdr, payload);
 
     engine.set_input_json(input.dump().c_str());
-    auto rego_result = engine.eval_query("data.policy.allow");
+    // auto rego_result = engine.eval_query("data.policy.allow");
+    auto rego_rule_result = engine.eval_rule("data.policy.allow");
+
+    if (!rego_rule_result)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Failed to evaluate policy: {}", rego_rule_result.error()));
+    }
+
+    if (std::strcmp("true", rego_rule_result.output()) == 0)
+    {
+      end = std::chrono::steady_clock::now();
+      elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
+      return std::nullopt;
+    }
+    return std::optional<std::string>("policy violation");
+
+    /*
+    CCF_APP_INFO("Rego rule result: {}", rego_rule_result.output());
 
     if (!rego_result)
     {
@@ -508,5 +529,6 @@ namespace scitt
     {
       return std::optional<std::string>("policy violation");
     }
+    */
   }
 }
