@@ -314,12 +314,6 @@ namespace scitt
           fmt::format("Invalid policy module: {}", e.what()));
       }
 
-      auto end = std::chrono::steady_clock::now();
-      auto elapsed =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-      CCF_APP_INFO("JS runtime setup in {}us", elapsed.count());
-      start = std::chrono::steady_clock::now();
-
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
       auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
       auto payload_val = interpreter.new_array_buffer_copy(payload);
@@ -350,11 +344,6 @@ namespace scitt
             reason,
             trace.value_or("<no trace>")));
       }
-
-      end = std::chrono::steady_clock::now();
-      elapsed =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-      CCF_APP_INFO("JS input construction and eval in {}us", elapsed.count());
 
       if (result.is_str())
       {
@@ -393,16 +382,23 @@ namespace scitt
 
   using PolicyRego = std::string;
 
-  static inline nlohmann::json rego_input_from_profile_and_protected_header(
-    const cose::ProtectedHeader& phdr, std::span<uint8_t> payload)
+  static inline nlohmann::json rego_input_from_signed_statement(
+    const cose::ProtectedHeader& phdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
     nlohmann::json rego_input;
     nlohmann::json cwt;
+    // All integer labels registered with IANA are mapped to their name
+    // https://www.iana.org/assignments/cwt/cwt.xhtml
     cwt["iss"] = phdr.cwt_claims.iss;
     cwt["sub"] = phdr.cwt_claims.sub;
     cwt["iat"] = phdr.cwt_claims.iat;
+    // String labels such as "name" as prefixed with an underscore: "_name"
     cwt["_svn"] = phdr.cwt_claims.svn;
     nlohmann::json protected_header;
+    // Same as above, but at the COSE level
+    // https://www.iana.org/assignments/cose/cose.xhtml
     protected_header["CWT Claims"] = cwt;
     protected_header["alg"] = phdr.alg;
     if (phdr.cty.has_value())
@@ -416,6 +412,7 @@ namespace scitt
         protected_header["cty"] = std::get<std::string>(phdr.cty.value());
       }
     }
+    // The COSE protected header is arbitrarily called phdr
     rego_input["phdr"] = protected_header;
     // Note: uhdr is deliberately not mapped, since the current agreement is to
     // manually expose only validated parts of the uhdr to policy, once there is
@@ -423,6 +420,43 @@ namespace scitt
 
     // Payload is exposed as a hex string, because rego has no byte array type.
     rego_input["payload"] = ccf::ds::to_hex(payload);
+
+    // Attestation information where available is exposed as "attestation"
+    if (details.has_value())
+    {
+      // Names match those defined in
+      // https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 7.3 Attestation, Table 23, transformed to lower case
+      nlohmann::json attestation;
+      attestation["measurement"] = details->get_measurement().hex_str();
+      attestation["report_data"] = details->get_report_data().hex_str();
+      attestation["host_data"] = ccf::ds::to_hex(details->get_host_data());
+      // Document in
+      // https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // Eventually expected to become a CWT Claims object
+      if (details->get_uvm_endorsements().has_value())
+      {
+        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        nlohmann::json uvm;
+        uvm["did"] = uvm_endorsements.did;
+        uvm["feed"] = uvm_endorsements.feed;
+        uvm["svn"] = uvm_endorsements.svn;
+        attestation["uvm_endorsements"] = uvm;
+      }
+      nlohmann::json reported_tcb;
+      const auto& tcb = details->get_tcb_version_policy();
+      reported_tcb["microcode"] = tcb.microcode;
+      reported_tcb["snp"] = tcb.snp;
+      reported_tcb["tee"] = tcb.tee;
+      reported_tcb["boot_loader"] = tcb.boot_loader;
+      reported_tcb["fmc"] = tcb.fmc;
+      reported_tcb["hexstring"] = tcb.hexstring;
+      attestation["reported_tcb"] = reported_tcb;
+      attestation["product_name"] =
+        ccf::pal::snp::to_string(details->get_product_name());
+      rego_input["attestation"] = attestation;
+    }
+
     return rego_input;
   }
 
@@ -434,20 +468,12 @@ namespace scitt
     std::span<uint8_t> payload,
     const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
-    auto start = std::chrono::steady_clock::now();
     regorus::Engine engine;
 
     engine.add_policy("policy", rego.c_str());
-
-    auto end = std::chrono::steady_clock::now();
-    auto elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
-    start = std::chrono::steady_clock::now();
-    auto input = rego_input_from_profile_and_protected_header(phdr, payload);
+    auto input = rego_input_from_signed_statement(phdr, payload, details);
 
     engine.set_input_json(input.dump().c_str());
-    // auto rego_result = engine.eval_query("data.policy.allow");
     auto rego_rule_result = engine.eval_rule("data.policy.allow");
 
     if (!rego_rule_result)
@@ -459,76 +485,9 @@ namespace scitt
 
     if (std::strcmp("true", rego_rule_result.output()) == 0)
     {
-      end = std::chrono::steady_clock::now();
-      elapsed =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-      CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
       return std::nullopt;
     }
+
     return std::optional<std::string>("policy violation");
-
-    /*
-    CCF_APP_INFO("Rego rule result: {}", rego_rule_result.output());
-
-    if (!rego_result)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        fmt::format("Failed to evaluate policy: {}", rego_result.error()));
-    }
-
-    auto rego_output = nlohmann::json::parse(rego_result.output());
-    if (!rego_output.contains("result"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Failed to evaluate policy: no result");
-    }
-    auto result = rego_output["result"];
-    if (!result.is_array() || result.size() != 1)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: did not evaluate to a single result");
-    }
-    auto only_result = result[0];
-    if (!only_result.contains("expressions"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: no expressions in result");
-    }
-    auto expressions = only_result["expressions"];
-    if (!expressions.is_array() || expressions.size() != 1)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: did not evaluate to a single expression");
-    }
-    if (!expressions[0].contains("value"))
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: no expression value");
-    }
-    auto value = expressions[0]["value"];
-    if (!value.is_boolean())
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError,
-        "Failed to evaluate policy: expression value not boolean");
-    }
-    end = std::chrono::steady_clock::now();
-    elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
-    if (value.get<bool>())
-    {
-      return std::nullopt;
-    }
-    else
-    {
-      return std::optional<std::string>("policy violation");
-    }
-    */
   }
 }

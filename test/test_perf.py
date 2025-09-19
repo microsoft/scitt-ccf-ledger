@@ -49,6 +49,7 @@ export function apply(phdr, uhdr, payload, details) {{
 X509_HASHV_POLICY_REGO = f"""
 package policy
 default allow := false
+
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
 }}
@@ -56,16 +57,8 @@ seconds_since_epoch := time.now_ns() / 1000000000
 iat_in_the_past if {{
     input.phdr["CWT Claims"].iat < seconds_since_epoch
 }}
-svn_undefined if {{
-    not input.phdr["CWT Claims"]._svn
-}}
 svn_positive if {{
     input.phdr["CWT Claims"]._svn >= 0
-}}
-allow if {{
-    issuer_allowed
-    iat_in_the_past
-    svn_undefined
 }}
 allow if {{
     issuer_allowed
@@ -74,16 +67,64 @@ allow if {{
 }}
 """
 
+ATTESTEDSVC_POLICY_REGO = f"""
+package policy
+default allow := false
+
+product_name_valid if {{
+    input.attestation.product_name == "Milan"
+}}
+reported_tcb_valid if {{
+    input.attestation.reported_tcb.hexstring == "db18000000000004"
+}}
+amd_tcb_valid if {{
+    product_name_valid
+    reported_tcb_valid
+}}
+
+uvm_did_valid if {{
+    input.attestation.uvm_endorsements.did == "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2"
+}}
+uvm_feed_valid if {{
+    input.attestation.uvm_endorsements.feed == "ContainerPlat-AMD-UVM"
+}}
+uvm_svn_valid if {{
+    input.attestation.uvm_endorsements.svn == "101"
+}}
+uvm_valid if {{
+    uvm_did_valid
+    uvm_feed_valid
+    uvm_svn_valid
+}}
+
+host_data_valid if {{
+    input.attestation.host_data == "c71e9f286127f4327a7ddcfb4c6f6f1274a2858172549e10b9e506a19206fd57"
+}}
+
+issuer_valid if {{
+    startswith(input.phdr["CWT Claims"].iss, "did:attestedsvc:msft-css-dev:")
+}}
+
+allow if {{
+    amd_tcb_valid
+    uvm_valid
+    host_data_valid
+    issuer_valid
+}}
+"""
+
 TEST_POLICIES = {
     "x509_hashv": X509_HASHV_POLICY_SCRIPT,
     "attested_svc": ATTESTEDSVC_POLICY_SCRIPT,
     "x509_hashv_rego": X509_HASHV_POLICY_REGO,
+    "attested_svc_rego": ATTESTEDSVC_POLICY_REGO,
 }
 
 TEST_VECTORS = [
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
-    #    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
+    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
+    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc_rego"),
 ]
 
 
