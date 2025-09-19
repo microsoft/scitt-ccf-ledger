@@ -22,7 +22,7 @@ option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(ccf_${COMPILE_TARGET} 6.0.10 REQUIRED)
+find_package(ccf_${COMPILE_TARGET} 6.0.12 REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/target_link_system_libraries.cmake)
