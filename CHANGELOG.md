@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Changes
+- Update CCF version from 6.0.10 to 6.0.12 across all configuration files and code
+
 ## [0.15.1]
 ### Changes
 - 6493384 Expose reported TCB to policy (#316)

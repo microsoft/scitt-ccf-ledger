@@ -1,4 +1,4 @@
-ARG CCF_VERSION="6.0.10"
+ARG CCF_VERSION="6.0.12"
 ARG CCF_PLATFORM="virtual"
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
@@ -17,7 +17,9 @@ RUN tdnf update -y && \
     procps \
     docker-cli \
     docker-buildx \
-    clang-tools-extra-devel && \
+    clang-tools-extra-devel \
+    curl-devel \
+    libuv-devel && \
     \
     # Install the CCF development package
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \

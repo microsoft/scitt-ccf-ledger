@@ -5,7 +5,6 @@
 
 #include "cose.h"
 #include "http_error.h"
-#include "profiles.h"
 #include "regorus.hpp"
 #include "tracing.h"
 #include "verified_details.h"

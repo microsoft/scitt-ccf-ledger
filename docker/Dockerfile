@@ -1,7 +1,7 @@
-ARG CCF_VERSION="6.0.10"
+ARG CCF_VERSION="6.0.12"
 
 # Use fixed image version to ensure reproducibility
-ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250402
+ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250910
 
 FROM ${BASE_IMAGE} AS builder
 
@@ -10,7 +10,9 @@ ARG CCF_PLATFORM
 ARG SCITT_VERSION_OVERRIDE
 
 RUN tdnf install -y \
-    ca-certificates-1:3.0.0-8.azl3 && \
+    ca-certificates-1:3.0.0-11.azl3 \
+    curl-devel-8.11.1-3.azl3 \
+    libuv-devel-1.48.0-1.azl3 && \
     \
     # Download the CCF development package
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
@@ -38,9 +40,9 @@ ARG CCF_PLATFORM
 WORKDIR /usr/src/app
 
 RUN tdnf install -y \
-    ca-certificates-1:3.0.0-8.azl3 \
-    tini-0.19.0-19.azl3 \
-    tar-1.35-1.azl3 \
+    ca-certificates-1:3.0.0-11.azl3 \
+    tini-0.19.0-22.azl3 \
+    tar-1.35-2.azl3 \
     nmap-ncat-7.95-2.azl3 && \
     \
     # Use the CCF runtime package which contains the minimal dependencies for running CCF applications
