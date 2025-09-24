@@ -309,28 +309,18 @@ export function apply(phdr) {{
                 client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
-        "filepath",
+        "filepath, lang",
         [
-            "test/payloads/cts-hashv-cwtclaims-b64url.cose",
-            "test/payloads/manifest.spdx.json.sha384.digest.cose",
+            ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "js"),
+            ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rego"),
+            ("test/payloads/manifest.spdx.json.sha384.digest.cose", "js"),
+            ("test/payloads/manifest.spdx.json.sha384.digest.cose", "rego"),
         ],
     )
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self, tmp_path, client: Client, configure_service, filepath
+        self, tmp_path, client: Client, configure_service, filepath, lang
     ):
-
-        policy_script = f"""
-export function apply(phdr) {{
-
-// Check exact issuer 
-if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
-if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
-
-return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": policies.SAMPLE[lang]})
 
         with open(filepath, "rb") as f:
             cts_hashv_cwtclaims = f.read()
