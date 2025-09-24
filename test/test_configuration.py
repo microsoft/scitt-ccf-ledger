@@ -20,6 +20,7 @@ from pycose.keys.cosekey import CoseKey
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from . import policies
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
@@ -105,11 +106,13 @@ class TestPolicyEngine:
 
         return f
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
         self,
         client: Client,
         configure_service,
         cert_authority: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -194,15 +197,8 @@ class TestPolicyEngine:
             ],
         }
 
-        policy_script = f"""
-export function apply(phdr) {{
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(cert_authority)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.submit_signed_statement_and_wait(signed_statement)
@@ -212,11 +208,13 @@ export function apply(phdr) {{
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_svn_policy(
         self,
         client: Client,
         configure_service,
         cert_authority: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -229,7 +227,8 @@ export function apply(phdr) {{
             root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
             return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
 
-        identity.issuer = didx509_issuer(cert_authority)
+        issuer = didx509_issuer(cert_authority)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
         feed = "SomeFeed"
         # SBOMs
         statement = {"foo": "bar"}
@@ -270,59 +269,44 @@ export function apply(phdr) {{
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_pass_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {"policy": {"policyScript": "export function apply() { return true }"}}
-        )
+        configure_service({"policy": policies.PASS[lang]})
 
         client.submit_signed_statement_and_wait(signed_statement())
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_fail_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": "export function apply() { return `All entries are refused`; }"
-                }
-            }
-        )
+        configure_service({"policy": policies.FAIL[lang]})
 
         with service_error("Policy was not met"):
             client.submit_signed_statement_and_wait(signed_statement())
 
+    @pytest.mark.parametrize("lang", ["js"])
     def test_exceptional_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
-                }
-            }
-        )
+        # No runtime error test for Rego, because things that seem like they
+        # would cause runtime errors, such as dividing by zero, cause a policy
+        # failure instead.
+        configure_service({"policy": policies.RUNTIME_ERROR[lang]})
 
         with service_error("Error while applying policy"):
             client.submit_signed_statement_and_wait(signed_statement())
 
-    @pytest.mark.parametrize(
-        "script",
-        [
-            "",
-            "return true",
-            "function apply() {}",
-            "function apply() { not valid javascript }",
-        ],
-    )
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_invalid_policy(
-        self, client: Client, configure_service, signed_statement, script
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service({"policy": {"policyScript": script}})
+        for invalid_policy in policies.INVALID[lang]:
+            configure_service({"policy": invalid_policy})
 
-        with service_error("Invalid policy module"):
-            client.submit_signed_statement_and_wait(signed_statement())
+            with service_error("Invalid policy module"):
+                client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
         "filepath",

@@ -480,7 +480,7 @@ namespace scitt
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError,
-        fmt::format("Failed to evaluate policy: {}", rego_rule_result.error()));
+        fmt::format("Invalid policy module: {}", rego_rule_result.error()));
     }
 
     if (std::strcmp("true", rego_rule_result.output()) == 0)
@@ -488,6 +488,27 @@ namespace scitt
       return std::nullopt;
     }
 
-    return std::optional<std::string>("policy violation");
+    auto rego_errors = engine.eval_rule("data.policy.errors");
+    if (!rego_errors)
+    {
+      return {"No error details exposed by policy"};
+    }
+
+    nlohmann::json errors = nlohmann::json::parse(rego_errors.output());
+    if (errors.is_object() && !errors.empty())
+    {
+      std::string error_msg;
+      for (auto it = errors.begin(); it != errors.end(); ++it)
+      {
+        if (!error_msg.empty())
+        {
+          error_msg += ", ";
+        }
+        error_msg += it.key();
+      }
+      return error_msg;
+    }
+
+    return {"Could not obtain error details from policy"};
   }
 }
