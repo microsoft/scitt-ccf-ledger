@@ -49,6 +49,7 @@ export function apply(phdr, uhdr, payload, details) {{
 X509_HASHV_POLICY_REGO = f"""
 package policy
 default allow := false
+default errors := {{}}
 
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
@@ -65,11 +66,16 @@ allow if {{
     iat_in_the_past
     svn_positive
 }}
+
+errors["Invalid issuer"] if {{ not issuer_allowed }}
+errors["Invalid iat"] if {{ not iat_in_the_past }}
+errors["Invalid SVN"] if {{ not svn_positive }}
 """
 
 ATTESTEDSVC_POLICY_REGO = f"""
 package policy
 default allow := false
+default errors := {{}}
 
 product_name_valid if {{
     input.attestation.product_name == "Milan"
@@ -111,6 +117,14 @@ allow if {{
     host_data_valid
     issuer_valid
 }}
+
+errors["Invalid AMD product name"] if {{ not product_name_valid }}
+errors["Invalid reported TCB"] if {{ not reported_tcb_valid }}
+errors["Invalid uvm_endorsements did"] if {{ not uvm_did_valid }}
+errors["Invalid uvm_endorsements feed"] if {{ not uvm_feed_valid }}
+errors["Invalid uvm_endorsements svn"] if {{ not uvm_svn_valid }}
+errors["Invalid host data"] if {{ not host_data_valid }}
+errors["Invalid issuer"] if {{ not issuer_valid }}
 """
 
 TEST_POLICIES = {

@@ -12,6 +12,8 @@ return true;
 SAMPLE_POLICY_REGO = f"""
 package policy
 default allow := false
+default errors := {{}}
+
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
 }}
@@ -58,6 +60,7 @@ RUNTIME_ERROR = {
 FAIL_POLICY_REGO = f"""
 package policy
 default allow := false
+default errors := {{"All entries are refused": true}}
 """
 
 FAIL = {
@@ -94,6 +97,8 @@ def svn_policy_rego(issuer):
     policy = f"""
 package policy
 default allow := false
+default errors := {{}}
+
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "{issuer}"
 }}
