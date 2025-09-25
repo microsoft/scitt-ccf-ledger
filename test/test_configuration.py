@@ -406,7 +406,8 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
-                "msft-css-dev": {
+                "attestedsvc": {
+                    "svc_id": "msft-css-dev",
                     "attestation": b"testAttestation",
                     "snp_endorsements": b"testSnpEndorsements",
                     "uvm_endorsements": b"testUvmEndorsements",
@@ -422,14 +423,17 @@ return true;
     ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
-            if (ccf.bufToStr(phdr["msft-css-dev"].attestation) !== "testAttestation") {
-                return `Invalid msft-css-dev.attestation`;
+            if (phdr["attestedsvc"].svc_id !== "msft-css-dev") {
+                return `Invalid attestedsvc.svc_id`;
             }
-            if (ccf.bufToStr(phdr["msft-css-dev"].snp_endorsements) !== "testSnpEndorsements") {
-                return `Invalid msft-css-dev.snp_endorsements`;
+            if (ccf.bufToStr(phdr["attestedsvc"].attestation) !== "testAttestation") {
+                return `Invalid attestedsvc.attestation`;
             }
-            if (ccf.bufToStr(phdr["msft-css-dev"].uvm_endorsements) !== "testUvmEndorsements") {
-                return `Invalid msft-css-dev.uvm_endorsements`;
+            if (ccf.bufToStr(phdr["attestedsvc"].snp_endorsements) !== "testSnpEndorsements") {
+                return `Invalid attestedsvc.snp_endorsements`;
+            }
+            if (ccf.bufToStr(phdr["attestedsvc"].uvm_endorsements) !== "testUvmEndorsements") {
+                return `Invalid attestedsvc.uvm_endorsements`;
             }
             return true;
         }
