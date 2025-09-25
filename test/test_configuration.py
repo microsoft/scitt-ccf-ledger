@@ -513,7 +513,8 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
-                "msft-css-dev": {
+                "attestedsvc": {
+                    "svc_id": "msft-css-dev",
                     "attestation": snp_r,
                     "attestation_type": "SEV-SNP:ContainerPlat-AMD-UVM",
                     "snp_endorsements": snp_e,
@@ -530,9 +531,9 @@ return true;
         policy_script = """
         export function apply(phdr, uhdr, payload) {
             var claims = snp_attestation.verifySnpAttestation(
-                phdr["msft-css-dev"].attestation,
-                phdr["msft-css-dev"].snp_endorsements,
-                phdr["msft-css-dev"].uvm_endorsements
+                phdr["attestedsvc"].attestation,
+                phdr["attestedsvc"].snp_endorsements,
+                phdr["attestedsvc"].uvm_endorsements
             );
 
             function toHexStr(arrayBuffer) {
