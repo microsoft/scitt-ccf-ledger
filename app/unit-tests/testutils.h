@@ -133,6 +133,10 @@ namespace testutils
     // TSS map
     // ----------------------
     QCBOREncode_OpenMapInMap(&ectx, cose::COSE_HEADER_PARAM_TSS);
+    QCBOREncode_AddTextToMap(
+      &ectx,
+      cose::COSE_HEADER_PARAM_TSS_SVC_ID,
+      cbor::from_string("msft-css-dev"));
     QCBOREncode_AddBytesToMap(
       &ectx,
       cose::COSE_HEADER_PARAM_TSS_ATTESTATION,
