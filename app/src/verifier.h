@@ -386,6 +386,37 @@ namespace scitt::verifier
               process_signed_statement_with_didattestedsvc_issuer(
                 phdr, configuration, signed_statement);
 
+            if (!phdr.crit.has_value())
+            {
+              throw VerificationError(
+                "Attested Service signed statement must have a crit parameter");
+            }
+
+            auto& crit = phdr.crit.value();
+
+            if (crit.size() != 1)
+            {
+              throw VerificationError(
+                "Attested Service signed statement crit must contain a single "
+                "value");
+            }
+
+            auto& crit_val = crit[0];
+
+            if (!std::holds_alternative<std::string>(crit_val))
+            {
+              throw VerificationError(
+                "Attested Service signed statement crit value must be a "
+                "string");
+            }
+
+            if (std::get<std::string>(crit_val) != cose::COSE_HEADER_PARAM_TSS)
+            {
+              throw VerificationError(fmt::format(
+                "Attested Service signed statement crit value must be \"{}\"",
+                cose::COSE_HEADER_PARAM_TSS));
+            }
+
             if (!phdr.tss_map.svc_id.has_value())
             {
               throw VerificationError(fmt::format(

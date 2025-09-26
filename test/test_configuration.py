@@ -406,12 +406,13 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
+                2: ["attested_svc"],
                 "attestedsvc": {
                     "svc_id": "msft-css-dev",
                     "attestation": b"testAttestation",
                     "snp_endorsements": b"testSnpEndorsements",
                     "uvm_endorsements": b"testUvmEndorsements",
-                }
+                },
             },
         )
 
@@ -513,6 +514,7 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
+                2: ["attestedsvc"],
                 "attestedsvc": {
                     "svc_id": "msft-css-dev",
                     "attestation": snp_r,
@@ -521,7 +523,7 @@ return true;
                     "uvm_endorsements": uvm_e,
                     "cose_key": cbor2.loads(cose_key_cbor),
                     "ver": 0,
-                }
+                },
             },
         )
 
