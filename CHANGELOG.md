@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Changes
+- Update CCF version from 6.0.12 to 6.0.14 across all configuration files and code
 - Update CCF version from 6.0.10 to 6.0.12 across all configuration files and code
 
 ## [0.15.1]
