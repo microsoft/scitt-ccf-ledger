@@ -406,7 +406,6 @@ return true;
             {"foo": "bar"},
             cwt=True,
             additional_phdr={
-                2: ["attested_svc"],
                 "attestedsvc": {
                     "svc_id": "msft-css-dev",
                     "attestation": b"testAttestation",
