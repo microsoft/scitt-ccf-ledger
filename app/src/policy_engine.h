@@ -5,11 +5,13 @@
 
 #include "cose.h"
 #include "http_error.h"
+#include "regorus.hpp"
 #include "tracing.h"
 #include "verified_details.h"
 
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
+#include <chrono>
 #include <string>
 
 namespace scitt
@@ -293,6 +295,7 @@ namespace scitt
       std::span<uint8_t> payload,
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
+      auto start = std::chrono::steady_clock::now();
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -374,5 +377,137 @@ namespace scitt
   {
     return js::apply_js_policy(
       script, policy_name, phdr, uhdr, payload, details);
+  }
+
+  using PolicyRego = std::string;
+
+  static inline nlohmann::json rego_input_from_signed_statement(
+    const cose::ProtectedHeader& phdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
+  {
+    nlohmann::json rego_input;
+    nlohmann::json cwt;
+    // All integer labels registered with IANA are mapped to their name
+    // https://www.iana.org/assignments/cwt/cwt.xhtml
+    cwt["iss"] = phdr.cwt_claims.iss;
+    cwt["sub"] = phdr.cwt_claims.sub;
+    cwt["iat"] = phdr.cwt_claims.iat;
+    // String labels such as "name" as prefixed with an underscore: "_name"
+    cwt["_svn"] = phdr.cwt_claims.svn;
+    nlohmann::json protected_header;
+    // Same as above, but at the COSE level
+    // https://www.iana.org/assignments/cose/cose.xhtml
+    protected_header["CWT Claims"] = cwt;
+    protected_header["alg"] = phdr.alg;
+    if (phdr.cty.has_value())
+    {
+      if (std::holds_alternative<int64_t>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<int64_t>(phdr.cty.value());
+      }
+      else if (std::holds_alternative<std::string>(phdr.cty.value()))
+      {
+        protected_header["cty"] = std::get<std::string>(phdr.cty.value());
+      }
+    }
+    // The COSE protected header is arbitrarily called phdr
+    rego_input["phdr"] = protected_header;
+    // Note: uhdr is deliberately not mapped, since the current agreement is to
+    // manually expose only validated parts of the uhdr to policy, once there is
+    // a use case.
+
+    // Payload is exposed as a hex string, because rego has no byte array type.
+    rego_input["payload"] = ccf::ds::to_hex(payload);
+
+    // Attestation information where available is exposed as "attestation"
+    if (details.has_value())
+    {
+      // Names match those defined in
+      // https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 7.3 Attestation, Table 23, transformed to lower case
+      nlohmann::json attestation;
+      attestation["measurement"] = details->get_measurement().hex_str();
+      attestation["report_data"] = details->get_report_data().hex_str();
+      attestation["host_data"] = ccf::ds::to_hex(details->get_host_data());
+      // Document in
+      // https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // Eventually expected to become a CWT Claims object
+      if (details->get_uvm_endorsements().has_value())
+      {
+        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        nlohmann::json uvm;
+        uvm["did"] = uvm_endorsements.did;
+        uvm["feed"] = uvm_endorsements.feed;
+        uvm["svn"] = uvm_endorsements.svn;
+        attestation["uvm_endorsements"] = uvm;
+      }
+      nlohmann::json reported_tcb;
+      const auto& tcb = details->get_tcb_version_policy();
+      reported_tcb["microcode"] = tcb.microcode;
+      reported_tcb["snp"] = tcb.snp;
+      reported_tcb["tee"] = tcb.tee;
+      reported_tcb["boot_loader"] = tcb.boot_loader;
+      reported_tcb["fmc"] = tcb.fmc;
+      reported_tcb["hexstring"] = tcb.hexstring;
+      attestation["reported_tcb"] = reported_tcb;
+      attestation["product_name"] =
+        ccf::pal::snp::to_string(details->get_product_name());
+      rego_input["attestation"] = attestation;
+    }
+
+    return rego_input;
+  }
+
+  static inline std::optional<std::string> check_for_policy_violations_rego(
+    const PolicyRego& rego,
+    const std::string& policy_name,
+    const cose::ProtectedHeader& phdr,
+    const cose::UnprotectedHeader& uhdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
+  {
+    regorus::Engine engine;
+
+    engine.add_policy("policy", rego.c_str());
+    auto input = rego_input_from_signed_statement(phdr, payload, details);
+
+    engine.set_input_json(input.dump().c_str());
+    auto rego_rule_result = engine.eval_rule("data.policy.allow");
+
+    if (!rego_rule_result)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Invalid policy module: {}", rego_rule_result.error()));
+    }
+
+    if (std::strcmp("true", rego_rule_result.output()) == 0)
+    {
+      return std::nullopt;
+    }
+
+    auto rego_errors = engine.eval_rule("data.policy.errors");
+    if (!rego_errors)
+    {
+      return {"No error details exposed by policy"};
+    }
+
+    nlohmann::json errors = nlohmann::json::parse(rego_errors.output());
+    if (errors.is_object() && !errors.empty())
+    {
+      std::string error_msg;
+      for (auto it = errors.begin(); it != errors.end(); ++it)
+      {
+        if (!error_msg.empty())
+        {
+          error_msg += ", ";
+        }
+        error_msg += it.key();
+      }
+      return error_msg;
+    }
+
+    return {"Could not obtain error details from policy"};
   }
 }
