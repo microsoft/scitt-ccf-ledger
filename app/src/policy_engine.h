@@ -393,36 +393,30 @@ namespace scitt
 
   using PolicyRego = std::string;
 
-  static inline nlohmann::json rego_input_from_profile_and_protected_header(
+  static inline trieste::Node rego_input_from_protected_header(
     const cose::ProtectedHeader& phdr, std::span<uint8_t> payload)
   {
-    nlohmann::json rego_input;
-    nlohmann::json cwt;
-    cwt["iss"] = phdr.cwt_claims.iss;
-    cwt["sub"] = phdr.cwt_claims.sub;
-    cwt["iat"] = phdr.cwt_claims.iat;
-    cwt["_svn"] = phdr.cwt_claims.svn;
-    nlohmann::json protected_header;
-    protected_header["CWT Claims"] = cwt;
-    protected_header["alg"] = phdr.alg;
-    if (phdr.cty.has_value())
-    {
-      if (std::holds_alternative<int64_t>(phdr.cty.value()))
-      {
-        protected_header["cty"] = std::get<int64_t>(phdr.cty.value());
-      }
-      else if (std::holds_alternative<std::string>(phdr.cty.value()))
-      {
-        protected_header["cty"] = std::get<std::string>(phdr.cty.value());
-      }
-    }
-    rego_input["phdr"] = protected_header;
-    // Note: uhdr is deliberately not mapped, since the current agreement is to
-    // manually expose only validated parts of the uhdr to policy, once there is
-    // a use case.
+    // TODO: needs optional checks and nulls
+    auto iss = rego::scalar(phdr.cwt_claims.iss.value());
+    auto sub = rego::scalar(phdr.cwt_claims.sub.value());
+    auto iat = rego::scalar(rego::BigInt(phdr.cwt_claims.iat.value()));
+    auto cwt_claims = rego::object(
+      {rego::object_item(rego::scalar("iss"), iss),
+       rego::object_item(rego::scalar("sub"), sub),
+       rego::object_item(rego::scalar("iat"), iat)}
+    );
+    auto alg = rego::scalar(rego::BigInt(phdr.alg.value()));
+    auto phdr_ = rego::object(
+      {rego::object_item(rego::scalar("alg"), alg),
+       rego::object_item(rego::scalar("CWT Claims"), cwt_claims)}
+    );
+    // TODO: cty (variant int/string)
+    auto payload_ = rego::scalar(ccf::ds::to_hex(payload));
+    auto rego_input = rego::object(
+      {rego::object_item(rego::scalar("phdr"), phdr_),
+       rego::object_item(rego::scalar("payload"), payload_)}
+    );
 
-    // Payload is exposed as a hex string, because rego has no byte array type.
-    rego_input["payload"] = ccf::ds::to_hex(payload);
     return rego_input;
   }
 
@@ -450,22 +444,21 @@ namespace scitt
     interpreter.set_query("data.policy.allow");
     bundle_node = interpreter.bundle({});
     auto bundle = rego::BundleDef::from_node(bundle_node);
-    rego::CompiledPolicy policy(bundle, rego::builtins::BuiltInsDef::create());
 
     auto end = std::chrono::steady_clock::now();
     auto elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
     start = std::chrono::steady_clock::now();
-    auto input = rego_input_from_profile_and_protected_header(phdr, payload);
+    auto input = rego_input_from_protected_header(phdr, payload);
 
-    auto tv = policy.set_input_json(input.dump());
+    auto tv = interpreter.set_input(input);
     if (tv != nullptr)
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy input");
     }
-    auto rego_result = interpreter.output_to_string(policy.query());
+    auto rego_result = interpreter.output_to_string(interpreter.bundle_query(bundle));
 
     end = std::chrono::steady_clock::now();
     elapsed =
