@@ -472,7 +472,7 @@ namespace scitt
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
 
-    // TODO: work out how to do deal with triest::Node directly rather than JSON
+    // TODO: work out how to do deal with trieste::Node directly rather than JSON
     // TODO: add support for error types
     auto rego_output = nlohmann::json::parse(rego_result);
     if (
