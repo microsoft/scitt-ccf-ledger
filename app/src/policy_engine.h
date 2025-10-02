@@ -6,13 +6,13 @@
 #include "cose.h"
 #include "http_error.h"
 #include "profiles.h"
-#include <rego/rego.hh>
 #include "tracing.h"
 #include "verified_details.h"
 
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
 #include <chrono>
+#include <rego/rego.hh>
 #include <string>
 
 namespace scitt
@@ -444,10 +444,13 @@ namespace scitt
         scitt::errors::PolicyError, "Invalid policy module");
     }
 
-    trieste::Node bundle;
+    // TODO: this ought to be done once in governance, not per-eval
+    // or at least cached per node
+    trieste::Node bundle_node;
     interpreter.set_query("data.policy.allow");
-    bundle = interpreter.compile({});
-    rego::CompiledPolicy policy(bundle, interpreter.builtins());
+    bundle_node = interpreter.bundle({});
+    auto bundle = rego::BundleDef::from_node(bundle_node);
+    rego::CompiledPolicy policy(bundle, rego::builtins::BuiltInsDef::create());
 
     auto end = std::chrono::steady_clock::now();
     auto elapsed =
@@ -455,34 +458,42 @@ namespace scitt
     CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
     start = std::chrono::steady_clock::now();
     auto input = rego_input_from_profile_and_protected_header(phdr, payload);
-    
+
     auto tv = policy.set_input_json(input.dump());
     if (tv != nullptr)
     {
-      throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy input");
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy input");
     }
-    auto rego_result = policy.query();
+    auto rego_result = interpreter.output_to_string(policy.query());
 
     end = std::chrono::steady_clock::now();
     elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
 
-    // auto rego_output = nlohmann::json::parse(rego_result);
-    // if(!rego_output.contains("expressions") || !rego_output["expressions"].is_array() || rego_output["expressions"].empty())
-    // {
-    //   throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy result");
-    // }
-    // auto expr = rego_output["expressions"][0];
-    // if(!expr.contains("value"))
-    // {
-    //   throw BadRequestCborError(scitt::errors::PolicyError, "Invalid policy result");
-    // }
-    // auto value = expr["value"];
-    // if(value.is_boolean() && !value.get<bool>())
-    // {
-    //   return "Input statement rejected";
-    // }
+    // TODO: work out how to do deal with triest::Node directly rather than JSON
+    // TODO: add support for error types
+    auto rego_output = nlohmann::json::parse(rego_result);
+    if (
+      !rego_output.contains("expressions") ||
+      !rego_output["expressions"].is_array() ||
+      rego_output["expressions"].empty())
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy result");
+    }
+    auto expr = rego_output["expressions"][0];
+    if (!expr.contains("value"))
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy result");
+    }
+    auto value = expr["value"];
+    if (value.is_boolean() && !value.get<bool>())
+    {
+      return "Input statement rejected";
+    }
     return std::nullopt;
   }
 }
