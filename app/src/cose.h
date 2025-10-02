@@ -301,11 +301,14 @@ namespace scitt::cose
     std::optional<int64_t> svn;
   };
 
+  using CritValuesContent = std::vector<std::variant<int64_t, std::string>>;
+  using CritValues = std::optional<CritValuesContent>;
+
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
     // The headers used in this codebase
     std::optional<int64_t> alg;
-    std::optional<std::vector<std::variant<int64_t, std::string>>> crit;
+    CritValues crit;
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;

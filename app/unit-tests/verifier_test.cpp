@@ -91,4 +91,62 @@ namespace
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
 
+  TEST(VerifierTest, TestAttestSvcCritValidation)
+  {
+    auto valid = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_TSS});
+
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(valid));
+
+    cose::CritValues invalid_missing = {};
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_missing),
+      scitt::verifier::VerificationError);
+
+    auto invalid_empty = std::make_optional<cose::CritValuesContent>({});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_empty),
+      scitt::verifier::VerificationError);
+
+    cose::CritValues invalid_values =
+      std::make_optional<cose::CritValuesContent>({"invalid", "values"});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_values),
+      scitt::verifier::VerificationError);
+  }
+
+  TEST(VerifierTest, TestX509CritValidation)
+  {
+    auto just_cwt = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_CWT_CLAIMS});
+    EXPECT_NO_THROW(scitt::verifier::throw_if_invalid_crit_for_x509(just_cwt));
+
+    auto just_x5chain = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_X5CHAIN});
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(just_x5chain));
+
+    auto both = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_CWT_CLAIMS, cose::COSE_HEADER_PARAM_X5CHAIN});
+    EXPECT_NO_THROW(scitt::verifier::throw_if_invalid_crit_for_x509(both));
+
+    // OK to have no crit at all for x509
+    cose::CritValues valid_missing = {};
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(valid_missing));
+
+    // But empty is always invalid
+    auto invalid_empty = std::make_optional<cose::CritValuesContent>({});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(invalid_empty),
+      scitt::verifier::VerificationError);
+
+    // Unexpected values
+    auto invalid =
+      std::make_optional<cose::CritValuesContent>({"invalid", "values"});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(invalid),
+      scitt::verifier::VerificationError);
+  }
 }
