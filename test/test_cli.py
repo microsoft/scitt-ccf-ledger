@@ -157,8 +157,7 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     [
         "test/payloads/cts-hashv-cwtclaims-b64url.cose",
         "test/payloads/manifest.spdx.json.sha384.digest.cose",
-        "test/payloads/css-attested-cosesign1-20250617.cose",
-        "test/payloads/css-attested-cosesign1-20250812.cose",
+        "test/payloads/css-attested-cosesign1-20250925.cose",
     ],
 )
 def test_submit_and_validate(

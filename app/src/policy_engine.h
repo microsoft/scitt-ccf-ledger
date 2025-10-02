@@ -125,6 +125,10 @@ namespace scitt
         obj.set("cwt", std::move(cwt));
 
         auto tss_map = ctx.new_obj();
+        if (phdr.tss_map.svc_id.has_value())
+        {
+          tss_map.set("svc_id", ctx.new_string(phdr.tss_map.svc_id.value()));
+        }
         if (phdr.tss_map.attestation.has_value())
         {
           tss_map.set(
@@ -196,7 +200,7 @@ namespace scitt
         {
           tss_map.set_int64("ver", phdr.tss_map.ver.value());
         }
-        obj.set("msft-css-dev", std::move(tss_map));
+        obj.set("attestedsvc", std::move(tss_map));
       }
 
       return obj;

@@ -27,7 +27,7 @@ namespace
   // NOLINTBEGIN(bugprone-unchecked-optional-access)
   TEST(VerifierTest, VerifyTSSStatement)
   {
-    std::string filepath = "test_payloads/css-attested-cosesign1-20250617.cose";
+    std::string filepath = "test_payloads/css-attested-cosesign1-20250925.cose";
     std::ifstream file(filepath, std::ios::binary);
     ASSERT_TRUE(file.is_open());
 
@@ -66,7 +66,7 @@ namespace
       "920ab2fa0096903a0c23fca1");
     EXPECT_EQ(
       details->get_report_data().hex_str(),
-      "a3fc5df291c866d1ae7fe90519384eee2b84d412ed4abe22c71395b6fde3057d00000000"
+      "460dce07b03a0a4f3a42cf93f2010595e7a8da0677b3a01a1bf08821a48bdfaf00000000"
       "00000000000000000000000000000000000000000000000000000000");
     EXPECT_TRUE(details->get_uvm_endorsements().has_value());
     EXPECT_EQ(
@@ -80,7 +80,7 @@ namespace
     auto host_data_str = ccf::ds::to_hex(host_data);
     EXPECT_EQ(
       host_data_str,
-      "953e208258fc57d814c44a0b083dbe4e8f2e734a2fde32f1049a78890d98b730");
+      "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20");
     EXPECT_EQ(details->get_product_name(), ccf::pal::snp::ProductName::Milan);
     EXPECT_EQ(details->get_tcb_version_policy().microcode, 219);
     EXPECT_EQ(details->get_tcb_version_policy().snp, 24);

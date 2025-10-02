@@ -385,6 +385,57 @@ namespace scitt::verifier
             std::tie(payload, details) =
               process_signed_statement_with_didattestedsvc_issuer(
                 phdr, configuration, signed_statement);
+
+            if (!phdr.crit.has_value())
+            {
+              throw VerificationError(
+                "Attested Service signed statement must have a crit parameter");
+            }
+
+            auto& crit = phdr.crit.value();
+
+            if (crit.size() != 1)
+            {
+              throw VerificationError(
+                "Attested Service signed statement crit must contain a single "
+                "value");
+            }
+
+            auto& crit_val = crit[0];
+
+            if (!std::holds_alternative<std::string>(crit_val))
+            {
+              throw VerificationError(
+                "Attested Service signed statement crit value must be a "
+                "string");
+            }
+
+            if (std::get<std::string>(crit_val) != cose::COSE_HEADER_PARAM_TSS)
+            {
+              throw VerificationError(fmt::format(
+                "Attested Service signed statement crit value must be \"{}\"",
+                cose::COSE_HEADER_PARAM_TSS));
+            }
+
+            if (!phdr.tss_map.svc_id.has_value())
+            {
+              throw VerificationError(fmt::format(
+                "Attested service map {} must contain a service "
+                "identifier (svc_id)",
+                cose::COSE_HEADER_PARAM_TSS));
+            }
+
+            // Authenticate the did:attestedsvc issuer against the svc_id
+            // contained in the attested service map.
+            auto expected_did_prefix =
+              fmt::format("did:attestedsvc:{}:", phdr.tss_map.svc_id.value());
+            if (!phdr.cwt_claims.iss->starts_with(expected_did_prefix))
+            {
+              throw VerificationError(fmt::format(
+                "did:attestedsvc issuer does not match svc_id (expected prefix "
+                "{})",
+                expected_did_prefix));
+            }
           }
           else
           {
