@@ -1,0 +1,40 @@
+Signed_Statement = #6.18(COSE_Sign1)
+
+COSE_Sign1 = [
+  protected   : bstr .cbor Protected_Header,
+  unprotected : Unprotected_Header,
+  payload     : bstr / nil,
+  signature   : bstr
+]
+
+Protected_Header = {
+  &(alg: 1) => int
+  &(CWT_Claims: 15) => CWT_Claims
+  ? &(crit: 2) => [+ label]
+  &(attestedsvc: "attestedsvc") => AttestedServiceClaims
+  * int => any
+}
+
+label = int / tstr
+
+AttestedServiceClaims = {
+  &(attestation: "attestation") => bstr
+  &(attestation_type: "attestation_type") => tstr
+  &(snp_endorsements: "snp_endorsements") => bstr
+  &(uvm_endorsements: "uvm_endorsements") => bstr
+  &(svc_id: "svc_id") => tstr
+  &(ver: "ver") => int
+  &(COSE_Key: "cose_key") => any
+  * tstr => any
+}
+
+CWT_Claims = {
+  &(iss: 1) => tstr
+  ? &(sub: 2) => tstr
+  ? "svn" => int
+  * int => any
+}
+
+Unprotected_Header = {
+  * int => any
+}
