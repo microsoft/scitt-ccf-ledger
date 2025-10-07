@@ -35,7 +35,7 @@ COSE_EC_Key = {
 }
 
 CWT_Claims = {
-  &(iss: 1) => tstr
+  &(iss: 1) => tstr .regexp "^did:attestedsvc:.*"
   ? &(sub: 2) => tstr
   ? "svn" => int
   * label => any

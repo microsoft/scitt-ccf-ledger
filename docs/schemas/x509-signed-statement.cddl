@@ -18,7 +18,7 @@ Protected_Header = {
 COSE_X509 = bstr / [ 2*certs: bstr ]
 
 CWT_Claims = {
-  &(iss: 1) => tstr
+  &(iss: 1) => tstr .regexp "^did:x509:.*"
   &(sub: 2) => tstr
   ? "svn" => int
   * label => any
