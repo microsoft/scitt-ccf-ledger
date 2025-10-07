@@ -12,7 +12,7 @@ Protected_Header = {
   &(CWT_Claims: 15) => CWT_Claims
   &(x5chain: 33) => COSE_X509
   ? &(crit: 2) => [+ (15 / 33)]
-  * (int / tstr) => any
+  * label => any
 }
 
 COSE_X509 = bstr / [ 2*certs: bstr ]
@@ -21,9 +21,11 @@ CWT_Claims = {
   &(iss: 1) => tstr
   &(sub: 2) => tstr
   ? "svn" => int
-  * (int / tstr) => any
+  * label => any
 }
 
 Unprotected_Header = {
-  * (int / tstr) => any
+  * label => any
 }
+
+label = int / tstr

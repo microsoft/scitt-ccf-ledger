@@ -10,31 +10,39 @@ COSE_Sign1 = [
 Protected_Header = {
   &(alg: 1) => int
   &(CWT_Claims: 15) => CWT_Claims
-  ? &(crit: 2) => [+ label]
-  &(attestedsvc: "attestedsvc") => AttestedServiceClaims
-  * int => any
+  &(crit: 2) => [+ "attestedsvc"]
+  &(attestedsvc: "attestedsvc") => Attested_Service_Claims
+  * label => any
 }
 
-label = int / tstr
-
-AttestedServiceClaims = {
+Attested_Service_Claims = {
   &(attestation: "attestation") => bstr
   &(attestation_type: "attestation_type") => tstr
   &(snp_endorsements: "snp_endorsements") => bstr
   &(uvm_endorsements: "uvm_endorsements") => bstr
   &(svc_id: "svc_id") => tstr
   &(ver: "ver") => int
-  &(COSE_Key: "cose_key") => any
-  * tstr => any
+  &(cose_key: "cose_key") => COSE_EC_Key
+  * label => any
+}
+
+COSE_EC_Key = {
+  &(kty: 1) => int
+  ? &(crv: -1) => int
+  ? &(x: -2) => bstr
+  ? &(y: -3) => bstr
+  * label => any
 }
 
 CWT_Claims = {
   &(iss: 1) => tstr
   ? &(sub: 2) => tstr
   ? "svn" => int
-  * int => any
+  * label => any
 }
 
 Unprotected_Header = {
-  * int => any
+  * label => any
 }
+
+label = int / tstr
