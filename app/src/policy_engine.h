@@ -442,7 +442,7 @@ namespace scitt
     // or at least cached per node
     trieste::Node bundle_node;
     interpreter.set_query("data.policy.allow");
-    bundle_node = interpreter.bundle({});
+    bundle_node = interpreter.build();
     auto bundle = rego::BundleDef::from_node(bundle_node);
 
     auto end = std::chrono::steady_clock::now();
