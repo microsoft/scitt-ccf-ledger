@@ -27,7 +27,7 @@ namespace
   // NOLINTBEGIN(bugprone-unchecked-optional-access)
   TEST(VerifierTest, VerifyTSSStatement)
   {
-    std::string filepath = "test_payloads/css-attested-cosesign1-20250617.cose";
+    std::string filepath = "test_payloads/css-attested-cosesign1-20250925.cose";
     std::ifstream file(filepath, std::ios::binary);
     ASSERT_TRUE(file.is_open());
 
@@ -66,7 +66,7 @@ namespace
       "920ab2fa0096903a0c23fca1");
     EXPECT_EQ(
       details->get_report_data().hex_str(),
-      "a3fc5df291c866d1ae7fe90519384eee2b84d412ed4abe22c71395b6fde3057d00000000"
+      "460dce07b03a0a4f3a42cf93f2010595e7a8da0677b3a01a1bf08821a48bdfaf00000000"
       "00000000000000000000000000000000000000000000000000000000");
     EXPECT_TRUE(details->get_uvm_endorsements().has_value());
     EXPECT_EQ(
@@ -80,7 +80,7 @@ namespace
     auto host_data_str = ccf::ds::to_hex(host_data);
     EXPECT_EQ(
       host_data_str,
-      "953e208258fc57d814c44a0b083dbe4e8f2e734a2fde32f1049a78890d98b730");
+      "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20");
     EXPECT_EQ(details->get_product_name(), ccf::pal::snp::ProductName::Milan);
     EXPECT_EQ(details->get_tcb_version_policy().microcode, 219);
     EXPECT_EQ(details->get_tcb_version_policy().snp, 24);
@@ -91,4 +91,62 @@ namespace
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
 
+  TEST(VerifierTest, TestAttestSvcCritValidation)
+  {
+    auto valid = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_TSS});
+
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(valid));
+
+    cose::CritValues invalid_missing = {};
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_missing),
+      scitt::verifier::VerificationError);
+
+    auto invalid_empty = std::make_optional<cose::CritValuesContent>({});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_empty),
+      scitt::verifier::VerificationError);
+
+    cose::CritValues invalid_values =
+      std::make_optional<cose::CritValuesContent>({"invalid", "values"});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_attestedsvc(invalid_values),
+      scitt::verifier::VerificationError);
+  }
+
+  TEST(VerifierTest, TestX509CritValidation)
+  {
+    auto just_cwt = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_CWT_CLAIMS});
+    EXPECT_NO_THROW(scitt::verifier::throw_if_invalid_crit_for_x509(just_cwt));
+
+    auto just_x5chain = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_X5CHAIN});
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(just_x5chain));
+
+    auto both = std::make_optional<cose::CritValuesContent>(
+      {cose::COSE_HEADER_PARAM_CWT_CLAIMS, cose::COSE_HEADER_PARAM_X5CHAIN});
+    EXPECT_NO_THROW(scitt::verifier::throw_if_invalid_crit_for_x509(both));
+
+    // OK to have no crit at all for x509
+    cose::CritValues valid_missing = {};
+    EXPECT_NO_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(valid_missing));
+
+    // But empty is always invalid
+    auto invalid_empty = std::make_optional<cose::CritValuesContent>({});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(invalid_empty),
+      scitt::verifier::VerificationError);
+
+    // Unexpected values
+    auto invalid =
+      std::make_optional<cose::CritValuesContent>({"invalid", "values"});
+    EXPECT_THROW(
+      scitt::verifier::throw_if_invalid_crit_for_x509(invalid),
+      scitt::verifier::VerificationError);
+  }
 }

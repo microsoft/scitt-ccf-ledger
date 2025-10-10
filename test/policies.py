@@ -12,7 +12,7 @@ return true;
 SAMPLE_POLICY_REGO = f"""
 package policy
 default allow := false
-default errors := {{}}
+default errors := []
 
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
@@ -30,9 +30,9 @@ allow if {{
     svn_positive
 }}
 
-errors["Invalid issuer"] if {{ not issuer_allowed }}
-errors["Invalid iat"] if {{ not iat_in_the_past }}
-errors["Invalid SVN"] if {{ not svn_positive }}
+errors contains "Invalid issuer" if {{ not issuer_allowed }}
+errors contains "Invalid iat" if {{ not iat_in_the_past }}
+errors contains "Invalid SVN" if {{ not svn_positive }}
 """
 
 SAMPLE = {
@@ -60,7 +60,7 @@ RUNTIME_ERROR = {
 FAIL_POLICY_REGO = f"""
 package policy
 default allow := false
-default errors := {{"All entries are refused": true}}
+default errors := ["All entries are refused"]
 """
 
 FAIL = {
@@ -97,7 +97,7 @@ def svn_policy_rego(issuer):
     policy = f"""
 package policy
 default allow := false
-default errors := {{}}
+default errors := []
 
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "{issuer}"
@@ -111,7 +111,7 @@ allow if {{
     svn_positive
 }}
 
-errors["Invalid SVN"] if {{ not svn_positive }}
+errors contains "Invalid SVN" if {{ not svn_positive }}
 """
     return {"policyRego": policy}
 
@@ -135,7 +135,7 @@ def did_x509_policy_rego(issuer):
     policy = f"""
 package policy
 default allow := false
-default errors := {{}}
+default errors := []
 
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "{issuer}"
@@ -144,7 +144,7 @@ allow if {{
     issuer_allowed
 }}
 
-errors["Invalid issuer"] if {{ not issuer_allowed }}
+errors contains "Invalid issuer" if {{ not issuer_allowed }}
 """
     return {"policyRego": policy}
 

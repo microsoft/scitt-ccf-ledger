@@ -127,6 +127,10 @@ namespace scitt
         obj.set("cwt", std::move(cwt));
 
         auto tss_map = ctx.new_obj();
+        if (phdr.tss_map.svc_id.has_value())
+        {
+          tss_map.set("svc_id", ctx.new_string(phdr.tss_map.svc_id.value()));
+        }
         if (phdr.tss_map.attestation.has_value())
         {
           tss_map.set(
@@ -198,7 +202,7 @@ namespace scitt
         {
           tss_map.set_int64("ver", phdr.tss_map.ver.value());
         }
-        obj.set("msft-css-dev", std::move(tss_map));
+        obj.set("attestedsvc", std::move(tss_map));
       }
 
       return obj;
@@ -494,16 +498,19 @@ namespace scitt
     }
 
     nlohmann::json errors = nlohmann::json::parse(rego_errors.output());
-    if (errors.is_object() && !errors.empty())
+    if (errors.is_array() && !errors.empty())
     {
       std::string error_msg;
-      for (auto it = errors.begin(); it != errors.end(); ++it)
+      for (const auto& element : errors)
       {
         if (!error_msg.empty())
         {
           error_msg += ", ";
         }
-        error_msg += it.key();
+        if (element.is_string())
+        {
+          error_msg += element.get<std::string>();
+        }
       }
       return error_msg;
     }

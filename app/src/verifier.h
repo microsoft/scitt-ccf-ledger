@@ -37,8 +37,80 @@ namespace scitt::verifier
     VerificationError(const std::string& msg) : std::runtime_error(msg) {}
   };
 
+  void throw_if_invalid_crit_for_attestedsvc(const cose::CritValues& crit_vals)
+  {
+    if (!crit_vals.has_value())
+    {
+      throw VerificationError(
+        "Attested Service signed statement must have a crit parameter");
+    }
+
+    auto& crit = crit_vals.value();
+
+    if (crit.size() != 1)
+    {
+      throw VerificationError(
+        "Attested Service signed statement crit must contain a single "
+        "value");
+    }
+
+    auto& crit_val = crit[0];
+
+    if (!std::holds_alternative<std::string>(crit_val))
+    {
+      throw VerificationError(
+        "Attested Service signed statement crit value must be a "
+        "string");
+    }
+
+    if (std::get<std::string>(crit_val) != cose::COSE_HEADER_PARAM_TSS)
+    {
+      throw VerificationError(fmt::format(
+        "Attested Service signed statement crit value must be \"{}\"",
+        cose::COSE_HEADER_PARAM_TSS));
+    }
+  }
+
+  void throw_if_invalid_crit_for_x509(const cose::CritValues& crit_vals)
+  {
+    // payloads issued by did:x509 issuers do not require any
+    // unregistered parameters, it is fine for crit to be absent
+    if (!crit_vals.has_value())
+    {
+      return;
+    }
+
+    auto& crit = crit_vals.value();
+
+    if (crit.empty())
+    {
+      // https://www.rfc-editor.org/rfc/rfc9052.html#name-common-cose-header-paramete
+      // The array MUST have at least one value in it.
+      throw VerificationError("Empty crit parameter is not allowed");
+    }
+
+    for (const auto& param : crit)
+    {
+      if (!std::holds_alternative<int64_t>(param))
+      {
+        throw VerificationError(
+          "x509 signed statement crit values must be integers");
+      }
+
+      // x5chain and CWT claims are the only parameters above 7
+      // that are used by the verifier for did:x509 issuers
+      auto int_param = std::get<int64_t>(param);
+      if (!(int_param == cose::COSE_HEADER_PARAM_X5CHAIN ||
+            int_param == cose::COSE_HEADER_PARAM_CWT_CLAIMS))
+      {
+        throw VerificationError(fmt::format(
+          "x509 signed statement crit value {} is not allowed", int_param));
+      }
+    }
+  }
+
   /**
-   * The Verifier is resonsible for checking that submitted claims conform to
+   * The Verifier is responsible for checking that submitted claims conform to
    * the current acceptance policy, and that their signature is valid.
    *
    * If a claim uses a DID based issuer, a did::Resolver is used to fetch the
@@ -217,8 +289,9 @@ namespace scitt::verifier
       std::span<uint8_t> payload;
       try
       {
-        // ignore unknown critical headers due to the presence of a custom TSS
-        // header
+        // Instruct t_cose to ignore critical header params it does not
+        // understand as the attestedsvc header param is custom and not part of
+        // the COSE standard. Crit checking is done per issuer-type later on.
         payload = cose::verify(data, public_key, true);
       }
       catch (const cose::COSESignatureValidationError& e)
@@ -363,6 +436,8 @@ namespace scitt::verifier
                 "Signed statement protected header must contain an x5chain");
             }
 
+            throw_if_invalid_crit_for_x509(phdr.crit);
+
             payload = process_signed_statement_with_didx509_issuer(
               phdr, configuration, signed_statement);
           }
@@ -382,9 +457,32 @@ namespace scitt::verifier
                 cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
                 cose::COSE_HEADER_PARAM_TSS_COSE_KEY));
             }
+
+            throw_if_invalid_crit_for_attestedsvc(phdr.crit);
+
             std::tie(payload, details) =
               process_signed_statement_with_didattestedsvc_issuer(
                 phdr, configuration, signed_statement);
+
+            if (!phdr.tss_map.svc_id.has_value())
+            {
+              throw VerificationError(fmt::format(
+                "Attested service map {} must contain a service "
+                "identifier (svc_id)",
+                cose::COSE_HEADER_PARAM_TSS));
+            }
+
+            // Authenticate the did:attestedsvc issuer against the svc_id
+            // contained in the attested service map.
+            auto expected_did_prefix =
+              fmt::format("did:attestedsvc:{}:", phdr.tss_map.svc_id.value());
+            if (!phdr.cwt_claims.iss->starts_with(expected_did_prefix))
+            {
+              throw VerificationError(fmt::format(
+                "did:attestedsvc issuer does not match svc_id (expected prefix "
+                "{})",
+                expected_did_prefix));
+            }
           }
           else
           {

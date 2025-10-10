@@ -5,10 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.16.0]
 ### Changes
-- Update CCF version from 6.0.12 to 6.0.14 across all configuration files and code
-- Update CCF version from 6.0.10 to 6.0.12 across all configuration files and code
+- fa3f2d7 crit verification for x509 path (#331)
+- f0c1a7e Update to attestedsvc map (#326)
+- 9ac6e4c Update CCF version from 6.0.12 to 6.0.14 across all configuration files and code (#328)
+
+## [0.15.2]
+### Changes
+- 935ff03 Update CCF version from 6.0.10 to 6.0.12 across all configuration files and code (#324)
+- 66c9741 Drop unused profiles.h file (#323)
+- ab6f66d Remove now-unnecessary test proxy (#320)
+- 8af10e7 Use KS4 network in ADO PR builds (#322)
+- 891b978 Use release builds for benchmarks (#318)
+- ea20022 Add performance test for Attested Service signed statements (#319)
 
 ## [0.15.1]
 ### Changes
@@ -346,3 +356,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.5.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.5.2
 [0.15.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.0
 [0.15.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.1
+[0.15.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.2
+[0.16.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.0

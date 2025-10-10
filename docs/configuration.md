@@ -167,8 +167,9 @@ Function arguments:
         svn?: number   // Software version number
       },
       
-      // Microsoft CSS Dev TSS Map
-      "msft-css-dev": {
+      // Microsoft Attested Service Map
+      "attestedsvc": {
+        svc_id?: string,
         attestation?: ArrayBuffer,
         attestation_type?: string,
         
@@ -259,10 +260,10 @@ Function arguments:
 ### Policy Rego
 Rego code that determines whether an entry should be accepted. The package must be called "policy", and expose a rule called "allow" that must evaluate to `true` when the value of `input` is acceptable.
 
-The package can also expose an "errors" rule that must evaluate to an object. The keys of that object, if set, will be returned to the caller as error reasons. This allows easy incremental definition of error reasons, for example:
+The package can also expose an "errors" rule that must evaluate to an array of strings. The values, if set, will be returned to the caller as error reasons. This allows easy incremental definition of error reasons, for example:
 
 ```
-errors["Invalid parameter value"] if { not parameter_is_valid }
+errors contains "Invalid parameter value" if { not parameter_is_valid }
 ```
 
 Mapping from the Signed Statement to Rego `input` takes place in [`scitt::js::rego_input_from_signed_statement()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h).
