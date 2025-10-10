@@ -484,17 +484,16 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy result");
     }
-
-    auto expressions = rego::unwrap(result, rego::Object);
-    if (!expressions.success)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Failed to convert policy result to Object");
-    }
+    // auto expressions = rego::unwrap(result, rego::Object);
+    // if (!expressions.success)
+    // {
+    //   throw BadRequestCborError(
+    //     scitt::errors::PolicyError, "Failed to convert policy result to Object");
+    // }
 
     return fmt::format(
       "Unexpected result type: {}",
-      result->front()->str());
+      result->front()->front()->front()->front()->str()); // rego-True
 
     // // TODO: work out how to do deal with trieste::Node directly rather than JSON
     // // TODO: add support for error types
