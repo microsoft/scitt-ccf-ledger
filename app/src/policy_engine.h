@@ -458,35 +458,66 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy input");
     }
-    auto rego_result = interpreter.output_to_string(interpreter.bundle_query(bundle));
+    auto rego_results = interpreter.bundle_query(bundle);
 
     end = std::chrono::steady_clock::now();
     elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
 
-    // TODO: work out how to do deal with trieste::Node directly rather than JSON
-    // TODO: add support for error types
-    auto rego_output = nlohmann::json::parse(rego_result);
-    if (
-      !rego_output.contains("expressions") ||
-      !rego_output["expressions"].is_array() ||
-      rego_output["expressions"].empty())
+    if (rego_results->type() == rego::ErrorSeq)
+    {
+      // TODO: format the error nicely
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Error while applying policy");
+    }
+
+    if (rego_results->type() != rego::Results)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy results");
+    }
+
+    auto result = rego_results->front();
+    if (result->type() != rego::Result)
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy result");
     }
-    auto expr = rego_output["expressions"][0];
-    if (!expr.contains("value"))
+
+    auto expressions = rego::unwrap(result, rego::Object);
+    if (!expressions.success)
     {
       throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy result");
+        scitt::errors::PolicyError, "Failed to convert policy result to Object");
     }
-    auto value = expr["value"];
-    if (value.is_boolean() && !value.get<bool>())
-    {
-      return "Input statement rejected";
-    }
+
+    return fmt::format(
+      "Unexpected result type: {}",
+      result->front()->str());
+
+    // // TODO: work out how to do deal with trieste::Node directly rather than JSON
+    // // TODO: add support for error types
+    // auto rego_output = nlohmann::json::parse(rego_result);
+    // if (
+    //   !rego_output.contains("expressions") ||
+    //   !rego_output["expressions"].is_array() ||
+    //   rego_output["expressions"].empty())
+    // {
+    //   throw BadRequestCborError(
+    //     scitt::errors::PolicyError, "Invalid policy result");
+    // }
+    // auto expr = rego_output["expressions"][0];
+    // if (!expr.contains("value"))
+    // {
+    //   throw BadRequestCborError(
+    //     scitt::errors::PolicyError, "Invalid policy result");
+    // }
+    // auto value = expr["value"];
+    // if (value.is_boolean() && !value.get<bool>())
+    // {
+    //   return "Input statement rejected";
+    // }
     return std::nullopt;
   }
 }
