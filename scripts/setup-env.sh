@@ -4,7 +4,7 @@
 
 set -ex
 
-CCF_VERSION=${CCF_VERSION:-"6.0.14"}
+CCF_VERSION=${CCF_VERSION:-"6.0.15"}
 CCF_PLATFORM=${PLATFORM:-"virtual"}
 
 tdnf update -y
@@ -17,9 +17,7 @@ tdnf install -y \
     jq \
     which \
     procps \
-    clang-tools-extra-devel \
-    curl-devel \
-    libuv-devel
+    clang-tools-extra-devel
 
 # Download the CCF development package
 curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm
