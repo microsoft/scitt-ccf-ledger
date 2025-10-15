@@ -1,10 +1,11 @@
 ARG CCF_VERSION="6.0.15"
 
-# Use fixed image version to ensure reproducibility
-ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250910
+# Pin a specific Azure Linux base image tag for reproducibility.
+# Dependabot will monitor and update this FROM line.
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20250910 AS base
 
 # Initial stage to download and extract the tdnf snapshot time
-FROM ${BASE_IMAGE} AS snapshot-extractor
+FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
 ARG CCF_PLATFORM
@@ -18,7 +19,7 @@ RUN tdnf install -y \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce-${CCF_PLATFORM}.json" -o /tmp/reproduce.json && \
     jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime
 
-FROM ${BASE_IMAGE} AS builder
+FROM base AS builder
 
 ARG CCF_VERSION
 ARG CCF_PLATFORM
@@ -46,7 +47,7 @@ RUN mkdir /tmp/app-build && \
     /tmp/app && \
     ninja && ninja install
 
-FROM ${BASE_IMAGE}
+FROM base
 
 ARG CCF_VERSION
 ARG CCF_PLATFORM
