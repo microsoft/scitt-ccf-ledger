@@ -441,7 +441,8 @@ namespace scitt
     // TODO: this ought to be done once in governance, not per-eval
     // or at least cached per node
     trieste::Node bundle_node;
-    interpreter.set_query("data.policy.allow");
+    //interpreter.set_query("allow=data.policy.allow; errors=data.policy.errors");
+    interpreter.entrypoints({"policy/allow", "policy/errors"});
     bundle_node = interpreter.build();
     auto bundle = rego::BundleDef::from_node(bundle_node);
 
@@ -458,7 +459,7 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy input");
     }
-    auto rego_results = interpreter.bundle_query(bundle);
+    auto rego_results = interpreter.query_bundle(bundle, "policy/allow");
 
     end = std::chrono::steady_clock::now();
     elapsed =
@@ -491,32 +492,15 @@ namespace scitt
     //     scitt::errors::PolicyError, "Failed to convert policy result to Object");
     // }
 
-    return fmt::format(
-      "Unexpected result type: {}",
-      result->front()->front()->front()->front()->str()); // rego-True
+    // terms -> term -> scalar -> bool
+    // TODO: can unwrap be used here?
+    auto allow = result->front()->front()->front()->front();
 
-    // // TODO: work out how to do deal with trieste::Node directly rather than JSON
-    // // TODO: add support for error types
-    // auto rego_output = nlohmann::json::parse(rego_result);
-    // if (
-    //   !rego_output.contains("expressions") ||
-    //   !rego_output["expressions"].is_array() ||
-    //   rego_output["expressions"].empty())
-    // {
-    //   throw BadRequestCborError(
-    //     scitt::errors::PolicyError, "Invalid policy result");
-    // }
-    // auto expr = rego_output["expressions"][0];
-    // if (!expr.contains("value"))
-    // {
-    //   throw BadRequestCborError(
-    //     scitt::errors::PolicyError, "Invalid policy result");
-    // }
-    // auto value = expr["value"];
-    // if (value.is_boolean() && !value.get<bool>())
-    // {
-    //   return "Input statement rejected";
-    // }
-    return std::nullopt;
+    if (allow == rego::True)
+    {
+      return std::nullopt;
+    }
+
+    return "Extract errors from Rego result not implemented";
   }
 }
