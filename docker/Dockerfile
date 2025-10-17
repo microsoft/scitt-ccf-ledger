@@ -1,23 +1,38 @@
-ARG CCF_VERSION="6.0.14"
+ARG CCF_VERSION="6.0.15"
 
-# Use fixed image version to ensure reproducibility
-ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250910
+# Pin a specific Azure Linux base image tag for reproducibility.
+# Dependabot will monitor and update this FROM line.
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20250910 AS base
 
-FROM ${BASE_IMAGE} AS builder
+# Initial stage to download and extract the tdnf snapshot time
+FROM base AS snapshot-extractor
+
+ARG CCF_VERSION
+ARG CCF_PLATFORM
+
+# Install minimal tools, download reproduce JSON, and extract snapshot time
+# Note: No need to pin package versions here as this stage doesn't contribute
+# to the final image - it only extracts metadata used by subsequent stages
+RUN tdnf install -y \
+    ca-certificates \
+    jq && \
+    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce-${CCF_PLATFORM}.json" -o /tmp/reproduce.json && \
+    jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime
+
+FROM base AS builder
 
 ARG CCF_VERSION
 ARG CCF_PLATFORM
 ARG SCITT_VERSION_OVERRIDE
 
-RUN tdnf install -y \
-    ca-certificates-1:3.0.0-11.azl3 \
-    curl-devel-8.11.1-3.azl3 \
-    libuv-devel-1.48.0-1.azl3 && \
-    \
-    # Download the CCF development package
+# Copy the extracted snapshot time from the previous stage
+COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
+
+# Install dependencies and CCF development package
+RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates && \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
-    \
-    tdnf install -y ./ccf.rpm
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ./ccf.rpm
 
 # Build CCF app
 COPY ./app /tmp/app/
@@ -32,23 +47,27 @@ RUN mkdir /tmp/app-build && \
     /tmp/app && \
     ninja && ninja install
 
-FROM ${BASE_IMAGE}
+FROM base
 
 ARG CCF_VERSION
 ARG CCF_PLATFORM
 
+# Copy the extracted snapshot time from the snapshot-extractor stage
+COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
+
 WORKDIR /usr/src/app
 
-RUN tdnf install -y \
-    ca-certificates-1:3.0.0-11.azl3 \
-    tini-0.19.0-22.azl3 \
-    tar-1.35-2.azl3 \
-    nmap-ncat-7.95-2.azl3 && \
+RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
+    ca-certificates \
+    tini \
+    tar \
+    nmap-ncat && \
     \
     # Use the CCF runtime package which contains the minimal dependencies for running CCF applications
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
     \
-    tdnf install -y \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     ./ccf.rpm && \
     rm ./ccf.rpm && \
     \
