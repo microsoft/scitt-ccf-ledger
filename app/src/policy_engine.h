@@ -396,26 +396,40 @@ namespace scitt
   static inline trieste::Node rego_input_from_protected_header(
     const cose::ProtectedHeader& phdr, std::span<uint8_t> payload)
   {
-    // TODO: needs optional checks and nulls
-    auto iss = rego::scalar(phdr.cwt_claims.iss.value());
-    auto sub = rego::scalar(phdr.cwt_claims.sub.value());
-    auto iat = rego::scalar(rego::BigInt(phdr.cwt_claims.iat.value()));
+    auto iss = phdr.cwt_claims.iss.has_value() ?
+      rego::scalar(phdr.cwt_claims.iss.value()) :
+      rego::Null;
+    auto sub = phdr.cwt_claims.sub.has_value() ?
+      rego::scalar(phdr.cwt_claims.sub.value()) :
+      rego::Null;
+    auto iat = phdr.cwt_claims.iat.has_value() ?
+      rego::scalar(rego::BigInt(phdr.cwt_claims.iat.value())) :
+      rego::Null;
     auto cwt_claims = rego::object(
       {rego::object_item(rego::scalar("iss"), iss),
        rego::object_item(rego::scalar("sub"), sub),
-       rego::object_item(rego::scalar("iat"), iat)}
-    );
-    auto alg = rego::scalar(rego::BigInt(phdr.alg.value()));
+       rego::object_item(rego::scalar("iat"), iat)});
+    auto alg = phdr.alg.has_value() ?
+      rego::scalar(rego::BigInt(phdr.alg.value())) :
+      rego::Null;
+    trieste::Node cty_node;
+    if (std::holds_alternative<std::string>(phdr.cty.value()))
+    {
+      cty_node = rego::scalar(std::get<std::string>(phdr.cty.value()));
+    }
+    else if (std::holds_alternative<int64_t>(phdr.cty.value()))
+    {
+      cty_node =
+        rego::scalar(rego::BigInt(std::get<int64_t>(phdr.cty.value())));
+    }
     auto phdr_ = rego::object(
       {rego::object_item(rego::scalar("alg"), alg),
-       rego::object_item(rego::scalar("CWT Claims"), cwt_claims)}
-    );
-    // TODO: cty (variant int/string)
+       rego::object_item(rego::scalar("cty"), cty_node),
+       rego::object_item(rego::scalar("CWT Claims"), cwt_claims)});
     auto payload_ = rego::scalar(ccf::ds::to_hex(payload));
     auto rego_input = rego::object(
       {rego::object_item(rego::scalar("phdr"), phdr_),
-       rego::object_item(rego::scalar("payload"), payload_)}
-    );
+       rego::object_item(rego::scalar("payload"), payload_)});
 
     return rego_input;
   }
@@ -442,17 +456,16 @@ namespace scitt
     // TODO: this ought to be done once in governance, not per-eval
     // or at least cached per node
     trieste::Node bundle_node;
-    //interpreter.set_query("allow=data.policy.allow; errors=data.policy.errors");
     interpreter.entrypoints({"policy/allow", "policy/errors"});
-    CCF_APP_INFO("Rego policy entrypoints set");
     bundle_node = interpreter.build();
     if (bundle_node->type() == rego::ErrorSeq)
     {
+      CCF_APP_FAIL(
+        "Failed to build policy bundle: {}",
+        interpreter.output_to_string(bundle_node));
       throw BadRequestCborError(
-        scitt::errors::PolicyError, fmt::format("Failed to build policy bundle: {}", interpreter.output_to_string(bundle_node)));
+        scitt::errors::PolicyError, "Failed to build policy bundle");
     }
-
-    CCF_APP_INFO("Rego policy bundle built");
     auto bundle = rego::BundleDef::from_node(bundle_node);
 
     auto end = std::chrono::steady_clock::now();
@@ -477,9 +490,11 @@ namespace scitt
 
     if (rego_results->type() == rego::ErrorSeq)
     {
-      // TODO: format the error nicely
       throw BadRequestCborError(
-        scitt::errors::PolicyError, "Error while applying policy");
+        scitt::errors::PolicyError,
+        fmt::format(
+          "Error while applying policy: {}",
+          interpreter.output_to_string(rego_results)));
     }
 
     if (rego_results->type() != rego::Results)
@@ -494,12 +509,6 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy result");
     }
-    // auto expressions = rego::unwrap(result, rego::Object);
-    // if (!expressions.success)
-    // {
-    //   throw BadRequestCborError(
-    //     scitt::errors::PolicyError, "Failed to convert policy result to Object");
-    // }
 
     // terms -> term -> scalar -> bool
     // TODO: can unwrap be used here?
@@ -514,9 +523,11 @@ namespace scitt
 
     if (error_results->type() == rego::ErrorSeq)
     {
-      // TODO: format the error nicely
       throw BadRequestCborError(
-        scitt::errors::PolicyError, "Error while extracting policy errors");
+        scitt::errors::PolicyError,
+        fmt::format(
+          "Error while retrieving policy errors: {}",
+          interpreter.output_to_string(error_results)));
     }
 
     if (error_results->type() != rego::Results)
@@ -532,6 +543,7 @@ namespace scitt
         scitt::errors::PolicyError, "Invalid policy error result");
     }
 
+    // terms -> term -> set
     auto error = error_result->front()->front()->front();
     if (error->type() != rego::Set)
     {
@@ -547,7 +559,8 @@ namespace scitt
       {
         buf << ", ";
       }
-      // TODO: validate the AST 
+      // TODO: validate the AST
+      // term -> scalar -> string
       buf << child->front()->front()->location().view();
     }
 
