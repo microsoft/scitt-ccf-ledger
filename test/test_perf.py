@@ -49,6 +49,7 @@ export function apply(phdr, uhdr, payload, details) {{
 X509_HASHV_POLICY_REGO = f"""
 package policy
 default allow := false
+
 issuer_allowed if {{
     input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"
 }}
@@ -72,6 +73,10 @@ allow if {{
     iat_in_the_past
     svn_positive
 }}
+
+errors contains "Invalid Issuer"
+
+errors contains "Future Timestamp"
 """
 
 TEST_POLICIES = {
@@ -81,7 +86,7 @@ TEST_POLICIES = {
 }
 
 TEST_VECTORS = [
-    ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
+    # ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
     #    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
 ]

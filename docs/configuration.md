@@ -245,4 +245,4 @@ To use the specific values in the receipts please set it through the [CCF v6 con
 }
 ```
 
-Once the value is set, the public keys can be discoverd through the `$issuer/.well-known/transparency-configuration` endpoint.
+Once the value is set, the public keys can be discovered through the `$issuer/.well-known/transparency-configuration` endpoint.

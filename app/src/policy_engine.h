@@ -437,13 +437,22 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy module");
     }
+    CCF_APP_INFO("Rego policy module loaded");
 
     // TODO: this ought to be done once in governance, not per-eval
     // or at least cached per node
     trieste::Node bundle_node;
     //interpreter.set_query("allow=data.policy.allow; errors=data.policy.errors");
     interpreter.entrypoints({"policy/allow", "policy/errors"});
+    CCF_APP_INFO("Rego policy entrypoints set");
     bundle_node = interpreter.build();
+    if (bundle_node->type() == rego::ErrorSeq)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, fmt::format("Failed to build policy bundle: {}", interpreter.output_to_string(bundle_node)));
+    }
+
+    CCF_APP_INFO("Rego policy bundle built");
     auto bundle = rego::BundleDef::from_node(bundle_node);
 
     auto end = std::chrono::steady_clock::now();
@@ -501,6 +510,47 @@ namespace scitt
       return std::nullopt;
     }
 
-    return "Extract errors from Rego result not implemented";
+    auto error_results = interpreter.query_bundle(bundle, "policy/errors");
+
+    if (error_results->type() == rego::ErrorSeq)
+    {
+      // TODO: format the error nicely
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Error while extracting policy errors");
+    }
+
+    if (error_results->type() != rego::Results)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy error results");
+    }
+
+    auto error_result = error_results->front();
+    if (error_result->type() != rego::Result)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy error result");
+    }
+
+    auto error = error_result->front()->front()->front();
+    if (error->type() != rego::Set)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy error value, not a Set");
+    }
+
+    std::ostringstream buf;
+
+    for (const auto& child : *error)
+    {
+      if (!buf.str().empty())
+      {
+        buf << ", ";
+      }
+      // TODO: validate the AST 
+      buf << child->front()->front()->location().view();
+    }
+
+    return buf.str();
   }
 }
