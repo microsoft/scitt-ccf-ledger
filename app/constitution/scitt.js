@@ -19,6 +19,7 @@ actions.set("set_scitt_configuration",
           }
         }
         checkType(args.configuration.policy.policyScript, "string?", "configuration.policy.policyScript");
+        checkType(args.configuration.policy.policyRego, "string?", "configuration.policy.policyRego");
       }
 
       checkType(args.configuration.authentication, "object?", "configuration.authentication");

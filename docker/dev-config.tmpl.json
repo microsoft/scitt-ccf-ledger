@@ -45,5 +45,6 @@
         "subject": "scitt.ccf.signature.v1"
       }
     }
-  }
+  },
+  "worker_threads": 2
 }
