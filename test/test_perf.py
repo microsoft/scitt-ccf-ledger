@@ -37,7 +37,7 @@ export function apply(phdr, uhdr, payload, details) {{
     if (details.uvm_endorsements.svn < "101") {{ return "Invalid uvm_endorsements svn"; }}
 
     // Check host_data is the expected digest of the CCE policy for the issuing service
-    if (details.host_data !== "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20") {{ return "Invalid host data"; }}
+    if (details.host_data !== "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20") {{ return "Invalid host data "; }}
 
     // Check issuer is valid
     if (!phdr.cwt.iss.startsWith("did:attestedsvc:msft-css-dev:")) {{ return "Invalid issuer"; }}
@@ -57,16 +57,8 @@ seconds_since_epoch := time.now_ns() / 1000000000
 iat_in_the_past if {{
     input.phdr["CWT Claims"].iat < seconds_since_epoch
 }}
-svn_undefined if {{
-    not input.phdr["CWT Claims"]._svn
-}}
 svn_positive if {{
     input.phdr["CWT Claims"]._svn >= 0
-}}
-allow if {{
-    issuer_allowed
-    iat_in_the_past
-    svn_undefined
 }}
 allow if {{
     issuer_allowed
@@ -74,24 +66,77 @@ allow if {{
     svn_positive
 }}
 
-errors contains "Invalid Issuer" if {{
-    not issuer_allowed
-}}  
-errors contains "Future Timestamp" if {{
-    not iat_in_the_past
+errors contains "Invalid issuer" if {{ not issuer_allowed }}
+errors contains "Invalid iat" if {{ not iat_in_the_past }}
+errors contains "Invalid SVN" if {{ not svn_positive }}
+"""
+
+ATTESTEDSVC_POLICY_REGO = f"""
+package policy
+default allow := false
+
+product_name_valid if {{
+    input.attestation.product_name == "Milan"
 }}
+reported_tcb_valid if {{
+    input.attestation.reported_tcb.hexstring == "db18000000000004"
+}}
+amd_tcb_valid if {{
+    product_name_valid
+    reported_tcb_valid
+}}
+
+uvm_did_valid if {{
+    input.attestation.uvm_endorsements.did == "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2"
+}}
+uvm_feed_valid if {{
+    input.attestation.uvm_endorsements.feed == "ContainerPlat-AMD-UVM"
+}}
+uvm_svn_valid if {{
+    input.attestation.uvm_endorsements.svn == "101"
+}}
+uvm_valid if {{
+    uvm_did_valid
+    uvm_feed_valid
+    uvm_svn_valid
+}}
+
+host_data_valid if {{
+    input.attestation.host_data == "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20"
+}}
+
+issuer_valid if {{
+    startswith(input.phdr["CWT Claims"].iss, "did:attestedsvc:msft-css-dev:")
+}}
+
+allow if {{
+    amd_tcb_valid
+    uvm_valid
+    host_data_valid
+    issuer_valid
+}}
+
+errors contains "Invalid AMD product name" if {{ not product_name_valid }}
+errors contains "Invalid reported TCB" if {{ not reported_tcb_valid }}
+errors contains "Invalid uvm_endorsements did" if {{ not uvm_did_valid }}
+errors contains "Invalid uvm_endorsements feed" if {{ not uvm_feed_valid }}
+errors contains "Invalid uvm_endorsements svn" if {{ not uvm_svn_valid }}
+errors contains "Invalid host data" if {{ not host_data_valid }}
+errors contains "Invalid issuer" if {{ not issuer_valid }}
 """
 
 TEST_POLICIES = {
     "x509_hashv": X509_HASHV_POLICY_SCRIPT,
     "attested_svc": ATTESTEDSVC_POLICY_SCRIPT,
     "x509_hashv_rego": X509_HASHV_POLICY_REGO,
+    "attested_svc_rego": ATTESTEDSVC_POLICY_REGO,
 }
 
 TEST_VECTORS = [
-    ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
     ("test/payloads/css-attested-cosesign1-20250925.cose", "attested_svc"),
+    ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
+    ("test/payloads/css-attested-cosesign1-20250925.cose", "attested_svc_rego"),
 ]
 
 
@@ -119,7 +164,7 @@ def test_statement_latency(
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
 
-    iterations = 1
+    iterations = 50
 
     latency_ns = []
     for i in range(iterations):

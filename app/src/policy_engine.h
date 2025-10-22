@@ -502,8 +502,10 @@ namespace scitt
 
   using PolicyRego = std::string;
 
-  static inline trieste::Node rego_input_from_protected_header(
-    const cose::ProtectedHeader& phdr, std::span<uint8_t> payload)
+  static inline trieste::Node rego_input_mapping(
+    const cose::ProtectedHeader& phdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
     auto iss = phdr.cwt_claims.iss.has_value() ?
       rego::scalar(phdr.cwt_claims.iss.value()) :
@@ -514,10 +516,14 @@ namespace scitt
     auto iat = phdr.cwt_claims.iat.has_value() ?
       rego::scalar(rego::BigInt(phdr.cwt_claims.iat.value())) :
       rego::Null;
+    auto svn = phdr.cwt_claims.svn.has_value() ?
+      rego::scalar(rego::BigInt(phdr.cwt_claims.svn.value())) :
+      rego::Null;
     auto cwt_claims = rego::object(
       {rego::object_item(rego::scalar("iss"), iss),
        rego::object_item(rego::scalar("sub"), sub),
-       rego::object_item(rego::scalar("iat"), iat)});
+       rego::object_item(rego::scalar("iat"), iat),
+       rego::object_item(rego::scalar("_svn"), svn)});
     auto alg = phdr.alg.has_value() ?
       rego::scalar(rego::BigInt(phdr.alg.value())) :
       rego::Null;
@@ -539,6 +545,75 @@ namespace scitt
     auto rego_input = rego::object(
       {rego::object_item(rego::scalar("phdr"), phdr_),
        rego::object_item(rego::scalar("payload"), payload_)});
+
+    if (details.has_value())
+    {
+      auto measurement = rego::scalar(details->get_measurement().hex_str());
+      auto report_data = rego::scalar(details->get_report_data().hex_str());
+      auto host_data = rego::scalar(ccf::ds::to_hex(details->get_host_data()));
+      // Reported TCB
+      const auto& tcb = details->get_tcb_version_policy();
+      auto reported_tcb = rego::object(
+        {rego::object_item(
+           rego::scalar("microcode"),
+           tcb.microcode.has_value() ?
+             rego::scalar(
+               rego::BigInt(static_cast<uint64_t>(tcb.microcode.value()))) :
+             rego::Null),
+         rego::object_item(
+           rego::scalar("snp"),
+           tcb.snp.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.snp.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("tee"),
+           tcb.tee.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.tee.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("boot_loader"),
+           tcb.boot_loader.has_value() ?
+             rego::scalar(
+               rego::BigInt(static_cast<uint64_t>(tcb.boot_loader.value()))) :
+             rego::Null),
+         rego::object_item(
+           rego::scalar("fmc"),
+           tcb.fmc.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.fmc.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("hexstring"),
+           tcb.hexstring.has_value() ? rego::scalar(tcb.hexstring.value()) :
+                                       rego::Null)});
+      auto product_name =
+        rego::scalar(ccf::pal::snp::to_string(details->get_product_name()));
+
+      auto attestation = rego::object(
+        {rego::object_item(rego::scalar("measurement"), measurement),
+         rego::object_item(rego::scalar("report_data"), report_data),
+         rego::object_item(rego::scalar("host_data"), host_data),
+         rego::object_item(rego::scalar("reported_tcb"), reported_tcb),
+         rego::object_item(rego::scalar("product_name"), product_name)});
+      // Documented in
+      // https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // Eventually expected to become a CWT Claims object
+      if (details->get_uvm_endorsements().has_value())
+      {
+        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        auto uvm_obj = rego::object(
+          {rego::object_item(
+             rego::scalar("did"), rego::scalar(uvm_endorsements.did)),
+           rego::object_item(
+             rego::scalar("feed"), rego::scalar(uvm_endorsements.feed)),
+           rego::object_item(
+             rego::scalar("svn"), rego::scalar(uvm_endorsements.svn))});
+        attestation->push_back(
+          rego::object_item(rego::scalar("uvm_endorsements"), uvm_obj));
+      }
+
+      rego_input->push_back(
+        rego::object_item(rego::scalar("attestation"), attestation));
+    }
 
     return rego_input;
   }
@@ -573,14 +648,20 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Failed to build policy bundle");
     }
-    auto bundle = rego::BundleDef::from_node(bundle_node);
-
     auto end = std::chrono::steady_clock::now();
     auto elapsed =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego runtime setup in {}us", elapsed.count());
+    CCF_APP_INFO("Rego bundle build time in {}us", elapsed.count());
+
     start = std::chrono::steady_clock::now();
-    auto input = rego_input_from_protected_header(phdr, payload);
+    auto bundle = rego::BundleDef::from_node(bundle_node);
+    end = std::chrono::steady_clock::now();
+    elapsed =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    CCF_APP_INFO("Rego bundle setup time in {}us", elapsed.count());
+
+    start = std::chrono::steady_clock::now();
+    auto input = rego_input_mapping(phdr, payload, details);
 
     auto tv = interpreter.set_input(input);
     if (tv != nullptr)
