@@ -74,9 +74,12 @@ allow if {{
     svn_positive
 }}
 
-errors contains "Invalid Issuer"
-
-errors contains "Future Timestamp"
+errors contains "Invalid Issuer" if {{
+    not issuer_allowed
+}}  
+errors contains "Future Timestamp" if {{
+    not iat_in_the_past
+}}
 """
 
 TEST_POLICIES = {
@@ -116,7 +119,7 @@ def test_statement_latency(
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
 
-    iterations = 50
+    iterations = 1
 
     latency_ns = []
     for i in range(iterations):

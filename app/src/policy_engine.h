@@ -15,6 +15,112 @@
 #include <rego/rego.hh>
 #include <string>
 
+namespace
+{
+  std::string_view string_view_from_term(const trieste::Node& term)
+  {
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto scalar = term->front();
+    if (scalar->type() != rego::Scalar || scalar->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected scalar, got {}", scalar->str()));
+    }
+
+    auto string = scalar->front();
+    if (string->type() != rego::JSONString)
+    {
+      throw std::domain_error(
+        fmt::format("Expected string, got {}", string->str()));
+    }
+
+    return string->location().view();
+  }
+
+  trieste::Node set_from_results(const trieste::Node& results)
+  {
+    if (results->type() != rego::Results || results->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected results, got {}", results->str()));
+    }
+
+    auto result = results->front();
+    if (result->type() != rego::Result || result->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected result, got {}", result->str()));
+    }
+
+    auto terms = result->front();
+    if (terms->type() != rego::Terms || terms->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected set, got {}", terms->str()));
+    }
+
+    auto term = terms->front();
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto set = term->front();
+    if (set->type() != rego::Set || set->empty())
+    {
+      throw std::domain_error(fmt::format("Expected set, got {}", set->str()));
+    }
+
+    return set;
+  }
+
+  bool true_from_results(const trieste::Node& results)
+  {
+    if (results->type() != rego::Results || results->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected results, got {}", results->str()));
+    }
+
+    auto result = results->front();
+    if (result->type() != rego::Result || result->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected result, got {}", result->str()));
+    }
+
+    auto terms = result->front();
+    if (terms->type() != rego::Terms || terms->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected terms, got {}", terms->str()));
+    }
+
+    auto term = terms->front();
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto scalar = term->front();
+    if (scalar->type() != rego::Scalar || scalar->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected scalar, got {}", scalar->str()));
+    }
+
+    auto boolean = scalar->front();
+    return boolean->type() == rego::True;
+  }
+}
+
 namespace scitt
 {
   using PolicyScript = std::string;
@@ -453,8 +559,6 @@ namespace scitt
     }
     CCF_APP_INFO("Rego policy module loaded");
 
-    // TODO: this ought to be done once in governance, not per-eval
-    // or at least cached per node
     trieste::Node bundle_node;
     interpreter.entrypoints({"policy/allow", "policy/errors"});
     bundle_node = interpreter.build();
@@ -510,17 +614,21 @@ namespace scitt
         scitt::errors::PolicyError, "Invalid policy result");
     }
 
-    // terms -> term -> scalar -> bool
-    // TODO: can unwrap be used here?
-    auto allow = result->front()->front()->front()->front();
-
-    if (allow == rego::True)
+    try
     {
-      return std::nullopt;
+      if (true_from_results(rego_results))
+      {
+        return std::nullopt;
+      }
+    }
+    catch (const std::domain_error& e)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Could not interpret policy result: {}", e.what()));
     }
 
     auto error_results = interpreter.query_bundle(bundle, "policy/errors");
-
     if (error_results->type() == rego::ErrorSeq)
     {
       throw BadRequestCborError(
@@ -530,40 +638,26 @@ namespace scitt
           interpreter.output_to_string(error_results)));
     }
 
-    if (error_results->type() != rego::Results)
+    try
     {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy error results");
-    }
-
-    auto error_result = error_results->front();
-    if (error_result->type() != rego::Result)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy error result");
-    }
-
-    // terms -> term -> set
-    auto error = error_result->front()->front()->front();
-    if (error->type() != rego::Set)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy error value, not a Set");
-    }
-
-    std::ostringstream buf;
-
-    for (const auto& child : *error)
-    {
-      if (!buf.str().empty())
+      auto error_set = set_from_results(error_results);
+      std::ostringstream buf;
+      for (const auto& child : *error_set)
       {
-        buf << ", ";
+        if (!buf.str().empty())
+        {
+          buf << ", ";
+        }
+        buf << string_view_from_term(child);
       }
-      // TODO: validate the AST
-      // term -> scalar -> string
-      buf << child->front()->front()->location().view();
-    }
 
-    return buf.str();
+      return buf.str();
+    }
+    catch (const std::domain_error& e)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Could not interpret policy errors: {}", e.what()));
+    }
   }
 }
