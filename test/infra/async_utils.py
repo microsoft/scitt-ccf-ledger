@@ -7,9 +7,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Awaitable, Optional
 
 import aiotools
+from aiotools.types import CoroutineLike
 
 
-async def race_tasks(*awaitables: Awaitable[Any]):
+async def race_tasks(*awaitables: CoroutineLike[Any]) -> None:
     """
     Run a collection of awaitable objects as tasks, concurrently, until at least
     one of them completes or terminates with an exception. All uncompleted tasks

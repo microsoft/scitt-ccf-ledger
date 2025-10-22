@@ -37,7 +37,7 @@ export function apply(phdr, uhdr, payload, details) {{
     if (details.uvm_endorsements.svn < "101") {{ return "Invalid uvm_endorsements svn"; }}
 
     // Check host_data is the expected digest of the CCE policy for the issuing service
-    if (details.host_data !== "c71e9f286127f4327a7ddcfb4c6f6f1274a2858172549e10b9e506a19206fd57") {{ return "Invalid host data"; }}
+    if (details.host_data !== "73973b78d70cc68353426de188db5dfc57e5b766e399935fb73a61127ea26d20") {{ return "Invalid host data"; }}
 
     // Check issuer is valid
     if (!phdr.cwt.iss.startsWith("did:attestedsvc:msft-css-dev:")) {{ return "Invalid issuer"; }}
@@ -89,9 +89,9 @@ TEST_POLICIES = {
 }
 
 TEST_VECTORS = [
-    # ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
-    #    ("test/payloads/css-attested-cosesign1-20250812.cose", "attested_svc"),
     ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv_rego"),
+    ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "x509_hashv"),
+    ("test/payloads/css-attested-cosesign1-20250925.cose", "attested_svc"),
 ]
 
 

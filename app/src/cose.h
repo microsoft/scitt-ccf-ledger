@@ -37,7 +37,8 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_X5CHAIN = 33;
   static constexpr int64_t COSE_HEADER_PARAM_CWT_CLAIMS = 15;
 
-  static constexpr const char* COSE_HEADER_PARAM_TSS = "msft-css-dev";
+  static constexpr const char* COSE_HEADER_PARAM_TSS = "attestedsvc";
+  static constexpr const char* COSE_HEADER_PARAM_TSS_SVC_ID = "svc_id";
   static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION =
     "attestation";
   static constexpr const char* COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE =
@@ -273,6 +274,7 @@ namespace scitt::cose
   };
 
   /**
+  "svc_id": tstr,            ; service identifier
   "attestation": bstr,       ; raw hardware attestation report
   "attestation_type": tstr,  ; "SEV-SNP:ContainerPlat-AMD-UVM"
   "cose_key": { ... },       ; canonical COSE_Key map (embedded directly)
@@ -282,6 +284,7 @@ namespace scitt::cose
    */
   struct TSSMap
   {
+    std::optional<std::string> svc_id;
     std::optional<std::vector<uint8_t>> attestation;
     std::optional<std::string> attestation_type;
     std::optional<CoseKeyMap> cose_key;
@@ -298,11 +301,14 @@ namespace scitt::cose
     std::optional<int64_t> svn;
   };
 
+  using CritValuesContent = std::vector<std::variant<int64_t, std::string>>;
+  using CritValues = std::optional<CritValuesContent>;
+
   struct ProtectedHeader // NOLINT(bugprone-exception-escape)
   {
     // The headers used in this codebase
     std::optional<int64_t> alg;
-    std::optional<std::vector<std::variant<int64_t, std::string>>> crit;
+    CritValues crit;
     std::optional<std::string> kid;
     std::optional<std::string> issuer;
     std::optional<std::string> feed;
@@ -482,6 +488,7 @@ namespace scitt::cose
 
     enum
     {
+      TSS_SVC_ID_INDEX,
       TSS_ATTESTATION_INDEX,
       TSS_ATTESTATION_TYPE_INDEX,
       TSS_SNP_ENDORSEMENTS_INDEX,
@@ -491,6 +498,11 @@ namespace scitt::cose
       TSS_END_INDEX,
     };
     QCBORItem tss_items[TSS_END_INDEX + 1];
+
+    tss_items[TSS_SVC_ID_INDEX].label.string =
+      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_SVC_ID);
+    tss_items[TSS_SVC_ID_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
+    tss_items[TSS_SVC_ID_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
 
     tss_items[TSS_ATTESTATION_INDEX].label.string =
       UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION);
@@ -701,6 +713,11 @@ namespace scitt::cose
           tss_error));
       }
 
+      if (tss_items[TSS_SVC_ID_INDEX].uDataType != QCBOR_TYPE_NONE)
+      {
+        parsed.tss_map.svc_id =
+          cbor::as_string(tss_items[TSS_SVC_ID_INDEX].val.string);
+      }
       if (tss_items[TSS_ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
         parsed.tss_map.attestation =

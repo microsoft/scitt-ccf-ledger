@@ -37,6 +37,11 @@ resources:
 extends:
   template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
   parameters:
+    featureFlags:
+      WindowsHostVersion:
+        Network: KS4 # Onboard to the KS4 network pool: https://eng.ms/docs/cloud-ai-platform/azure-edge-platform-aep/aep-engineering-systems/productivity-and-experiences/network-isolation/oss/net_restrict 
+      LinuxHostVersion:
+        Network: KS4
     cloudvault: # https://aka.ms/obpipelines/cloudvault
       enabled: false
     globalSdl: # https://aka.ms/obpipelines/sdl

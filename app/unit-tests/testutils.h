@@ -103,8 +103,7 @@ namespace testutils
       cbor::from_string("application/attestedsvc+json"));
     // crit
     QCBOREncode_OpenArrayInMapN(&ectx, cose::COSE_HEADER_PARAM_CRIT);
-    QCBOREncode_AddInt64(&ectx, cose::COSE_HEADER_PARAM_ALG);
-    QCBOREncode_AddInt64(&ectx, cose::COSE_HEADER_PARAM_KID);
+    QCBOREncode_AddText(&ectx, cbor::from_string(cose::COSE_HEADER_PARAM_TSS));
     QCBOREncode_CloseArray(&ectx);
 
     // X5Chain
@@ -133,6 +132,10 @@ namespace testutils
     // TSS map
     // ----------------------
     QCBOREncode_OpenMapInMap(&ectx, cose::COSE_HEADER_PARAM_TSS);
+    QCBOREncode_AddTextToMap(
+      &ectx,
+      cose::COSE_HEADER_PARAM_TSS_SVC_ID,
+      cbor::from_string("msft-css-dev"));
     QCBOREncode_AddBytesToMap(
       &ectx,
       cose::COSE_HEADER_PARAM_TSS_ATTESTATION,

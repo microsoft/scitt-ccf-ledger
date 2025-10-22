@@ -139,8 +139,9 @@ Function arguments:
         svn?: number   // Software version number
       },
       
-      // Microsoft CSS Dev TSS Map
-      "msft-css-dev": {
+      // Microsoft Attested Service Map
+      "attestedsvc": {
+        svc_id?: string,
         attestation?: ArrayBuffer,
         attestation_type?: string,
         

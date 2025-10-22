@@ -3,9 +3,17 @@
 [![Build and test](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml) [![Build Status](https://github-private.visualstudio.com/microsoft/_apis/build/status%2FOneBranch%2Fscitt-ccf-ledger-wrapper%2Fscitt-ccf-ledger-wrapper-Official?repoName=scitt-ccf-ledger-wrapper&branchName=master)](https://github-private.visualstudio.com/microsoft/_build/latest?definitionId=716&repoName=scitt-ccf-ledger-wrapper&branchName=master)
 
 This repository contains the source code for scitt-ccf-ledger, an application
-that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the [IETF SCITT WG](https://datatracker.ietf.org/wg/scitt/about/). Its purpose is to provide provenance for artefacts in digital supply chains, increasing trust in those artefacts. scitt-ccf-ledger achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
+that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the IETF [SCITT](https://datatracker.ietf.org/wg/scitt/about/) and [COSE](https://datatracker.ietf.org/wg/cose/about/) Working Groups:
 
-This research project is at an early stage and is open sourced to facilitate academic collaborations. We are keen to engage in research collaborations on this project, please do reach out to discuss this by opening an issue.
+- [draft-ietf-scitt-architecture](https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/)
+- [draft-ietf-cose-merkle-tree-proofs](https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/)
+- [draft-ietf-cose-hash-envelope](https://datatracker.ietf.org/doc/draft-ietf-cose-hash-envelope/)
+- [draft-ietf-scitt-scrapi](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/)
+- [draft-birkholz-cose-receipts-ccf-profile](https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/)
+
+The purpose of scitt-ccf-ledger is to provide transparent provenance for artefacts in digital supply chains. It achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
+
+This project is open source to facilitate auditability and academic collaboration. We are keen to engage in research collaboration on this project, please do reach out to discuss this by opening an issue.
 
 ## Getting Started
 
@@ -13,7 +21,7 @@ The instructions below guide you through building and deploying a local instance
 
 Being a CCF application, scitt-ccf-ledger targets AMD SEV-SNP but also supports running on x86-64 hardware without TEE support in what is called *virtual* mode.
 
-All instructions below assume Linux as the operating system.
+All instructions below assume Linux as the operating system. scitt-ccf-ledger is primarily built on Azure Linux 3.0.
 
 ### Using Docker
 
@@ -33,6 +41,13 @@ The node is now reachable at https://127.0.0.1:8000/.
 Note that `run-dev.sh` configures the network in a way that is not suitable for production, in particular it generates an ad-hoc governance member key pair and it disables API authentication.
 
 See the `demo/` folder on how to interact with the application.
+
+### Signed Statements Support
+
+scitt-ccf-ledger implements registration for two kinds of Signed Statements:
+
+1. Statements signed with an X.509 certificate chain ([schema](docs/schemas/x509-signed-statement.cddl)), which make use of header parameters defined in [RFC9360](https://www.rfc-editor.org/rfc/rfc9360.html), and [`did:x509`](https://github.com/microsoft/did-x509) issuers.
+2. Statements signed with hardware-attested, ephemeral keys ([schema](docs/schemas/attestedsvc-signed-statement.cddl)), which are currently experimental, and make use `did:attestedsvc` issuers.
 
 ### Development setup
 
@@ -57,7 +72,6 @@ The CLI is also distributed through the GitHub releases as a `wheel` file. Optio
 The CLI is extensively used in the following functional tests and demo scripts:
 
 - [Transparency service demo](./demo/cts_poc/README.md)
-- [GitHub hosted DID demo](./demo/github/README.md)
 - [CLI tests](./test/test_cli.py)
 
 See [pyscitt](pyscitt/README.md) for more details.
@@ -81,4 +95,5 @@ Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev
 This project welcomes contributions and suggestions. Please see the [Contribution guidelines](CONTRIBUTING.md).
 
 ### Trademarks 
+
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow Microsoft’s Trademark & Brand Guidelines. Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party’s policies.
