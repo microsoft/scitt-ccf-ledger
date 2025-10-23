@@ -8,6 +8,7 @@
 #include "tracing.h"
 #include "verified_details.h"
 
+#include <ccf/crypto/sha256_hash.h>
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
 #include <chrono>
@@ -118,6 +119,44 @@ namespace
     auto boolean = scalar->front();
     return boolean->type() == rego::True;
   }
+
+  class BundleWrapper
+  {
+    rego::Bundle bundle;
+    ccf::crypto::Sha256Hash policy_digest = {};
+
+  public:
+    rego::Bundle load_policy(const std::string& policy)
+    {
+      auto new_digest = ccf::crypto::Sha256Hash(policy);
+      if (new_digest != policy_digest)
+      {
+        rego::Interpreter interpreter;
+        auto rv = interpreter.add_module("policy.rego", policy);
+        if (rv != nullptr)
+        {
+          CCF_APP_FAIL(
+            "Failed to load policy: {}", interpreter.output_to_string(rv));
+          throw std::domain_error("Invalid policy module (add_module)");
+        }
+        interpreter.entrypoints({"policy/allow", "policy/errors"});
+        trieste::Node bundle_node = interpreter.build();
+        if (bundle_node->type() == rego::ErrorSeq)
+        {
+          CCF_APP_FAIL(
+            "Failed to build policy bundle: {}",
+            interpreter.output_to_string(bundle_node));
+          throw std::domain_error("Invalid policy module (build)");
+        }
+        bundle = rego::BundleDef::from_node(bundle_node);
+        policy_digest = new_digest;
+      }
+
+      return bundle;
+    }
+  };
+
+  thread_local BundleWrapper bundle_wrapper;
 }
 
 namespace scitt
@@ -626,42 +665,18 @@ namespace scitt
     std::span<uint8_t> payload,
     const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
   {
-    auto start = std::chrono::steady_clock::now();
-
-    rego::Interpreter interpreter;
-    auto rv = interpreter.add_module("policy", rego);
-    if (rv != nullptr)
+    rego::Bundle bundle;
+    try
     {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy module");
+      bundle = bundle_wrapper.load_policy(rego);
     }
-    CCF_APP_INFO("Rego policy module loaded");
-
-    trieste::Node bundle_node;
-    interpreter.entrypoints({"policy/allow", "policy/errors"});
-    bundle_node = interpreter.build();
-    if (bundle_node->type() == rego::ErrorSeq)
+    catch (const std::domain_error& e)
     {
-      CCF_APP_FAIL(
-        "Failed to build policy bundle: {}",
-        interpreter.output_to_string(bundle_node));
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Failed to build policy bundle");
+      throw BadRequestCborError(scitt::errors::PolicyError, e.what());
     }
-    auto end = std::chrono::steady_clock::now();
-    auto elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego bundle build time in {}us", elapsed.count());
 
-    start = std::chrono::steady_clock::now();
-    auto bundle = rego::BundleDef::from_node(bundle_node);
-    end = std::chrono::steady_clock::now();
-    elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego bundle setup time in {}us", elapsed.count());
-
-    start = std::chrono::steady_clock::now();
     auto input = rego_input_mapping(phdr, payload, details);
+    rego::Interpreter interpreter;
 
     auto tv = interpreter.set_input(input);
     if (tv != nullptr)
@@ -670,11 +685,6 @@ namespace scitt
         scitt::errors::PolicyError, "Invalid policy input");
     }
     auto rego_results = interpreter.query_bundle(bundle, "policy/allow");
-
-    end = std::chrono::steady_clock::now();
-    elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    CCF_APP_INFO("Rego input construction and eval in {}us", elapsed.count());
 
     if (rego_results->type() == rego::ErrorSeq)
     {

@@ -40,8 +40,8 @@ set(REGOCPP_BUILD_SHARED ON)
 FetchContent_Declare(
   regocpp
   GIT_REPOSITORY https://github.com/microsoft/rego-cpp
-  # TODO: update to 1.0.0 final when available
-  GIT_TAG        5f11d69e8e3d68f234121d6b334790775fd901fd
+  # https://github.com/microsoft/rego-cpp/releases/tag/v1.0.1
+  GIT_TAG        6dee78d239815f41ce2500451470058c200d1c85
 )
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 FetchContent_MakeAvailable(regocpp)

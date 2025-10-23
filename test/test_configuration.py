@@ -305,7 +305,7 @@ export function apply(phdr) {{
         for invalid_policy in policies.INVALID[lang]:
             configure_service({"policy": invalid_policy})
 
-            with service_error("Invalid policy module"):
+            with service_error("Invalid policy module.*"):
                 client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
