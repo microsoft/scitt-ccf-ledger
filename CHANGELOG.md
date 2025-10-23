@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.16.1]
+### Changes
+- 874f312 Refactor Dockerfile to enable Dependabot detection of Azure Linux base image (#336)
+- 949b296 Configure Dependabot for Docker updates (#337)
+- 9ff6ad6 Update CCF version from 6.0.14 to 6.0.15 (#335)
+- c0558e5 Update to Readme and addition of signed statement schemas (#333)
+- f622d93 Fix Python type-checking error (#334)
+- d447157 update changelog for 0.16.0 (#332)
+
 ## [0.16.0]
 ### Changes
 - fa3f2d7 crit verification for x509 path (#331)
@@ -358,3 +367,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.15.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.1
 [0.15.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.2
 [0.16.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.0
+[0.16.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.1
