@@ -13,7 +13,7 @@ Once SCITT is appropriately configured members can vote to [open the service](ht
 
 SCITT configuration can be set via the `set_scitt_configuration` action within a governance proposal. Each item in `args.configuration` within `set_scitt_configuration` is a separate configuration option. Existing configuration options are outlined in the sections below.
 
-Example configuration proposal:
+Example configuration proposal using a JavaScript policy:
 ```json
 {
   "actions": [
@@ -23,6 +23,34 @@ Example configuration proposal:
         "configuration": {
           "policy": {
             "policyScript": "export function apply(phdr) { if (!phdr.issuer) {return 'Issuer not found'} else if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } return true; }"
+          },
+          "authentication": {
+            "allowUnauthenticated": false,
+            "jwt": {
+              "requiredClaims": {
+                "aud": "scitt",
+                "iss": "https://authserver.com/",
+                "http://unique.claim/department_id": "654987"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+Example configuration proposal, using a Rego policy:
+
+```
+  "actions": [
+    {
+      "name": "set_scitt_configuration",
+      "args": {
+        "configuration": {
+          "policy": {
+            "policyRego": "\npackage policy\ndefault allow := false\nissuer_allowed if {\n    input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"\n}\nseconds_since_epoch := time.now_ns() / 1000000000\niat_in_the_past if {\n    input.phdr["CWT Claims"].iat < seconds_since_epoch\n}\nsvn_positive if {\n    input.phdr["CWT Claims"]._svn >= 0\n}\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_positive\n}\n"
           },
           "authentication": {
             "allowUnauthenticated": false,
@@ -229,6 +257,101 @@ Function arguments:
     }
     ```
 
+### Policy Rego
+Rego code that determines whether an entry should be accepted. The package must be called "policy", and expose a rule called "allow" that must evaluate to `true` when the value of `input` is acceptable.
+
+The package can also expose an "errors" rule that must evaluate to an array of strings. The values, if set, will be returned to the caller as error reasons. This allows easy incremental definition of error reasons, for example:
+
+```
+errors contains "Invalid parameter value" if { not parameter_is_valid }
+```
+
+Mapping from the Signed Statement to Rego `input` takes place in [`scitt::js::rego_input_from_signed_statement()`](https://github.com/microsoft/scitt-ccf-ledger/blob/main/app/src/policy_engine.h).
+
+Attributes in `input` object:
+1. `phdr` (Object) representation of the subset of COSE protected header parameters parsed by scitt-ccf-ledger
+
+    ```
+    {
+      // Algorithm identifier (integer)
+      alg: number,
+      
+      // Content type (can be integer or string)
+      cty?: number | string,
+      
+      // CWT Claims object
+      "CWT Claims": {
+        iss?: string,  // Issuer
+        sub?: string,  // Subject
+        iat?: number,  // Issued at
+        _svn?: number   // Software version number
+      }
+    }
+    ```
+
+2. `payload` (string)
+
+    ```
+    Hexadecimal representation
+    ```
+
+3. `attestation` (Object) present when signature issuer is `did:attestedsvc`, details added after the signature and the attestation verification
+
+    ```
+    {
+      // Empty object if no attestation details
+      // OR if attestation details exist:
+      
+      // See https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 7.3 - Table 23 for the semantics and size of the following fields before their
+      // encoding to hex string.
+
+      // Measurement (hex string)
+      measurement?: string,
+      
+      // Report data (hex string)
+      report_data?: string,
+
+      // Host data (hex string)
+      host_data?: string,
+
+      // Reported TCB
+      // See https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf
+      // Section 2.2 (TCB_VERSION) for the semantics and size of the following fields
+      // Note that the fmc field is only present on Turin platforms
+      reported_tcb?: {
+        microcode: number,   // Lowest current patch level of all cores
+        snp: number,         // Security Version Number (SVN) of SNP firmware
+        tee: number,         // SVN of PSP operating system
+        boot_loader: number, // SVN of PSP bootloader
+        fmc?: number,        // SVN of FMC fw
+        hexstring: string    // Combined hexstring representation of the fields listed above
+                             // Often used as a compact representation in security advisories
+      },
+
+      // Product name of the architecture, computed from the CPUID_FAM_ID and CPUID_MOD_ID fields
+      // one of "Milan", "Genoa", "Turin".
+      product_name?: string,
+      
+      // See https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // for additional detail on the UVM Endorsements object and reference values for the Confidential ACI platform
+
+      // UVM Endorsements object
+      uvm_endorsements?: {
+        did: string,   // Decentralized identifier
+        feed: string,  // Feed identifier
+        svn: string    // Software version number
+      }
+    }
+    ```
+
+Example `set_scitt_configuration` snippet:
+```json
+"policy": {
+  "policyRego": "package policy\ndefault allow := false\n allow if input.profile == \"X509\""
+}
+```
+
 ## CCF specific configuration
 
 Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.
@@ -246,4 +369,4 @@ To use the specific values in the receipts please set it through the [CCF v6 con
 }
 ```
 
-Once the value is set, the public keys can be discovered through the `$issuer/.well-known/transparency-configuration` endpoint.
+Once the value is set, the public keys can be discoverd through the `$issuer/.well-known/transparency-configuration` endpoint.
