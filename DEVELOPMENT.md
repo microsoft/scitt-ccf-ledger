@@ -156,6 +156,16 @@ PLATFORM=virtual ./build.sh
 PLATFORM=virtual ./run_functional_tests.sh
 ```
 
+### Performance regression tests
+
+A basic set of performance indicators can be obtained by building the project, and running:
+
+```bash
+./run_functional_tests.sh -m bencher
+```
+
+Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
+
 ### Address sanitization
 
 To enable ASan it is necessary to build CCF from source:

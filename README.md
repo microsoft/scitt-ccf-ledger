@@ -80,16 +80,6 @@ See [pyscitt](pyscitt/README.md) for more details.
 
 See [reproducibility.md](./docs/reproducibility.md) for instructions.
 
-#### Run performance regression tests for CTS
-
-A basic set of performance indicators can be obtained by building the project, and running:
-
-```bash
-./run_functional_tests.sh -m bencher
-```
-
-Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
-
 ## Contributing
 
 This project welcomes contributions and suggestions. Please see the [Contribution guidelines](CONTRIBUTING.md).
