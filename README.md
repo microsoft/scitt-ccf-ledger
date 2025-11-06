@@ -9,54 +9,70 @@ The purpose of scitt-ccf-ledger is to provide transparent provenance for artefac
 
 This project is open source to facilitate auditability and academic collaboration. We are keen to engage in research collaboration on this project, please do reach out to discuss this by opening an issue.
 
-## Getting Started
+## Quick start
 
 The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
 
 Being a CCF application, scitt-ccf-ledger targets AMD SEV-SNP but also supports running on x86-64 hardware without TEE support in what is called *virtual* mode.
 
-All instructions below assume Linux as the operating system. scitt-ccf-ledger is primarily built on Azure Linux 3.0.
+All instructions below assume Linux as the operating system and the availability of docker and python.
 
-### Using Docker
+> Note that `run-dev.sh` configures the network in a way that is not suitable for production, in particular it generates an ad-hoc governance member key pair, disables API authentication and sets permissive policy.
 
-Use the following commands to start a single-node CCF network with the scitt-ccf-ledger application setup for development purposes.
-
-> Note: `PLATFORM` should be set to `virtual`, or `snp` to select the type of build.
-> Note: if `PLATFORM` is set to `snp`, additional configuration is required. Refer to [this section](DEVELOPMENT.md#amd-sev-snp-platform) for more details.
+First, start the service in one terminal window:
 
 ```sh
-export PLATFORM=<virtual|snp>
+export PLATFORM=virtual
 ./docker/build.sh
 ./docker/run-dev.sh
+
+# Output would show:
+# ...
+# 2025-11-06T13:10:51.559932Z        100 [info ] CCF/src/host/socket.h:49             | TCP RPC Client listening on 0.0.0.0:8000
+# ...
+# 2025-11-06T13:11:01.743871Z -0.012 0   [info ] CCF/src/node/rpc/frontend.h:949      | Opening frontend
+# 2025-11-06T13:11:01.743882Z -0.012 0   [info ] CCF/src/node/node_state.h:2581       | Service open at seqno 9
+# ...
 ```
 
-The node is now reachable at https://127.0.0.1:8000/.
+Then, in **another terminal** window you can submit a test signed statement and get transparent statement:
 
-Note that `run-dev.sh` configures the network in a way that is not suitable for production, in particular it generates an ad-hoc governance member key pair and it disables API authentication.
+```sh
+# use the python virtual environment which was setup in the previous step
+source venv/bin/activate
+# use CLI to submit test payload
+scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development --url "https://localhost:8000" --transparent-statement output.cose
 
-See the `demo/` folder on how to interact with the application.
+# 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:402 - POST /entries 202
+# 2025-11-06 13:19:16.009 | DEBUG    | pyscitt.client:request:402 - GET /operations/2.13 202
+# 2025-11-06 13:19:18.012 | DEBUG    | pyscitt.client:request:402 - GET /operations/2.13 (attempt #2) 200
+# 2025-11-06 13:19:18.015 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement 503 TransactionNotCached
+# 2025-11-06 13:19:19.017 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement (attempt #2) 200
+# Registered test/payloads/manifest.spdx.json.sha384.digest.cose as transaction 2.13
+# Received output.cose
+```
 
-### Supported inputs
+## Supported inputs
 
 See [inputs.md](./docs/inputs.md) to understand what can you register and store in the service.
 
-### Usage examples
+## Usage examples
 
 See [demo/](demo/) directory containing steps to launch and use the service.
 
-### Development and testing
+## Development and testing
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger.
 
-### Available clients
+## Available clients
 
 See [clients.md](./docs/clients.md) to get a list of available clients to use to interact with the service.
 
-### Configuration
+## Configuration
 
 See [configuration.md](./docs/configuration.md) for instructions on how to configure registration policies and authentication.
 
-### Reproducing builds
+## Reproducing builds
 
 See [reproducibility.md](./docs/reproducibility.md) for instructions.
 
