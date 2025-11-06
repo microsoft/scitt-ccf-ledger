@@ -3,13 +3,7 @@
 [![Build and test](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml) [![Build Status](https://github-private.visualstudio.com/microsoft/_apis/build/status%2FOneBranch%2Fscitt-ccf-ledger-wrapper%2Fscitt-ccf-ledger-wrapper-Official?repoName=scitt-ccf-ledger-wrapper&branchName=master)](https://github-private.visualstudio.com/microsoft/_build/latest?definitionId=716&repoName=scitt-ccf-ledger-wrapper&branchName=master)
 
 This repository contains the source code for scitt-ccf-ledger, an application
-that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the IETF [SCITT](https://datatracker.ietf.org/wg/scitt/about/) and [COSE](https://datatracker.ietf.org/wg/cose/about/) Working Groups:
-
-- [draft-ietf-scitt-architecture](https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/)
-- [draft-ietf-cose-merkle-tree-proofs](https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/)
-- [draft-ietf-cose-hash-envelope](https://datatracker.ietf.org/doc/draft-ietf-cose-hash-envelope/)
-- [draft-ietf-scitt-scrapi](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/)
-- [draft-birkholz-cose-receipts-ccf-profile](https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/)
+that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the IETF. See [SCITT Standard alignment](docs/scitt.md).
 
 The purpose of scitt-ccf-ledger is to provide transparent provenance for artefacts in digital supply chains. It achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
 
