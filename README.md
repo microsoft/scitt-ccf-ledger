@@ -43,7 +43,11 @@ scitt-ccf-ledger implements registration for two kinds of Signed Statements:
 1. Statements signed with an X.509 certificate chain ([schema](docs/schemas/x509-signed-statement.cddl)), which make use of header parameters defined in [RFC9360](https://www.rfc-editor.org/rfc/rfc9360.html), and [`did:x509`](https://github.com/microsoft/did-x509) issuers.
 2. Statements signed with hardware-attested, ephemeral keys ([schema](docs/schemas/attestedsvc-signed-statement.cddl)), which are currently experimental, and make use `did:attestedsvc` issuers.
 
-### Development setup
+### Usage examples
+
+See [demo/](demo/) directory containing steps to launch and use the service.
+
+### Development and testing
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger.
 
@@ -69,6 +73,10 @@ The CLI is extensively used in the following functional tests and demo scripts:
 - [CLI tests](./test/test_cli.py)
 
 See [pyscitt](pyscitt/README.md) for more details.
+
+### Configuration
+
+See [configuration.md](./docs/configuration.md) for instructions on how to configure registration policies and authentication.
 
 ### Reproducing builds
 
