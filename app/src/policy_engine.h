@@ -17,7 +17,7 @@
 
 namespace
 {
-  std::string_view string_view_from_term(const trieste::Node& term)
+  std::string string_from_term(const trieste::Node& term)
   {
     if (term->type() != rego::Term || term->empty())
     {
@@ -25,21 +25,14 @@ namespace
         fmt::format("Expected term, got {}", term->str()));
     }
 
-    auto scalar = term->front();
-    if (scalar->type() != rego::Scalar || scalar->empty())
+    auto maybe_string = rego::try_get_string(term);
+    if (!maybe_string.has_value())
     {
       throw std::domain_error(
-        fmt::format("Expected scalar, got {}", scalar->str()));
+        fmt::format("Expected string, got {}", term->str()));
     }
 
-    auto string = scalar->front();
-    if (string->type() != rego::JSONString)
-    {
-      throw std::domain_error(
-        fmt::format("Expected string, got {}", string->str()));
-    }
-
-    return string->location().view();
+    return maybe_string.value();
   }
 
   trieste::Node set_from_terms(const trieste::Node& terms)
@@ -60,7 +53,7 @@ namespace
     return set;
   }
 
-  bool true_from_terms(const trieste::Node& terms)
+  bool bool_from_terms(const trieste::Node& terms)
   {
     auto term = terms->front();
     if (term->type() != rego::Term || term->empty())
@@ -69,15 +62,14 @@ namespace
         fmt::format("Expected term, got {}", term->str()));
     }
 
-    auto scalar = term->front();
-    if (scalar->type() != rego::Scalar || scalar->empty())
+    auto maybe_bool = rego::try_get_bool(term);
+    if (!maybe_bool.has_value())
     {
       throw std::domain_error(
-        fmt::format("Expected scalar, got {}", scalar->str()));
+        fmt::format("Expected boolean, got {}", term->str()));
     }
 
-    auto boolean = scalar->front();
-    return boolean->type() == rego::True;
+    return maybe_bool.value();
   }
 
   class BundleWrapper
@@ -659,7 +651,7 @@ namespace scitt
 
     try
     {
-      if (true_from_terms(rego_output.expressions()))
+      if (bool_from_terms(rego_output.expressions()))
       {
         return std::nullopt;
       }
@@ -693,7 +685,7 @@ namespace scitt
         {
           buf << ", ";
         }
-        buf << string_view_from_term(child);
+        buf << string_from_term(child);
       }
 
       return buf.str();
