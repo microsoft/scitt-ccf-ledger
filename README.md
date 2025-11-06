@@ -48,28 +48,9 @@ See [demo/](demo/) directory containing steps to launch and use the service.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and testing scitt-ccf-ledger.
 
-### Using the CLI
+### Available clients
 
-To help with the configuration of an application or to be able to interact with its API you could leverage the available CLI.
-
-The `pyscitt` CLI is written in Python and is available on PyPi [here](https://pypi.org/project/pyscitt/). To install it, you can use the following command:
-
-```sh
-pip install pyscitt
-```
-
-The CLI is also distributed through the GitHub releases as a `wheel` file. Optionally, it can be used from within the repository using the [`./pyscitt.sh`](../pyscitt.sh) script. For example: 
-
-```sh
-./pyscitt.sh --help
-```
-
-The CLI is extensively used in the following functional tests and demo scripts:
-
-- [Transparency service demo](./demo/cts_poc/README.md)
-- [CLI tests](./test/test_cli.py)
-
-See [pyscitt](pyscitt/README.md) for more details.
+See [clients.md](./docs/clients.md) to get a list of available clients to use to interact with the service.
 
 ### Configuration
 
