@@ -42,28 +42,8 @@ namespace
     return string->location().view();
   }
 
-  trieste::Node set_from_results(const trieste::Node& results)
+  trieste::Node set_from_terms(const trieste::Node& terms)
   {
-    if (results->type() != rego::Results || results->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected results, got {}", results->str()));
-    }
-
-    auto result = results->front();
-    if (result->type() != rego::Result || result->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected result, got {}", result->str()));
-    }
-
-    auto terms = result->front();
-    if (terms->type() != rego::Terms || terms->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected set, got {}", terms->str()));
-    }
-
     auto term = terms->front();
     if (term->type() != rego::Term || term->empty())
     {
@@ -80,28 +60,8 @@ namespace
     return set;
   }
 
-  bool true_from_results(const trieste::Node& results)
+  bool true_from_terms(const trieste::Node& terms)
   {
-    if (results->type() != rego::Results || results->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected results, got {}", results->str()));
-    }
-
-    auto result = results->front();
-    if (result->type() != rego::Result || result->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected result, got {}", result->str()));
-    }
-
-    auto terms = result->front();
-    if (terms->type() != rego::Terms || terms->empty())
-    {
-      throw std::domain_error(
-        fmt::format("Expected terms, got {}", terms->str()));
-    }
-
     auto term = terms->front();
     if (term->type() != rego::Term || term->empty())
     {
@@ -684,57 +644,48 @@ namespace scitt
       throw BadRequestCborError(
         scitt::errors::PolicyError, "Invalid policy input");
     }
-    auto rego_results = interpreter.query_bundle(bundle, "policy/allow");
 
-    if (rego_results->type() == rego::ErrorSeq)
+    auto rego_output =
+      rego::Output(interpreter.query_bundle(bundle, "policy/allow"));
+
+    if (!rego_output.ok())
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format(
           "Error while applying policy: {}",
-          interpreter.output_to_string(rego_results)));
-    }
-
-    if (rego_results->type() != rego::Results)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy results");
-    }
-
-    auto result = rego_results->front();
-    if (result->type() != rego::Result)
-    {
-      throw BadRequestCborError(
-        scitt::errors::PolicyError, "Invalid policy result");
+          fmt::join(rego_output.errors(), ", ")));
     }
 
     try
     {
-      if (true_from_results(rego_results))
+      if (true_from_terms(rego_output.expressions()))
       {
         return std::nullopt;
       }
     }
-    catch (const std::domain_error& e)
+    catch (const std::exception& e)
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format("Could not interpret policy result: {}", e.what()));
     }
 
-    auto error_results = interpreter.query_bundle(bundle, "policy/errors");
-    if (error_results->type() == rego::ErrorSeq)
+    auto error_output =
+      rego::Output(interpreter.query_bundle(bundle, "policy/errors"));
+
+    if (!error_output.ok())
     {
       throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format(
           "Error while retrieving policy errors: {}",
-          interpreter.output_to_string(error_results)));
+          fmt::join(error_output.errors(), ", ")));
     }
 
     try
     {
-      auto error_set = set_from_results(error_results);
+      auto error_set = set_from_terms(error_output.expressions());
       std::ostringstream buf;
       for (const auto& child : *error_set)
       {
