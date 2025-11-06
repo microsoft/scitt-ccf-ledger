@@ -36,12 +36,9 @@ Note that `run-dev.sh` configures the network in a way that is not suitable for 
 
 See the `demo/` folder on how to interact with the application.
 
-### Signed Statements Support
+### Supported inputs
 
-scitt-ccf-ledger implements registration for two kinds of Signed Statements:
-
-1. Statements signed with an X.509 certificate chain ([schema](docs/schemas/x509-signed-statement.cddl)), which make use of header parameters defined in [RFC9360](https://www.rfc-editor.org/rfc/rfc9360.html), and [`did:x509`](https://github.com/microsoft/did-x509) issuers.
-2. Statements signed with hardware-attested, ephemeral keys ([schema](docs/schemas/attestedsvc-signed-statement.cddl)), which are currently experimental, and make use `did:attestedsvc` issuers.
+See [inputs.md](./docs/inputs.md) to understand what can you register and store in the service.
 
 ### Usage examples
 
