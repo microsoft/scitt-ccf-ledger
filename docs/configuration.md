@@ -22,7 +22,7 @@ Example configuration proposal:
       "args": {
         "configuration": {
           "policy": {
-            "policyScript": "export function apply(phdr) { if (!phdr.issuer) {return 'Issuer not found'} else if (phdr.issuer !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } return true; }"
+            "policyScript": "export function apply(phdr) { if (!phdr.cwt.iss) {return 'Issuer not found'} else if (phdr.cwt.iss !== 'did:x509:0:sha256:HnwZ4lezuxq/GVcl/Sk7YWW170qAD0DZBLXilXet0jg=::eku:1.3.6.1.4.1.311.10.3.13') { return 'Invalid issuer'; } return true; }"
           },
           "authentication": {
             "allowUnauthenticated": false,
