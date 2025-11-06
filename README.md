@@ -5,19 +5,19 @@
 This repository contains the source code for scitt-ccf-ledger, an application
 that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the IETF. See [SCITT Standard alignment](docs/scitt.md).
 
-The purpose of scitt-ccf-ledger is to provide transparent provenance for artefacts in digital supply chains. It achieves this by allowing signed claims about artefacts to be submitted to a secure immutable ledger, and returning receipts which prove claims have been stored and registration policies applied.
+The purpose of scitt-ccf-ledger is to provide transparent provenance for artefacts in digital supply chains. It achieves this by allowing signed claims about artefacts to be submitted to a secure, immutable ledger and returning receipts that prove the claims have been stored and registration policies applied.
 
-This project is open source to facilitate auditability and academic collaboration. We are keen to engage in research collaboration on this project, please do reach out to discuss this by opening an issue.
+This project is open source to facilitate auditability and academic collaboration. We are keen to engage in research collaboration on this project. Please reach out to discuss this by opening an issue.
 
 ## Quick start
 
 The instructions below guide you through building and deploying a local instance of scitt-ccf-ledger for development and testing purposes.
 
-Being a CCF application, scitt-ccf-ledger targets AMD SEV-SNP but also supports running on x86-64 hardware without TEE support in what is called *virtual* mode.
+Being a CCF application, scitt-ccf-ledger targets AMD SEV-SNP, but also supports running on x86-64 hardware without TEE support in what is called *virtual* mode.
 
-All instructions below assume Linux as the operating system and the availability of docker and python.
+All instructions below assume a Linux operating system and the availability of Docker and Python.
 
-> Note that `run-dev.sh` configures the network in a way that is not suitable for production, in particular it generates an ad-hoc governance member key pair, disables API authentication and sets permissive policy.
+> Note that `run-dev.sh` configures the network in a way that is not suitable for production; in particular it generates an ad-hoc governance member key pair, disables API authentication, and sets a permissive policy.
 
 First, start the service in one terminal window:
 
@@ -26,7 +26,7 @@ export PLATFORM=virtual
 ./docker/build.sh
 ./docker/run-dev.sh
 
-# Output would show:
+# Output will show:
 # ...
 # 2025-11-06T13:10:51.559932Z        100 [info ] CCF/src/host/socket.h:49             | TCP RPC Client listening on 0.0.0.0:8000
 # ...
@@ -35,12 +35,12 @@ export PLATFORM=virtual
 # ...
 ```
 
-Then, in **another terminal** window you can submit a test signed statement and get transparent statement:
+Then, in **another terminal** window, you can submit a test signed statement and obtain a transparent statement:
 
 ```sh
-# use the python virtual environment which was setup in the previous step
+# Use the Python virtual environment that was set up in the previous step
 source venv/bin/activate
-# use CLI to submit test payload
+# Use the CLI to submit a test payload
 scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development --url "https://localhost:8000" --transparent-statement output.cose
 
 # 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:402 - POST /entries 202
@@ -54,11 +54,11 @@ scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development -
 
 ## Supported inputs
 
-See [inputs.md](./docs/inputs.md) to understand what can you register and store in the service.
+See [inputs.md](./docs/inputs.md) to understand what you can register and store in the service.
 
 ## Usage examples
 
-See [demo/](demo/) directory containing steps to launch and use the service.
+See the [demo/](demo/) directory for steps to launch and use the service.
 
 ## Development and testing
 
@@ -66,7 +66,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on building, running, and 
 
 ## Available clients
 
-See [clients.md](./docs/clients.md) to get a list of available clients to use to interact with the service.
+See [clients.md](./docs/clients.md) for a list of available clients to interact with the service.
 
 ## Configuration
 
@@ -74,7 +74,7 @@ See [configuration.md](./docs/configuration.md) for instructions on how to confi
 
 ## Reproducing builds
 
-See [reproducibility.md](./docs/reproducibility.md) for instructions.
+See [reproducibility.md](./docs/reproducibility.md) for instructions on reproducing builds.
 
 ## Contributing
 
