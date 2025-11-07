@@ -1,24 +1,24 @@
-# CTS PoC Demo
+# Transparency Service Demo
 
-This demo provides a generic Proof of Concept for a Code Transparency Service (CTS) using the SCITT CCF ledger. The scripts provided in this folder allow configuring a new SCITT CCF instance, generating and submitting claims in COSE format, getting a SCITT receipt for a submitted claim, and verifying the receipt validity.
+This demo is a generic proof of concept for a Transparency Service (TS) built on the SCITT CCF ledger. The scripts in this folder let you configure a new SCITT CCF instance, generate and submit COSE-formatted claims, obtain a SCITT receipt for a submitted claim, and verify that the receipt is valid.
 
 ## Prerequisites
 
-- The ledger expects payloads to be signed into COSE_Sign1 signature envelopes, also called signed statements. You can set up custom [X509 signing cert](../../docs/configuration.md#x509-roots) locally via the script `0-cacerts-generator.sh`:
+- The ledger expects payloads to be signed into COSE_Sign1 signature envelopes ("signed statements"). You can set up a custom [X.509 signing certificate](../../docs/configuration.md#x509-roots) locally via the script `0-cacerts-generator.sh`:
 
     ```bash
     mkdir -p demo-poc/x509_roots
     CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/cts_poc/0-cacerts-generator.sh
     ```
-- `0-cacerts-generator.sh` will also setup the configuration file (see [documentation](../../docs/configuration.md#scitt-configuration)).
+- `0-cacerts-generator.sh` also sets up the configuration file (see the [documentation](../../docs/configuration.md#scitt-configuration)).
 
-- The admin (operator) will need to be recognized by the CTS instance. The member certificate and private key are generated automatically and stored in the `workspace` folder (`member0_cert.pem` and `member0_privk.pem`) **after starting the local instance**.
+- The admin (operator) must be recognized by the TS instance. The member certificate and private key are generated automatically and stored in the `workspace` folder (`member0_cert.pem` and `member0_privk.pem`) **after you start the local instance**.
 
 ## Instructions
 
 All the commands must be run from the root of the repository.
 
-### CTS Operator
+### TS Operator
 
 1. Start the instance with a single admin (member):
 
@@ -28,25 +28,25 @@ All the commands must be run from the root of the repository.
     ./start.sh
     ```
 
-    Alternatively, set the `SCITT_URL` variable if you are targeting a remote instance already deployed and publicly accessible:
+    Alternatively, set the `SCITT_URL` variable if you are targeting a remote instance that is already deployed and publicly accessible:
 
     ```
     export SCITT_URL=<address>
     ```
 
-    If the `SCITT_URL` variable is not set, the scripts will target a local instance by default (`https://localhost:8000`).
+    If the `SCITT_URL` variable is not set, the scripts target a local instance by default (`https://localhost:8000`).
 
-2. Run the [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance.
+2. Run [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance.
 
     ```bash
     MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" SCITT_CONFIG_PATH="demo-poc/x509_roots/configuration.json" ./demo/cts_poc/1-operator-demo.sh
     ```
 
-### CTS client
+### TS Client
 
-#### Prepare payload to be signed
+#### Prepare a payload to sign
 
-You need to have a file to sign. There is a limit on the size of the payload (1MB) so it needs to be reasonably small.
+Create a file to sign. The payload size limit is 1 MB, so keep it reasonably small.
 
 ```bash
 echo '{"content":"some demo text"}' > demo-poc/payload.json
@@ -54,7 +54,7 @@ echo '{"content":"some demo text"}' > demo-poc/payload.json
 
 #### Sign the payload
 
-If you created your own certificate and key combination as mentioned in the prerequisites then the following command will create a signature.
+If you created your own certificate and key as described in the prerequisites, the following command creates a signature:
 
 ```bash
 ISSUER=$(cat demo-poc/x509_roots/issuer.txt)
@@ -65,17 +65,17 @@ CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roo
 
 Submit the COSE claim to the SCITT ledger and verify a receipt for the committed transaction by running the [`3-client-demo.sh`](3-client-demo.sh) script.
 
-The script will submit the COSE claim to the SCITT ledger and will wait for a receipt to be generated. Once the receipt is generated, the script will print the CBOR receipt in a readable format, and verify the receipt validity.
+The script submits the COSE claim, waits for a receipt to be generated, prints the CBOR receipt in a readable format, and verifies its validity.
 
 ```bash
 COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/3-client-demo.sh
 ```
 
-#### Known Issues and Workaround for Local Virtual Build
+#### Known Issues and Workaround (Local Virtual Build)
 
 - Proposal failing with 403
     > enclave:../src/node/rpc/member_frontend.h:103 - POST /gov/proposals returning error 403: Member m[1e6aee66336c09bf4random8b55398nodeb3d2e08478c092491459a6063] is not active.
 
-    This means the scitt instance is not configured properly.
-    _Workaround:_ To configure on local, run following command and re-try:
+    This means the SCITT instance is not configured properly.
+    _Workaround:_ To configure locally, run the following command and retry:
     > ./pyscitt.sh governance local_development --url $SCITT_URL

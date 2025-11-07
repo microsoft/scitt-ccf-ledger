@@ -198,6 +198,9 @@ def setup_local_development(client: Client, trust_store_dir: Optional[Path]):
 
     config = {
         "authentication": {"allowUnauthenticated": True},
+        "policy": {
+            "policyScript": "export function apply(phdr) { if (!phdr.cwt.iss) {return 'Issuer not found'} else return true; }"
+        },
     }
     proposal = governance.set_scitt_configuration_proposal(config)
     client.governance.propose(proposal, must_pass=True)
