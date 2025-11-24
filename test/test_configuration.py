@@ -378,7 +378,7 @@ return true;
 
         # Payload generated with a build of https://github.com/microsoft/CoseSignTool/commit/a3be7e5131ebfb2ecd2be923df6fb4b0336cbb4f
         # CoseSignTool/bin/virtual/Debug/net8.0/CoseSignTool sign -pfx ../cert.pfx -scitt -ep -p README.md
-        filepath = "test/payloads/cose-sign1-tool-scitt-defaults.cose"
+        filepath = "test/payloads/cosesign1tool-scitt-a3be7e5.cose"
         with open(filepath, "rb") as f:
             cose_sign1_tool_scitt_defaults = f.read()
 
