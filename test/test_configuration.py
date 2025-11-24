@@ -359,6 +359,37 @@ return true;
         transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
 
+    def test_cose_sign1_tool_with_scitt_defaults(
+        self, tmp_path, client: Client, configure_service
+    ):
+
+        policy_script = f"""
+export function apply(phdr) {{
+
+// Check exact issuer 
+if (phdr.cwt.iss !== "did:x509:0:sha256:_ZI-nfqGZ-fxTeeCyC31xeKEs30u3esA8mjXEgsDfTU::subject:CN:7931e33a-6d97-46e6-a796-ae51ab91f79f") {{ return "Invalid issuer"; }}
+if (phdr.cwt.sub !== "unknown.intent") {{ return "Invalid SVN"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+
+return true;
+}}"""
+
+        configure_service({"policy": {"policyScript": policy_script}})
+
+        # Payload generated with a build of https://github.com/microsoft/CoseSignTool/commit/a3be7e5131ebfb2ecd2be923df6fb4b0336cbb4f
+        # CoseSignTool/bin/virtual/Debug/net8.0/CoseSignTool sign -pfx ../cert.pfx -scitt -ep -p README.md
+        filepath = "test/payloads/cosesign1tool-scitt-a3be7e5.cose"
+        with open(filepath, "rb") as f:
+            cose_sign1_tool_scitt_defaults = f.read()
+
+        statement = client.submit_signed_statement_and_wait(
+            cose_sign1_tool_scitt_defaults
+        ).response_bytes
+
+        # store statement
+        transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
+        transparent_statement.write_bytes(statement)
+
     def test_payload_policy(self, client: Client, configure_service, signed_statement):
         configure_service(
             {

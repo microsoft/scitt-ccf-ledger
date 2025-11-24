@@ -63,7 +63,8 @@ namespace testutils
     return bytes;
   }
 
-  static std::vector<uint8_t> create_valid_protected_header_bytes()
+  static std::vector<uint8_t> create_valid_protected_header_bytes(
+    bool iat_is_tagged = false)
   {
     // create protected header
     std::vector<uint8_t> output(2200);
@@ -125,7 +126,15 @@ namespace testutils
       &ectx,
       cose::COSE_CWT_CLAIM_SUB,
       cbor::from_string("did:example:subject"));
-    QCBOREncode_AddDateEpochToMapN(&ectx, cose::COSE_CWT_CLAIM_IAT, 1622547800);
+    if (iat_is_tagged)
+    {
+      QCBOREncode_AddDateEpochToMapN(
+        &ectx, cose::COSE_CWT_CLAIM_IAT, 1622547800);
+    }
+    else
+    {
+      QCBOREncode_AddInt64ToMapN(&ectx, cose::COSE_CWT_CLAIM_IAT, 1622547800);
+    }
     QCBOREncode_AddInt64ToMap(&ectx, cose::SVN_HEADER_PARAM, 1);
     QCBOREncode_CloseMap(&ectx);
 
