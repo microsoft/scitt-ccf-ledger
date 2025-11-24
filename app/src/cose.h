@@ -473,7 +473,7 @@ namespace scitt::cose
 
     cwt_items[CWT_IAT_INDEX].label.int64 = COSE_CWT_CLAIM_IAT;
     cwt_items[CWT_IAT_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_DATE_EPOCH;
+    cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_ANY;
 
     cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
     cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
@@ -682,7 +682,23 @@ namespace scitt::cose
         parsed.cwt_claims.sub =
           cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
       }
-      if (cwt_items[CWT_IAT_INDEX].uDataType != QCBOR_TYPE_NONE)
+      // The correct expected type for iat(6) is an _untagged_ date epoch,
+      // i.e. an integer representing seconds since epoch.
+      // https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.6
+      // The "iat" (issued at) claim [...] except that the value is a
+      // NumericDate, as defined in Section 2 of this specification.
+      // https://www.rfc-editor.org/rfc/rfc8392.html#section-2
+      // except that it is represented as a CBOR numeric date
+      // (from Section 2.4.1 of [RFC7049])
+      // https://www.rfc-editor.org/rfc/rfc7049#section-2.4.1
+      // The encoding is modified so that the leading tag 1
+      // (epoch-based date/time) MUST be omitted.
+      if (cwt_items[CWT_IAT_INDEX].uDataType == QCBOR_TYPE_INT64)
+      {
+        parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.int64;
+      }
+      // However, some implementations tag iat(6) it as date epoch.
+      if (cwt_items[CWT_IAT_INDEX].uDataType == QCBOR_TYPE_DATE_EPOCH)
       {
         parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
       }
