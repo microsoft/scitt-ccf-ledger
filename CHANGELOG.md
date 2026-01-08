@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.16.2]
+### Changes
+- 7d26f4d Update CCF version from 6.0.15 to 6.0.17 (#344)
+- 09a998a Bump azurelinux/base/core from 3.0.20251106 to 3.0.20251206 in /docker (#343)
+- d561159 Allow untagged iat(6) values (#341)
+- 693dc69 Bump azurelinux/base/core from 3.0.20251030 to 3.0.20251106 in /docker (#342)
+- c8349d5 Readme improvements (#340)
+- 70d4b92 Bump azurelinux/base/core from 3.0.20250910 to 3.0.20251030 in /docker (#339)
+
 ## [0.16.1]
 ### Changes
 - 874f312 Refactor Dockerfile to enable Dependabot detection of Azure Linux base image (#336)
@@ -368,3 +377,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.15.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.15.2
 [0.16.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.0
 [0.16.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.1
+[0.16.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.2

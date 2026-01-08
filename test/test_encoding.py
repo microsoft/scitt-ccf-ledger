@@ -5,6 +5,7 @@ import struct
 from io import BytesIO
 
 import cbor2
+import cbor2._encoder
 import pycose
 import pytest
 from pycose.keys.cosekey import CoseKey
@@ -19,7 +20,7 @@ from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
-class NonCanonicalEncoder(cbor2.encoder.CBOREncoder):  # type: ignore[name-defined]
+class NonCanonicalEncoder(cbor2._encoder.CBOREncoder):  # type: ignore[name-defined]
     """
     A variant of cbor2's encoder that introduces deliberate non-canonical
     encodings.
@@ -40,9 +41,9 @@ class NonCanonicalEncoder(cbor2.encoder.CBOREncoder):  # type: ignore[name-defin
         super().__init__(fp, canonical=False)
 
         # There are two definitions in the C and Python modules. Make sure we support either.
-        self._encoders[cbor2.CBORTag] = self._encoders[cbor2.encoder.CBORTag]
+        self._encoders[cbor2.CBORTag] = self._encoders[cbor2._encoder.CBORTag]
         self._encoders[cbor2.CBORSimpleValue] = self._encoders[
-            cbor2.encoder.CBORSimpleValue
+            cbor2._encoder.CBORSimpleValue
         ]
 
     def encode_length(self, major_tag, length):
