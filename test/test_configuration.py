@@ -250,16 +250,7 @@ class TestPolicyEngine:
             ],
         }
 
-        policy_script = f"""
-export function apply(phdr) {{
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
-    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": policies.SVN[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.submit_signed_statement_and_wait(signed_statement)
