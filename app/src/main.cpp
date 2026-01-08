@@ -299,7 +299,8 @@ namespace scitt
             phdr,
             uhdr,
             payload,
-            details);
+            details,
+            cfg.policy.get_policy_rego_statement_limit());
           if (policy_violation_reason.has_value())
           {
             SCITT_DEBUG(

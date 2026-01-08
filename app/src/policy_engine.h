@@ -615,7 +615,8 @@ namespace scitt
     const cose::ProtectedHeader& phdr,
     const cose::UnprotectedHeader& uhdr,
     std::span<uint8_t> payload,
-    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details,
+    size_t statement_limit)
   {
     rego::Bundle bundle;
     try
@@ -629,6 +630,7 @@ namespace scitt
 
     auto input = rego_input_mapping(phdr, payload, details);
     rego::Interpreter interpreter;
+    interpreter.stmt_limit(statement_limit);
 
     auto tv = interpreter.set_input(input);
     if (tv != nullptr)
