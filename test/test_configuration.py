@@ -260,6 +260,37 @@ class TestPolicyEngine:
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
+    def test_statement_limit(
+        self,
+        client: Client,
+        configure_service,
+        cert_authority: X5ChainCertificateAuthority,
+    ):
+        example_eku = "2.999"
+
+        identity = cert_authority.create_identity(
+            alg="ES256", kty="ec", add_eku=example_eku
+        )
+
+        def didx509_issuer(ca):
+            root_cert = ca.cert_bundle
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
+            return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
+
+        issuer = didx509_issuer(cert_authority)
+        statement = {"foo": "bar"}
+        signed_statement = crypto.sign_json_statement(
+            identity, statement, feed="feed", svn=1, cwt=True
+        )
+        # Configure service with a very low statement limit
+        config = {
+            "policy": policies.DID_X509["rego"](issuer)
+            | {"policyRegoStatementLimit": 1}
+        }
+        configure_service(config)
+        with service_error("Maximum statement count reached"):
+            client.submit_signed_statement_and_wait(signed_statement)
+
     @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_pass_policy(
         self, client: Client, configure_service, signed_statement, lang
