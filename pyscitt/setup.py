@@ -28,7 +28,7 @@ setup(
         "ccf==6.*",
         "cryptography==44.*",  # needs to match ccf
         "httpx",
-        "cbor2==5.4.*",
+        "cbor2==5.8.*",
         "pycose==1.1.0",
         "pyjwt",
         "jwcrypto==1.5.*",
