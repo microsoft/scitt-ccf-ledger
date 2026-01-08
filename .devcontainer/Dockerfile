@@ -1,4 +1,4 @@
-ARG CCF_VERSION="6.0.15"
+ARG CCF_VERSION="6.0.17"
 ARG CCF_PLATFORM="virtual"
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
