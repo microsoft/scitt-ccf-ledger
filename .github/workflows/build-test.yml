@@ -53,7 +53,7 @@ jobs:
         run: |
           gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
           tdnf update -y
-          tdnf install -y build-essential ca-certificates git
+          tdnf install -y build-essential ca-certificates git rust
       - name: Checkout repository with tags
         uses: actions/checkout@v4
         with:
