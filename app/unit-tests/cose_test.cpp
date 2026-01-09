@@ -25,11 +25,15 @@ namespace
 {
   TEST(CoseTest, DecodeAllProtectedHeaders)
   {
-    auto phdr_b = create_valid_protected_header_bytes();
+    for (auto iat_is_tagged : {false, true})
+    {
+      auto phdr_b = create_valid_protected_header_bytes(iat_is_tagged);
 
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(&ctx, cbor::from_bytes(phdr_b), QCBOR_DECODE_MODE_NORMAL);
-    EXPECT_NO_THROW(cose::decode_protected_header(ctx));
+      QCBORDecodeContext ctx;
+      QCBORDecode_Init(
+        &ctx, cbor::from_bytes(phdr_b), QCBOR_DECODE_MODE_NORMAL);
+      EXPECT_NO_THROW(cose::decode_protected_header(ctx));
+    }
   }
 
   // add a test case to use payloads from test/payloads directory
