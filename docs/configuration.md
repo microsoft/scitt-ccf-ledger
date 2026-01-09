@@ -258,6 +258,7 @@ Function arguments:
     ```
 
 ### Policy Rego
+
 Rego code that determines whether an entry should be accepted. The package must be called "policy", and expose a rule called "allow" that must evaluate to `true` when the value of `input` is acceptable.
 
 The package can also expose an "errors" rule that must evaluate to an array of strings. The values, if set, will be returned to the caller as error reasons. This allows easy incremental definition of error reasons, for example:
@@ -351,6 +352,17 @@ Example `set_scitt_configuration` snippet:
   "policyRego": "package policy\ndefault allow := false\n allow if input.profile == \"X509\""
 }
 ```
+
+It is possible to configure a policy execution limit, specified in number of rego statements:
+
+```json
+"policy": {
+  "policyRego": "...",
+  "policyRegoStatementLimit": 2000
+}
+```
+
+The default value is 10000, if registration policy execution exceeds the limit, it will be aborted and an error message returned.
 
 ## CCF specific configuration
 
