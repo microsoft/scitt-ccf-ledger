@@ -87,6 +87,22 @@ namespace scitt
        */
       std::optional<PolicyScript> policy_script;
 
+      /**
+       * Rego policy to be applied to each incoming entry.
+       */
+      std::optional<PolicyRego> policy_rego;
+      /**
+       * Optional limit on the number of Rego statements that can be executed
+       * during policy evaluation. If not set, a default limit is applied
+       * (10,000).
+       */
+      std::optional<size_t> policy_rego_statement_limit;
+
+      size_t get_policy_rego_statement_limit() const
+      {
+        return policy_rego_statement_limit.value_or(10'000);
+      }
+
       std::vector<std::string> get_accepted_algorithms() const
       {
         if (accepted_algorithms.has_value())
@@ -137,7 +153,11 @@ namespace scitt
     accepted_algorithms,
     "acceptedAlgorithms",
     policy_script,
-    "policyScript");
+    "policyScript",
+    policy_rego,
+    "policyRego",
+    policy_rego_statement_limit,
+    "policyRegoStatementLimit");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);

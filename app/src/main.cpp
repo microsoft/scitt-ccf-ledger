@@ -286,8 +286,39 @@ namespace scitt
           throw BadRequestCborError(errors::InvalidInput, e.what());
         }
 
-        if (cfg.policy.policy_script.has_value())
+        // Use Rego policy if defined, otherwise use JS policy if defined
+        // If neither is defined, do not apply any policy, but reject if
+        // CWT issuer is present.
+        if (cfg.policy.policy_rego.has_value())
         {
+          SCITT_DEBUG("Using Rego Policy");
+          auto start = std::chrono::steady_clock::now();
+          const auto policy_violation_reason = check_for_policy_violations_rego(
+            cfg.policy.policy_rego.value(),
+            "configured_policy",
+            phdr,
+            uhdr,
+            payload,
+            details,
+            cfg.policy.get_policy_rego_statement_limit());
+          if (policy_violation_reason.has_value())
+          {
+            SCITT_DEBUG(
+              "Policy check failed: {}", policy_violation_reason.value());
+            throw BadRequestCborError(
+              errors::PolicyFailed,
+              fmt::format(
+                "Policy was not met: {}", policy_violation_reason.value()));
+          }
+          auto end = std::chrono::steady_clock::now();
+          auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          CCF_APP_DEBUG("Rego Policy check passed in {}us", elapsed.count());
+        }
+        else if (cfg.policy.policy_script.has_value())
+        {
+          SCITT_DEBUG("Using JS Policy");
+          auto start = std::chrono::steady_clock::now();
           const auto policy_violation_reason = check_for_policy_violations(
             cfg.policy.policy_script.value(),
             "configured_policy",
@@ -304,7 +335,10 @@ namespace scitt
               fmt::format(
                 "Policy was not met: {}", policy_violation_reason.value()));
           }
-          SCITT_DEBUG("Policy check passed");
+          auto end = std::chrono::steady_clock::now();
+          auto elapsed =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          CCF_APP_DEBUG("JS Policy check passed in {}us", elapsed.count());
         }
         else
         {
