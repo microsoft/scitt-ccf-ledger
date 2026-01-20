@@ -34,6 +34,10 @@ dotnet add package Azure.Security.CodeTransparency --prerelease
 - Package information and available versions: https://www.nuget.org/packages/Azure.Security.CodeTransparency 
 - Source code with usage samples: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/confidentialledger/Azure.Security.CodeTransparency 
 
+## CoseSignTool CLI
+
+CoseSignTool can sign payloads in COSE format which is accepted by the service. Please refer to its [GitHub repository](https://github.com/microsoft/CoseSignTool) and section about [SCITT compliance](https://github.com/microsoft/CoseSignTool/blob/main/docs/SCITTCompliance.md).
+
 ## Auditing tools
 
 To parse and verify the ledger files use the available ccf utilities, see [documentation](https://microsoft.github.io/CCF/main/audit/python_library.html):
