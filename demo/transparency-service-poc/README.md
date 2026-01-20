@@ -8,7 +8,7 @@ This demo is a generic proof of concept for a Transparency Service (TS) built on
 
     ```bash
     mkdir -p demo-poc/x509_roots
-    CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/cts_poc/0-cacerts-generator.sh
+    CACERT_OUTPUT_DIR="demo-poc/x509_roots" ./demo/transparency-service-poc/0-cacerts-generator.sh
     ```
 - `0-cacerts-generator.sh` also sets up the configuration file (see the [documentation](../../docs/configuration.md#scitt-configuration)).
 
@@ -39,7 +39,7 @@ All the commands must be run from the root of the repository.
 2. Run [`1-operator-demo.sh`](1-operator-demo.sh) to configure the instance.
 
     ```bash
-    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" SCITT_CONFIG_PATH="demo-poc/x509_roots/configuration.json" ./demo/cts_poc/1-operator-demo.sh
+    MEMBER_CERT_PATH="workspace/member0_cert.pem" MEMBER_KEY_PATH="workspace/member0_privk.pem" SCITT_CONFIG_PATH="demo-poc/x509_roots/configuration.json" ./demo/transparency-service-poc/1-operator-demo.sh
     ```
 
 ### TS Client
@@ -58,7 +58,7 @@ If you created your own certificate and key as described in the prerequisites, t
 
 ```bash
 ISSUER=$(cat demo-poc/x509_roots/issuer.txt)
-CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" DID_X509_ISSUER="$ISSUER" ./demo/cts_poc/2-claim-generator.sh
+CACERT_PATH="demo-poc/x509_roots/cacert.pem" PRIVATE_KEY_PATH="demo-poc/x509_roots/cacert_privk.pem" CLAIM_CONTENT_PATH="demo-poc/payload.json" COSE_CLAIMS_OUTPUT_PATH="demo-poc/payload.sig.cose" DID_X509_ISSUER="$ISSUER" ./demo/transparency-service-poc/2-claim-generator.sh
 ```
 
 #### Submit the COSE_Sign1 claim file
@@ -68,7 +68,7 @@ Submit the COSE claim to the SCITT ledger and verify a receipt for the committed
 The script submits the COSE claim, waits for a receipt to be generated, prints the CBOR receipt in a readable format, and verifies its validity.
 
 ```bash
-COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/cts_poc/3-client-demo.sh
+COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/transparency-service-poc/3-client-demo.sh
 ```
 
 #### Known Issues and Workaround (Local Virtual Build)
