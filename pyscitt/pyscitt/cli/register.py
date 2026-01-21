@@ -24,11 +24,9 @@ def register_signed_statement(
     if skip_confirmation:
         pending = client.submit_signed_statement(signed_statement)
         print(f"Submitted {path} as operation {pending.operation_tx}")
-        print(
-            """Confirmation of submission was skipped, the signed
+        print("""Confirmation of submission was skipped, the signed
               statement may not be registered on the ledger. 
-              A transparent statement will not be downloaded nor saved."""
-        )
+              A transparent statement will not be downloaded nor saved.""")
         return
 
     submission = client.submit_signed_statement_and_wait(signed_statement)
