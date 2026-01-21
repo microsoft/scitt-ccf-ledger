@@ -13,7 +13,6 @@ from uuid import uuid4
 
 warnings.filterwarnings("ignore", category=Warning)
 
-import cbor2
 import jwt
 import pycose.headers
 from cryptography import x509
@@ -47,6 +46,8 @@ from pycose.headers import CoseHeaderAttribute
 from pycose.keys.cosekey import CoseKey
 from pycose.keys.curves import P256, P384
 from pycose.messages import Sign1Message
+
+import cbor2
 
 RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 

@@ -8,14 +8,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
-import cbor2
 import ccf.receipt
-from cbor2 import CBORError
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import load_der_x509_certificate
 from pycose.headers import KID, X5chain, X5t
 from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
+
+import cbor2
+from cbor2 import CBORError
 
 from . import crypto
 
