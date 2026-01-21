@@ -25,7 +25,7 @@ async def race_tasks(*awaitables: CoroutineLike[Any]) -> None:
         tasks = [tg.create_task(a) for a in awaitables]
 
         try:
-            (done, pending) = await asyncio.wait(
+            done, pending = await asyncio.wait(
                 tasks, return_when=asyncio.FIRST_COMPLETED
             )
             # The default TaskGroup behaviour is to wait for all child tasks on
