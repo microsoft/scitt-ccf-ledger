@@ -11,13 +11,11 @@ You will:
 
 ## Limitations
 
-The Azure CLI `confcom` extension does not run on macOS, so you cannot deploy this demo from macOS using `az`.
-
-If you are on macOS, run these steps from a Linux machine or a Linux VM.
+The Azure CLI `confcom` extension does not run on macOS, so you cannot deploy this demo from macOS using `az`. If you are on macOS, run these steps from a Linux machine or a Linux VM.
 
 This demo deploys a single ledger node. In production, you should run at least three nodes so the service can recover if one node fails. For background, see https://microsoft.github.io/CCF/main/operations/start_network.html.
 
-This demo uses the service IP address directly (no DNS). That makes end-to-end TLS verification harder, because the service certificate typically does not include the public IP address in its Subject Alternative Name (SAN). In practice, this means tools like `curl` may reject the connection unless you disable hostname verification.
+This demo uses the service IP address directly (no DNS). The IP will be known only after deployment and that makes end-to-end TLS verification harder. In practice, this means tools like `curl` may reject the connection unless you disable hostname verification or circumvent it through a local DNS resolver.
 
 ## Prerequisites
 
