@@ -191,13 +191,19 @@ az storage file download --path service_cert.pem --share-name configshare --acco
 
 #### (Optional) Test the service endpoint
 
-Because this demo uses an IP address (not DNS), the certificate may not match the host name that `curl` verifies.
+Because this demo uses an IP address (not DNS), the node certificate may not match the host name that `curl` verifies. The node certificate will contain SAN entries that were provided in the startup configuration under `node_certificate.subject_alt_names`.
 
-```bash
-curl --cacert service_cert.pem -k "$SCITT_URL/version"
-```
+- To avoid hostname verification issues, you can disable it with the `-k` flag in `curl`.
 
-The `-k` flag disables hostname verification. Use it for this demo, but avoid it in production.
+    ```bash
+    curl --cacert service_cert.pem -k "$SCITT_URL/version"
+    ```
+
+- Alternatively, you can use `--resolve` to map a expected DNS name to the IP address.
+
+    ```bash
+    curl --cacert service_cert.pem --resolve "ccf.dummy.com:8000:20.67.206.104" https://ccf.dummy.com:8000/version"
+    ```
 
 ## Open service
 
