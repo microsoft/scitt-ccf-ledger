@@ -31,7 +31,7 @@ fi
 
 source scripts/venv/bin/activate
 echo "Using pip index URL: ${PIP_INDEX_URL:-default}"
-pip install --disable-pip-version-check -q -U black isort mypy wheel
+pip install --disable-pip-version-check -q -U wheel
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
@@ -40,11 +40,11 @@ mypy -V
 git ls-files | grep -e '\.py$' | xargs mypy
 
 echo "-- Python imports"
-isort --version
+isort --version-number
 if [ $FIX -ne 0 ]; then
    git ls-files | grep -e '\.py$' | xargs isort
 else
-   git ls-files | grep -e '\.py$' | xargs isort --check
+   git ls-files | grep -e '\.py$' | xargs isort --check --diff
 fi
 
 echo "-- Python format"
