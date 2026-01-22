@@ -6,6 +6,7 @@ import json
 import os.path
 from hashlib import sha256
 
+import cbor2
 import pycose
 import pytest
 from cryptography import x509
@@ -16,7 +17,6 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from pycose.keys.cosekey import CoseKey
 
-import cbor2
 from pyscitt import crypto
 from pyscitt.client import Client
 

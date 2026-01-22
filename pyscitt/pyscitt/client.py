@@ -13,10 +13,9 @@ from http import HTTPStatus
 from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
 from urllib.parse import urlencode
 
+import cbor2
 import httpx
 from loguru import logger as LOG
-
-import cbor2
 
 from . import crypto
 from .governance import GovernanceClient

@@ -10,6 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Dict, Optional
 
+import cbor2
 import ccf.cose
 import httpx
 from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
@@ -26,8 +27,6 @@ from jwcrypto import jwk
 from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
-
-import cbor2
 
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims

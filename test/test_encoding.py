@@ -4,13 +4,13 @@
 import struct
 from io import BytesIO
 
+import cbor2
+import cbor2._encoder
 import pycose
 import pytest
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-import cbor2
-import cbor2._encoder
 from pyscitt import crypto
 from pyscitt.client import Client
 from pyscitt.crypto import CWT_ISS, CWTClaims, cert_pem_to_der

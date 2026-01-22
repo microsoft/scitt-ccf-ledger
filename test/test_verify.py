@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import ANY, DEFAULT, MagicMock, Mock, patch
 
+import cbor2
 import httpx
 import pytest
 from cryptography import x509
@@ -17,7 +18,6 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
-import cbor2
 from pyscitt.crypto import CWT_ISS, CWTClaims
 from pyscitt.verify import DynamicTrustStore, DynamicTrustStoreClient
 

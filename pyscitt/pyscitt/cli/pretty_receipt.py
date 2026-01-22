@@ -6,9 +6,8 @@ import json
 from pathlib import Path
 from typing import Union
 
-from pycose.messages import Sign1Message
-
 import cbor2
+from pycose.messages import Sign1Message
 
 from ..receipt import Receipt, cbor_to_printable
 
