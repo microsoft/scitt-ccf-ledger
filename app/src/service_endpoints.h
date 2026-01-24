@@ -218,6 +218,8 @@ namespace scitt
         ccf::json_adapter(endpoints::get_service_parameters),
         no_authn_policy)
       .set_auto_schema<void, GetServiceParameters::Out>()
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
 
     /**
@@ -237,6 +239,7 @@ namespace scitt
         no_authn_policy)
       .set_auto_schema<void, GetHistoricServiceParameters::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
 
     /**
@@ -251,6 +254,8 @@ namespace scitt
         ccf::json_adapter(endpoints::get_configuration),
         no_authn_policy)
       .set_auto_schema<void, Configuration>()
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
 
     /**
@@ -266,6 +271,7 @@ namespace scitt
         no_authn_policy)
       .set_auto_schema<void, GetVersion::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
 
     /**
@@ -281,6 +287,8 @@ namespace scitt
         ccf::json_adapter(
           std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
         no_authn_policy)
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
 
     /**
@@ -293,6 +301,8 @@ namespace scitt
         HTTP_GET,
         get_transparency_config,
         no_authn_policy)
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
   }
 }
