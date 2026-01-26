@@ -403,7 +403,9 @@ class BaseClient:
                 if location:
                     redirects += 1
                     if redirects > max_redirects:
-                        raise ValueError(f"Too many redirects (exceeded {max_redirects})")
+                        raise ValueError(
+                            f"Too many redirects (exceeded {max_redirects})"
+                        )
                     # Resolve relative URLs against the current base URL
                     url = str(httpx.URL(location))
                     LOG.debug(f"Following redirect to {url}")

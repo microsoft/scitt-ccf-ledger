@@ -357,7 +357,8 @@ namespace scitt
         operation_locally_committed_func,
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Always)
-        .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::ToPrimary)
+        .set_redirection_strategy(
+          ccf::endpoints::RedirectionStrategy::ToPrimary)
         .install();
 
       auto is_tx_committed =
