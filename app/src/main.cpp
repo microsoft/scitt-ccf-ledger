@@ -356,6 +356,9 @@ namespace scitt
         register_signed_statement,
         operation_locally_committed_func,
         authn_policy)
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Always)
+        .set_redirection_strategy(
+          ccf::endpoints::RedirectionStrategy::ToPrimary)
         .install();
 
       auto is_tx_committed =
@@ -403,6 +406,7 @@ namespace scitt
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
 
       static constexpr auto get_entry_statement_path =
@@ -459,6 +463,7 @@ namespace scitt
           get_entry_statement, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
 
       static constexpr auto get_entries_tx_ids_path = "/entries/txIds";
@@ -599,6 +604,8 @@ namespace scitt
           "from", ccf::endpoints::QueryParamPresence::OptionalParameter)
         .add_query_parameter<size_t>(
           "to", ccf::endpoints::QueryParamPresence::OptionalParameter)
+        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+        .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
 
       register_service_endpoints(context, *this);
