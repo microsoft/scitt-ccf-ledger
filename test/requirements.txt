@@ -10,3 +10,6 @@ jwcrypto==1.5.*
 types-jwcrypto
 cbor2
 polars
+black==26.1.0
+isort==6.1.0
+mypy==1.19.1

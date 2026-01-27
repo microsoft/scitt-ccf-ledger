@@ -439,6 +439,7 @@ namespace scitt
       .make_endpoint(
         "/operations/{txid}", HTTP_GET, get_op_with_status, authn_policy)
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
   }
 
