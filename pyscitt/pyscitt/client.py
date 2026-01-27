@@ -313,6 +313,7 @@ class BaseClient:
         retry_on=[],
         sign_request=False,
         wait_for_confirmation=False,
+        follow_redirects=True,
         **kwargs,
     ) -> httpx.Response:
         """
@@ -332,6 +333,10 @@ class BaseClient:
             client will wait for confirmation and raise an error if the transaction was rolled-back.
             Otherwise, any write to the key-value store caused by this request could be silently
             rolled-back.
+
+        follow_redirects:
+            If True (default), automatically follow 307 and 308 redirect responses, preserving
+            all headers and request metadata. If False, return the redirect response as-is.
 
         Other keyword-arguments are passed to httpx.
         """
@@ -386,9 +391,25 @@ class BaseClient:
         timeout = 30
         deadline = time.monotonic() + timeout
         attempt = 1
+        redirects = 0
+        max_redirects = 5
         response_error = None
         while True:
             response = self.session.request(method, url, **kwargs)
+
+            # Handle 307/308 redirects while preserving headers and request metadata
+            if follow_redirects and response.status_code in (307, 308):
+                location = response.headers.get("location")
+                if location:
+                    redirects += 1
+                    if redirects > max_redirects:
+                        raise ValueError(
+                            f"Too many redirects (exceeded {max_redirects})"
+                        )
+                    # Resolve relative URLs against the current base URL
+                    url = str(httpx.URL(location))
+                    LOG.debug(f"Following redirect to {url}")
+                    continue
 
             log_parts = [method, url]
             if attempt > 1:
