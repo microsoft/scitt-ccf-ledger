@@ -1,6 +1,6 @@
 # Preparing signatures for the service
 
-Signature envelopes (payloads) must be COSE_Sign1 structures as defined in [RFC 8152](https://datatracker.ietf.org/doc/html/rfc8152) but with the specific claims as documented in the [inputs explanation](../../docs/inputs.md).
+Signature envelopes (payloads) must be COSE_Sign1 structures as defined in [RFC 9052](https://datatracker.ietf.org/doc/html/rfc9052) but with the specific claims as documented in the [inputs explanation](../../docs/inputs.md).
 
 ## Available tools
 
