@@ -30,7 +30,7 @@ COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 
 # Install dependencies and CCF development package
 RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git && \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ./ccf.rpm
 
