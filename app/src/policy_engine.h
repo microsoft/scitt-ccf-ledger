@@ -518,15 +518,18 @@ namespace scitt
     auto alg = phdr.alg.has_value() ?
       rego::scalar(rego::BigInt(phdr.alg.value())) :
       rego::Null;
-    trieste::Node cty_node;
-    if (std::holds_alternative<std::string>(phdr.cty.value()))
+    trieste::Node cty_node = rego::Null;
+    if (phdr.cty.has_value())
     {
-      cty_node = rego::scalar(std::get<std::string>(phdr.cty.value()));
-    }
-    else if (std::holds_alternative<int64_t>(phdr.cty.value()))
-    {
-      cty_node =
-        rego::scalar(rego::BigInt(std::get<int64_t>(phdr.cty.value())));
+      const auto& cty_value = phdr.cty.value();
+      if (std::holds_alternative<std::string>(cty_value))
+      {
+        cty_node = rego::scalar(std::get<std::string>(cty_value));
+      }
+      else if (std::holds_alternative<int64_t>(cty_value))
+      {
+        cty_node = rego::scalar(rego::BigInt(std::get<int64_t>(cty_value)));
+      }
     }
     auto phdr_ = rego::object(
       {rego::object_item(rego::scalar("alg"), alg),
