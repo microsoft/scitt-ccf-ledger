@@ -119,15 +119,16 @@ EOL >> test-config.json;
 Alternatively, to set a Rego policy:
 
 ```sh
+echo <<< EOL
 {
     "policy": {
-        "policyRego": "\npackage policy\ndefault allow := false\nissuer_allowed if {\n    input.phdr["CWT Claims"].iss == "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13"\n}\nseconds_since_epoch := time.now_ns() / 1000000000\niat_in_the_past if {\n    input.phdr["CWT Claims"].iat < seconds_since_epoch\n}\nsvn_positive if {\n    input.phdr["CWT Claims"]._svn >= 0\n}\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_positive\n}\n"
+        "policyRego": "\npackage policy\ndefault allow := false\nissuer_allowed if {\n    input.phdr[\"CWT Claims\"].iss == \"did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13\"\n}\nseconds_since_epoch := time.now_ns() / 1000000000\niat_in_the_past if {\n    input.phdr[\"CWT Claims\"].iat < seconds_since_epoch\n}\nsvn_positive if {\n    input.phdr[\"CWT Claims\"]._svn >= 0\n}\nallow if {\n    issuer_allowed\n    iat_in_the_past\n    svn_positive\n}\n"
     },
     "authentication": {
         "allowUnauthenticated": true
     }
 }
-EOL >> test-config.json
+EOL >> test-config.json;
 ```
 
 The configuration can be pushed with the following command:
