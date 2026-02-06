@@ -76,7 +76,7 @@ class Bencher:
             with open(BENCHER_FILE, "w+") as bf:
                 json.dump({}, bf)
 
-    def set(self, key: str, metric: Union[Latency, Throughput, Memory]):
+    def set(self, key: str, metric: Union[Latency, Throughput, Memory, Rate]):
         with open(BENCHER_FILE, "r") as bf:
             data = json.load(bf)
         metric_val = dataclasses.asdict(metric)

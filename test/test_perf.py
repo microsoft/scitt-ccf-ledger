@@ -1,7 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import cast
 
 import pycose
@@ -12,7 +14,7 @@ from pyscitt import crypto
 from pyscitt.client import Client
 
 from .infra.assertions import service_error
-from .infra.bencher import Bencher, Latency
+from .infra.bencher import Bencher, Latency, Throughput
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 X509_HASHV_POLICY_SCRIPT = f"""
@@ -104,3 +106,76 @@ def test_statement_latency(
     print(df.describe())
 
     bf.set(f"Fetch Receipt {test_name}", latency(df))
+
+
+@pytest.mark.parametrize("signed_statement_path, test_name", TEST_VECTORS)
+@pytest.mark.bencher
+def test_write_throughput(
+    client: Client, configure_service, signed_statement_path: str, test_name: str
+):
+    """
+    Measure how many submissions can be made per second using concurrent
+    requests over a fixed time window.
+    """
+    client.wait_time = 0.001
+    policy_script = TEST_POLICY_SCRIPTS[test_name]
+
+    configure_service({"policy": {"policyScript": policy_script}})
+
+    with open(signed_statement_path, "rb") as f:
+        signed_statement = f.read()
+
+    duration_s = 30
+    max_workers = 16
+    warmup_requests = max_workers
+    lock = threading.Lock()
+    completed_count = 0
+    errors = 0
+    last_error = None
+    stop = False
+
+    def _submit():
+        nonlocal completed_count, errors, last_error
+        while not stop:
+            try:
+                client.submit_signed_statement(signed_statement)
+                with lock:
+                    completed_count += 1
+            except Exception as e:
+                with lock:
+                    errors += 1
+                    last_error = e
+
+    # Warmup: establish connections and warm caches before measuring
+    for _ in range(warmup_requests):
+        client.submit_signed_statement(signed_statement)
+
+    start = time.monotonic()
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_submit) for _ in range(max_workers)]
+        time.sleep(duration_s)
+        stop = True
+        for fut in futures:
+            fut.result()  # propagate any unexpected exceptions
+    elapsed = time.monotonic() - start
+
+    submissions_per_second = completed_count / elapsed
+    error_rate = errors / max(completed_count + errors, 1)
+
+    print(f"Throughput {test_name}: {completed_count} submissions in {elapsed:.2f}s")
+    print(f"  Rate: {submissions_per_second:.2f} submissions/s")
+    print(f"  Errors: {errors} ({error_rate:.1%})")
+    if last_error:
+        print(f"  Last error: {last_error}")
+
+    assert error_rate < 0.01, (
+        f"Error rate too high: {error_rate:.1%} ({errors}/{completed_count + errors}). "
+        f"Last error: {last_error}"
+    )
+    assert submissions_per_second > 0, "No successful submissions"
+
+    bf = Bencher()
+    bf.set(
+        f"Throughput {test_name}",
+        Throughput(value=submissions_per_second),
+    )

@@ -13,3 +13,6 @@ polars
 black==26.1.0
 isort==6.1.0
 mypy==1.19.1
+matplotlib
+pandas
+numpy
