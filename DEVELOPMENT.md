@@ -166,6 +166,17 @@ A basic set of performance indicators can be obtained by building the project, a
 
 Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
 
+### Load tests
+
+To run load tests, you can use the `load_test.py` script located in the `tests` directory. This script allows you to simulate a high load on the scitt-ccf-ledger application and measure its performance under stress.
+
+```bash
+PLATFORM=virtual ./docker/build.sh
+PLATFORM=virtual DOCKER=1 ./run_functional_tests.sh -m perf -k test_load --enable-perf
+```
+
+The output will be stored in the `tests/load_test/locust_stats.json` file, and the chart images generated in `tests/load_test/charts`.
+
 ### Address sanitization
 
 To enable ASan it is necessary to build CCF from source:
