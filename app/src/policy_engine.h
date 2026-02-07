@@ -8,9 +8,108 @@
 #include "tracing.h"
 #include "verified_details.h"
 
+#include <ccf/crypto/sha256_hash.h>
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
+#include <chrono>
+#include <rego/rego.hh>
 #include <string>
+
+namespace
+{
+  std::string string_from_term(const trieste::Node& term)
+  {
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto maybe_string = rego::try_get_string(term);
+    if (!maybe_string.has_value())
+    {
+      throw std::domain_error(
+        fmt::format("Expected string, got {}", term->str()));
+    }
+
+    return maybe_string.value();
+  }
+
+  trieste::Node set_from_terms(const trieste::Node& terms)
+  {
+    auto term = terms->front();
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto set = term->front();
+    if (set->type() != rego::Set || set->empty())
+    {
+      throw std::domain_error(fmt::format("Expected set, got {}", set->str()));
+    }
+
+    return set;
+  }
+
+  bool bool_from_terms(const trieste::Node& terms)
+  {
+    auto term = terms->front();
+    if (term->type() != rego::Term || term->empty())
+    {
+      throw std::domain_error(
+        fmt::format("Expected term, got {}", term->str()));
+    }
+
+    auto maybe_bool = rego::try_get_bool(term);
+    if (!maybe_bool.has_value())
+    {
+      throw std::domain_error(
+        fmt::format("Expected boolean, got {}", term->str()));
+    }
+
+    return maybe_bool.value();
+  }
+
+  class BundleWrapper
+  {
+    rego::Bundle bundle;
+    ccf::crypto::Sha256Hash policy_digest = {};
+
+  public:
+    rego::Bundle load_policy(const std::string& policy)
+    {
+      auto new_digest = ccf::crypto::Sha256Hash(policy);
+      if (new_digest != policy_digest)
+      {
+        rego::Interpreter interpreter;
+        auto rv = interpreter.add_module("policy.rego", policy);
+        if (rv != nullptr)
+        {
+          CCF_APP_FAIL(
+            "Failed to load policy: {}", interpreter.output_to_string(rv));
+          throw std::domain_error("Invalid policy module (add_module)");
+        }
+        interpreter.entrypoints({"policy/allow", "policy/errors"});
+        trieste::Node bundle_node = interpreter.build();
+        if (bundle_node->type() == rego::ErrorSeq)
+        {
+          CCF_APP_FAIL(
+            "Failed to build policy bundle: {}",
+            interpreter.output_to_string(bundle_node));
+          throw std::domain_error("Invalid policy module (build)");
+        }
+        bundle = rego::BundleDef::from_node(bundle_node);
+        policy_digest = new_digest;
+      }
+
+      return bundle;
+    }
+  };
+
+  thread_local BundleWrapper bundle_wrapper;
+}
 
 namespace scitt
 {
@@ -297,6 +396,7 @@ namespace scitt
       std::span<uint8_t> payload,
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
+      auto start = std::chrono::steady_clock::now();
       // Allow the policy to access common globals (including shims for
       // builtins) like "console", "ccf.crypto"
       ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
@@ -313,6 +413,12 @@ namespace scitt
           scitt::errors::PolicyError,
           fmt::format("Invalid policy module: {}", e.what()));
       }
+
+      auto end = std::chrono::steady_clock::now();
+      auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS runtime setup in {}us", elapsed.count());
+      start = std::chrono::steady_clock::now();
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
       auto uhdr_val = unprotected_header_to_js_val(interpreter, uhdr);
@@ -344,6 +450,11 @@ namespace scitt
             reason,
             trace.value_or("<no trace>")));
       }
+
+      end = std::chrono::steady_clock::now();
+      elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      CCF_APP_INFO("JS input construction and eval in {}us", elapsed.count());
 
       if (result.is_str())
       {
@@ -378,5 +489,217 @@ namespace scitt
   {
     return js::apply_js_policy(
       script, policy_name, phdr, uhdr, payload, details);
+  }
+
+  using PolicyRego = std::string;
+
+  static inline trieste::Node rego_input_mapping(
+    const cose::ProtectedHeader& phdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
+  {
+    auto iss = phdr.cwt_claims.iss.has_value() ?
+      rego::scalar(phdr.cwt_claims.iss.value()) :
+      rego::Null;
+    auto sub = phdr.cwt_claims.sub.has_value() ?
+      rego::scalar(phdr.cwt_claims.sub.value()) :
+      rego::Null;
+    auto iat = phdr.cwt_claims.iat.has_value() ?
+      rego::scalar(rego::BigInt(phdr.cwt_claims.iat.value())) :
+      rego::Null;
+    auto svn = phdr.cwt_claims.svn.has_value() ?
+      rego::scalar(rego::BigInt(phdr.cwt_claims.svn.value())) :
+      rego::Null;
+    auto cwt_claims = rego::object(
+      {rego::object_item(rego::scalar("iss"), iss),
+       rego::object_item(rego::scalar("sub"), sub),
+       rego::object_item(rego::scalar("iat"), iat),
+       rego::object_item(rego::scalar("_svn"), svn)});
+    auto alg = phdr.alg.has_value() ?
+      rego::scalar(rego::BigInt(phdr.alg.value())) :
+      rego::Null;
+    trieste::Node cty_node = rego::Null;
+    if (phdr.cty.has_value())
+    {
+      const auto& cty_value = phdr.cty.value();
+      if (std::holds_alternative<std::string>(cty_value))
+      {
+        cty_node = rego::scalar(std::get<std::string>(cty_value));
+      }
+      else if (std::holds_alternative<int64_t>(cty_value))
+      {
+        cty_node = rego::scalar(rego::BigInt(std::get<int64_t>(cty_value)));
+      }
+    }
+    auto phdr_ = rego::object(
+      {rego::object_item(rego::scalar("alg"), alg),
+       rego::object_item(rego::scalar("cty"), cty_node),
+       rego::object_item(rego::scalar("CWT Claims"), cwt_claims)});
+    auto payload_ = rego::scalar(ccf::ds::to_hex(payload));
+    auto rego_input = rego::object(
+      {rego::object_item(rego::scalar("phdr"), phdr_),
+       rego::object_item(rego::scalar("payload"), payload_)});
+
+    if (details.has_value())
+    {
+      auto measurement = rego::scalar(details->get_measurement().hex_str());
+      auto report_data = rego::scalar(details->get_report_data().hex_str());
+      auto host_data = rego::scalar(ccf::ds::to_hex(details->get_host_data()));
+      // Reported TCB
+      const auto& tcb = details->get_tcb_version_policy();
+      auto reported_tcb = rego::object(
+        {rego::object_item(
+           rego::scalar("microcode"),
+           tcb.microcode.has_value() ?
+             rego::scalar(
+               rego::BigInt(static_cast<uint64_t>(tcb.microcode.value()))) :
+             rego::Null),
+         rego::object_item(
+           rego::scalar("snp"),
+           tcb.snp.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.snp.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("tee"),
+           tcb.tee.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.tee.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("boot_loader"),
+           tcb.boot_loader.has_value() ?
+             rego::scalar(
+               rego::BigInt(static_cast<uint64_t>(tcb.boot_loader.value()))) :
+             rego::Null),
+         rego::object_item(
+           rego::scalar("fmc"),
+           tcb.fmc.has_value() ? rego::scalar(rego::BigInt(
+                                   static_cast<uint64_t>(tcb.fmc.value()))) :
+                                 rego::Null),
+         rego::object_item(
+           rego::scalar("hexstring"),
+           tcb.hexstring.has_value() ? rego::scalar(tcb.hexstring.value()) :
+                                       rego::Null)});
+      auto product_name =
+        rego::scalar(ccf::pal::snp::to_string(details->get_product_name()));
+
+      auto attestation = rego::object(
+        {rego::object_item(rego::scalar("measurement"), measurement),
+         rego::object_item(rego::scalar("report_data"), report_data),
+         rego::object_item(rego::scalar("host_data"), host_data),
+         rego::object_item(rego::scalar("reported_tcb"), reported_tcb),
+         rego::object_item(rego::scalar("product_name"), product_name)});
+      // Documented in
+      // https://github.com/microsoft/confidential-aci-examples/blob/main/docs/Confidential_ACI_SCHEME.md#reference-info-base64
+      // Eventually expected to become a CWT Claims object
+      if (details->get_uvm_endorsements().has_value())
+      {
+        const auto& uvm_endorsements = details->get_uvm_endorsements().value();
+        auto uvm_obj = rego::object(
+          {rego::object_item(
+             rego::scalar("did"), rego::scalar(uvm_endorsements.did)),
+           rego::object_item(
+             rego::scalar("feed"), rego::scalar(uvm_endorsements.feed)),
+           rego::object_item(
+             rego::scalar("svn"), rego::scalar(uvm_endorsements.svn))});
+        attestation->push_back(
+          rego::object_item(rego::scalar("uvm_endorsements"), uvm_obj));
+      }
+
+      rego_input->push_back(
+        rego::object_item(rego::scalar("attestation"), attestation));
+    }
+
+    return rego_input;
+  }
+
+  static inline std::optional<std::string> check_for_policy_violations_rego(
+    const PolicyRego& rego,
+    const std::string& policy_name,
+    const cose::ProtectedHeader& phdr,
+    const cose::UnprotectedHeader& uhdr,
+    std::span<uint8_t> payload,
+    const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details,
+    size_t statement_limit)
+  {
+    rego::Bundle bundle;
+    try
+    {
+      bundle = bundle_wrapper.load_policy(rego);
+    }
+    catch (const std::domain_error& e)
+    {
+      throw BadRequestCborError(scitt::errors::PolicyError, e.what());
+    }
+
+    auto input = rego_input_mapping(phdr, payload, details);
+    rego::Interpreter interpreter;
+    interpreter.stmt_limit(statement_limit);
+
+    auto tv = interpreter.set_input(input);
+    if (tv != nullptr)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError, "Invalid policy input");
+    }
+
+    auto rego_output =
+      rego::Output(interpreter.query_bundle(bundle, "policy/allow"));
+
+    if (!rego_output.ok())
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format(
+          "Error while applying policy: {}",
+          fmt::join(rego_output.errors(), ", ")));
+    }
+
+    try
+    {
+      if (bool_from_terms(rego_output.expressions()))
+      {
+        return std::nullopt;
+      }
+    }
+    catch (const std::exception& e)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Could not interpret policy result: {}", e.what()));
+    }
+
+    auto error_output =
+      rego::Output(interpreter.query_bundle(bundle, "policy/errors"));
+
+    if (!error_output.ok())
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format(
+          "Error while retrieving policy errors: {}",
+          fmt::join(error_output.errors(), ", ")));
+    }
+
+    try
+    {
+      auto error_set = set_from_terms(error_output.expressions());
+      std::ostringstream buf;
+      for (const auto& child : *error_set)
+      {
+        if (!buf.str().empty())
+        {
+          buf << ", ";
+        }
+        buf << string_from_term(child);
+      }
+
+      return buf.str();
+    }
+    catch (const std::domain_error& e)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        fmt::format("Could not interpret policy errors: {}", e.what()));
+    }
   }
 }
