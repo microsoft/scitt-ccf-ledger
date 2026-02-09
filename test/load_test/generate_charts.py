@@ -48,7 +48,7 @@ def expand_response_times(response_times_dict):
     return np.array(times)
 
 
-def generate_charts(stats, output_dir, peak_users, spawn_rate):
+def generate_charts(stats, output_dir, peak_users, spawn_rate, docker_stats=None):
     """Generate and save all load test charts to output_dir."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -280,6 +280,125 @@ def generate_charts(stats, output_dir, peak_users, spawn_rate):
         f"  Polls per Submission:   {get_stats['num_requests']/post_stats['num_requests']:.1f}x",
     ]
 
+    # --- Chart 4: Docker Resource Usage (if available) ---
+    if docker_stats is not None and docker_stats.get("samples"):
+        samples = docker_stats["samples"]
+        df_docker = pd.DataFrame(samples)
+
+        fig, (ax_cpu, ax_mem) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
+
+        ax_cpu.plot(
+            df_docker["elapsed_seconds"],
+            df_docker["cpu_percent"],
+            color="#E91E63",
+            linewidth=1.2,
+            alpha=0.8,
+            label="CPU %",
+        )
+        cpu_mean = df_docker["cpu_percent"].mean()
+        cpu_max = df_docker["cpu_percent"].max()
+        ax_cpu.axhline(
+            y=cpu_mean,
+            color="#4CAF50",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"Mean: {cpu_mean:.1f}%",
+        )
+        ax_cpu.axhline(
+            y=cpu_max,
+            color="#F44336",
+            linestyle=":",
+            linewidth=1,
+            alpha=0.6,
+            label=f"Max: {cpu_max:.1f}%",
+        )
+        ax_cpu.axvspan(
+            0,
+            ramp_up_seconds,
+            alpha=0.08,
+            color="orange",
+            label=f"Ramp-up ({ramp_up_seconds:.0f}s)",
+        )
+        ax_cpu.fill_between(
+            df_docker["elapsed_seconds"],
+            df_docker["cpu_percent"],
+            alpha=0.15,
+            color="#E91E63",
+        )
+        ax_cpu.set_ylabel("CPU Usage (%)")
+        ax_cpu.set_title(
+            f"Docker Container CPU Usage — {docker_stats.get('container', 'unknown')}"
+        )
+        ax_cpu.legend(loc="upper left")
+        ax_cpu.grid(True, alpha=0.3)
+
+        ax_mem.plot(
+            df_docker["elapsed_seconds"],
+            df_docker["mem_used_mb"],
+            color="#673AB7",
+            linewidth=1.2,
+            alpha=0.8,
+            label="Memory Used (MB)",
+        )
+        mem_mean = df_docker["mem_used_mb"].mean()
+        mem_max = df_docker["mem_used_mb"].max()
+        ax_mem.axhline(
+            y=mem_mean,
+            color="#4CAF50",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"Mean: {mem_mean:.0f} MB",
+        )
+        ax_mem.axhline(
+            y=mem_max,
+            color="#F44336",
+            linestyle=":",
+            linewidth=1,
+            alpha=0.6,
+            label=f"Max: {mem_max:.0f} MB",
+        )
+        ax_mem.axvspan(0, ramp_up_seconds, alpha=0.08, color="orange")
+        ax_mem.fill_between(
+            df_docker["elapsed_seconds"],
+            df_docker["mem_used_mb"],
+            alpha=0.15,
+            color="#673AB7",
+        )
+        if df_docker["mem_limit_mb"].max() > 0:
+            mem_limit = df_docker["mem_limit_mb"].iloc[0]
+            ax_mem.axhline(
+                y=mem_limit,
+                color="#FF5722",
+                linestyle="-",
+                linewidth=1,
+                alpha=0.4,
+                label=f"Limit: {mem_limit:.0f} MB",
+            )
+        ax_mem.set_xlabel("Elapsed Time (seconds)")
+        ax_mem.set_ylabel("Memory Usage (MB)")
+        ax_mem.set_title(
+            f"Docker Container Memory Usage — {docker_stats.get('container', 'unknown')}"
+        )
+        ax_mem.legend(loc="upper left")
+        ax_mem.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        fig.savefig(output_dir / "docker_resource_usage.png", dpi=150)
+        plt.close(fig)
+
+        # Append resource stats to summary
+        summary_lines += [
+            "",
+            f"Docker Resource Usage ({docker_stats.get('container', 'N/A')})",
+            "-" * 40,
+            f"  Samples Collected:  {len(samples)}",
+            f"  CPU Mean:           {cpu_mean:.1f}%",
+            f"  CPU Max:            {cpu_max:.1f}%",
+            f"  Memory Mean:        {mem_mean:.0f} MB",
+            f"  Memory Max:         {mem_max:.0f} MB",
+            f"  Memory Limit:       {df_docker['mem_limit_mb'].iloc[0]:.0f} MB",
+        ]
+
     summary_text = "\n".join(summary_lines)
     (output_dir / "summary.txt").write_text(summary_text)
     print(summary_text)
@@ -288,6 +407,8 @@ def generate_charts(stats, output_dir, peak_users, spawn_rate):
     print("  - rps_over_time.png")
     print("  - response_time_distribution.png")
     print("  - rampup_vs_throughput.png")
+    if docker_stats is not None and docker_stats.get("samples"):
+        print("  - docker_resource_usage.png")
     print("  - summary.txt")
 
 
@@ -313,10 +434,19 @@ def main():
         default=20,
         help="User spawn rate per second (default: 20)",
     )
+    parser.add_argument(
+        "--docker-stats",
+        type=Path,
+        default=None,
+        help="Path to Docker resource stats JSON file (optional)",
+    )
     args = parser.parse_args()
 
     stats = json.loads(args.stats_file.read_text())
-    generate_charts(stats, args.output_dir, args.peak_users, args.spawn_rate)
+    docker_stats = None
+    if args.docker_stats and args.docker_stats.exists():
+        docker_stats = json.loads(args.docker_stats.read_text())
+    generate_charts(stats, args.output_dir, args.peak_users, args.spawn_rate, docker_stats)
 
 
 if __name__ == "__main__":
