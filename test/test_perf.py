@@ -204,7 +204,6 @@ def test_write_throughput(
     requests over a fixed time window.
     """
     client.wait_time = 0.001
-    policy_script = TEST_POLICY_SCRIPTS[test_name]
 
     policy = TEST_POLICIES[test_name]
     policy_config = (
