@@ -206,7 +206,12 @@ def test_write_throughput(
     client.wait_time = 0.001
     policy_script = TEST_POLICY_SCRIPTS[test_name]
 
-    configure_service({"policy": {"policyScript": policy_script}})
+    policy = TEST_POLICIES[test_name]
+    policy_config = (
+        {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
+    )
+
+    configure_service({"policy": policy_config})
 
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
