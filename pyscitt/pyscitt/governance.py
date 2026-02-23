@@ -13,6 +13,8 @@ from typing import Optional, Union
 
 from . import crypto
 
+CCF_GOV_API_VERSION = "2024-07-01"
+
 
 @dataclass
 class SubmittedProposal:
@@ -36,6 +38,13 @@ class GovernanceClient:
 
     def __init__(self, client: "Client"):
         self.client = client
+
+    @property
+    def member_id(self) -> str:
+        return crypto.get_cert_fingerprint(self.client.member_auth.cert)
+
+    def _gov_params(self) -> dict:
+        return {"api-version": CCF_GOV_API_VERSION}
 
     def propose(
         self,
@@ -65,10 +74,13 @@ class GovernanceClient:
             proposal = json.dumps(proposal).encode("ascii")
 
         response = self.client.post(
-            "/gov/proposals", content=proposal, sign_request=True
+            "/gov/members/proposals:create",
+            content=proposal,
+            sign_request=True,
+            params=self._gov_params(),
         )
         out = response.json()
-        result = SubmittedProposal(out["proposal_id"], out["state"])
+        result = SubmittedProposal(out["proposalId"], out["proposalState"])
         if vote and result.is_open:
             result = self.vote(result.id, must_pass=must_pass)
 
@@ -84,15 +96,16 @@ class GovernanceClient:
                 }
             """
         response = self.client.post(
-            f"/gov/proposals/{proposal_id}/ballots",
+            f"/gov/members/proposals/{proposal_id}/ballots/{self.member_id}:submit",
             sign_request=True,
+            params=self._gov_params(),
             json={
                 "ballot": ballot,
             },
         )
 
         out = response.json()
-        result = SubmittedProposal(out["proposal_id"], out["state"])
+        result = SubmittedProposal(out["proposalId"], out["proposalState"])
 
         if must_pass and not result.is_accepted:
             raise ProposalNotAccepted(
@@ -103,8 +116,9 @@ class GovernanceClient:
 
     def get_recovery_share(self, key: Optional[crypto.Pem] = None) -> bytes:
         encoded_share = self.client.get(
-            "/gov/recovery_share", sign_request=True
-        ).json()["encrypted_share"]
+            f"/gov/recovery/encrypted-shares/{self.member_id}",
+            params=self._gov_params(),
+        ).json()["encryptedShare"]
         encrypted_share = base64.b64decode(encoded_share)
 
         if key is not None:
@@ -114,8 +128,9 @@ class GovernanceClient:
 
     def submit_recovery_share(self, share: bytes) -> None:
         self.client.post(
-            "/gov/recovery_share",
+            f"/gov/recovery/members/{self.member_id}:recover",
             sign_request=True,
+            params=self._gov_params(),
             json={"share": base64.b64encode(share).decode("ascii")},
         )
 
@@ -140,8 +155,17 @@ class GovernanceClient:
         self.client.wait_for_network_open()
 
     def activate_member(self):
-        r = self.client.post("/gov/ack/update_state_digest", sign_request=True)
-        self.client.post("/gov/ack", content=r.content, sign_request=True)
+        r = self.client.post(
+            f"/gov/members/state-digests/{self.member_id}:update",
+            sign_request=True,
+            params=self._gov_params(),
+        )
+        self.client.post(
+            f"/gov/members/state-digests/{self.member_id}:ack",
+            content=r.content,
+            sign_request=True,
+            params=self._gov_params(),
+        )
 
 
 def set_scitt_configuration_proposal(configuration: dict) -> dict:

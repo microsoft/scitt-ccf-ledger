@@ -23,6 +23,7 @@ from .receipt import Receipt
 from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
+CCF_GOV_API_VERSION = "2024-07-01"
 CT_APPLICATION_JSON = "application/json"
 CT_APPLICATION_CBOR = "application/cbor"
 CT_APPLICATION_COSE = "application/cose"
@@ -149,25 +150,22 @@ def cose_protected_headers(request_path: str, method: str):
     }
 
     # Set headers based on the request path and method
-    if request_path.endswith("gov/ack/update_state_digest"):
+    if "state-digests/" in request_path and request_path.endswith(":update"):
         cose_headers["ccf.gov.msg.type"] = "state_digest"
-    elif request_path.endswith("gov/ack"):
+    elif "state-digests/" in request_path and request_path.endswith(":ack"):
         cose_headers["ccf.gov.msg.type"] = "ack"
-    elif request_path.endswith("gov/proposals"):
+    elif request_path.endswith("proposals:create"):
         cose_headers["ccf.gov.msg.type"] = "proposal"
-    elif request_path.endswith("/ballots"):
-        pid = request_path.split("/")[-2]
+    elif "/ballots/" in request_path and ":submit" in request_path:
+        pid = request_path.split("proposals/")[1].split("/")[0]
         cose_headers["ccf.gov.msg.type"] = "ballot"
         cose_headers["ccf.gov.msg.proposal_id"] = pid
-    elif request_path.endswith("/withdraw"):
-        pid = request_path.split("/")[-2]
+    elif "proposals/" in request_path and request_path.endswith(":withdraw"):
+        pid = request_path.split("proposals/")[1].split(":")[0]
         cose_headers["ccf.gov.msg.type"] = "withdrawal"
         cose_headers["ccf.gov.msg.proposal_id"] = pid
-    elif request_path.endswith("gov/recovery_share"):
-        if method == "GET":
-            cose_headers["ccf.gov.msg.type"] = "encrypted_recovery_share"
-        if method == "POST":
-            cose_headers["ccf.gov.msg.type"] = "recovery_share"
+    elif "recovery/members/" in request_path and ":recover" in request_path:
+        cose_headers["ccf.gov.msg.type"] = "recovery_share"
 
     return cose_headers
 
@@ -544,9 +542,10 @@ class Client(BaseClient):
         return ServiceParameters.from_dict(self.get("/parameters").json())
 
     def get_constitution(self) -> str:
-        # The endpoint returns the value as a JSON-encoded string, ie. wrapped
-        # in double quotes and with all special characters escaped.
-        return self.get("/gov/kv/constitution").json()
+        return self.get(
+            "/gov/service/constitution",
+            params={"api-version": CCF_GOV_API_VERSION},
+        ).text
 
     def get_version(self) -> dict:
         return self.get("/version").json()
