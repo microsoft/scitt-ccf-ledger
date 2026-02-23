@@ -446,7 +446,9 @@ def main():
     docker_stats = None
     if args.docker_stats and args.docker_stats.exists():
         docker_stats = json.loads(args.docker_stats.read_text())
-    generate_charts(stats, args.output_dir, args.peak_users, args.spawn_rate, docker_stats)
+    generate_charts(
+        stats, args.output_dir, args.peak_users, args.spawn_rate, docker_stats
+    )
 
 
 if __name__ == "__main__":
