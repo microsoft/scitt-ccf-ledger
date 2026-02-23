@@ -248,7 +248,6 @@ namespace scitt
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
 
-        SCITT_DEBUG("Get service configuration from KV store");
         auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
                      ->get()
                      .value_or(Configuration{});
