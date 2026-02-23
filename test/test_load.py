@@ -6,12 +6,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from test.load_test.docker_monitor import DockerMonitor
 
 import pytest
 
 from pyscitt import crypto
 from pyscitt.client import Client
-from test.load_test.docker_monitor import DockerMonitor
 
 NUM_STATEMENTS = 100
 LOCUST_PEAK_USERS = 800
