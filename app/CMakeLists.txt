@@ -3,6 +3,8 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+include(FetchContent)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if((NOT CMAKE_CXX_COMPILER)
@@ -32,6 +34,18 @@ set(CMAKE_GENERATED_COMMENT
 )
 configure_file(src/generated/constants.h.in src/generated/constants.h @ONLY)
 
+set(TRIESTE_USE_SNMALLOC OFF)
+set(REGOCPP_BUILD_SHARED ON)
+
+FetchContent_Declare(
+  regocpp
+  GIT_REPOSITORY https://github.com/microsoft/rego-cpp
+  # https://github.com/microsoft/rego-cpp/releases/tag/v1.2.0
+  GIT_TAG        d8f141390bd3c1d317602f8b571d00907728eeed
+)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+FetchContent_MakeAvailable(regocpp)
+
 # add CCF dependencies
 # add linking options
 # add SAN options if CCF is built with them
@@ -45,6 +59,8 @@ if (COMPILE_TARGET STREQUAL "virtual")
 elseif (COMPILE_TARGET STREQUAL "snp")
   set(SCITT_TARGET scitt.snp)
 endif ()
+add_dependencies(${SCITT_TARGET} regocpp::rego)
+target_link_libraries(${SCITT_TARGET} PRIVATE regocpp::rego)
 
 # The INCLUDE_DIRS argument of the add_ccf_app macro adds directories with
 # -isystem, which silences any warnings in them, which is undesirable for our
@@ -137,6 +153,7 @@ if (BUILD_TESTS)
     http_parser.host
     ccf.virtual
   )
+  target_link_libraries(unit_tests PRIVATE regocpp::rego)
 
   target_include_directories(unit_tests PRIVATE src unit-tests)
   target_include_directories(

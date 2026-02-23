@@ -20,6 +20,7 @@ from pycose.keys.cosekey import CoseKey
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from . import policies
 from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
@@ -105,11 +106,13 @@ class TestPolicyEngine:
 
         return f
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
         self,
         client: Client,
         configure_service,
         cert_authority: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -194,15 +197,8 @@ class TestPolicyEngine:
             ],
         }
 
-        policy_script = f"""
-export function apply(phdr) {{
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        issuer = didx509_issuer(cert_authority)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.submit_signed_statement_and_wait(signed_statement)
@@ -212,11 +208,13 @@ export function apply(phdr) {{
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_svn_policy(
         self,
         client: Client,
         configure_service,
         cert_authority: X5ChainCertificateAuthority,
+        lang,
     ):
         example_eku = "2.999"
 
@@ -229,7 +227,8 @@ export function apply(phdr) {{
             root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
             return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
 
-        identity.issuer = didx509_issuer(cert_authority)
+        issuer = didx509_issuer(cert_authority)
+        configure_service({"policy": policies.DID_X509[lang](issuer)})
         feed = "SomeFeed"
         # SBOMs
         statement = {"foo": "bar"}
@@ -251,16 +250,7 @@ export function apply(phdr) {{
             ],
         }
 
-        policy_script = f"""
-export function apply(phdr) {{
-    // Check exact issuer 
-    if (phdr.cwt.iss !== "{didx509_issuer(cert_authority)}") {{ return "Invalid issuer"; }}
-    if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-
-    return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": policies.SVN[lang](issuer)})
 
         for signed_statement in permitted_signed_statements:
             client.submit_signed_statement_and_wait(signed_statement)
@@ -270,83 +260,89 @@ export function apply(phdr) {{
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
-    def test_trivial_pass_policy(
-        self, client: Client, configure_service, signed_statement
+    def test_statement_limit(
+        self,
+        client: Client,
+        configure_service,
+        cert_authority: X5ChainCertificateAuthority,
     ):
-        configure_service(
-            {"policy": {"policyScript": "export function apply() { return true }"}}
+        example_eku = "2.999"
+
+        identity = cert_authority.create_identity(
+            alg="ES256", kty="ec", add_eku=example_eku
         )
+
+        def didx509_issuer(ca):
+            root_cert = ca.cert_bundle
+            root_fingerprint = crypto.get_cert_fingerprint_b64url(root_cert)
+            return f"did:x509:0:sha256:{root_fingerprint}::eku:{example_eku}"
+
+        issuer = didx509_issuer(cert_authority)
+        statement = {"foo": "bar"}
+        signed_statement = crypto.sign_json_statement(
+            identity, statement, feed="feed", svn=1, cwt=True
+        )
+        # Configure service with a very low statement limit
+        config = {
+            "policy": policies.DID_X509["rego"](issuer)
+            | {"policyRegoStatementLimit": 1}
+        }
+        configure_service(config)
+        with service_error("Maximum statement count reached"):
+            client.submit_signed_statement_and_wait(signed_statement)
+
+    @pytest.mark.parametrize("lang", ["js", "rego"])
+    def test_trivial_pass_policy(
+        self, client: Client, configure_service, signed_statement, lang
+    ):
+        configure_service({"policy": policies.PASS[lang]})
 
         client.submit_signed_statement_and_wait(signed_statement())
 
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_trivial_fail_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": "export function apply() { return `All entries are refused`; }"
-                }
-            }
-        )
+        configure_service({"policy": policies.FAIL[lang]})
 
         with service_error("Policy was not met"):
             client.submit_signed_statement_and_wait(signed_statement())
 
+    @pytest.mark.parametrize("lang", ["js"])
     def test_exceptional_policy(
-        self, client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service(
-            {
-                "policy": {
-                    "policyScript": 'export function apply() { throw new Error("Boom"); }'
-                }
-            }
-        )
+        # No runtime error test for Rego, because things that seem like they
+        # would cause runtime errors, such as dividing by zero, cause a policy
+        # failure instead.
+        configure_service({"policy": policies.RUNTIME_ERROR[lang]})
 
         with service_error("Error while applying policy"):
             client.submit_signed_statement_and_wait(signed_statement())
 
-    @pytest.mark.parametrize(
-        "script",
-        [
-            "",
-            "return true",
-            "function apply() {}",
-            "function apply() { not valid javascript }",
-        ],
-    )
+    @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_invalid_policy(
-        self, client: Client, configure_service, signed_statement, script
+        self, client: Client, configure_service, signed_statement, lang
     ):
-        configure_service({"policy": {"policyScript": script}})
+        for invalid_policy in policies.INVALID[lang]:
+            configure_service({"policy": invalid_policy})
 
-        with service_error("Invalid policy module"):
-            client.submit_signed_statement_and_wait(signed_statement())
+            with service_error("Invalid policy module.*"):
+                client.submit_signed_statement_and_wait(signed_statement())
 
     @pytest.mark.parametrize(
-        "filepath",
+        "filepath, lang",
         [
-            "test/payloads/cts-hashv-cwtclaims-b64url.cose",
-            "test/payloads/manifest.spdx.json.sha384.digest.cose",
+            ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "js"),
+            ("test/payloads/cts-hashv-cwtclaims-b64url.cose", "rego"),
+            ("test/payloads/manifest.spdx.json.sha384.digest.cose", "js"),
+            ("test/payloads/manifest.spdx.json.sha384.digest.cose", "rego"),
         ],
     )
     def test_cts_hashv_cwtclaims_payload_with_policy(
-        self, tmp_path, client: Client, configure_service, filepath
+        self, tmp_path, client: Client, configure_service, filepath, lang
     ):
-
-        policy_script = f"""
-export function apply(phdr) {{
-
-// Check exact issuer 
-if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
-if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
-
-return true;
-}}"""
-
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service({"policy": policies.SAMPLE[lang]})
 
         with open(filepath, "rb") as f:
             cts_hashv_cwtclaims = f.read()
