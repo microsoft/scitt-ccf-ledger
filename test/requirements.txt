@@ -5,7 +5,7 @@ pytest
 loguru
 aiotools
 ccf==6.*
-cryptography==44.*
+cryptography==46.*
 jwcrypto==1.5.*
 types-jwcrypto
 cbor2
