@@ -438,10 +438,12 @@ return true;
             return true;
         }
         """
-        configure_service({
-            "policy": {"policyScript": policy_script},
-            "maxSignedStatementBytes": max_size,
-        })
+        configure_service(
+            {
+                "policy": {"policyScript": policy_script},
+                "maxSignedStatementBytes": max_size,
+            }
+        )
 
         # Create a payload that is larger than 1MB but smaller than 2MB
         # Each item is ~1024 bytes, 1100 items ~= 1.1MB of JSON
@@ -452,8 +454,12 @@ return true;
         print(f"Signed statement size: {len(statement)} bytes")
 
         # This should succeed because the new limit is 2MB
-        assert len(statement) > 1024 * 1024, "Statement should be larger than default 1MB limit"
-        assert len(statement) < max_size, "Statement should be smaller than configured 2MB limit"
+        assert (
+            len(statement) > 1024 * 1024
+        ), "Statement should be larger than default 1MB limit"
+        assert (
+            len(statement) < max_size
+        ), "Statement should be smaller than configured 2MB limit"
         client.submit_signed_statement_and_wait(statement)
 
     def test_configurable_max_signed_statement_bytes_smaller(
@@ -472,10 +478,12 @@ return true;
             return true;
         }
         """
-        configure_service({
-            "policy": {"policyScript": policy_script},
-            "maxSignedStatementBytes": max_size,
-        })
+        configure_service(
+            {
+                "policy": {"policyScript": policy_script},
+                "maxSignedStatementBytes": max_size,
+            }
+        )
 
         # Create a payload that is larger than 1KB but smaller than the default 1MB
         # ~10KB of JSON payload
@@ -485,8 +493,12 @@ return true;
         statement = signed_statement(medium_json)
         print(f"Signed statement size: {len(statement)} bytes")
 
-        assert len(statement) > max_size, "Statement should be larger than configured 1KB limit"
-        assert len(statement) < 1024 * 1024, "Statement should be smaller than default 1MB limit"
+        assert (
+            len(statement) > max_size
+        ), "Statement should be larger than configured 1KB limit"
+        assert (
+            len(statement) < 1024 * 1024
+        ), "Statement should be smaller than default 1MB limit"
         with service_error("PayloadTooLarge"):
             client.submit_signed_statement_and_wait(statement)
 
