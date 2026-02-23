@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.16.4]
+### Changes
+- c4493a7 add a simple throughput benchmark calculation (#356)
+- 659e5bc Update CCF version from 6.0.19 to 6.0.21 (#355)
+- 57bc6b3 steps to sign with cosesigntool (#353)
+
+## [0.16.3]
+### Changes
+- 02a6680 Update CCF version from 6.0.17 to 6.0.19 (#351)
+- 165c443 Set redirection strategy for all endpoints and follow redirects in pyscitt CLI   (#350)
+- 538676e Docs describing how to run on azure confidential containers (#349)
+- 41e1dcb Bump azurelinux/base/core from 3.0.20251206 to 3.0.20260107 in /docker (#348)
+- 0400bb2 Update cbor2 version requirement in setup.py (#346)
+- 51602d7 Update CCF_VERSION to 6.0.17 (#347)
+
 ## [0.16.2]
 ### Changes
 - 7d26f4d Update CCF version from 6.0.15 to 6.0.17 (#344)
@@ -378,3 +393,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.16.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.0
 [0.16.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.1
 [0.16.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.2
+[0.16.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.3
+[0.16.4]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.4
