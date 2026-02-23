@@ -18,4 +18,4 @@ perf.json
 **/*.cose
 !test/payloads/*
 **/*.cbor
-demo-poc/
+demo-poc/_codeql_detected_source_root
