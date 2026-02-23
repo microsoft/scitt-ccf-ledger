@@ -18,12 +18,11 @@ import httpx
 from loguru import logger as LOG
 
 from . import crypto
-from .governance import GovernanceClient
+from .governance import CCF_GOV_API_VERSION, GovernanceClient
 from .receipt import Receipt
 from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
-CCF_GOV_API_VERSION = "2024-07-01"
 CT_APPLICATION_JSON = "application/json"
 CT_APPLICATION_CBOR = "application/cbor"
 CT_APPLICATION_COSE = "application/cose"
