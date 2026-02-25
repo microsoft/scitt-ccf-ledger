@@ -103,6 +103,8 @@ echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $
 docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
+    --cpus=1 \
+    --memory=2g \
     -v "$VOLUME_NAME":/host \
     --entrypoint "cchost" \
     "$DOCKER_TAG" --config /host/dev-config.json
