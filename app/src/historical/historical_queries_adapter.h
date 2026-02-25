@@ -3,7 +3,6 @@
 #pragma once
 
 #include "http_error.h"
-#include "lru.h"
 #include "tracing.h"
 
 #include <ccf/endpoint_context.h>
@@ -13,15 +12,13 @@
 #include <ccf/odata_error.h>
 #include <ccf/rpc_context.h>
 #include <ccf/tx_id.h>
-#include <mutex>
 
-// Custom version of CCF's historical query adapter that cleans old cached
-// states to avoid memory exhaustion using a simple LRU cache. See
-// https://github.com/microsoft/CCF/blob/main/src/node/historical_queries_adapter.cpp
-// for the original.
-//
-// It is also adapted to match the rest of the SCITT code base, eg. uses
+// Custom version of CCF's historical query adapter.
+// Adapted to match the rest of the SCITT code base, eg. uses
 // exceptions to return HTTP errors.
+//
+// Cache eviction is handled by CCF's set_soft_cache_limit(), which should be
+// called during initialization.
 
 namespace scitt::historical
 {
@@ -32,14 +29,6 @@ namespace scitt::historical
   using ccf::historical::HandleHistoricalQuery;
   using ccf::historical::HistoricalTxStatus;
   using ccf::historical::StatePtr;
-
-  using ActiveHandlesLRU = LRU<ccf::SeqNo, bool>;
-
-  // TODO: move this to constants.h and describe how it influences memory
-  // consumption
-  constexpr size_t MAX_ACTIVE_HANDLES = 100;
-  inline ActiveHandlesLRU ACTIVE_HANDLES_LRU(MAX_ACTIVE_HANDLES);
-  inline std::mutex ACTIVE_HANDLES_MUTEX;
 
   static StatePtr get_historical_entry_state(
     AbstractStateCache& state_cache,
@@ -86,27 +75,11 @@ namespace scitt::historical
     }
 
     // We need a handle to determine whether this request is the 'same' as a
-    // previous one. For simplicity we use target_tx_id.seqno. This means we
-    // keep a lot of state around for old requests! It should be cleaned up
-    // manually
+    // previous one. For simplicity we use target_tx_id.seqno.
     const auto historic_request_handle = target_tx_id.seqno;
 
-    StatePtr historical_state;
-    {
-      std::unique_lock<std::mutex> guard(ACTIVE_HANDLES_MUTEX);
-      ACTIVE_HANDLES_LRU.set_cull_callback(
-        [&state_cache](ccf::SeqNo key, bool value) {
-          SCITT_INFO("Dropping cached transaction {}", key);
-          state_cache.drop_cached_states(key);
-        });
-      ACTIVE_HANDLES_LRU.insert(historic_request_handle, true);
-
-      // Get a state at the target version from the cache, if it is present.
-      // Note that this must be within the mutex lock, otherwise in busy
-      // situations state may be dropped before it was requested.
-      historical_state =
-        state_cache.get_state_at(historic_request_handle, target_tx_id.seqno);
-    }
+    auto historical_state =
+      state_cache.get_state_at(historic_request_handle, target_tx_id.seqno);
 
     if (historical_state == nullptr)
     {
