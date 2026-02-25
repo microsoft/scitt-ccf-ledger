@@ -13,6 +13,10 @@ namespace scitt
 {
   const uint64_t MAX_ENTRY_SIZE_BYTES_DEFAULT = 1024 * 1024;
 
+  // Soft limit on the size of the historical state cache, in bytes.
+  // Once exceeded, least recently used states will be evicted.
+  constexpr size_t HISTORICAL_CACHE_SOFT_LIMIT = 100 * 1024 * 1024;
+
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
   namespace errors
