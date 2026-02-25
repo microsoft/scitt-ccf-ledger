@@ -253,7 +253,7 @@ namespace scitt
                      .value_or(Configuration{});
 
         const auto max_entry_size =
-          cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES);
+          cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES_DEFAULT);
         SCITT_DEBUG(
           "Maximum allowed Signed Statement size: {} bytes", max_entry_size);
 

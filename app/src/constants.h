@@ -11,7 +11,7 @@
 // entries in test/constants.py
 namespace scitt
 {
-  const uint64_t MAX_ENTRY_SIZE_BYTES = 1024 * 1024;
+  const uint64_t MAX_ENTRY_SIZE_BYTES_DEFAULT = 1024 * 1024;
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 

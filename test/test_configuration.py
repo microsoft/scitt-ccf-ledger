@@ -426,10 +426,10 @@ return true;
     ):
         """
         Configure the service with a maxSignedStatementBytes larger than the
-        default MAX_ENTRY_SIZE_BYTES (1MB) and confirm that payloads larger
+        default MAX_ENTRY_SIZE_BYTES_DEFAULT (1MB) and confirm that payloads larger
         than the default but smaller than the new limit are accepted.
         """
-        # Default MAX_ENTRY_SIZE_BYTES is 1MB (1024*1024 = 1048576)
+        # Default MAX_ENTRY_SIZE_BYTES_DEFAULT is 1MB (1024*1024 = 1048576)
         # Set a 2MB limit
         max_size = 2 * 1024 * 1024
 
@@ -467,7 +467,7 @@ return true;
     ):
         """
         Configure the service with a maxSignedStatementBytes smaller than the
-        default MAX_ENTRY_SIZE_BYTES (1MB) and confirm that payloads smaller
+        default MAX_ENTRY_SIZE_BYTES_DEFAULT (1MB) and confirm that payloads smaller
         than the default but larger than the new limit are rejected.
         """
         # Set a very small limit (1KB)
