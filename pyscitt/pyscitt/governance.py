@@ -41,6 +41,7 @@ class GovernanceClient:
 
     @property
     def member_id(self) -> str:
+        assert self.client.member_auth is not None
         return crypto.get_cert_fingerprint(self.client.member_auth.cert)
 
     def _gov_params(self) -> dict:
