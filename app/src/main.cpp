@@ -248,14 +248,24 @@ namespace scitt
         const auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
-        if (body.size() > MAX_ENTRY_SIZE_BYTES)
+
+        auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
+                     ->get()
+                     .value_or(Configuration{});
+
+        const auto max_entry_size =
+          cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES_DEFAULT);
+        SCITT_DEBUG(
+          "Maximum allowed Signed Statement size: {} bytes", max_entry_size);
+
+        if (body.size() > max_entry_size)
         {
           throw BadRequestCborError(
             errors::PayloadTooLarge,
             fmt::format(
               "Entry size {} exceeds maximum allowed size {}",
               body.size(),
-              MAX_ENTRY_SIZE_BYTES));
+              max_entry_size));
         }
 
         ::timespec host_time;
@@ -265,11 +275,6 @@ namespace scitt
           throw InternalCborError(fmt::format(
             "Failed to get host time: {}", ccf::api_result_to_str(result)));
         }
-
-        SCITT_DEBUG("Get service configuration from KV store");
-        auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
-                     ->get()
-                     .value_or(Configuration{});
 
         cose::ProtectedHeader phdr;
         cose::UnprotectedHeader uhdr;

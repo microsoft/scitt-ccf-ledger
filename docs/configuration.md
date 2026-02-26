@@ -364,6 +364,22 @@ It is possible to configure a policy execution limit, specified in number of reg
 
 The default value is 10000, if registration policy execution exceeds the limit, it will be aborted and an error message returned.
 
+## Maximum signed statement size
+
+By default, signed statements larger than 1MB (1,048,576 bytes) are rejected. This limit can be configured using the `maxSignedStatementBytes` parameter in the `set_scitt_configuration` action.
+
+Example `set_scitt_configuration` snippet to allow signed statements up to 2MB:
+```json
+"maxSignedStatementBytes": 2097152
+```
+
+The value must be a positive integer representing the maximum size in bytes. If not set, the default limit of 1MB is used.
+
+This can also be used to restrict the maximum size to a value smaller than the default. For example, to limit signed statements to 512KB:
+```json
+"maxSignedStatementBytes": 524288
+```
+
 ## CCF specific configuration
 
 Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.

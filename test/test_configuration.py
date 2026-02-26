@@ -421,6 +421,87 @@ return true;
 
         client.submit_signed_statement_and_wait(statement)
 
+    def test_configurable_max_signed_statement_bytes_larger(
+        self, client: Client, configure_service, signed_statement
+    ):
+        """
+        Configure the service with a maxSignedStatementBytes larger than the
+        default MAX_ENTRY_SIZE_BYTES_DEFAULT (1MB) and confirm that payloads larger
+        than the default but smaller than the new limit are accepted.
+        """
+        # Default MAX_ENTRY_SIZE_BYTES_DEFAULT is 1MB (1024*1024 = 1048576)
+        # Set a 2MB limit
+        max_size = 2 * 1024 * 1024
+
+        policy_script = """
+        export function apply(phdr, uhdr, payload) {
+            return true;
+        }
+        """
+        configure_service(
+            {
+                "policy": {"policyScript": policy_script},
+                "maxSignedStatementBytes": max_size,
+            }
+        )
+
+        # Create a payload that is larger than 1MB but smaller than 2MB
+        # Each item is ~1024 bytes, 1100 items ~= 1.1MB of JSON
+        big_json: dict = {"foo": []}
+        for _ in range(1100):
+            big_json["foo"].append("a" * 1024)
+        statement = signed_statement(big_json)
+        print(f"Signed statement size: {len(statement)} bytes")
+
+        # This should succeed because the new limit is 2MB
+        assert (
+            len(statement) > 1024 * 1024
+        ), "Statement should be larger than default 1MB limit"
+        assert (
+            len(statement) < max_size
+        ), "Statement should be smaller than configured 2MB limit"
+        client.submit_signed_statement_and_wait(statement)
+
+    def test_configurable_max_signed_statement_bytes_smaller(
+        self, client: Client, configure_service, signed_statement
+    ):
+        """
+        Configure the service with a maxSignedStatementBytes smaller than the
+        default MAX_ENTRY_SIZE_BYTES_DEFAULT (1MB) and confirm that payloads smaller
+        than the default but larger than the new limit are rejected.
+        """
+        # Set a very small limit (1KB)
+        max_size = 1024
+
+        policy_script = """
+        export function apply(phdr, uhdr, payload) {
+            return true;
+        }
+        """
+        configure_service(
+            {
+                "policy": {"policyScript": policy_script},
+                "maxSignedStatementBytes": max_size,
+            }
+        )
+
+        # Create a payload that is larger than 1KB but smaller than the default 1MB
+        # ~10KB of JSON payload
+        medium_json: dict = {"foo": []}
+        for _ in range(10):
+            medium_json["foo"].append("a" * 1024)
+        statement = signed_statement(medium_json)
+        print(f"Signed statement size: {len(statement)} bytes")
+
+        assert (
+            len(statement) > max_size
+        ), "Statement should be larger than configured 1KB limit"
+        assert (
+            len(statement) < 1024 * 1024
+        ), "Statement should be smaller than default 1MB limit"
+        with service_error("PayloadTooLarge"):
+            client.submit_signed_statement_and_wait(statement)
+
     @pytest.fixture(scope="class")
     def didx509_signed_statement_with_attestation(
         self, cert_authority: X5ChainCertificateAuthority
