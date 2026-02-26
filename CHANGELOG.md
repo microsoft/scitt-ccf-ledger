@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.16.5]
+### Changes
+- 56132cd Bump azurelinux/base/core from 3.0.20260107 to 3.0.20260204 in /docker (#362)
+- d466c16 Update cryptography version to 46.* in setup.py (#361)
+- eb2f430 Update CCF version from 6.0.21 to 6.0.23 (#360)
+- e29be23 Remove failing pypi release step (#358)
+
 ## [0.16.4]
 ### Changes
 - c4493a7 add a simple throughput benchmark calculation (#356)
@@ -395,3 +402,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.16.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.2
 [0.16.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.3
 [0.16.4]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.4
+[0.16.5]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.5

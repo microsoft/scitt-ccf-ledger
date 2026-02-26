@@ -31,6 +31,8 @@ actions.set("set_scitt_configuration",
         }
       }
 
+      checkType(args.configuration.maxSignedStatementBytes, "integer?", "configuration.maxSignedStatementBytes");
+
       checkType(args.configuration.serviceIssuer, "string?", "configuration.serviceIssuer");
     },
     function(args) {

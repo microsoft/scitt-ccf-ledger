@@ -142,6 +142,12 @@ namespace scitt
     Policy policy = {};
     Authentication authentication = {};
 
+    /**
+     * Optional maximum size in bytes for signed statements.
+     * If set, overrides the default MAX_ENTRY_SIZE_BYTES_DEFAULT constant.
+     */
+    std::optional<size_t> max_signed_statement_bytes;
+
     // deprecated
     std::optional<std::string> service_issuer;
   };
@@ -181,6 +187,8 @@ namespace scitt
     "policy",
     authentication,
     "authentication",
+    max_signed_statement_bytes,
+    "maxSignedStatementBytes",
     service_issuer,
     "serviceIssuer");
 

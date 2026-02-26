@@ -344,6 +344,7 @@ class CCHost(EventLoopThread):
                 "rpc_interfaces": {
                     "rpc": {
                         "bind_address": f"0.0.0.0:{self.listen_rpc_port}",
+                        "http_configuration": {"max_body_size": "2MB"},
                     }
                 },
                 "node_to_node_interface": {
