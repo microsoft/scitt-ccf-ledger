@@ -88,13 +88,21 @@ def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
     input_signed_statement: bytes,
-):
+) -> list:
     st = Sign1Message.decode(transparent_statement)
+    receipt_details = []
     for receipt in st.uhdr[crypto.SCITTReceipts]:
         service_key = service_trust_store.get_key(receipt)
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
         )
+        parsed = Sign1Message.decode(receipt)
+        issuer = None
+        if CWTClaims in parsed.phdr:
+            cwt = parsed.phdr[CWTClaims]
+            issuer = cwt.get(CWT_ISS)
+        receipt_details.append({"issuer": issuer})
+    return receipt_details
 
 
 class StaticTrustStore(TrustStore):

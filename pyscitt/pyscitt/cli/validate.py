@@ -35,9 +35,13 @@ def validate_transparent_statement(
     else:
         service_trust_store = DynamicTrustStore()
 
-    verify_transparent_statement(
+    receipt_details = verify_transparent_statement(
         transparent_statment_bytes, service_trust_store, signed_statement
     )
+    for detail in receipt_details:
+        issuer = detail.get("issuer")
+        if issuer:
+            print(f"Verified receipt from issuer: {issuer}")
     print(f"Statment is transparent: {statement}")
 
 
