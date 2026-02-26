@@ -153,6 +153,14 @@ Unit tests will be run as part of the virtual platform build workflow in cmake.
 PLATFORM=virtual ./build.sh
 ```
 
+**Using Docker*
+
+The command below uses the built Docker image `mytestimg` to run the tests (see above how to build the image).
+
+```sh
+docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg -c 'git config --global --add safe.directory "*" && ./build.sh'
+```
+
 ### Functional (e2e) tests
 
 To start the tests you need to use the script `run_functional_tests.sh`.
