@@ -42,7 +42,7 @@ def validate_transparent_statement(
         issuer = detail.get("issuer")
         if issuer:
             print(f"Verified receipt from issuer: {issuer}")
-    print(f"Statment is transparent: {statement}")
+    print(f"Statement is transparent: {statement}")
 
 
 def cli(fn):
