@@ -19,7 +19,11 @@ from pycose.headers import KID
 from pycose.messages import Sign1Message
 
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
-from pyscitt.verify import DynamicTrustStore, DynamicTrustStoreClient, verify_transparent_statement
+from pyscitt.verify import (
+    DynamicTrustStore,
+    DynamicTrustStoreClient,
+    verify_transparent_statement,
+)
 
 
 class TestDynamicTrustStore:
