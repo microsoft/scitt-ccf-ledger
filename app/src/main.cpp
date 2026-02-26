@@ -123,9 +123,14 @@ namespace scitt
    * from a CCF TxReceiptImplPtr obtained through a historical query.
    * The proof format is described in
    * https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/
+   *
+   * The registration_tx parameter is embedded as a text string in the
+   * unprotected header under the "registration_tx" key, allowing clients to
+   * correlate the receipt with the ledger entry transaction ID.
    */
   std::vector<uint8_t> get_cose_receipt(
-    const ccf::TxReceiptImplPtr& receipt_ptr)
+    const ccf::TxReceiptImplPtr& receipt_ptr,
+    const std::string& registration_tx)
   {
     auto proof = ccf::describe_merkle_proof_v1(*receipt_ptr);
     if (!proof.has_value())
@@ -139,18 +144,119 @@ namespace scitt
       throw InternalCborError("Failed to get COSE signature");
     }
 
+    // Parse the COSE signature to extract phdr, payload, and signature bytes.
+    // We re-encode the receipt manually so we can include both the inclusion
+    // proof and the registration_tx entry in a single unprotected header.
+    UsefulBufC sig_buf{signature->data(), signature->size()};
+    QCBORDecodeContext dctx;
+    QCBORDecode_Init(&dctx, sig_buf, QCBOR_DECODE_MODE_NORMAL);
+
+    QCBORItem item;
+    QCBORDecode_EnterArray(&dctx, nullptr);
+    if (QCBORDecode_GetError(&dctx) != QCBOR_SUCCESS)
+    {
+      throw InternalCborError("Failed to parse COSE signature outer array");
+    }
+
+    // Protected header (bstr)
+    QCBORDecode_GetNext(&dctx, &item);
+    if (item.uDataType != QCBOR_TYPE_BYTE_STRING)
+    {
+      throw InternalCborError("Failed to get protected header from COSE signature");
+    }
+    UsefulBufC phdr{item.val.string.ptr, item.val.string.len};
+
+    // Skip the existing unprotected header
+    QCBORDecode_VGetNextConsume(&dctx, &item);
+
+    // Capture the payload as pre-encoded CBOR bytes
+    size_t pos_start = 0;
+    size_t pos_end = 0;
+    auto partial_err = QCBORDecode_PartialFinish(&dctx, &pos_start);
+    if (partial_err != QCBOR_ERR_ARRAY_OR_MAP_UNCONSUMED)
+    {
+      throw InternalCborError("Failed to find start of payload in COSE signature");
+    }
+    QCBORDecode_VGetNextConsume(&dctx, &item);
+    partial_err = QCBORDecode_PartialFinish(&dctx, &pos_end);
+    if (partial_err != QCBOR_ERR_ARRAY_OR_MAP_UNCONSUMED)
+    {
+      throw InternalCborError("Failed to find end of payload in COSE signature");
+    }
+    UsefulBufC payload{signature->data() + pos_start, pos_end - pos_start};
+
+    // Signature bytes (bstr)
+    QCBORDecode_GetNext(&dctx, &item);
+    if (item.uDataType != QCBOR_TYPE_BYTE_STRING)
+    {
+      throw InternalCborError("Failed to get signature bytes from COSE signature");
+    }
+    UsefulBufC sig_bytes{item.val.string.ptr, item.val.string.len};
+
+    QCBORDecode_ExitArray(&dctx);
+    if (QCBORDecode_Finish(&dctx) != QCBOR_SUCCESS)
+    {
+      throw InternalCborError("Failed to finish parsing COSE signature");
+    }
+
     // See
     // https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
-    // Page 11, vdp is the label for verifiable-proods in the unprotected
+    // Page 11, vdp is the label for verifiable-proofs in the unprotected
     // header of the receipt
     const int64_t vdp = 396;
     // -1 is the label for inclusion-proofs
-    auto inclusion_proof = ccf::cose::edit::pos::AtKey{-1};
-    ccf::cose::edit::desc::Value inclusion_desc{inclusion_proof, vdp, *proof};
+    const int64_t inclusion_proof_key = -1;
 
-    auto cose_receipt =
-      ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
-    return cose_receipt;
+    // Allocate output buffer with enough space for the receipt.
+    // The unprotected header will contain:
+    //   {vdp: {inclusion_proof_key: [proof]}, "registration_tx": txid}
+    size_t additional_size =
+      3 * QCBOR_HEAD_BUFFER_SIZE + sizeof(vdp) + // vdp sub-map
+      3 * QCBOR_HEAD_BUFFER_SIZE +
+        sizeof(inclusion_proof_key) + // inclusion proof array
+      QCBOR_HEAD_BUFFER_SIZE + proof->size() + // proof bytes
+      QCBOR_HEAD_BUFFER_SIZE +
+        strlen(scitt::cose::COSE_HEADER_PARAM_REGISTRATION_TX) + // key
+      QCBOR_HEAD_BUFFER_SIZE + registration_tx.size(); // txid value
+
+    std::vector<uint8_t> output(
+      signature->size() + additional_size + QCBOR_HEAD_BUFFER_SIZE);
+    UsefulBuf output_buf{output.data(), output.size()};
+
+    QCBOREncodeContext ectx;
+    QCBOREncode_Init(&ectx, output_buf);
+    QCBOREncode_AddTag(&ectx, CBOR_TAG_COSE_SIGN1);
+    QCBOREncode_OpenArray(&ectx);
+    QCBOREncode_AddBytes(&ectx, phdr);
+    QCBOREncode_OpenMap(&ectx);
+
+    // Add inclusion proof: {vdp: {inclusion_proof_key: [proof_bytes]}}
+    QCBOREncode_OpenMapInMapN(&ectx, vdp);
+    QCBOREncode_OpenArrayInMapN(&ectx, inclusion_proof_key);
+    QCBOREncode_AddBytes(&ectx, {proof->data(), proof->size()});
+    QCBOREncode_CloseArray(&ectx);
+    QCBOREncode_CloseMap(&ectx);
+
+    // Add registration_tx: {"registration_tx": txid}
+    QCBOREncode_AddTextToMap(
+      &ectx,
+      scitt::cose::COSE_HEADER_PARAM_REGISTRATION_TX,
+      cbor::from_string(registration_tx));
+
+    QCBOREncode_CloseMap(&ectx);
+    QCBOREncode_AddEncoded(&ectx, payload);
+    QCBOREncode_AddBytes(&ectx, sig_bytes);
+    QCBOREncode_CloseArray(&ectx);
+
+    UsefulBufC cose_output;
+    QCBORError err = QCBOREncode_Finish(&ectx, &cose_output);
+    if (err != QCBOR_SUCCESS)
+    {
+      throw InternalCborError("Failed to encode COSE receipt");
+    }
+    output.resize(cose_output.len);
+    output.shrink_to_fit();
+    return output;
   }
 
   class AppEndpoints : public ccf::UserEndpointRegistry
@@ -427,7 +533,9 @@ namespace scitt
           }
 
           SCITT_DEBUG("Get receipt from the ledger");
-          auto cose_receipt = get_cose_receipt(historical_state->receipt);
+          auto cose_receipt = get_cose_receipt(
+            historical_state->receipt,
+            historical_state->transaction_id.to_str());
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
@@ -470,7 +578,9 @@ namespace scitt
           }
 
           SCITT_DEBUG("Get receipt from the ledger");
-          auto cose_receipt = get_cose_receipt(historical_state->receipt);
+          auto cose_receipt = get_cose_receipt(
+            historical_state->receipt,
+            historical_state->transaction_id.to_str());
 
           // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
           // Section 4.4, 394 is the label for an array of receipts in the

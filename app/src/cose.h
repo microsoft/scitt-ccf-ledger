@@ -64,6 +64,13 @@ namespace scitt::cose
   static constexpr int64_t COSE_HEADER_PARAM_FEED = 392;
   static constexpr int64_t COSE_HEADER_PARAM_SCITT_RECEIPTS = 394;
 
+  // Unprotected header label for the registration transaction ID embedded in
+  // COSE receipts. The value is a text string (tstr) of the transaction ID,
+  // e.g. "7.145". This allows clients to correlate a receipt with the ledger
+  // entry they retrieved it from.
+  static constexpr const char* COSE_HEADER_PARAM_REGISTRATION_TX =
+    "registration_tx";
+
   static constexpr int64_t COSE_CWT_CLAIM_ISS = 1;
   static constexpr int64_t COSE_CWT_CLAIM_SUB = 2;
   static constexpr int64_t COSE_CWT_CLAIM_IAT = 6;

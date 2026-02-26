@@ -18,8 +18,73 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
-from pyscitt.crypto import CWT_ISS, CWTClaims
+from pyscitt.crypto import CWT_ISS, REGISTRATION_TX, CWTClaims, embed_receipt_in_cose
+from pyscitt.receipt import cbor_to_printable
 from pyscitt.verify import DynamicTrustStore, DynamicTrustStoreClient
+
+
+def _make_receipt_bytes(txid: str, uhdr: dict | None = None) -> bytes:
+    """Build a minimal COSE_Sign1 receipt with registration_tx in the unprotected header."""
+    phdr_encoded = cbor2.dumps({1: -7})  # alg: ES256
+    if uhdr is None:
+        uhdr = {
+            396: {-1: [b"proof_bytes"]},  # verifiable-proofs / inclusion-proof
+            REGISTRATION_TX: txid,
+        }
+    return cbor2.dumps(cbor2.CBORTag(18, [phdr_encoded, uhdr, None, b"\x00" * 64]))
+
+
+class TestReceiptRegistrationTx:
+    """Tests verifying that the registration_tx unprotected header is handled."""
+
+    def test_receipt_bytes_contain_registration_tx(self):
+        """A receipt built with registration_tx in the uhdr can be decoded and
+        the txid value is accessible."""
+        txid = "350.9219"
+        receipt_bytes = _make_receipt_bytes(txid)
+
+        decoded = cbor2.loads(receipt_bytes)
+        assert decoded.tag == 18  # COSE_Sign1
+        uhdr = decoded.value[1]
+        assert REGISTRATION_TX in uhdr
+        assert uhdr[REGISTRATION_TX] == txid
+
+    def test_cbor_to_printable_includes_registration_tx(self):
+        """cbor_to_printable correctly renders the registration_tx field."""
+        txid = "7.145"
+        uhdr = {
+            396: {-1: [b"proof_bytes"]},
+            REGISTRATION_TX: txid,
+        }
+        result = cbor_to_printable(uhdr)
+        assert result.get(REGISTRATION_TX) == txid
+
+    def test_embed_receipt_in_cose_preserves_registration_tx(self):
+        """When a receipt with registration_tx is embedded into a signed statement,
+        the registration_tx value is preserved in the embedded receipt."""
+        txid = "350.9219"
+        receipt_bytes = _make_receipt_bytes(txid)
+
+        # Create a minimal signed statement (COSE_Sign1)
+        stmt_phdr_encoded = cbor2.dumps({1: -7})
+        stmt = cbor2.dumps(
+            cbor2.CBORTag(18, [stmt_phdr_encoded, {}, b"payload", b"\x00" * 64])
+        )
+
+        # Embed the receipt into the statement
+        result_bytes = embed_receipt_in_cose(stmt, receipt_bytes)
+        result = cbor2.loads(result_bytes)
+
+        # The embedded receipt is in uhdr[394][0] as a CBORTag
+        embedded_receipt = result.value[1][394][0]
+        assert isinstance(embedded_receipt, cbor2.CBORTag)
+        embedded_uhdr = embedded_receipt.value[1]
+        assert REGISTRATION_TX in embedded_uhdr
+        assert embedded_uhdr[REGISTRATION_TX] == txid
+
+    def test_registration_tx_constant_value(self):
+        """The REGISTRATION_TX constant has the expected string value."""
+        assert REGISTRATION_TX == "registration_tx"
 
 
 class TestDynamicTrustStore:

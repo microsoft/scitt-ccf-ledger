@@ -89,6 +89,12 @@ CWT_IAT = 6
 # Other expected CWT claims
 CWT_SVN = "svn"  # AMD Security Version Number
 
+# Unprotected header label for the registration transaction ID in COSE receipts.
+# The value is a text string (tstr) identifying the ledger entry transaction,
+# e.g. "7.145". This allows clients to correlate a receipt with the ledger entry
+# they retrieved it from.
+REGISTRATION_TX = "registration_tx"
+
 
 def ec_curve_from_name(name: str) -> EllipticCurve:
     if name == "P-256":
