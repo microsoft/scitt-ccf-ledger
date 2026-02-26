@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include "constants.h"
 #include "did/document.h"
+#include "http_error.h"
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
@@ -60,6 +62,12 @@ namespace scitt
       nlohmann::json jwks_json;
       jwks_json["keys"] = jwks;
       return jwks_json;
+    }
+
+    bool has_cert(const ccf::crypto::Pem& cert) const
+    {
+      std::lock_guard guard(lock);
+      return service_certificates.count(cert) > 0;
     }
 
   protected:
@@ -165,7 +173,15 @@ namespace scitt
       ccf::endpoints::EndpointContext& ctx,
       nlohmann::json&& params)
     {
-      // TODO: this is not right when the indexer is not up to date
+      auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
+      auto service_info = service->get().value();
+      if (!index->has_cert(service_info.cert))
+      {
+        throw ServiceUnavailableJsonError(
+          errors::IndexingInProgressRetryLater,
+          "Index not yet up to date, retry later",
+          1);
+      }
       return index->get_jwks();
     }
   }

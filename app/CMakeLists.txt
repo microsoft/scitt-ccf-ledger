@@ -155,7 +155,7 @@ if (BUILD_TESTS)
   )
   target_link_libraries(unit_tests PRIVATE regocpp::rego)
 
-  target_include_directories(unit_tests PRIVATE src unit-tests)
+  target_include_directories(unit_tests PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/src unit-tests)
   target_include_directories(
     unit_tests SYSTEM PRIVATE
     ${CCF_DIR}/include
