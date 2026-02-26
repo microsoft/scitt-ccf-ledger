@@ -109,6 +109,56 @@ namespace
   }
   // NOLINTEND(bugprone-unchecked-optional-access)
 
+  TEST(CoseTest, DecodeHeadersRejectsNilPayload)
+  {
+    // COSE_Sign1 = Tag(18, [bstr({1:-7}), {}, nil, bstr(64 zero bytes)])
+    // A nil payload indicates a detached payload which is not supported.
+    const std::vector<uint8_t>& signed_statement = from_hex_string(
+      "d28443a10126a0f65840"
+      "0000000000000000000000000000000000000000000000000000000000000000"
+      "0000000000000000000000000000000000000000000000000000000000000000");
+
+    std::string error_message;
+    try
+    {
+      cose::decode_headers(signed_statement);
+    }
+    catch (const cose::COSEDecodeError& e)
+    {
+      error_message = e.what();
+    }
+    EXPECT_THAT(
+      error_message,
+      HasSubstr(
+        "Signed Statement could not be verified because payload is detached "
+        "or empty"));
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsEmptyPayload)
+  {
+    // COSE_Sign1 = Tag(18, [bstr({1:-7}), {}, bstr(empty), bstr(64 zero
+    // bytes)]) An empty payload is not a valid signed statement.
+    const std::vector<uint8_t>& signed_statement = from_hex_string(
+      "d28443a10126a0405840"
+      "0000000000000000000000000000000000000000000000000000000000000000"
+      "0000000000000000000000000000000000000000000000000000000000000000");
+
+    std::string error_message;
+    try
+    {
+      cose::decode_headers(signed_statement);
+    }
+    catch (const cose::COSEDecodeError& e)
+    {
+      error_message = e.what();
+    }
+    EXPECT_THAT(
+      error_message,
+      HasSubstr(
+        "Signed Statement could not be verified because payload is detached "
+        "or empty"));
+  }
+
   TEST(CoseTest, DecodeTSSHeadersFailsDueToInvalidMap)
   {
     const std::vector<uint8_t>& signed_statement = from_hex_string(
