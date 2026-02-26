@@ -10,8 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from http import HTTPStatus
-from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
-from urllib.parse import urlencode
+from typing import Any, Dict, Literal, Optional, TypeVar, Union, overload
 
 import cbor2
 import httpx
@@ -656,37 +655,6 @@ class Client(BaseClient):
 
         response = self.get_historical(f"/entries/{tx}/statement")
         return response.content
-
-    def enumerate_statements(
-        self, *, start: Optional[int] = None, end: Optional[int] = None
-    ) -> Iterable[str]:
-        """
-        Enumerate all statements on the ledger, with an optional start and end range.
-
-        Yields a sequence of transaction numbers. The contents and/or receipt for a given claim can
-        be fetched using the `get_claim` and `get_receipt` methods.
-        """
-        params = {}
-        if start is not None:
-            params["from"] = start
-        if end is not None:
-            params["to"] = end
-
-        link = f"/entries/txIds?{urlencode(params)}"
-
-        while link:
-            response = self.get(
-                link,
-                params=params,
-                retry_on=[
-                    (HTTPStatus.SERVICE_UNAVAILABLE, "IndexingInProgressRetryLater")
-                ],
-            )
-            body = response.json()
-            for tx in body["transactionIds"]:
-                yield tx
-
-            link = body.get("nextLink")
 
     def wait_for_network_open(self):
         self.get(
