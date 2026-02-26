@@ -129,9 +129,7 @@ namespace
     }
     EXPECT_THAT(
       error_message,
-      HasSubstr(
-        "Signed Statement could not be verified because payload is detached "
-        "or empty"));
+      HasSubstr("Detached or empty payloads are not supported"));
   }
 
   TEST(CoseTest, DecodeHeadersRejectsEmptyPayload)
@@ -154,9 +152,7 @@ namespace
     }
     EXPECT_THAT(
       error_message,
-      HasSubstr(
-        "Signed Statement could not be verified because payload is detached "
-        "or empty"));
+      HasSubstr("Detached or empty payloads are not supported"));
   }
 
   TEST(CoseTest, DecodeTSSHeadersFailsDueToInvalidMap)

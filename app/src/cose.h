@@ -930,18 +930,14 @@ namespace scitt::cose
     qcbor_result = QCBORDecode_GetError(&ctx);
     if (qcbor_result != QCBOR_SUCCESS)
     {
-      throw COSEDecodeError(
-        "Signed Statement could not be verified because payload is detached "
-        "or empty");
+      throw COSEDecodeError("Detached or empty payloads are not supported");
     }
     if (
       payload_item.uDataType == QCBOR_TYPE_NULL ||
       (payload_item.uDataType == QCBOR_TYPE_BYTE_STRING &&
        payload_item.val.string.len == 0))
     {
-      throw COSEDecodeError(
-        "Signed Statement could not be verified because payload is detached "
-        "or empty");
+      throw COSEDecodeError("Detached or empty payloads are not supported");
     }
 
     QCBORDecode_ExitArray(&ctx);
