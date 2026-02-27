@@ -128,8 +128,7 @@ namespace
       error_message = e.what();
     }
     EXPECT_THAT(
-      error_message,
-      HasSubstr("Detached or empty payloads are not supported"));
+      error_message, HasSubstr("Detached or empty payloads are not supported"));
   }
 
   TEST(CoseTest, DecodeHeadersRejectsEmptyPayload)
@@ -151,8 +150,7 @@ namespace
       error_message = e.what();
     }
     EXPECT_THAT(
-      error_message,
-      HasSubstr("Detached or empty payloads are not supported"));
+      error_message, HasSubstr("Detached or empty payloads are not supported"));
   }
 
   TEST(CoseTest, DecodeTSSHeadersFailsDueToInvalidMap)
