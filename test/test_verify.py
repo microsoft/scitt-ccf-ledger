@@ -361,7 +361,7 @@ class TestVerifyTransparentStatement:
         )
 
         assert len(details) == 1
-        assert details[0]["issuer"] == issuer
+        assert details[0]["iss"] == issuer
 
     @patch("pyscitt.verify.ccf.cose.verify_receipt")
     def test_returns_issuers_for_multiple_receipts(self, mock_verify_receipt):
@@ -378,8 +378,8 @@ class TestVerifyTransparentStatement:
         )
 
         assert len(details) == 2
-        assert details[0]["issuer"] == issuers[0]
-        assert details[1]["issuer"] == issuers[1]
+        assert details[0]["iss"] == issuers[0]
+        assert details[1]["iss"] == issuers[1]
 
     @patch("pyscitt.verify.ccf.cose.verify_receipt")
     def test_returns_none_issuer_when_no_cwt_claims(self, mock_verify_receipt):
@@ -399,7 +399,7 @@ class TestVerifyTransparentStatement:
         )
 
         assert len(details) == 1
-        assert details[0]["issuer"] is None
+        assert details[0]["iss"] is None
 
     @patch("pyscitt.verify.ccf.cose.verify_receipt")
     def test_validate_prints_issuer(self, mock_verify_receipt, capsys, tmp_path):
@@ -421,4 +421,4 @@ class TestVerifyTransparentStatement:
             validate_transparent_statement(ts_file)
 
         captured = capsys.readouterr()
-        assert f"Verified receipt from issuer: {issuer}" in captured.out
+        assert f"Verified receipt from issuer {issuer}" in captured.out
