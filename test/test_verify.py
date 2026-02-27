@@ -18,8 +18,12 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
-from pyscitt.crypto import CWT_ISS, CWTClaims
-from pyscitt.verify import DynamicTrustStore, DynamicTrustStoreClient
+from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
+from pyscitt.verify import (
+    DynamicTrustStore,
+    DynamicTrustStoreClient,
+    verify_transparent_statement,
+)
 
 
 class TestDynamicTrustStore:
@@ -319,3 +323,99 @@ class TestDynamicTrustStoreClient:
 
         # Verify warning was printed
         mock_print.assert_called_with("Warning: Could not parse JWKS key: Invalid JWK")
+
+
+class TestVerifyTransparentStatement:
+    def _build_receipt(self, issuer):
+        """Build a sample COSE Sign1 receipt with CWT claims containing an issuer."""
+        receipt = Sign1Message()
+        receipt.phdr = {
+            CWTClaims: {CWT_ISS: issuer},
+            KID: b"test_kid",
+        }
+        receipt.payload = b""
+        receipt._signature = b"fake_sig"
+        return receipt.encode(tag=True, sign=False)
+
+    def _build_transparent_statement(self, receipts):
+        """Build a sample transparent statement with embedded receipts."""
+        ts = Sign1Message()
+        ts.phdr = {}
+        ts.uhdr = {SCITTReceipts: receipts}
+        ts.payload = b"test payload"
+        ts._signature = b"fake_sig"
+        return ts.encode(tag=True, sign=False)
+
+    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    def test_returns_issuer_for_each_receipt(self, mock_verify_receipt):
+        issuer = "test-issuer.example.com"
+        receipt_bytes = self._build_receipt(issuer)
+        ts_bytes = self._build_transparent_statement([receipt_bytes])
+        signed_statement = b"signed_statement"
+
+        mock_trust_store = Mock()
+        mock_trust_store.get_key.return_value = Mock()
+
+        details = verify_transparent_statement(
+            ts_bytes, mock_trust_store, signed_statement
+        )
+
+        assert len(details) == 1
+        assert details[0]["iss"] == issuer
+
+    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    def test_returns_issuers_for_multiple_receipts(self, mock_verify_receipt):
+        issuers = ["issuer-a.example.com", "issuer-b.example.com"]
+        receipts = [self._build_receipt(iss) for iss in issuers]
+        ts_bytes = self._build_transparent_statement(receipts)
+        signed_statement = b"signed_statement"
+
+        mock_trust_store = Mock()
+        mock_trust_store.get_key.return_value = Mock()
+
+        details = verify_transparent_statement(
+            ts_bytes, mock_trust_store, signed_statement
+        )
+
+        assert len(details) == 2
+        assert details[0]["iss"] == issuers[0]
+        assert details[1]["iss"] == issuers[1]
+
+    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    def test_returns_none_issuer_when_no_cwt_claims(self, mock_verify_receipt):
+        receipt = Sign1Message()
+        receipt.phdr = {KID: b"test_kid"}
+        receipt.payload = b""
+        receipt._signature = b"fake_sig"
+        receipt_bytes = receipt.encode(tag=True, sign=False)
+        ts_bytes = self._build_transparent_statement([receipt_bytes])
+        signed_statement = b"signed_statement"
+
+        mock_trust_store = Mock()
+        mock_trust_store.get_key.return_value = Mock()
+
+        details = verify_transparent_statement(
+            ts_bytes, mock_trust_store, signed_statement
+        )
+
+        assert len(details) == 1
+        assert details[0]["iss"] is None
+
+    def test_validate_print_issuers(self, capsys):
+        """Validate CLI output against a checked-in golden transparent statement."""
+        from pyscitt.cli.validate import validate_transparent_statement
+
+        golden_dir = Path(__file__).parent / "transparent_statements"
+        golden_file = golden_dir / "uvm_0.2.10.cose"
+
+        validate_transparent_statement(golden_file, service_trust_store_path=golden_dir)
+
+        captured = capsys.readouterr()
+        lines = captured.out.strip().splitlines()
+        assert len(lines) == 2
+        assert lines[0] == (
+            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
+            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00): "
+            "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440"
+        )
+        assert lines[1] == f"Statement is transparent: {golden_file}"
