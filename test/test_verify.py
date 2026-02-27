@@ -401,24 +401,21 @@ class TestVerifyTransparentStatement:
         assert len(details) == 1
         assert details[0]["iss"] is None
 
-    @patch("pyscitt.verify.ccf.cose.verify_receipt")
-    def test_validate_prints_issuer(self, mock_verify_receipt, capsys, tmp_path):
+    def test_validate_print_issuers(self, capsys):
+        """Validate CLI output against a checked-in golden transparent statement."""
         from pyscitt.cli.validate import validate_transparent_statement
 
-        issuer = "test-issuer.example.com"
-        receipt_bytes = self._build_receipt(issuer)
-        ts_bytes = self._build_transparent_statement([receipt_bytes])
+        golden_dir = Path(__file__).parent / "transparent_statements"
+        golden_file = golden_dir / "uvm_0.2.10.cose"
 
-        ts_file = tmp_path / "transparent_statement.cose"
-        ts_file.write_bytes(ts_bytes)
-
-        mock_trust_store = Mock()
-        mock_trust_store.get_key.return_value = Mock()
-
-        with patch(
-            "pyscitt.cli.validate.DynamicTrustStore", return_value=mock_trust_store
-        ):
-            validate_transparent_statement(ts_file)
+        validate_transparent_statement(golden_file, service_trust_store_path=golden_dir)
 
         captured = capsys.readouterr()
-        assert f"Verified receipt from issuer {issuer}" in captured.out
+        lines = captured.out.strip().splitlines()
+        assert len(lines) == 2
+        assert lines[0] == (
+            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
+            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00): "
+            "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440"
+        )
+        assert lines[1] == f"Statement is transparent: {golden_file}"
