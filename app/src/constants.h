@@ -21,8 +21,6 @@ namespace scitt
 
   namespace errors
   {
-    const std::string IndexingInProgressRetryLater =
-      "IndexingInProgressRetryLater";
     const std::string InternalError = "InternalError";
     const std::string InvalidInput = "InvalidInput";
     const std::string TransactionNotCached = "TransactionNotCached";
@@ -33,11 +31,5 @@ namespace scitt
     const std::string PolicyError = "PolicyError";
     const std::string PolicyFailed = "PolicyFailed";
   } // namespace errors
-
-  namespace indexing
-  {
-    const size_t SEQNOS_PER_BUCKET = 10000;
-    const size_t MAX_BUCKETS = 20;
-  }
 
 } // namespace scitt
