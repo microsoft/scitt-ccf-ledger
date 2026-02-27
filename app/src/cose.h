@@ -922,6 +922,28 @@ namespace scitt::cose
     auto phdr = decode_protected_header(ctx);
     auto uhdr = decode_unprotected_header(ctx);
 
+    // Check that the payload is present and not nil (detached).
+    // A COSE_Sign1 payload must be a bstr; a nil value indicates a
+    // detached payload which is not supported.
+    QCBORItem payload_item;
+    QCBORDecode_VGetNext(&ctx, &payload_item);
+    qcbor_result = QCBORDecode_GetError(&ctx);
+    if (qcbor_result != QCBOR_SUCCESS)
+    {
+      throw COSEDecodeError(
+        "Signed Statement could not be verified because payload is detached "
+        "or empty");
+    }
+    if (
+      payload_item.uDataType == QCBOR_TYPE_NULL ||
+      (payload_item.uDataType == QCBOR_TYPE_BYTE_STRING &&
+       payload_item.val.string.len == 0))
+    {
+      throw COSEDecodeError(
+        "Signed Statement could not be verified because payload is detached "
+        "or empty");
+    }
+
     QCBORDecode_ExitArray(&ctx);
     auto error = QCBORDecode_Finish(&ctx);
     if (error)
