@@ -50,8 +50,9 @@ def validate_transparent_statement(
             else "unknown time"
         )
         if issuer:
+            url = f"https://{issuer}/entries/{regtxid}"
             print(
-                f"Verified receipt from issuer {issuer}, registered at {regtxid}, signed at {sigtxid} ({timestamp})"
+                f"Verified receipt from issuer {issuer}, registered at {regtxid}, signed at {sigtxid} ({timestamp}): {url}"
             )
     print(f"Statement is transparent: {statement}")
 
