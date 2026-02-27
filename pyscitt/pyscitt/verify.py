@@ -29,7 +29,7 @@ from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from . import crypto
-from .crypto import CWT_ISS, CWTClaims
+from .crypto import CWT_IAT, CWT_ISS, CWTClaims
 
 
 @dataclass
@@ -96,12 +96,45 @@ def verify_transparent_statement(
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
         )
+
+        # ccf.cose.verify_receipt should be improved to return full detail from the receipt
+        # at which point the following parsing can be removed and the details can be returned directly from the verify_receipt function.
         parsed = Sign1Message.decode(receipt)
         issuer = None
+        iat = None
         if CWTClaims in parsed.phdr:
             cwt = parsed.phdr[CWTClaims]
             issuer = cwt.get(CWT_ISS)
-        receipt_details.append({"issuer": issuer})
+            iat = cwt.get(CWT_IAT)
+
+        # Extract txid from ccf.v1 protected header
+        sigtxid = None
+        ccf_v1 = parsed.phdr.get("ccf.v1")
+        if isinstance(ccf_v1, dict):
+            sigtxid = ccf_v1.get("txid")
+
+        # Extract registration txid from internal-evidence in inclusion proof leaf
+        regtxid = None
+        uhdr = parsed.uhdr
+        if 396 in uhdr:
+            inclusion_proofs = uhdr[396].get(-1, [])
+            if inclusion_proofs:
+                proof = cbor2.loads(inclusion_proofs[0])
+                leaf = proof.get(1)
+                if leaf and len(leaf) > 1:
+                    ce = leaf[1]
+                    parts = ce.split(":") if isinstance(ce, str) else []
+                    if len(parts) >= 2:
+                        regtxid = parts[1]
+
+        receipt_details.append(
+            {
+                "iss": issuer,
+                "iat": iat,
+                "sigtxid": sigtxid,
+                "regtxid": regtxid,
+            }
+        )
     return receipt_details
 
 

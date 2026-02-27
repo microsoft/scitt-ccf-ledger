@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -39,9 +40,19 @@ def validate_transparent_statement(
         transparent_statment_bytes, service_trust_store, signed_statement
     )
     for detail in receipt_details:
-        issuer = detail.get("issuer")
+        issuer = detail.get("iss")
+        iat = detail.get("iat")
+        sigtxid = detail["sigtxid"]
+        regtxid = detail["regtxid"]
+        timestamp = (
+            datetime.fromtimestamp(iat, tz=timezone.utc).isoformat()
+            if iat
+            else "unknown time"
+        )
         if issuer:
-            print(f"Verified receipt from issuer: {issuer}")
+            print(
+                f"Verified receipt from issuer {issuer}, registered at {regtxid}, signed at {sigtxid} ({timestamp})"
+            )
     print(f"Statement is transparent: {statement}")
 
 
