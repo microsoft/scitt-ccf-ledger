@@ -34,10 +34,7 @@ namespace
       (override));
 
     MOCK_METHOD(
-      void,
-      set_soft_cache_limit,
-      (ccf::historical::CacheSize),
-      (override));
+      void, set_soft_cache_limit, (ccf::historical::CacheSize), (override));
 
     MOCK_METHOD(void, track_deletes_on_missing_keys, (bool), (override));
 
@@ -45,7 +42,9 @@ namespace
     MOCK_METHOD(
       ccf::kv::ReadOnlyStorePtr,
       get_store_at,
-      (ccf::historical::RequestHandle, ccf::SeqNo, ccf::historical::ExpiryDuration),
+      (ccf::historical::RequestHandle,
+       ccf::SeqNo,
+       ccf::historical::ExpiryDuration),
       (override));
     MOCK_METHOD(
       ccf::kv::ReadOnlyStorePtr,
@@ -126,10 +125,7 @@ namespace
       (override));
 
     MOCK_METHOD(
-      bool,
-      drop_cached_states,
-      (ccf::historical::RequestHandle),
-      (override));
+      bool, drop_cached_states, (ccf::historical::RequestHandle), (override));
   };
 
   // ---------------------------------------------------------------------------
@@ -253,9 +249,7 @@ namespace
     void set_response_trailer(
       const std::string_view&, const std::string_view&) override
     {}
-    void set_response_json(
-      const nlohmann::json&, ccf::http_status) override
-    {}
+    void set_response_json(const nlohmann::json&, ccf::http_status) override {}
     void set_error(
       ccf::http_status,
       const std::string&,
@@ -306,12 +300,12 @@ namespace
     EXPECT_CALL(cache, drop_cached_states(seqno)).WillOnce(Return(true));
 
     bool handler_called = false;
-    auto handler =
-      [&](ccf::endpoints::EndpointContext&,
-          const ccf::historical::StatePtr& s) {
-        handler_called = true;
-        EXPECT_EQ(s->transaction_id.seqno, seqno);
-      };
+    auto handler = [&](
+                     ccf::endpoints::EndpointContext&,
+                     const ccf::historical::StatePtr& s) {
+      handler_called = true;
+      EXPECT_EQ(s->transaction_id.seqno, seqno);
+    };
 
     auto endpoint_fn = entry_adapter(handler, cache, always_valid());
 
@@ -342,8 +336,7 @@ namespace
     EXPECT_CALL(cache, drop_cached_states(_)).Times(0);
 
     auto handler =
-      [](ccf::endpoints::EndpointContext&,
-         const ccf::historical::StatePtr&) {
+      [](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
         throw std::runtime_error("simulated handler failure");
       };
 
@@ -374,8 +367,7 @@ namespace
     EXPECT_CALL(cache, drop_cached_states(_)).Times(0);
 
     auto handler =
-      [](ccf::endpoints::EndpointContext&,
-         const ccf::historical::StatePtr&) {
+      [](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
         FAIL() << "Handler should not be reached when cache returns nullptr";
       };
 
@@ -435,8 +427,9 @@ namespace
 
     size_t handler_call_count = 0;
     auto handler =
-      [&](ccf::endpoints::EndpointContext&,
-          const ccf::historical::StatePtr&) { handler_call_count++; };
+      [&](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
+        handler_call_count++;
+      };
 
     auto endpoint_fn = entry_adapter(handler, cache, always_valid());
 
@@ -457,7 +450,8 @@ namespace
     for (size_t i = 0; i < num_requests; ++i)
     {
       EXPECT_EQ(
-        dropped_handles[i], static_cast<ccf::historical::RequestHandle>(seqnos[i]))
+        dropped_handles[i],
+        static_cast<ccf::historical::RequestHandle>(seqnos[i]))
         << "Handle at position " << i << " should match seqno " << seqnos[i];
     }
   }
@@ -504,25 +498,26 @@ namespace
       get_state_at(
         Matcher<ccf::historical::RequestHandle>(Eq(second_seqno)),
         Matcher<ccf::SeqNo>(Eq(second_seqno))))
-      .WillOnce([&first_dropped, second_seqno](
-                  ccf::historical::RequestHandle,
-                  ccf::SeqNo) -> ccf::historical::StatePtr {
-        // If the first state was not dropped, the cache is full and returns
-        // nullptr — which triggers a 503 in production.
-        if (!first_dropped)
-        {
-          return nullptr;
-        }
-        return make_state(second_seqno);
-      });
+      .WillOnce(
+        [&first_dropped, second_seqno](
+          ccf::historical::RequestHandle,
+          ccf::SeqNo) -> ccf::historical::StatePtr {
+          // If the first state was not dropped, the cache is full and returns
+          // nullptr — which triggers a 503 in production.
+          if (!first_dropped)
+          {
+            return nullptr;
+          }
+          return make_state(second_seqno);
+        });
 
-    EXPECT_CALL(cache, drop_cached_states(second_seqno))
-      .WillOnce(Return(true));
+    EXPECT_CALL(cache, drop_cached_states(second_seqno)).WillOnce(Return(true));
 
     size_t handler_call_count = 0;
     auto handler =
-      [&](ccf::endpoints::EndpointContext&,
-          const ccf::historical::StatePtr&) { handler_call_count++; };
+      [&](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
+        handler_call_count++;
+      };
 
     auto endpoint_fn = entry_adapter(handler, cache, always_valid());
 
@@ -585,8 +580,9 @@ namespace
 
     size_t handler_call_count = 0;
     auto handler =
-      [&](ccf::endpoints::EndpointContext&,
-          const ccf::historical::StatePtr&) { handler_call_count++; };
+      [&](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
+        handler_call_count++;
+      };
 
     auto endpoint_fn = entry_adapter(handler, cache, always_valid());
 
@@ -629,8 +625,7 @@ namespace
     EXPECT_CALL(
       cache,
       get_state_at(
-        Matcher<ccf::historical::RequestHandle>(_),
-        Matcher<ccf::SeqNo>(_)))
+        Matcher<ccf::historical::RequestHandle>(_), Matcher<ccf::SeqNo>(_)))
       .Times(0);
     EXPECT_CALL(cache, drop_cached_states(_)).Times(0);
 
@@ -639,8 +634,7 @@ namespace
     };
 
     auto handler =
-      [](ccf::endpoints::EndpointContext&,
-         const ccf::historical::StatePtr&) {
+      [](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
         FAIL() << "Handler must not be called for invalid transactions";
       };
 
@@ -678,8 +672,9 @@ namespace
 
     size_t handler_call_count = 0;
     auto handler =
-      [&](ccf::endpoints::EndpointContext&,
-          const ccf::historical::StatePtr&) { handler_call_count++; };
+      [&](ccf::endpoints::EndpointContext&, const ccf::historical::StatePtr&) {
+        handler_call_count++;
+      };
 
     auto endpoint_fn = entry_adapter(handler, cache, always_valid());
 
