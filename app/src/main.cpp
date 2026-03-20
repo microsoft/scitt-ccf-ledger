@@ -572,8 +572,7 @@ namespace scitt
           {
             throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later",
-              1);
+              "Index of requested range not available yet, retry later");
           }
 
           static constexpr size_t max_seqno_per_page = 10000;
@@ -587,8 +586,7 @@ namespace scitt
           {
             throw ServiceUnavailableJsonError(
               errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later",
-              1);
+              "Index of requested range not available yet, retry later");
           }
 
           SCITT_DEBUG("Get entries for the target range");

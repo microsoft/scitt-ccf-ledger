@@ -68,58 +68,16 @@ namespace scitt
 
   struct ServiceUnavailableJsonError : public HTTPError
   {
-    ServiceUnavailableJsonError(
-      std::string code,
-      std::string msg,
-      std::optional<uint32_t> retry_after = std::nullopt) :
-      HTTPError(
-        HTTP_STATUS_SERVICE_UNAVAILABLE,
-        code,
-        msg,
-        false,
-        make_headers(retry_after))
+    ServiceUnavailableJsonError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, false)
     {}
-
-  private:
-    static HTTPError::Headers make_headers(std::optional<uint32_t> retry_after)
-    {
-      if (retry_after)
-      {
-        return {{"Retry-After", std::to_string(retry_after.value())}};
-      }
-      else
-      {
-        return {};
-      }
-    }
   };
 
   struct ServiceUnavailableCborError : public HTTPError
   {
-    ServiceUnavailableCborError(
-      std::string code,
-      std::string msg,
-      std::optional<uint32_t> retry_after = std::nullopt) :
-      HTTPError(
-        HTTP_STATUS_SERVICE_UNAVAILABLE,
-        code,
-        msg,
-        true,
-        make_headers(retry_after))
+    ServiceUnavailableCborError(std::string code, std::string msg) :
+      HTTPError(HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, true)
     {}
-
-  private:
-    static HTTPError::Headers make_headers(std::optional<uint32_t> retry_after)
-    {
-      if (retry_after)
-      {
-        return {{"Retry-After", std::to_string(retry_after.value())}};
-      }
-      else
-      {
-        return {};
-      }
-    }
   };
 
   struct InternalServerError : public HTTPError
