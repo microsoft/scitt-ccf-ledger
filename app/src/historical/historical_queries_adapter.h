@@ -83,12 +83,10 @@ namespace scitt::historical
 
     if (historical_state == nullptr)
     {
-      constexpr uint32_t retry_after_seconds = 1;
       throw ServiceUnavailableCborError(
         errors::TransactionNotCached,
         fmt::format(
-          "Historical transaction {} is not cached.", target_tx_id.to_str()),
-        retry_after_seconds);
+          "Historical transaction {} is not cached.", target_tx_id.to_str()));
     }
 
     return historical_state;
