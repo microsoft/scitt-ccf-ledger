@@ -17,8 +17,8 @@
 // Adapted to match the rest of the SCITT code base, eg. uses
 // exceptions to return HTTP errors.
 //
-// Cache eviction is handled by CCF's set_soft_cache_limit(), which should be
-// called during initialization.
+// Cache eviction is handled by CCF's historical_cache_soft_limit node
+// configuration option. See the CCF documentation for details.
 
 namespace scitt::historical
 {

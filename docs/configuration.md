@@ -384,6 +384,15 @@ This can also be used to restrict the maximum size to a value smaller than the d
 
 Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.
 
+### Historical cache soft limit
+
+The size of the historical state cache can be configured per node using the `historical_cache_soft_limit` option in the [CCF node configuration](https://ccf.dev/main/operations/configuration.html#historical-cache-soft-limit). Once the soft limit is exceeded, least recently used states will be evicted from the cache.
+
+Example node configuration snippet:
+```json
+"historical_cache_soft_limit": "512MB"
+```
+
 ### Receipt issuance
 
 Receipts can contain the issuer and subject fields identifying the service.

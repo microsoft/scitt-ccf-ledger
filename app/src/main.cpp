@@ -230,10 +230,6 @@ namespace scitt
         std::make_shared<ConfigurableJwtAuthnPolicy>(),
       };
 
-      SCITT_DEBUG("Get historical state from CCF");
-      auto& state_cache = context.get_historical_state();
-      state_cache.set_soft_cache_limit(HISTORICAL_CACHE_SOFT_LIMIT);
-
       SCITT_DEBUG("Install custom indexing strategy");
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
         ENTRY_TABLE,
