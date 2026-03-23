@@ -327,7 +327,7 @@ namespace scitt
 
       if (it != operations_.begin())
       {
-        SCITT_INFO(
+        SCITT_DEBUG(
           "Removing {} operations from indexing strategy",
           std::distance(operations_.begin(), it));
 
