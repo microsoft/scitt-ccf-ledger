@@ -50,9 +50,26 @@ export function apply(phdr, uhdr, payload, details) {{
 
 PPE_CSS_POLICY_SCRIPT = f"""
 export function apply(phdr, uhdr, payload, details) {{
+    function check_tcb(ref_product, ref_tcb, reported_tcb) {{
+        const ref = ccf.tcbHexToPolicy(ref_product, ref_tcb);
+        const reported = ccf.tcbHexToPolicy(ref_product, reported_tcb);
+        const fields = ["microcode", "snp", "tee", "boot_loader", "fmc"];
+        for (const f of fields) {{
+            if (f in ref && reported[f] < ref[f]) {{
+                return false;
+            }}
+        }}
+        return true;
+    }}
+
     // Check AMD TCB is valid
-    if (details.product_name != "Genoa") {{ return "Invalid AMD product name"; }}
-    if (details.reported_tcb.hexstring !== "541700000000000a") {{ return "Invalid reported TCB" }}
+    if (details.product_name === "Milan") {{
+        if (!check_tcb("00a00f11", "db18000000000004", details.reported_tcb.hexstring)) {{ return "Invalid reported TCB"; }}
+    }} else if (details.product_name === "Genoa") {{
+        if (!check_tcb("00a10f11", "541700000000000a", details.reported_tcb.hexstring)) {{ return "Invalid reported TCB"; }}
+    }} else {{
+        return "Unsupported product name";
+    }}
 
     // Check UVM/measurement endorsement is valid
     if (details.uvm_endorsements.did !== "did:x509:0:sha256:I__iuL25oXEVFdTP_aBLx_eT1RPHbCQ_ECBQfYZpt9s::eku:1.3.6.1.4.1.311.76.59.1.2") {{ return "Invalid uvm_endorsements did"; }}
