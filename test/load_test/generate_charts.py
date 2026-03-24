@@ -22,7 +22,11 @@ import pandas as pd
 
 def build_rps_df(endpoint_stats, label, global_start_time=None):
     """Build a time-series DataFrame from an endpoint's num_reqs_per_sec."""
-    start_time = global_start_time if global_start_time is not None else endpoint_stats["start_time"]
+    start_time = (
+        global_start_time
+        if global_start_time is not None
+        else endpoint_stats["start_time"]
+    )
     rows = []
     for ts_str, count in endpoint_stats["num_reqs_per_sec"].items():
         ts = int(ts_str)
@@ -63,9 +67,7 @@ def build_fail_df(endpoint_stats, global_start_time, label):
 
 def align_series(dfs, value_col, elapsed_col="elapsed_seconds"):
     """Align multiple DataFrames to a shared elapsed-time index, filling gaps with 0."""
-    all_elapsed = sorted(
-        set().union(*[set(df[elapsed_col].tolist()) for df in dfs])
-    )
+    all_elapsed = sorted(set().union(*[set(df[elapsed_col].tolist()) for df in dfs]))
     aligned = []
     for df in dfs:
         s = df.set_index(elapsed_col)[value_col].reindex(all_elapsed, fill_value=0)
@@ -109,7 +111,9 @@ def expand_response_times(response_times_dict):
     return np.array(times)
 
 
-def generate_charts(stats, output_dir, peak_users, spawn_rate, docker_stats=None, e2e_samples=None):
+def generate_charts(
+    stats, output_dir, peak_users, spawn_rate, docker_stats=None, e2e_samples=None
+):
     """Generate and save all load test charts to output_dir."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -347,7 +351,9 @@ def generate_charts(stats, output_dir, peak_users, spawn_rate, docker_stats=None
         alpha=0.6,
     )
     ax_rps.set_ylabel("Requests Per Second")
-    ax_rps.set_title("SCITT Load Test — User Ramp-Up vs Throughput (All Endpoints, Stacked)")
+    ax_rps.set_title(
+        "SCITT Load Test — User Ramp-Up vs Throughput (All Endpoints, Stacked)"
+    )
     ax_rps.grid(True, alpha=0.3)
 
     ax_users = ax_rps.twinx()
