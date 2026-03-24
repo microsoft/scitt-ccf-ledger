@@ -126,6 +126,8 @@ namespace
 
     MOCK_METHOD(
       bool, drop_cached_states, (ccf::historical::RequestHandle), (override));
+
+    MOCK_METHOD(size_t, get_estimated_store_cache_size, (), (override));
   };
 
   // ---------------------------------------------------------------------------
