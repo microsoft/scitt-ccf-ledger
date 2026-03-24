@@ -17,8 +17,8 @@
 // Adapted to match the rest of the SCITT code base, eg. uses
 // exceptions to return HTTP errors.
 //
-// Cache eviction is handled by CCF's set_soft_cache_limit(), which should be
-// called during initialization.
+// Cache eviction is handled by CCF's historical_cache_soft_limit node
+// configuration option. See the CCF documentation for details.
 
 namespace scitt::historical
 {
@@ -83,12 +83,10 @@ namespace scitt::historical
 
     if (historical_state == nullptr)
     {
-      constexpr uint32_t retry_after_seconds = 1;
       throw ServiceUnavailableCborError(
         errors::TransactionNotCached,
         fmt::format(
-          "Historical transaction {} is not cached.", target_tx_id.to_str()),
-        retry_after_seconds);
+          "Historical transaction {} is not cached.", target_tx_id.to_str()));
     }
 
     return historical_state;
@@ -101,7 +99,15 @@ namespace scitt::historical
   {
     return [f, &state_cache, available](EndpointContext& ctx) {
       auto state = get_historical_entry_state(state_cache, available, ctx);
+      const auto handle = state->transaction_id.seqno;
       f(ctx, state);
+      // Drop cached state after the handler has successfully produced a
+      // response. Without this, completed states linger in the cache until
+      // soft-limit LRU eviction, consuming budget that in-flight fetches
+      // need. Under concurrent load this creates a starvation cycle: new
+      // fetches are evicted before they finish, resulting in perpetual 503
+      // TransactionNotCached errors.
+      state_cache.drop_cached_states(handle);
     };
   }
 }

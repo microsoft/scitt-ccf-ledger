@@ -205,7 +205,6 @@ namespace scitt
 
       SCITT_DEBUG("Get historical state from CCF");
       auto& state_cache = context.get_historical_state();
-      state_cache.set_soft_cache_limit(HISTORICAL_CACHE_SOFT_LIMIT);
 
       verifier = std::make_unique<verifier::Verifier>();
 
