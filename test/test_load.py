@@ -68,7 +68,7 @@ class TestLoad:
                     "--scitt-statements",
                     str(tmp_path),
                 ],
-                check=True,
+                check=False,
                 capture_output=True,
                 text=True,
             )

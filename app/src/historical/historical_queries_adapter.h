@@ -99,15 +99,7 @@ namespace scitt::historical
   {
     return [f, &state_cache, available](EndpointContext& ctx) {
       auto state = get_historical_entry_state(state_cache, available, ctx);
-      const auto handle = state->transaction_id.seqno;
       f(ctx, state);
-      // Drop cached state after the handler has successfully produced a
-      // response. Without this, completed states linger in the cache until
-      // soft-limit LRU eviction, consuming budget that in-flight fetches
-      // need. Under concurrent load this creates a starvation cycle: new
-      // fetches are evicted before they finish, resulting in perpetual 503
-      // TransactionNotCached errors.
-      state_cache.drop_cached_states(handle);
     };
   }
 }
