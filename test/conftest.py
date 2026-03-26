@@ -18,9 +18,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "perf: only run test if performance testing is enabled."
     )
-    config.addinivalue_line(
-        "markers", "bencher: benchmark tests using bencher."
-    )
+    config.addinivalue_line("markers", "bencher: benchmark tests using bencher.")
 
 
 def pytest_collection_modifyitems(config, items):
