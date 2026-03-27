@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.17.0]
+### Changes
+- 2926513 revert early cache cleanup and update local load test scripts to measure e2e latency (#387)
+- 408a10f Drop hardcoded HISTORICAL_CACHE_SOFT_LIMIT, document CCF node config option (#385)
+- cb20df1 Evict entries from cache after they were used to prevent cache from growing and depending on LRU eviction (#381)
+- e177832 Update sample CSS policy to handle multiple products and allow higher TCB values (#380)
+- 40f2ad7 Change operations removal from indexing strategy log from INFO to DEBUG (#386)
+- 4c6b4d6 Update CCF version from 6.0.23 to 6.0.26 (#384)
+- e696551 Remove retry-after header which slows down some clients who wait for a sec to retry (#383)
+- 9983dd9 Bump azurelinux/base/core from 3.0.20260204 to 3.0.20260304 in /docker (#379)
+- 5890213 Bump black from 26.1.0 to 26.3.1 in /test in the pip group across 1 directory (#378)
+- 15b6c26 Add PPE CSS testcase (#376)
+- 92c1733 Update detached/empty payload error message in COSE decoder (#371)
+- 5860db8 Print issuer for each verified receipt in scitt validate (#369)
+- 46862d5 Migrate CCF governance API calls to versioned API 2024-07-01 (#368)
+- f1e3010 improve error in the case of an empty or nil payload within the cose (#370)
+- 70e7055 Add configurable maxSignedStatementBytes to SCITT configuration (#364)
+- 40b1ff6 Replace custom LRU cache with CCF's set_soft_cache_limit() (#365)
+- 89ee97c Update load test include docker cpu and mem (#357)
+- 40f7e5c Update cryptography package version to 46.* in tests (#366)
+- 797c6cd Add support for Rego registration policies (rego-cpp 1.2.0) (#338)
+
 ## [0.16.5]
 ### Changes
 - 56132cd Bump azurelinux/base/core from 3.0.20260107 to 3.0.20260204 in /docker (#362)
@@ -403,3 +425,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.16.3]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.3
 [0.16.4]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.4
 [0.16.5]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.5
+[0.17.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.0
