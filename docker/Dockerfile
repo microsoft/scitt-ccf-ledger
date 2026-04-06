@@ -1,4 +1,4 @@
-ARG CCF_VERSION="6.0.26"
+ARG CCF_VERSION="6.0.27"
 
 # Pin a specific Azure Linux base image tag for reproducibility.
 # Dependabot will monitor and update this FROM line.
