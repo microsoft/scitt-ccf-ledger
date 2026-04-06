@@ -40,8 +40,8 @@ set(REGOCPP_BUILD_SHARED ON)
 FetchContent_Declare(
   regocpp
   GIT_REPOSITORY https://github.com/microsoft/rego-cpp
-  # https://github.com/microsoft/rego-cpp/releases/tag/v1.2.0
-  GIT_TAG        d8f141390bd3c1d317602f8b571d00907728eeed
+  # https://github.com/microsoft/rego-cpp/releases/tag/v1.3.0
+  GIT_TAG        975bfa0823609aec29b8e88a96eb46577977c57d
 )
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 FetchContent_MakeAvailable(regocpp)
