@@ -4,16 +4,11 @@
 
 set -ex
 
-PLATFORM=${PLATFORM:-virtual}
+PRESET=${PRESET:-dev}
 BUILD_DEBUG_CCF_FROM_SOURCE=${BUILD_DEBUG_CCF_FROM_SOURCE:-OFF}
 
-if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ] && [ "$PLATFORM" != "bench-virtual" ]; then
-    echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp', or 'bench-virtual'"
-    exit 1
-fi
-
 if [ "$BUILD_DEBUG_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="6.0.27"
+    CCF_SOURCE_VERSION="7.0.0-rc1"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     rm -rf /opt/h2spec
@@ -24,10 +19,10 @@ if [ "$BUILD_DEBUG_CCF_FROM_SOURCE" = "ON" ]; then
     tdnf -y update
     ./setup-ci.sh
     popd
-    echo "Compiling CCF $PLATFORM"
+    echo "Compiling CCF"
     mkdir -p build
     pushd build
-    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf_${PLATFORM}" -DCOMPILE_TARGET="$PLATFORM" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
+    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
     ninja
     echo "Packaging CCF into rpm"
     cpack -V -G RPM
@@ -39,6 +34,6 @@ if [ "$BUILD_DEBUG_CCF_FROM_SOURCE" = "ON" ]; then
 fi
 
 cd app
-cmake --workflow --preset "$PLATFORM" --fresh
+cmake --workflow --preset "$PRESET" --fresh
 cmake --build build/app --target install
 cd ..

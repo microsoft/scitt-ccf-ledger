@@ -4,16 +4,9 @@
 
 set -e
 
-PLATFORM=${PLATFORM:-snp}
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
-DOCKER_TAG=${DOCKER_TAG:-"scitt-$PLATFORM"}
+DOCKER_TAG=${DOCKER_TAG:-"scitt"}
 DOCKERFILE="Dockerfile"
-
-# If platform is not snp or virtual, exit
-if [ "$PLATFORM" != "virtual" ] && [ "$PLATFORM" != "snp" ]; then
-    echo "Unknown platform: $PLATFORM, must be 'virtual', or 'snp'"
-    exit 1
-fi
 
 # uses longer version of tags to avoid situations when tag is reassigned to a different commit, e.g. 0.12.1-2-g0b45e35
 SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
@@ -24,7 +17,6 @@ DOCKER_BUILDKIT=1 docker build \
     -t "$DOCKER_TAG" \
     -f docker/$DOCKERFILE \
     --build-arg SCITT_VERSION_OVERRIDE="$SCITT_VERSION_OVERRIDE" \
-    --build-arg CCF_PLATFORM="$PLATFORM" \
     .
 
 echo "Inspecting Docker image $DOCKER_TAG"

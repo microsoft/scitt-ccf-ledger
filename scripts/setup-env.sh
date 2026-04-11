@@ -4,8 +4,7 @@
 
 set -ex
 
-CCF_VERSION=${CCF_VERSION:-"6.0.27"}
-CCF_PLATFORM=${PLATFORM:-"virtual"}
+CCF_VERSION=${CCF_VERSION:-"7.0.0-rc1"}
 
 tdnf update -y
 
@@ -20,7 +19,7 @@ tdnf install -y \
     clang-tools-extra-devel
 
 # Download the CCF development package
-curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm
+curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm
 
 tdnf install -y ./ccf.rpm
 rm -f ccf.rpm

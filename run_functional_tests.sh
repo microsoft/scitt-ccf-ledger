@@ -5,7 +5,6 @@
 set -ex
 
 DOCKER=${DOCKER:-0}
-PLATFORM=${PLATFORM:-snp}
 
 # Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
@@ -50,7 +49,10 @@ else
     echo "List of files in SCITT_DIR $SCITT_DIR"
     ls -R $SCITT_DIR
 
-    TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
+    TEST_ARGS="--start-cchost --constitution=$SCITT_DIR/share/scitt/constitution"
+    if [ -n "$SNP_ATTESTATION_CONFIG" ]; then
+        TEST_ARGS="$TEST_ARGS --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
+    fi
 fi
 
 echo "Setting up python virtual environment."

@@ -5,7 +5,6 @@
 set -ex
 
 DOCKER=${DOCKER:-0}
-PLATFORM=virtual
 
 wait_for_service() {
     url=$1
@@ -40,7 +39,7 @@ echo "Service URL: $CCF_URL"
 if [ "$DOCKER" = "1" ]; then
     echo "Will use a running docker instance for testing..."
     
-    PLATFORM=$PLATFORM ./docker/run-dev.sh &
+    ./docker/run-dev.sh &
     CCF_NETWORK_PID=$!
     trap "kill $CCF_NETWORK_PID" EXIT
 
@@ -48,7 +47,7 @@ if [ "$DOCKER" = "1" ]; then
 else
     echo "Will use a built SCITT binary for testing..."
         
-    PLATFORM=$PLATFORM ./start.sh &
+    ./start.sh &
     # start script will launch cchost process
     trap 'pkill -f cchost' EXIT
 
