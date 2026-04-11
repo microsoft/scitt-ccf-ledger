@@ -5,7 +5,7 @@ SAMPLE_POLICY_SCRIPT = f"""
 export function apply(phdr) {{
 if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
 if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat > (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
 return true;
 }}"""
 

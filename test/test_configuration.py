@@ -365,7 +365,7 @@ export function apply(phdr) {{
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:_ZI-nfqGZ-fxTeeCyC31xeKEs30u3esA8mjXEgsDfTU::subject:CN:7931e33a-6d97-46e6-a796-ae51ab91f79f") {{ return "Invalid issuer"; }}
 if (phdr.cwt.sub !== "unknown.intent") {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat > (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
 
 return true;
 }}"""

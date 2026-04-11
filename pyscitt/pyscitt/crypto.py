@@ -233,7 +233,7 @@ def generate_cert(
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.datetime.now(datetime.UTC))
         .not_valid_after(
-            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=10)
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365)
         )
         .add_extension(
             x509.KeyUsage(

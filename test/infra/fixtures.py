@@ -15,7 +15,7 @@ from pyscitt.client import Client
 from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import StaticTrustStore
 
-from .cchost import CCHost, get_default_cchost_path, get_enclave_path
+from .cchost import CCHost, get_default_cchost_path
 from .x5chain_certificate_authority import X5ChainCertificateAuthority
 
 # This file defines a collection of pytest fixtures used to manage and
@@ -30,14 +30,10 @@ class ManagedCCHostFixtures:
     def __init__(
         self,
         binary,
-        platform,
-        enclave_file,
         constitution,
         snp_attestation_config,
     ):
         self.binary = binary
-        self.platform = platform
-        self.enclave_file = enclave_file
         self.constitution = constitution
         self.snp_attestation_config = snp_attestation_config
 
@@ -82,8 +78,6 @@ class ManagedCCHostFixtures:
 
             cchost = CCHost(
                 self.binary,
-                self.platform,
-                self.enclave_file,
                 workspace=workspace,
                 constitution=constitution_files,
                 snp_attestation_config=self.snp_attestation_config,
@@ -207,17 +201,6 @@ def pytest_addoption(parser):
         help="Path to the cchost binary. Requires --start-cchost.",
     )
     parser.addoption(
-        "--platform",
-        default="virtual",
-        choices=["virtual", "snp"],
-        help="Type of enclave used when starting cchost. Requires --start-cchost.",
-    )
-    parser.addoption(
-        "--enclave-package",
-        default="/tmp/scitt/lib/libscitt",
-        help="The enclave package to load. Requires --start-cchost.",
-    )
-    parser.addoption(
         "--constitution",
         type=Path,
         default="/tmp/scitt/share/scitt/constitution",
@@ -238,19 +221,12 @@ def pytest_configure(config):
     )
 
     if config.getoption("--start-cchost"):
-        enclave_package = config.getoption("--enclave-package")
-        platform = config.getoption("--platform")
-        binary = config.getoption("--cchost-binary") or get_default_cchost_path(
-            platform
-        )
+        binary = config.getoption("--cchost-binary") or get_default_cchost_path()
         constitution = config.getoption("--constitution")
-        enclave_file = get_enclave_path(platform, enclave_package)
         snp_attestation_config = config.getoption("--snp-attestation-config")
         config.pluginmanager.register(
             ManagedCCHostFixtures(
                 binary,
-                platform,
-                enclave_file,
                 constitution,
                 snp_attestation_config,
             )
