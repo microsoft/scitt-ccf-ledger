@@ -187,7 +187,6 @@ namespace scitt
         ctx.rpc_ctx->get_request_query().c_str(),
         ctx.rpc_ctx->get_request_url());
 
-      ::timespec start;
       ccf::ApiResult result = get_time(app_data.start_time);
       if (result != ccf::ApiResult::OK)
       {
