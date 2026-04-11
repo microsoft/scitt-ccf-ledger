@@ -36,7 +36,7 @@ namespace
 
     std::shared_ptr<ccf::crypto::HashProvider> hash_provider =
       ccf::crypto::make_hash_provider();
-    auto thumbprint = hash_provider->Hash(
+    auto thumbprint = hash_provider->hash(
       cose_key.data(), cose_key.size(), ccf::crypto::MDType::SHA256);
 
     EXPECT_EQ(
@@ -65,7 +65,7 @@ namespace
 
     std::shared_ptr<ccf::crypto::HashProvider> hash_provider =
       ccf::crypto::make_hash_provider();
-    auto thumbprint = hash_provider->Hash(
+    auto thumbprint = hash_provider->hash(
       cose_key.data(), cose_key.size(), ccf::crypto::MDType::SHA256);
 
     EXPECT_EQ(

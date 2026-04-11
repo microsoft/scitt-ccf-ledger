@@ -51,9 +51,20 @@ namespace scitt
       for (const auto& service_certificate : service_certificates)
       {
         auto verifier = ccf::crypto::make_unique_verifier(service_certificate);
+        auto pub_pem = verifier->public_key_pem();
         auto kid =
           ccf::crypto::Sha256Hash(verifier->public_key_der()).hex_str();
-        nlohmann::json json_jwk = verifier->public_key_jwk();
+        nlohmann::json json_jwk;
+        try
+        {
+          json_jwk =
+            ccf::crypto::make_ec_public_key(pub_pem)->public_key_jwk(kid);
+        }
+        catch (const std::exception&)
+        {
+          json_jwk =
+            ccf::crypto::make_rsa_public_key(pub_pem)->public_key_jwk(kid);
+        }
         json_jwk["kid"] = kid;
         jwks.emplace_back(std::move(json_jwk));
       }
