@@ -22,7 +22,6 @@ All instructions below assume a Linux operating system and the availability of D
 First, start the service in one terminal window:
 
 ```sh
-export PLATFORM=virtual
 ./docker/build.sh
 ./docker/run-dev.sh
 

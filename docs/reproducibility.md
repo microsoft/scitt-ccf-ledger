@@ -122,7 +122,7 @@ Now it is clear that the contents of the policy (image layers) can be trusted in
 
     ```sh
     $ cat docker/Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=6.0.27
+    ARG CCF_VERSION=7.0.0-rc1
 
     $ cat docker/Dockerfile | grep BASE_IMAGE=
     ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250402
@@ -130,12 +130,12 @@ Now it is clear that the contents of the policy (image layers) can be trusted in
 - Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
 
     ```sh
-    $ export CCF_VERSION="6.0.27"
+    $ export CCF_VERSION="7.0.0-rc1"
     $ export BASE_IMAGE="mcr.microsoft.com/azurelinux/base/core:3.0.20250402"
     $ docker run -it --rm \
         -w /__w/1/s -v $(pwd):/__w/1/s \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        ${BASE_IMAGE} git config --global --add safe.directory "*" && PLATFORM=snp SAVE_IMAGE_PATH=image.tar ./docker/build.sh
+        ${BASE_IMAGE} git config --global --add safe.directory "*" && SAVE_IMAGE_PATH=image.tar ./docker/build.sh
     ```
 - Convert saved image layers with dmverity cli
 

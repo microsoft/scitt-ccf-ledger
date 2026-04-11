@@ -23,7 +23,6 @@ All the commands must be run from the root of the repository.
 1. Start the instance with a single admin (member):
 
     ```bash
-    export PLATFORM=virtual
     ./build.sh
     ./start.sh
     ```
@@ -71,7 +70,7 @@ The script submits the COSE claim, waits for a receipt to be generated, prints t
 COSE_CLAIMS_PATH="demo-poc/payload.sig.cose" OUTPUT_FOLDER="demo-poc" ./demo/transparency-service-poc/3-client-demo.sh
 ```
 
-#### Known Issues and Workaround (Local Virtual Build)
+#### Known Issues and Workaround (Local Build)
 
 - Proposal failing with 403
     > enclave:../src/node/rpc/member_frontend.h:103 - POST /gov/proposals returning error 403: Member m[1e6aee66336c09bf4random8b55398nodeb3d2e08478c092491459a6063] is not active.

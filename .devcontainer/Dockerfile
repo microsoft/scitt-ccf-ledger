@@ -1,10 +1,8 @@
-ARG CCF_VERSION="6.0.27"
-ARG CCF_PLATFORM="virtual"
+ARG CCF_VERSION="7.0.0-rc1"
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
 
 ARG CCF_VERSION
-ARG CCF_PLATFORM
 
 RUN tdnf update -y && \
     tdnf install -y \
@@ -20,7 +18,7 @@ RUN tdnf update -y && \
     clang-tools-extra-devel && \
     \
     # Install the CCF development package
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
+    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
     \
     tdnf install -y ./ccf.rpm && \
     rm ./ccf.rpm && \

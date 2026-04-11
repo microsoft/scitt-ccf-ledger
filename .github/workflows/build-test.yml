@@ -27,26 +27,14 @@ jobs:
   build-test:
     name: CI
     needs: checks
-    strategy:
-      matrix:
-        platform:
-          - name: virtual
-            image: virtual
-            nodes: [self-hosted, 1ES.Pool=gha-scitt-pool]
-            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
-          - name: snp
-            image: snp
-            nodes: [self-hosted, 1ES.Pool=gha-scitt-pool]
-            options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
-    runs-on: ${{ matrix.platform.nodes }}
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
-      options: ${{ matrix.platform.options }}
+      options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
       env:
         # Helps to distinguish between CI and local builds.
         SCITT_CI: 1
         # Additional CMake flags.
-        PLATFORM: ${{ matrix.platform.name }}
         ENABLE_CLANG_TIDY: ON
     steps:
       - name: Setup environment
@@ -66,12 +54,11 @@ jobs:
       - run: ./scripts/setup-env.sh
       - run: ./build.sh
       - run: ./run_functional_tests.sh
-        if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform for the moment
-      - name: "Upload logs for ${{ matrix.platform.name }}"
+      - name: "Upload logs"
         uses: actions/upload-artifact@v4
         if: success() || failure()
         with:
-          name: logs-${{ matrix.platform.name }}
+          name: logs
           path: |
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json

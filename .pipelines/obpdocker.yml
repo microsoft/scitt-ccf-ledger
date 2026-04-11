@@ -6,8 +6,6 @@ parameters:
   - name: DockerTag
     type: string
     default: 'unset'
-  - name: Platform
-    type: string
   - name: DockerFile
     type: string
   - name: AcrName
@@ -22,7 +20,6 @@ jobs:
       type: linux
     variables:
       ob_outputDirectory: $(Build.SourcesDirectory)/out
-      PLATFORM: ${{ parameters.Platform }}
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage#examples
       ob_git_checkout: true 
       OB_build_container: true
@@ -55,7 +52,7 @@ jobs:
           TargetFolder: '$(Build.SourcesDirectory)/out'
 
       # use custom docker task based on parameters in docker/build.sh
-      # save image to scitt-${PLATFORM}.tar and use it in the Ev2 release pipeline
+      # save image to scitt.tar and use it in the Ev2 release pipeline
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage
       - task: onebranch.pipeline.containercontrol@1
         displayName: "Login to ACR ${{ parameters.AcrName }}"
@@ -67,7 +64,7 @@ jobs:
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
         retryCountOnTaskFailure: 1 
         inputs:
-          repositoryName: scitt-${{ parameters.Platform }}
+          repositoryName: scitt
           dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
           dockerFileContextPath: artifacts
           registry: ${{ parameters.AcrName }}.azurecr.io
@@ -78,6 +75,6 @@ jobs:
           enable_cache: false
           enable_acr_push: true 
           enable_service_tree_acr_path: false
-          arguments: --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}" --build-arg CCF_PLATFORM="${{ parameters.Platform }}"
+          arguments: --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}"
           endpoint: ${{ parameters.AcrEndpoint }}
           

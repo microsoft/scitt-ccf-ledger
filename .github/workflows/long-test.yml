@@ -21,7 +21,6 @@ jobs:
       # Fast unwinder only gives us partial stack traces in LeakSanitzer
       # Alloc/dealloc mismatch has been disabled in CCF: https://github.com/microsoft/CCF/pull/5157
       ASAN_OPTIONS: fast_unwind_on_malloc=0:alloc_dealloc_mismatch=0
-      PLATFORM: virtual
       CMAKE_BUILD_TYPE: Debug
       BUILD_DEBUG_CCF_FROM_SOURCE: ON
     steps:
@@ -57,8 +56,6 @@ jobs:
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
-    env:
-      PLATFORM: virtual
     steps:
       - name: Setup environment
         run: |

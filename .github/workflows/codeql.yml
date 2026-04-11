@@ -78,7 +78,7 @@ jobs:
     - if: matrix.language == 'cpp'
       name: Build C++
       run: |
-        PLATFORM=virtual ./build.sh
+        ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

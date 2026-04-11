@@ -22,7 +22,7 @@ Similar to Codespaces you could build and test the application within the runnin
 
 ```sh
 docker build -t mytestimg -f .devcontainer/Dockerfile .
-docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg
+docker run --rm -it --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg
 # workaround to make git happy in a running docker image
 /opt/app# git config --global --add safe.directory "*"
 
@@ -31,7 +31,7 @@ docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /o
 
 ### Develop within a host machine
 
-It is expected that you have Azure Linux 3.0. Follow the steps below to setup your development environment, replacing `<virtual|snp>` with either one, as desired:
+It is expected that you have Azure Linux 3.0. Follow the steps below to setup your development environment:
 
 1. Set up your host machine:
     - If using virtual mode, running Azure Linux 3.0 on any platform (WSL, VM, etc.) is enough
@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-6.0.27.tar.gz
-    tar xvzf ccf-6.0.27.tar.gz
-    cd CCF-ccf-6.0.27/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.0-rc1.tar.gz
+    tar xvzf ccf-7.0.0-rc1.tar.gz
+    cd CCF-ccf-7.0.0-rc1/scripts/
     ./setup-dev.sh
     ```
 
@@ -52,7 +52,6 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 When you need to quickly build it and do not have the configured development environment yet.
 
 ```sh
-export PLATFORM=virtual
 ./docker/build.sh
 ```
 
@@ -63,7 +62,7 @@ This will expect all of the required dependencies to be set correctly.
 Build scitt-ccf-ledger by running:
 
 ```sh
-PLATFORM=<virtual|snp> ./build.sh
+./build.sh
 ```
 
 ## Running
@@ -73,7 +72,6 @@ PLATFORM=<virtual|snp> ./build.sh
 The script is used in testing, it starts the docker image and sets basic [configuration](docs/configuration.md). For more details refer to [docker/README.md](./docker/README.md).
 
 ```sh
-export PLATFORM=virtual
 ./docker/run-dev.sh
 ```
 
@@ -84,7 +82,7 @@ export PLATFORM=virtual
 2. Start a single-node CCF network running the scitt-ccf-ledger application:
 
     ```sh
-    PLATFORM=<virtual|snp> ./start.sh
+    ./start.sh
     ```
 
 3. Before claims can be submitted, the scitt-ccf-ledger application needs to be configured. For local
@@ -145,12 +143,12 @@ scitt-ccf-ledger has unit tests, covering individual components of the source co
 
 ### Unit tests
 
-Unit tests will be run as part of the virtual platform build workflow in cmake.
+Unit tests will be run as part of the build workflow in cmake.
 
 **Using your host environment**
 
 ```sh
-PLATFORM=virtual ./build.sh
+./build.sh
 ```
 
 **Using Docker*
@@ -158,7 +156,7 @@ PLATFORM=virtual ./build.sh
 The command below uses the built Docker image `mytestimg` to run the tests (see above how to build the image).
 
 ```sh
-docker run --rm -it --env PLATFORM=virtual --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg -c 'git config --global --add safe.directory "*" && ./build.sh'
+docker run --rm -it --volume $(pwd):/opt/app --workdir /opt/app --entrypoint /bin/bash mytestimg -c 'git config --global --add safe.directory "*" && ./build.sh'
 ```
 
 ### Functional (e2e) tests
@@ -174,15 +172,15 @@ Note: the functional tests will launch their own CCF network on a randomly assig
 The script will launch the built Docker image and will execute tests against it:
 
 ```sh
-PLATFORM="virtual" ./docker/build.sh
-DOCKER=1 PLATFORM=virtual ./run_functional_tests.sh
+./docker/build.sh
+DOCKER=1 ./run_functional_tests.sh
 ```
 
 **Using your host environment**
 
 ```sh
-PLATFORM=virtual ./build.sh
-PLATFORM=virtual ./run_functional_tests.sh
+./build.sh
+./run_functional_tests.sh
 ```
 
 ### Performance regression tests
@@ -200,8 +198,8 @@ Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev
 To run load tests, you can use the `load_test.py` script located in the `tests` directory. This script allows you to simulate a high load on the scitt-ccf-ledger application and measure its performance under stress.
 
 ```bash
-PLATFORM=virtual ./docker/build.sh
-PLATFORM=virtual DOCKER=1 ./run_functional_tests.sh -m perf -k test_load --enable-perf
+./docker/build.sh
+DOCKER=1 ./run_functional_tests.sh -m perf -k test_load --enable-perf
 ```
 
 The output will be stored in the `tests/load_test/locust_stats.json` file, and the chart images generated in `tests/load_test/charts`.
@@ -211,8 +209,8 @@ The output will be stored in the `tests/load_test/locust_stats.json` file, and t
 To enable ASan it is necessary to build CCF from source:
 
 ```sh
-PLATFORM=virtual BUILD_DEBUG_CCF_FROM_SOURCE=ON ./build.sh
-PLATFORM=virtual ./run_functional_tests.sh
+BUILD_DEBUG_CCF_FROM_SOURCE=ON ./build.sh
+./run_functional_tests.sh
 ```
 
 ### Fuzzing
@@ -255,11 +253,11 @@ Please refer to [the CCF documentation on the AMD SEV-SNP platform](https://micr
 To start SCITT on SNP, you would run:
 
 ```sh
-PLATFORM=snp SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./start.sh
+SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./start.sh
 ```
 
 To run the SCITT functional tests on SNP, you would run:
 
 ```sh
-PLATFORM=snp SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
+SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
 ```

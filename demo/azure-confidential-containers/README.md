@@ -55,7 +55,7 @@ The deployment requires a container image published in an accessible container r
 3. Tag the image with an accessible remote repository reference, e.g. `username/demo-scitt-ccf-ledger`
 
     ```bash
-    docker tag scitt-snp username/demo-scitt-ccf-ledger:latest
+    docker tag scitt username/demo-scitt-ccf-ledger:latest
     ```
 
 4. Push the image layers
@@ -74,9 +74,6 @@ mkdir -p "workspace"
 # create a config file for the ledger
 cp ./docker/dev-config.tmpl.json workspace/dev-config.json
 # update values in the config file
-sed -i "s/%ENCLAVE_PLATFORM%/SNP/g" workspace/dev-config.json
-sed -i "s/%ENCLAVE_TYPE%/Release/g" workspace/dev-config.json
-sed -i "s/%ENCLAVE_FILE%/libscitt.snp.so/g" workspace/dev-config.json
 sed -i "s/%CCF_PORT%/8000/g" workspace/dev-config.json
 
 # add constitution files
