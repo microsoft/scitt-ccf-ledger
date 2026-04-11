@@ -22,7 +22,7 @@ if [ "$BUILD_DEBUG_CCF_FROM_SOURCE" = "ON" ]; then
     echo "Compiling CCF"
     mkdir -p build
     pushd build
-    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON ..
+    cmake -L -GNinja -DCMAKE_INSTALL_PREFIX="/opt/ccf" -DBUILD_TESTS=OFF -DBUILD_UNIT_TESTS=OFF -DCMAKE_BUILD_TYPE=Debug -DSAN=ON -DUSE_SNMALLOC=OFF ..
     ninja
     echo "Packaging CCF into rpm"
     cpack -V -G RPM
