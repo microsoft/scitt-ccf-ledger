@@ -3,6 +3,7 @@ __pycache__/
 bencher.json
 ccf-source/
 build/
+CMakeFiles/
 tmp/
 out/
 venv/
