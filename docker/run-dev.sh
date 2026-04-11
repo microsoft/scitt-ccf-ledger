@@ -62,7 +62,7 @@ echo "Copy the workspace to the volume"
 tar -C "$WORKSPACE" -c . | docker run --rm \
     -v "$VOLUME_NAME":/host -i \
     --entrypoint "" \
-    "$DOCKER_TAG" tar -C /host -x
+    "$DOCKER_TAG" bash -c "tdnf install -y tar && tar -C /host -x"
 
 # Determine networking flags
 if [ "$DOCKER_IN_DOCKER" = "1" ]; then

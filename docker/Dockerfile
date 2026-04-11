@@ -61,7 +61,6 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     ca-certificates \
     tini \
-    tar \
     nmap-ncat && \
     \
     tdnf install -y \

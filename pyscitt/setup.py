@@ -31,6 +31,7 @@ setup(
         "cbor2==5.8.*",
         "pycose==1.1.0",
         "pyjwt",
+        "loguru",
         "jwcrypto==1.5.*",
         "types-jwcrypto",
         "azure-identity",
