@@ -30,8 +30,8 @@
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
 #include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
-#include <ccf/node/host_processes_interface.h>
 #include <ccf/node/quote.h>
+#include <ccf/run.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <ccf/service/tables/members.h>
 #include <ccf/service/tables/nodes.h>
@@ -204,20 +204,21 @@ namespace scitt
       ccf::RESTVerb verb,
       const ccf::endpoints::EndpointFunction& f,
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
-      const ccf::AuthnPolicies& ap) override
+      const ccf::AuthnPolicies& ap)
     {
       const std::function<ccf::ApiResult(timespec & time)> get_time =
         [this](timespec& time) {
           return this->get_untrusted_host_time_v1(time);
         };
 
-      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method,
-        verb,
-        tracing_adapter_first(error_adapter(f), method, get_time),
-        ap);
-      endpoint.locally_committed_func =
-        tracing_adapter_last(l, method, get_time);
+      auto endpoint =
+        ccf::UserEndpointRegistry::make_endpoint(
+          method,
+          verb,
+          tracing_adapter_first(error_adapter(f), method, get_time),
+          ap)
+          .set_locally_committed_function(
+            tracing_adapter_last(l, method, get_time));
       return endpoint;
     }
 
@@ -408,7 +409,7 @@ namespace scitt
 
       static constexpr auto get_entry_receipt_path = "/entries/{txid}";
       auto get_entry_receipt =
-        [this](
+        [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
           SCITT_DEBUG("Get transaction historical state");
@@ -451,7 +452,7 @@ namespace scitt
       static constexpr auto get_entry_statement_path =
         "/entries/{txid}/statement";
       auto get_entry_statement =
-        [this](
+        [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
           SCITT_DEBUG("Get transaction historical state");
@@ -660,3 +661,9 @@ namespace ccf
     return std::make_unique<scitt::AppEndpoints>(context);
   }
 } // namespace ccf
+
+// Main entrypoint
+int main(int argc, char** argv)
+{
+  return ccf::run(argc, argv);
+}
