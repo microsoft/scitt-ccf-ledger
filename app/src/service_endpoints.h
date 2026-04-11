@@ -60,10 +60,20 @@ namespace scitt
           json_jwk =
             ccf::crypto::make_ec_public_key(pub_pem)->public_key_jwk(kid);
         }
-        catch (const std::exception&)
+        catch (const std::exception& ec_error)
         {
-          json_jwk =
-            ccf::crypto::make_rsa_public_key(pub_pem)->public_key_jwk(kid);
+          try
+          {
+            json_jwk =
+              ccf::crypto::make_rsa_public_key(pub_pem)->public_key_jwk(kid);
+          }
+          catch (const std::exception& rsa_error)
+          {
+            throw std::runtime_error(
+              std::string("Unable to parse service public key as EC or RSA. ") +
+              "EC parse failed: " + ec_error.what() +
+              ". RSA parse failed: " + rsa_error.what());
+          }
         }
         json_jwk["kid"] = kid;
         jwks.emplace_back(std::move(json_jwk));

@@ -39,7 +39,11 @@ cp ./docker/dev-config.tmpl.json "$WORKSPACE"/dev-config.json
 
 sed -i "s/%CCF_PORT%/$CCF_PORT/g" "$WORKSPACE"/dev-config.json
 
-if [ -f "$SNP_ATTESTATION_CONFIG" ]; then
+if [ -n "$SNP_ATTESTATION_CONFIG" ]; then
+    if [ ! -f "$SNP_ATTESTATION_CONFIG" ]; then
+        echo "Error: SNP_ATTESTATION_CONFIG is set to '$SNP_ATTESTATION_CONFIG' but the file does not exist."
+        exit 1
+    fi
     SNP_ATTESTATION_CONTENT=$(jq '.' "$SNP_ATTESTATION_CONFIG")
     jq --argjson content "$SNP_ATTESTATION_CONTENT" '.attestation = $content' "$WORKSPACE"/dev-config.json > tmp.json && mv tmp.json "$WORKSPACE"/dev-config.json
 fi

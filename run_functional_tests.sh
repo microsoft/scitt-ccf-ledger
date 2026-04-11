@@ -51,6 +51,10 @@ else
 
     TEST_ARGS="--start-cchost --constitution=$SCITT_DIR/share/scitt/constitution"
     if [ -n "$SNP_ATTESTATION_CONFIG" ]; then
+        if [ ! -f "$SNP_ATTESTATION_CONFIG" ]; then
+            echo "Error: SNP_ATTESTATION_CONFIG is set to '$SNP_ATTESTATION_CONFIG' but the file does not exist."
+            exit 1
+        fi
         TEST_ARGS="$TEST_ARGS --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
     fi
 fi

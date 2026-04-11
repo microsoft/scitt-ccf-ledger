@@ -26,15 +26,17 @@ ARG SCITT_VERSION_OVERRIDE
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 
-# Copy the app source code into the builder stage
-COPY ./app /tmp/app/
-
-# Install dependencies and CCF development package
+# Install dependencies and CCF development package first for better layer caching
 RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git rpm-build && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
-    \
-    mkdir /tmp/app-build && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm"
+
+# Copy the app source code after installing dependencies so that
+# changes to app/ don't invalidate the dependency layer above.
+COPY ./app /tmp/app/
+
+# Build the app and package as RPM
+RUN mkdir /tmp/app-build && \
     cd /tmp/app-build && \
     CC=clang-18 CXX=clang++-18 cmake -GNinja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -63,7 +65,7 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tini \
     nmap-ncat && \
     \
-    tdnf install -y \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     /tmp/*.rpm && \
     rm -rf /tmp/*.rpm && \
     \
