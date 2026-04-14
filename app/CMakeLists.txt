@@ -25,7 +25,6 @@ set(CMAKE_CXX_STANDARD 20)
 
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ccf REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -137,7 +136,6 @@ if (BUILD_TESTS)
 
   # Avoid Gtest files ending up in the scitt install directory
   set(INSTALL_GTEST OFF)
-  include(FetchContent)
   FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
