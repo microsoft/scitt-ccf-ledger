@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.25)
 
 include(FetchContent)
 
-# Allow FetchContent_Populate() calls (used for t_cose and snmalloc where we
-# need to download source without running add_subdirectory).
+# Allow FetchContent_Populate() calls (used for t_cose where we need to
+# download source without running add_subdirectory).
 cmake_policy(SET CMP0169 OLD)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -76,31 +76,11 @@ set(TRIESTE_USE_SNMALLOC OFF)
 set(REGOCPP_USE_SNMALLOC OFF)
 set(REGOCPP_BUILD_SHARED ON)
 
-# Trieste unconditionally depends on snmalloc for headers and links it as an
-# INTERFACE dependency. However, we can't let trieste build snmalloc from
-# source because CCF 7.x already provides a snmallocshim-static imported
-# target, causing a name collision.
-#
-# Solution: fetch snmalloc source ourselves (for headers only), then create a
-# minimal INTERFACE target. FetchContent_Populate downloads the source without
-# running add_subdirectory, and marks it as populated so trieste skips it.
-FetchContent_Declare(
-  snmalloc
-  GIT_REPOSITORY https://github.com/microsoft/snmalloc
-  GIT_TAG b8e28be14b3fd98e27c2fe87c0296570f6d3990e
-)
-FetchContent_Populate(snmalloc)
-add_library(snmalloc INTERFACE)
-target_include_directories(snmalloc INTERFACE
-  $<BUILD_INTERFACE:${snmalloc_SOURCE_DIR}/src>
-)
-add_library(snmalloc-new-override INTERFACE)
-
 FetchContent_Declare(
   regocpp
   GIT_REPOSITORY https://github.com/microsoft/rego-cpp
-  # https://github.com/microsoft/rego-cpp/releases/tag/v1.3.0
-  GIT_TAG        975bfa0823609aec29b8e88a96eb46577977c57d
+  # https://github.com/microsoft/rego-cpp/releases/tag/v1.4.1
+  GIT_TAG        a9d8d5607c65a7d20dad2e87dec6e0eefd62f35b
 )
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 FetchContent_MakeAvailable(regocpp)
@@ -119,7 +99,6 @@ set_property(TARGET json PROPERTY SYSTEM TRUE)
 set_property(TARGET yaml PROPERTY SYSTEM TRUE)
 set_property(TARGET t_cose PROPERTY SYSTEM TRUE)
 set_property(TARGET qcbor PROPERTY SYSTEM TRUE)
-set_property(TARGET snmalloc PROPERTY SYSTEM TRUE)
 
 set(SCITT_TARGET scitt)
 set_target_properties(${SCITT_TARGET} PROPERTIES OUTPUT_NAME cchost)
