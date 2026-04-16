@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.0-rc1.tar.gz
-    tar xvzf ccf-7.0.0-rc1.tar.gz
-    cd CCF-ccf-7.0.0-rc1/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.0-rc2.tar.gz
+    tar xvzf ccf-7.0.0-rc2.tar.gz
+    cd CCF-ccf-7.0.0-rc2/scripts/
     ./setup-dev.sh
     ```
 
