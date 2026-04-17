@@ -300,10 +300,7 @@ namespace scitt::verifier
       std::span<uint8_t> payload;
       try
       {
-        // Instruct t_cose to ignore critical header params it does not
-        // understand as the attestedsvc header param is custom and not part of
-        // the COSE standard. Crit checking is done per issuer-type later on.
-        payload = cose::verify(data, public_key, true);
+        payload = cose::verify(data, public_key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {

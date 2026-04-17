@@ -9,6 +9,7 @@
 #include "util.h"
 
 #include <ccf/crypto/base64.h>
+#include <ccf/crypto/cose_verifier.h>
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/sha256.h>
@@ -24,7 +25,6 @@
 #include <set>
 #include <span>
 #include <string>
-#include <t_cose/t_cose_sign1_verify.h>
 #include <vector>
 
 namespace scitt::cose
@@ -391,9 +391,6 @@ namespace scitt::cose
   static ProtectedHeader decode_protected_header(QCBORDecodeContext& ctx)
   {
     ProtectedHeader parsed;
-
-    // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
-    // t_cose doesn't support custom header parameters yet.
 
     QCBORError qcbor_result;
 
@@ -853,8 +850,6 @@ namespace scitt::cose
   static UnprotectedHeader decode_unprotected_header(QCBORDecodeContext& ctx)
   {
     UnprotectedHeader parsed;
-    // Adapted from parse_cose_header_parameters in t_cose_parameters.c.
-    // t_cose doesn't support custom header parameters yet.
 
     QCBORError qcbor_result;
 
@@ -960,72 +955,35 @@ namespace scitt::cose
    *
    * Beyond the basic verification of key usage and the signature
    * itself, no particular validation of the message is done.
+   *
+   * Critical header checking is not performed here; it is handled
+   * at the application level per issuer type.
    */
   static std::span<uint8_t> verify(
-    const std::vector<uint8_t>& cose_sign1,
-    const PublicKey& key,
-    bool allow_unknown_crit = false)
+    const std::vector<uint8_t>& cose_sign1, const PublicKey& key)
   {
-    q_useful_buf_c signed_cose;
-    signed_cose.ptr = cose_sign1.data();
-    signed_cose.len = cose_sign1.size();
-
-    t_cose_sign1_verify_ctx verify_ctx;
-
-    // Do some preliminary decoding, to get the header parameters and potential
-    // auxiliary buffer size.
-    t_cose_parameters params;
-    uint32_t prelim_options = T_COSE_OPT_TAG_REQUIRED | T_COSE_OPT_DECODE_ONLY;
-    if (allow_unknown_crit)
-    {
-      prelim_options |= T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
-    }
-    t_cose_sign1_verify_init(&verify_ctx, prelim_options);
-    t_cose_err_t error =
-      t_cose_sign1_verify(&verify_ctx, signed_cose, nullptr, &params);
-    if (error)
-    {
-      throw COSESignatureValidationError(
-        fmt::format("COSE decoding failed: {}", error));
-    }
-
-    auto key_alg = key.get_cose_alg();
-    if (key_alg.has_value() && params.cose_algorithm_id != key_alg.value())
-    {
-      throw COSESignatureValidationError(
-        "Algorithm mismatch between protected header and public key");
-    }
-
-    size_t auxiliary_buffer_size =
-      t_cose_sign1_verify_auxiliary_buffer_size(&verify_ctx);
-
-    t_cose_key cose_key;
-    cose_key.crypto_lib = T_COSE_CRYPTO_LIB_OPENSSL;
     EVP_PKEY* evp_key = key.get_evp_pkey();
-    cose_key.k.key_ptr = evp_key;
-
-    uint32_t options = T_COSE_OPT_TAG_REQUIRED;
-    if (allow_unknown_crit)
+    int der_len = i2d_PUBKEY(evp_key, nullptr);
+    if (der_len <= 0)
     {
-      options |= T_COSE_OPT_UNKNOWN_CRIT_ALLOWED;
+      throw COSESignatureValidationError(
+        "Failed to serialize public key to DER");
     }
-    t_cose_sign1_verify_init(&verify_ctx, options);
-    t_cose_sign1_set_verification_key(&verify_ctx, cose_key);
+    std::vector<uint8_t> der_key(der_len);
+    uint8_t* der_ptr = der_key.data();
+    i2d_PUBKEY(evp_key, &der_ptr);
 
-    // EdDSA signature verification needs an auxiliary buffer.
-    // For other algorithms, the buffer size will just be 0.
-    std::vector<uint8_t> auxiliary_buffer(auxiliary_buffer_size);
-    t_cose_sign1_verify_set_auxiliary_buffer(
-      &verify_ctx, {auxiliary_buffer.data(), auxiliary_buffer.size()});
+    auto verifier = ccf::crypto::make_cose_verifier_from_key(
+      std::span<const uint8_t>(der_key.data(), der_key.size()));
 
-    q_useful_buf_c payload;
-
-    error = t_cose_sign1_verify(&verify_ctx, signed_cose, &payload, nullptr);
-    if (error)
+    std::span<uint8_t> payload;
+    if (!verifier->verify(
+          std::span<const uint8_t>(cose_sign1.data(), cose_sign1.size()),
+          payload))
     {
       throw COSESignatureValidationError("Signature verification failed");
     }
 
-    return {(uint8_t*)payload.ptr, payload.len};
+    return payload;
   }
 }
