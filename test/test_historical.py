@@ -41,17 +41,6 @@ class TestHistorical:
             )
         return result
 
-    def test_enumerate_statements(self, client: Client, submissions, configure_service):
-        seqnos = list(
-            client.enumerate_statements(
-                start=submissions[0].seqno, end=submissions[-1].seqno
-            )
-        )
-        print("Found statements:", seqnos)
-        # This works because we don't run tests concurrently on a shared server.
-        # If we did, we'd have to check for a sub-list instead.
-        assert [s.tx for s in submissions] == seqnos
-
     def test_get_receipt(self, client: Client, trust_store, submissions):
         for s in submissions:
             receipt = client.get_transparent_statement(s.tx)

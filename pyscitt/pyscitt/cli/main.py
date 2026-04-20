@@ -8,7 +8,6 @@ from . import (
     governance,
     pretty_receipt,
     register,
-    retrieve_signed_claims,
     sign,
     split_payload,
     validate,
@@ -17,7 +16,6 @@ from . import (
 COMMANDS = [
     ("sign", sign),
     ("submit", register),
-    ("retrieve", retrieve_signed_claims),
     ("split-payload", split_payload),
     ("pretty-receipt", pretty_receipt),
     ("embed-receipt", embed_receipt_in_cose),

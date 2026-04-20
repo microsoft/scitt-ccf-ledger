@@ -48,21 +48,6 @@ namespace scitt
   DECLARE_JSON_TYPE(GetHistoricServiceParameters::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetHistoricServiceParameters::Out, parameters);
 
-  struct GetEntriesTransactionIds
-  {
-    struct Out
-    {
-      std::vector<std::string> transaction_ids;
-      std::optional<std::string> next_link;
-    };
-  };
-
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetEntriesTransactionIds::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
-    GetEntriesTransactionIds::Out, transaction_ids, "transactionIds");
-  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    GetEntriesTransactionIds::Out, next_link, "nextLink");
-
   struct GetVersion
   {
     struct Out
