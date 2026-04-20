@@ -33,9 +33,7 @@ def test_blocking_entries(
         }
     )
 
-    signed_statement = crypto.sign_json_statement(
-        identity, {"foo": "bar"}, cwt=True
-    )
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
     submission = client.submit_signed_statement_wait_for_commit(signed_statement)
 
@@ -51,9 +49,7 @@ def test_blocking_entries(
     LOG.info(f"COSE message type: {type(cose_msg).__name__}")
     LOG.info(f"COSE protected headers: {cose_msg.phdr}")
     LOG.info(f"COSE unprotected headers: {cose_msg.uhdr}")
-    LOG.info(
-        f"COSE payload length: {len(cose_msg.payload) if cose_msg.payload else 0}"
-    )
+    LOG.info(f"COSE payload length: {len(cose_msg.payload) if cose_msg.payload else 0}")
 
     # Decode the raw CBOR to inspect the full structure
     raw = cbor2.loads(submission.response_bytes)
@@ -63,7 +59,9 @@ def test_blocking_entries(
     LOG.info(f"COSE_Sign1 array length: {len(raw)}")
     # raw[0] = protected headers, raw[1] = unprotected headers, raw[2] = payload, raw[3] = signature
     uhdr = raw[1] if len(raw) > 1 else {}
-    LOG.info(f"Unprotected headers keys: {list(uhdr.keys()) if isinstance(uhdr, dict) else type(uhdr)}")
+    LOG.info(
+        f"Unprotected headers keys: {list(uhdr.keys()) if isinstance(uhdr, dict) else type(uhdr)}"
+    )
     LOG.info(f"Unprotected headers: {uhdr}")
 
     # Verify the receipt against the signed statement using ccf.cose directly.

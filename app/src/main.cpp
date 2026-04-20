@@ -244,8 +244,7 @@ namespace scitt
 
       verifier = std::make_unique<verifier::Verifier>();
 
-      auto register_signed_statement =
-        [this, &context_](EndpointContext& ctx) {
+      auto register_signed_statement = [this, &context_](EndpointContext& ctx) {
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
         const auto wait_for_commit =
