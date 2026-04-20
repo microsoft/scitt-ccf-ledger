@@ -37,7 +37,7 @@ def test_blocking_entries(
         identity, {"foo": "bar"}, cwt=True
     )
 
-    submission = client.submit_signed_statement_blocking(signed_statement)
+    submission = client.submit_signed_statement_wait_for_commit(signed_statement)
 
     LOG.info("=== Blocking /entries?wait_for_commit=true response ===")
     LOG.info(f"Transaction ID: {submission.tx}")

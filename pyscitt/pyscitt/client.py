@@ -603,7 +603,7 @@ class Client(BaseClient):
         receipt = self.get_receipt(tx)
         return Submission(operation_id, tx, receipt, False)
 
-    def submit_signed_statement_blocking(
+    def submit_signed_statement_wait_for_commit(
         self,
         signed_statement: bytes,
     ) -> Submission:
