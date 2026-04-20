@@ -257,16 +257,14 @@ namespace scitt
               if (info.status == ccf::FinalTxStatus::Invalid)
               {
                 info.rpc_ctx->set_response_status(
-                  HTTP_STATUS_INTERNAL_SERVER_ERROR);
+                  HTTP_STATUS_SERVICE_UNAVAILABLE);
                 info.rpc_ctx->set_response_header(
                   ccf::http::headers::CONTENT_TYPE,
-                  ccf::http::headervalues::contenttype::CBOR);
-                nlohmann::json error_body;
-                error_body["error"]["code"] = "TransactionInvalid";
-                error_body["error"]["message"] =
-                  "Transaction was dropped by consensus";
-                info.rpc_ctx->set_response_body(
-                  nlohmann::json::to_cbor(error_body));
+                  cbor::CBOR_ERROR_CONTENT_TYPE);
+                info.rpc_ctx->set_response_body(cbor::cbor_error(
+                  errors::InternalError,
+                  "The submission could not be committed and was rolled "
+                  "back, please retry"));
                 return;
               }
 
@@ -279,7 +277,7 @@ namespace scitt
 
               auto cose_receipt = get_cose_receipt(receipt);
 
-              info.rpc_ctx->set_response_status(HTTP_STATUS_OK);
+              info.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
               info.rpc_ctx->set_response_header(
                 ccf::http::headers::CONTENT_TYPE,
                 ccf::http::headervalues::contenttype::COSE);
