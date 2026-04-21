@@ -4,7 +4,7 @@ httpx
 pytest
 loguru
 aiotools
-ccf==7.0.0-rc2
+ccf==7.0.0
 cryptography==46.*
 jwcrypto==1.5.*
 types-jwcrypto
