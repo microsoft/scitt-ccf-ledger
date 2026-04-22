@@ -247,7 +247,8 @@ namespace scitt::cbor
       case ccf::crypto::CurveID::CURVE25519:
       case ccf::crypto::CurveID::X25519:
         throw std::runtime_error(
-          "Unsupported curve ID: " + std::to_string(static_cast<uint8_t>(curve_id)));
+          "Unsupported curve ID: " +
+          std::to_string(static_cast<uint8_t>(curve_id)));
     }
   }
 

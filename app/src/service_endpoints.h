@@ -66,8 +66,8 @@ namespace scitt
 
   /**
    * An indexing strategy collecting all past and present service
-      * certificates and makes them immediately available.
-      */
+   * certificates and makes them immediately available.
+   */
   class ServiceCertificateIndexingStrategy
     : public VisitEachEntryInValueTyped<ccf::Service>
   {
@@ -253,40 +253,33 @@ namespace scitt
      * Returns all trusted service keys as a COSE_Key_Set in
      * application/cbor format.
      */
-    auto get_scitt_keys =
-      [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
-        auto network_identity =
-          context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
-        if (!network_identity)
-        {
-          set_cbor_response(
-            ctx,
-            HTTP_STATUS_INTERNAL_SERVER_ERROR,
-            cbor::cbor_error(
-              "InternalError",
-              "Network identity subsystem not available"));
-          return;
-        }
-
-        auto trusted_keys = network_identity->get_trusted_keys();
-        std::vector<std::vector<uint8_t>> cose_keys;
-        for (const auto& [seq_no, key] : trusted_keys)
-        {
-          cose_keys.push_back(key_to_cose_key(key, kid_from_key(key)));
-        }
-
+    auto get_scitt_keys = [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
+      auto network_identity =
+        context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
+      if (!network_identity)
+      {
         set_cbor_response(
           ctx,
-          HTTP_STATUS_OK,
-          cbor::cose_key_set_to_cbor(cose_keys));
-      };
+          HTTP_STATUS_INTERNAL_SERVER_ERROR,
+          cbor::cbor_error(
+            "InternalError", "Network identity subsystem not available"));
+        return;
+      }
+
+      auto trusted_keys = network_identity->get_trusted_keys();
+      std::vector<std::vector<uint8_t>> cose_keys;
+      for (const auto& [seq_no, key] : trusted_keys)
+      {
+        cose_keys.push_back(key_to_cose_key(key, kid_from_key(key)));
+      }
+
+      set_cbor_response(
+        ctx, HTTP_STATUS_OK, cbor::cose_key_set_to_cbor(cose_keys));
+    };
 
     registry
       .make_read_only_endpoint(
-        "/.well-known/scitt-keys",
-        HTTP_GET,
-        get_scitt_keys,
-        no_authn_policy)
+        "/.well-known/scitt-keys", HTTP_GET, get_scitt_keys, no_authn_policy)
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
       .install();
@@ -298,8 +291,7 @@ namespace scitt
      */
     auto get_scitt_key_by_kid =
       [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
-        auto kid_value =
-          ctx.rpc_ctx->get_request_path_params().at("kid_value");
+        auto kid_value = ctx.rpc_ctx->get_request_path_params().at("kid_value");
 
         auto network_identity =
           context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
@@ -309,8 +301,7 @@ namespace scitt
             ctx,
             HTTP_STATUS_INTERNAL_SERVER_ERROR,
             cbor::cbor_error(
-              "InternalError",
-              "Network identity subsystem not available"));
+              "InternalError", "Network identity subsystem not available"));
           return;
         }
 
