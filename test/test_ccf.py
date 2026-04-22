@@ -7,6 +7,7 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
 
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
@@ -14,10 +15,9 @@ from pyscitt.verify import (
     DynamicTrustStore,
     DynamicTrustStoreClient,
     verify_transparent_statement,
-)       
+)
 
 from .infra.assertions import service_error
-
 
 CURVE_TO_COSE_CRV = {
     "secp256r1": 1,  # P-256
@@ -29,6 +29,7 @@ CURVE_TO_COSE_CRV = {
 def pem_cert_to_ccf_cose_key(cert_pem: str) -> dict:
     cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
     pub_key = cert.public_key()
+    assert isinstance(pub_key, EllipticCurvePublicKey)
     ccf_kid = (
         sha256(
             pub_key.public_bytes(
@@ -75,6 +76,7 @@ def test_scitt_key_by_kid(client: Client):
     key_set = client.get_scitt_key(kid)
     assert len(key_set) == 1
     assert key_set[0] == keys[0]
+
 
 def test_scitt_key_by_kid_not_found(client: Client):
     """
@@ -180,7 +182,10 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
 @pytest.mark.isolated_test
 def test_transparency_configuration(client, cchost):
     issuer = f"127.0.0.1:{cchost.rpc_port}"
-    reference = {"issuer": issuer, "jwks_uri": f"https://{issuer}/.well-known/scitt-keys"}
+    reference = {
+        "issuer": issuer,
+        "jwks_uri": f"https://{issuer}/.well-known/scitt-keys",
+    }
     config = client.get("/.well-known/transparency-configuration")
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"

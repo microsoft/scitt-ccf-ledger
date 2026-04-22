@@ -42,9 +42,7 @@ class TestDynamicTrustStore:
 
     @patch("pyscitt.verify.ec")
     @patch("pyscitt.verify.Sign1Message")
-    def test_get_key_retrieves_from_cose_keys(
-        self, mock_sign1, mock_ec
-    ):
+    def test_get_key_retrieves_from_cose_keys(self, mock_sign1, mock_ec):
         # Setup mocks
         mock_receipt = b"test_receipt"
         mock_parsed = Mock()
@@ -226,9 +224,7 @@ class TestDynamicTrustStoreClient:
         mock_digest.digest.return_value.hex.return_value = "tls_cert_digest"
         mock_sha256.return_value = mock_digest
 
-        cose_keys = [
-            {1: 2, 2: "other_kid", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}
-        ]
+        cose_keys = [{1: 2, 2: "other_kid", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}]
         client = DynamicTrustStoreClient()
 
         with pytest.raises(
