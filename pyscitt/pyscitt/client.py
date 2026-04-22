@@ -549,10 +549,15 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
-    def get_jwks(self) -> dict:
-        resp = self.get(f"/jwks")
+    def get_scitt_keys(self) -> list:
+        resp = self.get("/.well-known/scitt-keys")
         resp.raise_for_status()
-        return resp.json()
+        return cbor2.loads(resp.read())
+
+    def get_scitt_key(self, kid: str) -> list:
+        resp = self.get(f"/.well-known/scitt-keys/{kid}")
+        resp.raise_for_status()
+        return cbor2.loads(resp.read())
 
     def submit_signed_statement(
         self,

@@ -2,9 +2,8 @@
 # Licensed under the MIT License.
 
 from datetime import datetime, timedelta
-from io import BytesIO
 from pathlib import Path
-from unittest.mock import ANY, DEFAULT, MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import cbor2
 import httpx
@@ -41,11 +40,10 @@ class TestDynamicTrustStore:
         with pytest.raises(NotImplementedError):
             _ = trust_store.services
 
-    @patch("pyscitt.verify.jwk.JWK.from_json")
+    @patch("pyscitt.verify.ec")
     @patch("pyscitt.verify.Sign1Message")
-    @patch("pyscitt.verify.load_pem_public_key")
-    def test_get_key_retrieves_from_jwks(
-        self, mock_load_key, mock_sign1, mock_jwk_from_json
+    def test_get_key_retrieves_from_cose_keys(
+        self, mock_sign1, mock_ec
     ):
         # Setup mocks
         mock_receipt = b"test_receipt"
@@ -54,15 +52,15 @@ class TestDynamicTrustStore:
         mock_kid = b"test_kid"
         mock_parsed.phdr = {CWTClaims: mock_cwt, KID: mock_kid}
         mock_sign1.decode.return_value = mock_parsed
-        mock_matched_jwk = MagicMock()
-        mock_matched_jwk.export_to_pem.return_value = b"mock_pem"
-        mock_jwk_from_json.return_value = mock_matched_jwk
-        mock_return_key = Mock()
-        mock_load_key.return_value = mock_return_key
+        mock_public_key = Mock()
+        mock_public_numbers = Mock()
+        mock_public_numbers.public_key.return_value = mock_public_key
+        mock_ec.EllipticCurvePublicNumbers.return_value = mock_public_numbers
+        mock_ec.SECP256R1.return_value = "mock_curve"
         mock_client = Mock()
-        mock_client.get_jwks.return_value = {
-            "keys": [{"kid": "test_kid", "kty": "RSA"}]
-        }
+        mock_client.get_scitt_keys.return_value = [
+            {1: 2, 2: "test_kid", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}
+        ]
 
         # Create instance and call method
         trust_store = DynamicTrustStore(mock_client)
@@ -70,12 +68,9 @@ class TestDynamicTrustStore:
 
         # Assertions
         mock_sign1.decode.assert_called_once_with(mock_receipt)
-        mock_client.get_jwks.assert_called_once_with("example.com")
-        mock_load_key.assert_called_once_with(
-            b"mock_pem",
-            pytest.importorskip("cryptography.hazmat.backends").default_backend(),
-        )
-        assert result == mock_return_key
+        mock_client.get_scitt_keys.assert_called_once_with("example.com")
+        mock_ec.EllipticCurvePublicNumbers.assert_called_once()
+        assert result == mock_public_key
 
 
 class TestDynamicTrustStoreClient:
@@ -150,38 +145,39 @@ class TestDynamicTrustStoreClient:
             client.get_configuration("")
 
     @patch("pyscitt.verify.DynamicTrustStoreClient.get_confidential_ledger_tls_pem")
-    @patch("pyscitt.verify.DynamicTrustStoreClient._assert_tls_in_jwks")
-    def test_get_jwks_validates_tls_cert(
-        self, mock_assert_tls_in_jwks, mock_get_confidential_ledger_tls_pem
+    @patch("pyscitt.verify.DynamicTrustStoreClient._assert_tls_in_cose_keys")
+    def test_get_scitt_keys_validates_tls_cert(
+        self, mock_assert_tls_in_cose_keys, mock_get_confidential_ledger_tls_pem
     ):
         # Setup mocks
         mock_get_confidential_ledger_tls_pem.return_value = "mock_pem_cert"
         mock_httpx_client = Mock()
+        test_cose_keys = [
+            {1: 2, 2: "test_kid", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}
+        ]
 
         def get_side_effect(*args, **kwargs):
             if (
                 args[0]
                 == "https://foobar.confidential-ledger.azure.com/.well-known/transparency-configuration"
             ):
-                with BytesIO() as fp:
-                    cbor2.CBOREncoder(fp).encode(
-                        {
-                            "jwks_uri": "https://foobar.confidential-ledger.azure.com/jwks"
-                        }
-                    )
-
                 return httpx.Response(
                     200,
                     content=cbor2.dumps(
                         {
-                            "jwks_uri": "https://foobar.confidential-ledger.azure.com/jwks"
+                            "jwks_uri": "https://foobar.confidential-ledger.azure.com/.well-known/scitt-keys"
                         }
                     ),
                     request=httpx.Request("GET", args[0]),
                 )
-            if args[0] == "https://foobar.confidential-ledger.azure.com/jwks":
+            if (
+                args[0]
+                == "https://foobar.confidential-ledger.azure.com/.well-known/scitt-keys"
+            ):
                 return httpx.Response(
-                    200, json={"keys": ["test"]}, request=httpx.Request("GET", args[0])
+                    200,
+                    content=cbor2.dumps(test_cose_keys),
+                    request=httpx.Request("GET", args[0]),
                 )
 
         mock_httpx_client.get = Mock(side_effect=get_side_effect)
@@ -190,139 +186,84 @@ class TestDynamicTrustStoreClient:
         trust_store_client = DynamicTrustStoreClient(
             forced_httpclient=mock_httpx_client
         )
-        result = trust_store_client.get_jwks("foobar.confidential-ledger.azure.com")
+        result = trust_store_client.get_scitt_keys(
+            "foobar.confidential-ledger.azure.com"
+        )
 
         # Assertions
-        mock_assert_tls_in_jwks.assert_called_once_with(
-            "mock_pem_cert", {"keys": ["test"]}
+        mock_assert_tls_in_cose_keys.assert_called_once_with(
+            "mock_pem_cert", test_cose_keys
         )
-        assert result == {"keys": ["test"]}
+        assert result == test_cose_keys
 
-    def test_assert_tls_in_jwks_raises_for_empty_tls_pem(self):
+    def test_assert_tls_in_cose_keys_raises_for_empty_tls_pem(self):
         client = DynamicTrustStoreClient()
         with pytest.raises(ValueError, match="TLS PEM certificate is required"):
-            client._assert_tls_in_jwks("", {"keys": []})
+            client._assert_tls_in_cose_keys("", [])
 
-    def test_assert_tls_in_jwks_raises_for_none_jwks(self):
+    def test_assert_tls_in_cose_keys_raises_for_none_cose_keys(self):
         client = DynamicTrustStoreClient()
-        with pytest.raises(ValueError, match="JWKS is required"):
-            client._assert_tls_in_jwks("certificate", None)
+        with pytest.raises(ValueError, match="COSE Key Set is required"):
+            client._assert_tls_in_cose_keys("certificate", None)
 
-    def test_assert_tls_in_jwks_raises_for_missing_keys(self):
+    def test_assert_tls_in_cose_keys_raises_for_empty_cose_keys(self):
         client = DynamicTrustStoreClient()
-        with pytest.raises(ValueError, match="JWKS does not contain 'keys'"):
-            client._assert_tls_in_jwks("certificate", {"other_key": []})
+        with pytest.raises(ValueError, match="COSE Key Set is required"):
+            client._assert_tls_in_cose_keys("certificate", [])
 
-    @patch("pyscitt.verify.load_pem_public_key")
     @patch("pyscitt.verify.x509.load_pem_x509_certificate")
     @patch("pyscitt.verify.sha256")
-    @patch("pyscitt.verify.jwk.JWK.from_json")
-    def test_assert_tls_in_jwks_raises_when_key_not_found(
-        self, mock_jwk_from_json, mock_sha256, mock_load_cert, mock_load_pub_key
+    def test_assert_tls_in_cose_keys_raises_when_key_not_found(
+        self, mock_sha256, mock_load_cert
     ):
-        # Mock certificate loading and hashing
         mock_cert = Mock()
         mock_public_key = Mock()
         mock_cert.public_key.return_value = mock_public_key
         mock_public_key.public_bytes.return_value = b"mock_public_bytes"
         mock_load_cert.return_value = mock_cert
 
-        # Mock digests
-        mock_tls_digest = Mock()
-        mock_tls_digest.digest.return_value.hex.return_value = "tls_cert_digest"
-        mock_sha256.side_effect = lambda x: (
-            mock_tls_digest if x == b"mock_public_bytes" else DEFAULT
-        )
-
-        # JWKS key setup
-        mock_jwks_key = Mock()
-        mock_jwks_key.export_to_pem.return_value = b"jwks_pem"
-        mock_jwk_from_json.return_value = mock_jwks_key
-
-        # Mock JWK pub key loading
-        mock_jwks_public_key = Mock()
-        mock_jwks_public_key.public_bytes.return_value = b"jwks_public_bytes"
-        mock_load_pub_key.return_value = mock_jwks_public_key
-
-        jwks = {"keys": [{"kid": "test_kid"}]}
-        client = DynamicTrustStoreClient()
-
-        with pytest.raises(
-            ValueError, match="TLS public key digest tls_cert_digest not found in JWKS"
-        ):
-            client._assert_tls_in_jwks("certificate", jwks)
-
-        # Verify all expected calls
-        mock_load_cert.assert_called_once()
-        mock_load_pub_key.assert_called_once()
-        mock_sha256.assert_called()
-        assert len(mock_sha256.call_args_list) == 2
-        mock_jwk_from_json.assert_called_once_with('{"kid": "test_kid"}')
-
-    @patch("pyscitt.verify.load_pem_public_key")
-    @patch("pyscitt.verify.x509.load_pem_x509_certificate")
-    @patch("pyscitt.verify.sha256")
-    @patch("pyscitt.verify.jwk.JWK.from_json")
-    def test_assert_tls_in_jwks_succeeds_when_key_found(
-        self, mock_jwk_from_json, mock_sha256, mock_load_cert, mock_load_pub_key
-    ):
-        # Mock certificate loading and hashing
-        mock_cert = Mock()
-        mock_public_key = Mock()
-        mock_cert.public_key.return_value = mock_public_key
-        mock_public_key.public_bytes.return_value = b"mock_public_bytes"
-        mock_load_cert.return_value = mock_cert
-
-        # Mock digests
         mock_digest = Mock()
-        mock_digest.digest.return_value.hex.return_value = "same_digest"
+        mock_digest.digest.return_value.hex.return_value = "tls_cert_digest"
         mock_sha256.return_value = mock_digest
 
-        # JWKS key setup
-        mock_jwks_key = Mock()
-        mock_jwks_key.export_to_pem.return_value = b"jwks_pem"
-        mock_jwk_from_json.return_value = mock_jwks_key
-
-        # Mock JWK pub key loading
-        mock_jwks_public_key = Mock()
-        mock_jwks_public_key.public_bytes.return_value = b"jwks_public_bytes"
-        mock_load_pub_key.return_value = mock_jwks_public_key
-
+        cose_keys = [
+            {1: 2, 2: "other_kid", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}
+        ]
         client = DynamicTrustStoreClient()
-        client._assert_tls_in_jwks("certificate", {"keys": [{"kid": "test_kid"}]})
 
-        # Verify all expected calls
+        with pytest.raises(
+            ValueError,
+            match="TLS public key digest tls_cert_digest not found in COSE Key Set",
+        ):
+            client._assert_tls_in_cose_keys("certificate", cose_keys)
+
         mock_load_cert.assert_called_once()
-        mock_load_pub_key.assert_called_once()
-        mock_sha256.assert_called()
-        assert len(mock_sha256.call_args_list) == 2
-        mock_jwk_from_json.assert_called_once_with('{"kid": "test_kid"}')
+        mock_sha256.assert_called_once()
 
     @patch("pyscitt.verify.x509.load_pem_x509_certificate")
-    @patch("pyscitt.verify.jwk.JWK.from_json")
-    @patch("builtins.print")
-    def test_assert_tls_in_jwks_handles_invalid_jwks_key(
-        self, mock_print, mock_jwk_from_json, mock_load_cert
+    @patch("pyscitt.verify.sha256")
+    def test_assert_tls_in_cose_keys_succeeds_when_key_found(
+        self, mock_sha256, mock_load_cert
     ):
-        # Mock certificate loading for TLS cert
         mock_cert = Mock()
         mock_public_key = Mock()
         mock_cert.public_key.return_value = mock_public_key
         mock_public_key.public_bytes.return_value = b"mock_public_bytes"
         mock_load_cert.return_value = mock_cert
 
-        # Mock JWK parsing to raise exception
-        mock_jwk_from_json.side_effect = Exception("Invalid JWK")
+        mock_digest = Mock()
+        mock_digest.digest.return_value.hex.return_value = "matching_digest"
+        mock_sha256.return_value = mock_digest
 
+        cose_keys = [
+            {1: 2, 2: "matching_digest", -1: 1, -2: b"\x01" * 32, -3: b"\x02" * 32}
+        ]
         client = DynamicTrustStoreClient()
-        # Should raise because no valid keys were found
-        with pytest.raises(
-            ValueError, match="TLS public key digest .* not found in JWKS"
-        ):
-            client._assert_tls_in_jwks("certificate", {"keys": [{"kid": "test_kid"}]})
+        # Should not raise
+        client._assert_tls_in_cose_keys("certificate", cose_keys)
 
-        # Verify warning was printed
-        mock_print.assert_called_with("Warning: Could not parse JWKS key: Invalid JWK")
+        mock_load_cert.assert_called_once()
+        mock_sha256.assert_called_once()
 
 
 class TestVerifyTransparentStatement:

@@ -3,15 +3,15 @@
 
 #pragma once
 
-#include "did/document.h"
+#include "cbor.h"
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/cose_signatures_config_interface.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
-#include <ccf/http_accept.h>
 #include <ccf/json_handler.h>
+#include <ccf/network_identity_interface.h>
 #include <ccf/service/tables/service.h>
 
 namespace scitt
@@ -33,74 +33,39 @@ namespace scitt
   }
 
   /**
-   * An indexing strategy collecting service keys used to sign receipts.
+   * Compute a kid from a public key using SHA-256 hash of the DER encoding.
    */
-  class ServiceKeyIndexingStrategy
-    : public VisitEachEntryInValueTyped<ccf::Service>
+  static std::string kid_from_key(const ccf::crypto::ECPublicKeyPtr& key)
   {
-  public:
-    ServiceKeyIndexingStrategy() :
-      VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
-    {}
+    auto der = key->public_key_der();
+    return ccf::crypto::Sha256Hash(der).hex_str();
+  }
 
-    nlohmann::json get_jwks() const
-    {
-      std::lock_guard guard(lock);
+  /**
+   * Encode an EC public key as a COSE_Key with kid.
+   */
+  static std::vector<uint8_t> key_to_cose_key(
+    const ccf::crypto::ECPublicKeyPtr& key, const std::string& kid)
+  {
+    auto coords = key->coordinates();
+    auto crv = cbor::curve_id_to_cose_crv(key->get_curve_id());
+    return cbor::ec_cose_key_with_kid_to_cbor(crv, coords.x, coords.y, kid);
+  }
 
-      std::vector<nlohmann::json> jwks;
-      for (const auto& service_certificate : service_certificates)
-      {
-        auto verifier = ccf::crypto::make_unique_verifier(service_certificate);
-        auto pub_pem = verifier->public_key_pem();
-        auto kid =
-          ccf::crypto::Sha256Hash(verifier->public_key_der()).hex_str();
-        nlohmann::json json_jwk;
-        try
-        {
-          json_jwk =
-            ccf::crypto::make_ec_public_key(pub_pem)->public_key_jwk(kid);
-        }
-        catch (const std::exception& ec_error)
-        {
-          try
-          {
-            json_jwk =
-              ccf::crypto::make_rsa_public_key(pub_pem)->public_key_jwk(kid);
-          }
-          catch (const std::exception& rsa_error)
-          {
-            throw std::runtime_error(
-              std::string("Unable to parse service public key as EC or RSA. ") +
-              "EC parse failed: " + ec_error.what() +
-              ". RSA parse failed: " + rsa_error.what());
-          }
-        }
-        json_jwk["kid"] = kid;
-        jwks.emplace_back(std::move(json_jwk));
-      }
-      nlohmann::json jwks_json;
-      jwks_json["keys"] = jwks;
-      return jwks_json;
-    }
+  static void set_cbor_response(
+    ccf::endpoints::ReadOnlyEndpointContext& ctx,
+    ccf::http_status status,
+    std::vector<uint8_t>&& body)
+  {
+    ctx.rpc_ctx->set_response_status(status);
+    ctx.rpc_ctx->set_response_header(
+      ccf::http::headers::CONTENT_TYPE,
+      ccf::http::headervalues::contenttype::CBOR);
+    ctx.rpc_ctx->set_response_body(std::move(body));
+  }
 
-  protected:
-    void visit_entry(
-      const ccf::TxID& tx_id, const ccf::ServiceInfo& service_info) override
-    {
-      std::lock_guard guard(lock);
-
-      // It is possible for multiple entries in the ServiceInfo table to contain
-      // the same certificate, eg. if the service status changes. Using an
-      // std::set removes duplicates.
-      service_certificates.insert(service_info.cert);
-    }
-
-  private:
-    mutable std::mutex lock;
-
-    std::set<ccf::crypto::Pem> service_certificates;
-  }; /**
-      * An indexing strategy collecting all past and present service
+  /**
+   * An indexing strategy collecting all past and present service
       * certificates and makes them immediately available.
       */
   class ServiceCertificateIndexingStrategy
@@ -180,15 +145,6 @@ namespace scitt
       out.version = SCITT_VERSION;
       return out;
     };
-
-    static nlohmann::json get_jwks(
-      const std::shared_ptr<ServiceKeyIndexingStrategy>& index,
-      ccf::endpoints::EndpointContext& ctx,
-      nlohmann::json&& params)
-    {
-      // TODO: this is not right when the indexer is not up to date
-      return index->get_jwks();
-    }
   }
 
   static void register_service_endpoints(
@@ -201,12 +157,8 @@ namespace scitt
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();
 
-    auto service_key_index = std::make_shared<ServiceKeyIndexingStrategy>();
-
     context.get_indexing_strategies().install_strategy(
       service_certificate_index);
-
-    context.get_indexing_strategies().install_strategy(service_key_index);
 
     auto get_transparency_config =
       [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
@@ -220,7 +172,8 @@ namespace scitt
 
         nlohmann::json config;
         config["issuer"] = cfg.issuer;
-        config["jwks_uri"] = fmt::format("https://{}/jwks", cfg.issuer);
+        config["jwks_uri"] =
+          fmt::format("https://{}/.well-known/scitt-keys", cfg.issuer);
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
@@ -296,17 +249,98 @@ namespace scitt
       .install();
 
     /**
-     * This endpoint is indirectly mentioned in the RFC,
-     * through the "jwks_uri" field in the transparency configuration.
-     * See 2.1.1. Transparency Configuration
-     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     * See Section 2.1 of draft-ietf-scitt-scrapi-08.
+     * Returns all trusted service keys as a COSE_Key_Set in
+     * application/cbor format.
      */
+    auto get_scitt_keys =
+      [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
+        auto network_identity =
+          context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
+        if (!network_identity)
+        {
+          set_cbor_response(
+            ctx,
+            HTTP_STATUS_INTERNAL_SERVER_ERROR,
+            cbor::cbor_error(
+              "InternalError",
+              "Network identity subsystem not available"));
+          return;
+        }
+
+        auto trusted_keys = network_identity->get_trusted_keys();
+        std::vector<std::vector<uint8_t>> cose_keys;
+        for (const auto& [seq_no, key] : trusted_keys)
+        {
+          cose_keys.push_back(key_to_cose_key(key, kid_from_key(key)));
+        }
+
+        set_cbor_response(
+          ctx,
+          HTTP_STATUS_OK,
+          cbor::cose_key_set_to_cbor(cose_keys));
+      };
+
     registry
-      .make_endpoint(
-        "/jwks",
+      .make_read_only_endpoint(
+        "/.well-known/scitt-keys",
         HTTP_GET,
-        ccf::json_adapter(
-          std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
+        get_scitt_keys,
+        no_authn_policy)
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
+      .install();
+
+    /**
+     * See Section 2.2 of draft-ietf-scitt-scrapi-08.
+     * Returns a single trusted service key by kid value
+     * as a COSE_Key in application/cbor format.
+     */
+    auto get_scitt_key_by_kid =
+      [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
+        auto kid_value =
+          ctx.rpc_ctx->get_request_path_params().at("kid_value");
+
+        auto network_identity =
+          context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
+        if (!network_identity)
+        {
+          set_cbor_response(
+            ctx,
+            HTTP_STATUS_INTERNAL_SERVER_ERROR,
+            cbor::cbor_error(
+              "InternalError",
+              "Network identity subsystem not available"));
+          return;
+        }
+
+        auto trusted_keys = network_identity->get_trusted_keys();
+        for (const auto& [seq_no, key] : trusted_keys)
+        {
+          auto kid = kid_from_key(key);
+          if (kid == kid_value)
+          {
+            set_cbor_response(
+              ctx,
+              HTTP_STATUS_OK,
+              cbor::cose_key_set_to_cbor({key_to_cose_key(key, kid)}));
+            return;
+          }
+        }
+
+        set_cbor_response(
+          ctx,
+          HTTP_STATUS_NOT_FOUND,
+          cbor::cbor_error(
+            "KeyNotFound",
+            fmt::format("Key with kid '{}' not found", kid_value)));
+      };
+
+    registry
+      .make_read_only_endpoint(
+        "/.well-known/scitt-keys/{kid_value}",
+        HTTP_GET,
+        get_scitt_key_by_kid,
         no_authn_policy)
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
       .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
@@ -314,7 +348,7 @@ namespace scitt
 
     /**
      * See 2.1.1. Transparency Configuration
-     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi-08/
      */
     registry
       .make_read_only_endpoint(

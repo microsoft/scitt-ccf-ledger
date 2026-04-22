@@ -16,14 +16,13 @@ import httpx
 from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
-    load_pem_public_key,
 )
 from cryptography.x509 import load_der_x509_certificate
-from jwcrypto import jwk
 from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
@@ -241,14 +240,12 @@ class DynamicTrustStoreClient:
                 self.clients[issuer] = self._client()
         return self.clients[issuer]
 
-    def _assert_tls_in_jwks(self, tls_pem: str, jwks: dict):
-        """Parse JSON web keys to find the KID of the TLS certificate public key."""
+    def _assert_tls_in_cose_keys(self, tls_pem: str, cose_keys: list):
+        """Check that the TLS certificate public key is present in the COSE Key Set."""
         if not tls_pem:
             raise ValueError("TLS PEM certificate is required")
-        if not jwks:
-            raise ValueError("JWKS is required")
-        if not "keys" in jwks:
-            raise ValueError("JWKS does not contain 'keys'")
+        if not cose_keys:
+            raise ValueError("COSE Key Set is required")
         cert = x509.load_pem_x509_certificate(tls_pem.encode(), default_backend())
         cert_digest = (
             sha256(
@@ -259,50 +256,36 @@ class DynamicTrustStoreClient:
             .digest()
             .hex()
         )
-        jwks_keys_digests = []
-        for jwks_key in jwks["keys"]:
-            try:
-                pem_b = jwk.JWK.from_json(json.dumps(jwks_key)).export_to_pem()
-                pub_key = load_pem_public_key(pem_b, default_backend())
-                pubhash = (
-                    sha256(
-                        pub_key.public_bytes(
-                            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
-                        )
-                    )
-                    .digest()
-                    .hex()
-                )
-                jwks_keys_digests.append(pubhash)
-            except Exception as e:
-                print(f"Warning: Could not parse JWKS key: {e}")
+        # kid (label 2) in COSE Keys is SHA-256 of DER public key, hex encoded
+        key_kids = [key.get(2) for key in cose_keys if isinstance(key, dict)]
+        if cert_digest not in key_kids:
+            raise ValueError(
+                f"TLS public key digest {cert_digest} not found in COSE Key Set"
+            )
 
-        if cert_digest not in jwks_keys_digests:
-            raise ValueError(f"TLS public key digest {cert_digest} not found in JWKS")
-
-    def get_jwks(self, issuer: str) -> dict:
+    def get_scitt_keys(self, issuer: str) -> list:
         """
-        Retrieve the JWKS from the issuer.
+        Retrieve the COSE Key Set from the issuer's SCITT keys endpoint.
         """
         transparency_configuration = self.get_configuration(issuer)
         transparency_configuration.raise_for_status()
         config_response = cbor2.loads(transparency_configuration.content)
         jwks_uri = config_response["jwks_uri"]
-        jwks_response = self._client_for_issuer(issuer).get(
-            jwks_uri, headers={"Accept": "application/json"}
+        keys_response = self._client_for_issuer(issuer).get(
+            jwks_uri, headers={"Accept": "application/cbor"}
         )
-        jwks_response.raise_for_status()
-        jwks = jwks_response.json()
+        keys_response.raise_for_status()
+        cose_keys = cbor2.loads(keys_response.content)
 
-        # If issuer is a Confidential Ledger issuer, ensure the TLS certificate public key is in the JWKS.
-        # This step adds an additional layer of trustworthiness of the public keys used for verification.
+        # If issuer is a Confidential Ledger issuer, ensure the TLS certificate
+        # public key is in the COSE Key Set.
         if self.is_confidential_ledger_issuer(issuer):
             pem = self.confidential_ledger_certs.get(issuer)
             if pem is None:
                 raise ValueError(f"No TLS certificate for issuer {issuer}.")
-            self._assert_tls_in_jwks(pem, jwks)
+            self._assert_tls_in_cose_keys(pem, cose_keys)
 
-        return jwks
+        return cose_keys
 
     def get_configuration(self, issuer: str):
         """
@@ -348,6 +331,12 @@ class DynamicTrustStore(TrustStore):
     def services(self):
         raise NotImplementedError()
 
+    COSE_CRV_TO_EC = {
+        1: ec.SECP256R1(),
+        2: ec.SECP384R1(),
+        3: ec.SECP521R1(),
+    }
+
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
         Look up a service's public key based on the protected headers from a receipt.
@@ -356,12 +345,27 @@ class DynamicTrustStore(TrustStore):
         cwt = parsed.phdr[CWTClaims]
         key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]
-        jwk_set = self.client.get_jwks(issuer)
-        jwks = jwk_set["keys"]
-        keys = {key["kid"].encode(): key for key in jwks}
+        cose_keys = self.client.get_scitt_keys(issuer)
+        # kid (label 2) is a text string; KID in receipt header is bytes
+        keys = {}
+        for k in cose_keys:
+            kid = k.get(2)
+            if isinstance(kid, str):
+                keys[kid.encode()] = k
+            elif isinstance(kid, bytes):
+                keys[kid] = k
         if key_id not in keys:
-            raise ValueError(f"Key ID {key_id} not found in JWKS for issuer {issuer}")
-        key = keys[key_id]
-        pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
-        key = load_pem_public_key(pem_key, default_backend())
-        return key  # type: ignore
+            raise ValueError(
+                f"Key ID {key_id} not found in COSE Key Set for issuer {issuer}"
+            )
+        cose_key = keys[key_id]
+        crv = cose_key.get(-1)
+        curve = self.COSE_CRV_TO_EC.get(crv)
+        if curve is None:
+            raise ValueError(f"Unsupported COSE curve: {crv}")
+        public_numbers = ec.EllipticCurvePublicNumbers(
+            x=int.from_bytes(cose_key[-2], "big"),
+            y=int.from_bytes(cose_key[-3], "big"),
+            curve=curve,
+        )
+        return public_numbers.public_key()
