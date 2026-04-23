@@ -248,8 +248,7 @@ namespace scitt
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
         const auto wait_for_commit =
-          get_query_value<bool>(parsed_query, "waitForCommit")
-            .value_or(false);
+          get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
         if (wait_for_commit)
         {
           ctx.rpc_ctx->set_consensus_committed_function(
