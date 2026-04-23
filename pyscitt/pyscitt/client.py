@@ -610,14 +610,14 @@ class Client(BaseClient):
         """
         Submit a signed statement and wait for global commit.
 
-        This sets `wait_for_commit=true` on POST /entries, so the
+        This sets `waitForCommit=true` on POST /entries, so the
         response is deferred until consensus reaches a terminal state and
         returns the COSE receipt directly in the response body.
         """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
-            params={"wait_for_commit": "true"},
+            params={"waitForCommit": "true"},
             headers=headers,
             content=signed_statement,
         )

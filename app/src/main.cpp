@@ -248,7 +248,7 @@ namespace scitt
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
         const auto wait_for_commit =
-          get_query_value<bool>(parsed_query, "wait_for_commit")
+          get_query_value<bool>(parsed_query, "waitForCommit")
             .value_or(false);
         if (wait_for_commit)
         {
@@ -439,7 +439,7 @@ namespace scitt
         operation_locally_committed_func,
         authn_policy)
         .add_query_parameter<bool>(
-          "wait_for_commit",
+          "waitForCommit",
           ccf::endpoints::QueryParamPresence::OptionalParameter)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Always)
         .set_redirection_strategy(

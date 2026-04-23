@@ -152,6 +152,49 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     assert claims.get("foo") == "bar"
 
 
+def test_submit_wait_for_commit(
+    run, tmp_path, cert_authority, configure_service
+):
+    """
+    Test the CLI submit command with --wait-for-commit flag.
+    This uses the synchronous flow (POST /entries?waitForCommit=true)
+    and saves the receipt to the --transparent-statement output path.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+    cose_path = tmp_path / "statement.cose"
+    cose_path.write_bytes(signed_statement)
+
+    output_path = tmp_path / "receipt.cose"
+
+    run(
+        "submit",
+        cose_path,
+        "--transparent-statement",
+        output_path,
+        "--wait-for-commit",
+        with_service_url=True,
+    )
+
+    assert output_path.exists()
+    receipt_bytes = output_path.read_bytes()
+    assert len(receipt_bytes) > 0
+
+    # Verify the output is valid COSE
+    msg = CoseMessage.decode(receipt_bytes)
+    assert msg is not None
+
+
 @pytest.mark.parametrize(
     "filepath",
     [

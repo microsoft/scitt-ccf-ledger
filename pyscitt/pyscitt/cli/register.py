@@ -14,6 +14,7 @@ def register_signed_statement(
     path: Path,
     transparent_statement_path: Optional[Path],
     skip_confirmation: bool,
+    wait_for_commit: bool,
 ):
     if path.suffix != ".cose":
         raise ValueError("unsupported file extension, must end with .cose")
@@ -27,6 +28,16 @@ def register_signed_statement(
         print("""Confirmation of submission was skipped, the signed
               statement may not be registered on the ledger. 
               A transparent statement will not be downloaded nor saved.""")
+        return
+
+    if wait_for_commit:
+        submission = client.submit_signed_statement_wait_for_commit(signed_statement)
+        print(f"Registered {path} as transaction {submission.tx}")
+
+        if transparent_statement_path:
+            with open(transparent_statement_path, "wb") as f:
+                f.write(submission.response_bytes)
+            print(f"Received {transparent_statement_path}")
         return
 
     submission = client.submit_signed_statement_and_wait(signed_statement)
@@ -53,6 +64,11 @@ def cli(fn):
         action="store_true",
         help="Don't wait for confirmation or the transparent statement",
     )
+    parser.add_argument(
+        "--wait-for-commit",
+        action="store_true",
+        help="Use synchronous flow: block until commit and return receipt directly",
+    )
 
     def cmd(args):
         client = create_client(args)
@@ -61,6 +77,7 @@ def cli(fn):
             args.path,
             args.transparent_statement,
             args.skip_confirmation,
+            args.wait_for_commit,
         )
 
     parser.set_defaults(func=cmd)

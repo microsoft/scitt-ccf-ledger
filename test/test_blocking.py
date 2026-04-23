@@ -16,7 +16,7 @@ def test_blocking_entries(
     client: Client, cert_authority, trust_store, configure_service
 ):
     """
-    Submit a signed statement via POST /entries?wait_for_commit=true and
+    Submit a signed statement via POST /entries?waitForCommit=true and
     inspect the response.
 
     The request blocks until the transaction is globally committed and
@@ -37,7 +37,7 @@ def test_blocking_entries(
 
     submission = client.submit_signed_statement_wait_for_commit(signed_statement)
 
-    LOG.info("=== Blocking /entries?wait_for_commit=true response ===")
+    LOG.info("=== Blocking /entries?waitForCommit=true response ===")
     LOG.info(f"Transaction ID: {submission.tx}")
     LOG.info(f"Response bytes length: {len(submission.response_bytes)}")
     LOG.info(
