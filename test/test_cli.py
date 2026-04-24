@@ -152,9 +152,7 @@ def test_extract_payload_from_cose(run, tmp_path: Path):
     assert claims.get("foo") == "bar"
 
 
-def test_submit_wait_for_commit(
-    run, tmp_path, cert_authority, configure_service
-):
+def test_submit_wait_for_commit(run, tmp_path, cert_authority, configure_service):
     """
     Test the CLI submit command with --wait-for-commit flag.
     This uses the synchronous flow (POST /entries?waitForCommit=true)
