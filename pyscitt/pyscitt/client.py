@@ -603,6 +603,29 @@ class Client(BaseClient):
         receipt = self.get_receipt(tx)
         return Submission(operation_id, tx, receipt, False)
 
+    def submit_signed_statement_wait_for_commit(
+        self,
+        signed_statement: bytes,
+    ) -> Submission:
+        """
+        Submit a signed statement and wait for global commit.
+
+        This sets `waitForCommit=true` on POST /entries, so the
+        response is deferred until consensus reaches a terminal state and
+        returns the COSE receipt directly in the response body.
+        """
+        headers = {"Content-Type": CT_APPLICATION_COSE}
+        resp = self.post(
+            "/entries",
+            params={"waitForCommit": "true"},
+            headers=headers,
+            content=signed_statement,
+        )
+        resp.raise_for_status()
+        tx = resp.headers[CCF_TX_ID_HEADER]
+        receipt = resp.content
+        return Submission("", tx, receipt, False)
+
     def wait_for_operation(self, operation: str) -> str:
         resp = self.get(
             f"/operations/{operation}",
