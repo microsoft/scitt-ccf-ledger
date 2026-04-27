@@ -8,7 +8,7 @@ PRESET=${PRESET:-dev}
 BUILD_DEBUG_CCF_FROM_SOURCE=${BUILD_DEBUG_CCF_FROM_SOURCE:-OFF}
 
 if [ "$BUILD_DEBUG_CCF_FROM_SOURCE" = "ON" ]; then
-    CCF_SOURCE_VERSION="7.0.0"
+    CCF_SOURCE_VERSION="7.0.1"
     echo "Cloning CCF sources"
     rm -rf ccf-source
     rm -rf /opt/h2spec
