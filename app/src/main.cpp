@@ -253,6 +253,8 @@ namespace scitt
         {
           ctx.rpc_ctx->set_consensus_committed_function(
             [&context_](ccf::endpoints::CommittedTxInfo& info) {
+              auto host =
+                info.rpc_ctx->get_request_header(ccf::http::headers::HOST);
               if (info.status == ccf::FinalTxStatus::Invalid)
               {
                 info.rpc_ctx->set_response_status(
@@ -282,6 +284,15 @@ namespace scitt
                 ccf::http::headervalues::contenttype::COSE);
               info.rpc_ctx->set_response_header(
                 ccf::http::headers::CCF_TX_ID, info.tx_id.to_str());
+              if (host.has_value())
+              {
+                info.rpc_ctx->set_response_header(
+                  ccf::http::headers::LOCATION,
+                  fmt::format(
+                    "https://{}/entries/{}",
+                    host.value(),
+                    info.tx_id.to_str()));
+              }
               info.rpc_ctx->set_response_body(cose_receipt);
             });
         }
@@ -480,13 +491,16 @@ namespace scitt
         };
 
       /**
-       * Resolve Receipt, 2.1.4 in
+       * Resolve Receipt / Query Registration Status, 2.4 and 2.5 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       *
+       * Returns 302 Found with Retry-After if the transaction is still
+       * pending, or 200 OK with the COSE receipt when committed.
        */
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        scitt::historical::entry_adapter(
+        scitt::historical::entry_adapter_with_polling(
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)

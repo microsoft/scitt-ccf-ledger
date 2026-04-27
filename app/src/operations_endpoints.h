@@ -479,6 +479,8 @@ namespace scitt
    * In this case, it is assumed the handler has set a response body when it set
    * the erroneous status code.
    *
+   * Per SCRAPI v09 section 2.3.2, async registration returns 303 See Other
+   * with Location pointing to /entries/{txid}.
    */
   static void operation_locally_committed_func(
     ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
@@ -486,27 +488,17 @@ namespace scitt
     std::string tx_str = tx_id.to_str();
     SCITT_DEBUG("New operation was locally committed with tx={}", tx_str);
 
-    // Even though synchronous operations are set to "Succeeded" in the KV,
-    // they still need to go through consensus, so we tell the client it is
-    // still "running".
-    GetOperation::Out operation{
-      .operation_id = tx_id,
-      .status = OperationStatus::Running,
-      .entry_id = {},
-      .error = {}};
-
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
-    ctx.rpc_ctx->set_response_header(
-      ccf::http::headers::CONTENT_TYPE,
-      ccf::http::headervalues::contenttype::CBOR);
-    ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
-    ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
     if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
     {
+      // SCRAPI v09 2.3.2: Location points to /entries/{txid}
       ctx.rpc_ctx->set_response_header(
         ccf::http::headers::LOCATION,
-        fmt::format("https://{}/operations/{}", *host, tx_str));
+        fmt::format("https://{}/entries/{}", *host, tx_str));
     }
+
+    // SCRAPI v09 2.3.2: Return 303 See Other with empty body
+    ctx.rpc_ctx->set_response_status(HTTP_STATUS_SEE_OTHER);
   }
 }

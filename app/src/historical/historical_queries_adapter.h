@@ -102,4 +102,43 @@ namespace scitt::historical
       f(ctx, state);
     };
   }
+
+  /**
+   * A variant of entry_adapter that returns 302 Found instead of 503
+   * when the transaction is pending or not yet cached, per SCRAPI v09
+   * section 2.4.1. This is used for the GET /entries/{txid} endpoint
+   * to support polling-based registration status queries.
+   *
+   * When the transaction is ready, the handler is called as normal and
+   * returns 200 OK with the receipt (section 2.4.2 / 2.5.1).
+   */
+  static EndpointFunction entry_adapter_with_polling(
+    const HandleHistoricalQuery& f,
+    AbstractStateCache& state_cache,
+    const CheckHistoricalTxStatus& available)
+  {
+    return [f, &state_cache, available](EndpointContext& ctx) {
+      try
+      {
+        auto state = get_historical_entry_state(state_cache, available, ctx);
+        f(ctx, state);
+      }
+      catch (const ServiceUnavailableCborError&)
+      {
+        // Transaction is pending or not yet cached. Per SCRAPI v09
+        // section 2.4.1, return 302 Found with Location pointing to
+        // the same URL, so the client can retry.
+        auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
+        ctx.rpc_ctx->set_response_status(HTTP_STATUS_FOUND);
+        if (
+          auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+        {
+          ctx.rpc_ctx->set_response_header(
+            ccf::http::headers::LOCATION,
+            fmt::format("https://{}/entries/{}", host.value(), tx_id_str));
+        }
+        ctx.rpc_ctx->set_response_header(ccf::http::headers::RETRY_AFTER, "1");
+      }
+    };
+  }
 }

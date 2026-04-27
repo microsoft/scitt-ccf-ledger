@@ -285,7 +285,7 @@ class BaseClient:
         """
         Parse the error response from the server and return a ServiceError instance.
         """
-        if response.is_success:
+        if response.is_success or response.is_redirect:
             return None
 
         content_type = response.headers.get("content-type", CT_APPLICATION_JSON)
@@ -483,11 +483,15 @@ class BaseClient:
         """
         Issue a request, retrying on codes commonly used by CCF applications to indicate that a
         historical query to the KV is in progress and needs to be retried.
+
+        Also retries on 302 Found per SCRAPI v09 section 2.4.1, which
+        indicates the transaction is still pending.
         """
         return self.get(
             *args,
             **kwargs,
             retry_on=[
+                HTTPStatus.FOUND.value,
                 (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
             ]
             + retry_on,
@@ -558,13 +562,28 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
+        """
+        Submit a signed statement asynchronously.
+
+        Per SCRAPI v09, POST /entries returns 303 See Other with a Location
+        header pointing to /entries/{txid}. The txid is extracted from the
+        Location header.
+
+        Falls back to the legacy 202 + CBOR OperationId flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            return PendingSubmission(tx)
         resp.raise_for_status()
+        # Legacy fallback: 202 with CBOR body
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         return PendingSubmission(operation_id)
@@ -573,13 +592,30 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> Submission:
+        """
+        Submit a signed statement and wait for the transparent statement.
+
+        Per SCRAPI v09, POST /entries returns 303, then polling
+        GET /entries/{txid} returns 302 while running and 200 with the
+        receipt when committed.
+
+        Falls back to the legacy /operations/ polling flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            self.wait_for_entry(tx)
+            statement = self.get_transparent_statement(tx)
+            return Submission(tx, tx, statement, False)
         resp.raise_for_status()
+        # Legacy fallback
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
@@ -590,13 +626,29 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> Submission:
+        """
+        Submit a signed statement and wait for the receipt.
+
+        Per SCRAPI v09, POST /entries returns 303, then polling
+        GET /entries/{txid} returns 302 while running and 200 with the
+        receipt when committed.
+
+        Falls back to the legacy /operations/ polling flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            receipt = self.wait_for_entry(tx)
+            return Submission(tx, tx, receipt, False)
         resp.raise_for_status()
+        # Legacy fallback
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
@@ -627,6 +679,12 @@ class Client(BaseClient):
         return Submission("", tx, receipt, False)
 
     def wait_for_operation(self, operation: str) -> str:
+        """
+        Legacy polling method using GET /operations/{id}.
+
+        Kept for backward compatibility with older servers that return 202
+        with CBOR operation status.
+        """
         resp = self.get(
             f"/operations/{operation}",
             retry_on=[
@@ -647,6 +705,24 @@ class Client(BaseClient):
             )
         else:
             raise ValueError("Invalid status {}".format(response["Status"]))
+
+    def wait_for_entry(self, tx: str) -> bytes:
+        """
+        Poll GET /entries/{txid} per SCRAPI v09 section 2.4.
+
+        Returns 302 Found while the registration is still running, and
+        200 OK with the COSE receipt when committed.
+        """
+        resp = self.get(
+            f"/entries/{tx}",
+            retry_on=[
+                HTTPStatus.FOUND.value,
+                HTTPStatus.TOO_MANY_REQUESTS.value,
+                HTTPStatus.SERVICE_UNAVAILABLE.value,
+                (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
+            ],
+        )
+        return resp.content
 
     def get_claim(self, tx: str) -> bytes:
         response = self.get_historical(f"/entries/{tx}")
