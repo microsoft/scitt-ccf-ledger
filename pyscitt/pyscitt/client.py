@@ -432,9 +432,7 @@ class BaseClient:
                             kwargs["headers"].pop("content-type", None)
 
                     url = str(httpx.URL(location))
-                    LOG.debug(
-                        f"Following {response.status_code} redirect to {url}"
-                    )
+                    LOG.debug(f"Following {response.status_code} redirect to {url}")
                     continue
 
             log_parts = [method, url]

@@ -497,8 +497,7 @@ namespace scitt
 
     // Check if the client is a legacy client expecting CBOR (eg. .NET SDK).
     // Legacy clients send Accept: application/cbor and expect 202 + CBOR body.
-    auto accept =
-      ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
+    auto accept = ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
     bool legacy_client = accept.has_value() &&
       accept.value().find(ccf::http::headervalues::contenttype::CBOR) !=
         std::string::npos;
@@ -518,9 +517,7 @@ namespace scitt
       ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
       ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
 
-      if (
-        auto host =
-          ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+      if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
       {
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::LOCATION,
@@ -530,9 +527,7 @@ namespace scitt
     else
     {
       // SCRAPI v09 2.3.2: 303 See Other with Location: /entries/{txid}
-      if (
-        auto host =
-          ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+      if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
       {
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::LOCATION,
