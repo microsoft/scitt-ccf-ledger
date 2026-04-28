@@ -280,8 +280,7 @@ namespace scitt
 
               info.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
               info.rpc_ctx->set_response_header(
-                ccf::http::headers::CONTENT_TYPE,
-                ccf::http::headervalues::contenttype::COSE);
+                ccf::http::headers::CONTENT_TYPE, CT_SCITT_RECEIPT);
               info.rpc_ctx->set_response_header(
                 ccf::http::headers::CCF_TX_ID, info.tx_id.to_str());
               if (host.has_value())
@@ -486,8 +485,7 @@ namespace scitt
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            ccf::http::headers::CONTENT_TYPE, CT_SCITT_RECEIPT);
         };
 
       /**
@@ -545,8 +543,7 @@ namespace scitt
 
           ctx.rpc_ctx->set_response_body(statement);
           ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            ccf::http::headers::CONTENT_TYPE, CT_SCITT_STATEMENT);
         };
 
       /**

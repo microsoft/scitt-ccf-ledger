@@ -17,6 +17,8 @@ from pyscitt import crypto
 from pyscitt.client import Client
 
 CT_APPLICATION_COSE = "application/cose"
+CT_SCITT_RECEIPT = "application/scitt-receipt+cose"
+CT_SCITT_STATEMENT = "application/scitt-statement+cose"
 
 
 def test_async_registration_returns_303(
@@ -228,3 +230,97 @@ def test_submit_and_wait_for_receipt_scrapi_flow(
     LOG.info(
         f"submit_and_wait_for_receipt tx={submission.tx}, receipt={len(submission.response_bytes)} bytes"
     )
+
+
+def test_receipt_content_type(client: Client, cert_authority, configure_service):
+    """
+    GET /entries/{txid} returns Content-Type: application/scitt-receipt+cose
+    per IANA-registered SCITT media types.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+    submission = client.submit_signed_statement(signed_statement)
+    tx = submission.operation_tx
+
+    # Wait for entry and check the content type on the raw response
+    receipt = client.wait_for_entry(tx)
+    assert len(receipt) > 0
+
+    # Make a direct request to verify Content-Type header
+    resp = client.get_historical(f"/entries/{tx}")
+    content_type = resp.headers.get("content-type")
+    LOG.info(f"GET /entries/{tx} Content-Type: {content_type}")
+    assert (
+        content_type == CT_SCITT_RECEIPT
+    ), f"Expected Content-Type {CT_SCITT_RECEIPT}, got {content_type}"
+
+
+def test_sync_receipt_content_type(client: Client, cert_authority, configure_service):
+    """
+    POST /entries?waitForCommit=true returns Content-Type: application/scitt-receipt+cose.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+
+    resp = client.post(
+        "/entries",
+        params={"waitForCommit": "true"},
+        headers={"Content-Type": CT_APPLICATION_COSE},
+        content=signed_statement,
+    )
+    resp.raise_for_status()
+
+    content_type = resp.headers.get("content-type")
+    LOG.info(f"POST /entries?waitForCommit=true Content-Type: {content_type}")
+    assert (
+        content_type == CT_SCITT_RECEIPT
+    ), f"Expected Content-Type {CT_SCITT_RECEIPT}, got {content_type}"
+
+
+def test_transparent_statement_content_type(
+    client: Client, cert_authority, configure_service
+):
+    """
+    GET /entries/{txid}/statement returns Content-Type: application/scitt-statement+cose.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+    submission = client.submit_signed_statement_and_wait(signed_statement)
+    tx = submission.tx
+
+    resp = client.get_historical(f"/entries/{tx}/statement")
+    content_type = resp.headers.get("content-type")
+    LOG.info(f"GET /entries/{tx}/statement Content-Type: {content_type}")
+    assert (
+        content_type == CT_SCITT_STATEMENT
+    ), f"Expected Content-Type {CT_SCITT_STATEMENT}, got {content_type}"
