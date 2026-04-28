@@ -332,8 +332,11 @@ class BaseClient:
             rolled-back.
 
         follow_redirects:
-            If True (default), automatically follow 307 and 308 redirect responses, preserving
-            all headers and request metadata. If False, return the redirect response as-is.
+            If True (default), automatically follow redirect responses:
+            - 302 Found: follow Location with Retry-After delay (polling pattern)
+            - 303 See Other: follow Location as GET, dropping the request body
+            - 307/308: follow Location, preserving the HTTP method and body
+            If False, return the redirect response as-is.
 
         Other keyword-arguments are passed to httpx.
         """
@@ -394,18 +397,44 @@ class BaseClient:
         while True:
             response = self.session.request(method, url, **kwargs)
 
-            # Handle 307/308 redirects while preserving headers and request metadata
-            if follow_redirects and response.status_code in (307, 308):
+            # Handle redirects (302 Found, 303 See Other, 307/308)
+            if follow_redirects and response.status_code in (302, 303, 307, 308):
                 location = response.headers.get("location")
                 if location:
-                    redirects += 1
-                    if redirects > max_redirects:
-                        raise ValueError(
-                            f"Too many redirects (exceeded {max_redirects})"
+                    # For 302 with Retry-After (polling pattern), use the
+                    # attempt/deadline counters rather than the redirect counter.
+                    retry_after = response.headers.get("retry-after")
+                    if retry_after:
+                        wait = (
+                            int(retry_after)
+                            if self.wait_time is None
+                            else self.wait_time
                         )
-                    # Resolve relative URLs against the current base URL
+                        if time.monotonic() + wait > deadline:
+                            raise ValueError("Too many retries")
+                        time.sleep(wait)
+                        attempt += 1
+                    else:
+                        redirects += 1
+                        if redirects > max_redirects:
+                            raise ValueError(
+                                f"Too many redirects (exceeded {max_redirects})"
+                            )
+
+                    # 302/303: switch to GET and drop the request body
+                    # (standard HTTP redirect semantics)
+                    if response.status_code in (302, 303):
+                        method = "GET"
+                        kwargs.pop("content", None)
+                        kwargs.pop("json", None)
+                        if "headers" in kwargs:
+                            kwargs["headers"].pop("Content-Type", None)
+                            kwargs["headers"].pop("content-type", None)
+
                     url = str(httpx.URL(location))
-                    LOG.debug(f"Following redirect to {url}")
+                    LOG.debug(
+                        f"Following {response.status_code} redirect to {url}"
+                    )
                     continue
 
             log_parts = [method, url]
@@ -484,14 +513,13 @@ class BaseClient:
         Issue a request, retrying on codes commonly used by CCF applications to indicate that a
         historical query to the KV is in progress and needs to be retried.
 
-        Also retries on 302 Found per SCRAPI v09 section 2.4.1, which
-        indicates the transaction is still pending.
+        302 Found (SCRAPI v09 section 2.4.1, transaction still pending) is
+        handled automatically by the request method's redirect logic.
         """
         return self.get(
             *args,
             **kwargs,
             retry_on=[
-                HTTPStatus.FOUND.value,
                 (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
             ]
             + retry_on,
@@ -577,6 +605,7 @@ class Client(BaseClient):
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
@@ -607,6 +636,7 @@ class Client(BaseClient):
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
@@ -641,6 +671,7 @@ class Client(BaseClient):
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
@@ -710,13 +741,13 @@ class Client(BaseClient):
         """
         Poll GET /entries/{txid} per SCRAPI v09 section 2.4.
 
-        Returns 302 Found while the registration is still running, and
-        200 OK with the COSE receipt when committed.
+        302 Found (transaction still pending) is handled automatically by
+        the request method's redirect logic with Retry-After support.
+        Returns the COSE receipt when the server responds with 200 OK.
         """
         resp = self.get(
             f"/entries/{tx}",
             retry_on=[
-                HTTPStatus.FOUND.value,
                 HTTPStatus.TOO_MANY_REQUESTS.value,
                 HTTPStatus.SERVICE_UNAVAILABLE.value,
                 (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),

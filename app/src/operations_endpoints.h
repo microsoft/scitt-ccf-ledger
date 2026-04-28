@@ -481,6 +481,11 @@ namespace scitt
    *
    * Per SCRAPI v09 section 2.3.2, async registration returns 303 See Other
    * with Location pointing to /entries/{txid}.
+   *
+   * For backward compatibility with legacy clients (eg. .NET SDK) that expect
+   * 202 Accepted with a CBOR body: if the request includes
+   * Accept: application/cbor, the old 202 + CBOR response is returned with
+   * Location: /operations/{txid}.
    */
   static void operation_locally_committed_func(
     ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
@@ -490,15 +495,51 @@ namespace scitt
 
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
 
-    if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
-    {
-      // SCRAPI v09 2.3.2: Location points to /entries/{txid}
-      ctx.rpc_ctx->set_response_header(
-        ccf::http::headers::LOCATION,
-        fmt::format("https://{}/entries/{}", *host, tx_str));
-    }
+    // Check if the client is a legacy client expecting CBOR (eg. .NET SDK).
+    // Legacy clients send Accept: application/cbor and expect 202 + CBOR body.
+    auto accept =
+      ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
+    bool legacy_client = accept.has_value() &&
+      accept.value().find(ccf::http::headervalues::contenttype::CBOR) !=
+        std::string::npos;
 
-    // SCRAPI v09 2.3.2: Return 303 See Other with empty body
-    ctx.rpc_ctx->set_response_status(HTTP_STATUS_SEE_OTHER);
+    if (legacy_client)
+    {
+      // Legacy flow: 202 Accepted with CBOR body and Location: /operations/
+      GetOperation::Out operation{
+        .operation_id = tx_id,
+        .status = OperationStatus::Running,
+        .entry_id = {},
+        .error = {}};
+
+      ctx.rpc_ctx->set_response_header(
+        ccf::http::headers::CONTENT_TYPE,
+        ccf::http::headervalues::contenttype::CBOR);
+      ctx.rpc_ctx->set_response_body(operation_to_cbor(operation));
+      ctx.rpc_ctx->set_response_status(HTTP_STATUS_ACCEPTED);
+
+      if (
+        auto host =
+          ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+      {
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::LOCATION,
+          fmt::format("https://{}/operations/{}", *host, tx_str));
+      }
+    }
+    else
+    {
+      // SCRAPI v09 2.3.2: 303 See Other with Location: /entries/{txid}
+      if (
+        auto host =
+          ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+      {
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::LOCATION,
+          fmt::format("https://{}/entries/{}", *host, tx_str));
+      }
+
+      ctx.rpc_ctx->set_response_status(HTTP_STATUS_SEE_OTHER);
+    }
   }
 }
