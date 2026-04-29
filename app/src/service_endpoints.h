@@ -4,12 +4,14 @@
 #pragma once
 
 #include "cbor.h"
+#include "did/document.h"
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/cose_signatures_config_interface.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
+#include <ccf/http_accept.h>
 #include <ccf/json_handler.h>
 #include <ccf/network_identity_interface.h>
 #include <ccf/service/tables/service.h>
@@ -33,7 +35,81 @@ namespace scitt
   }
 
   /**
+   * An indexing strategy collecting service keys used to sign receipts.
+   */
+  class ServiceKeyIndexingStrategy
+    : public VisitEachEntryInValueTyped<ccf::Service>
+  {
+  public:
+    ServiceKeyIndexingStrategy() :
+      VisitEachEntryInValueTyped(ccf::Tables::SERVICE)
+    {}
+
+    nlohmann::json get_jwks() const
+    {
+      std::lock_guard guard(lock);
+
+      std::vector<nlohmann::json> jwks;
+      for (const auto& service_certificate : service_certificates)
+      {
+        auto verifier = ccf::crypto::make_unique_verifier(service_certificate);
+        auto pub_pem = verifier->public_key_pem();
+        auto kid =
+          ccf::crypto::Sha256Hash(verifier->public_key_der()).hex_str();
+        nlohmann::json json_jwk;
+        try
+        {
+          json_jwk =
+            ccf::crypto::make_ec_public_key(pub_pem)->public_key_jwk(kid);
+        }
+        catch (const std::exception& ec_error)
+        {
+          try
+          {
+            json_jwk =
+              ccf::crypto::make_rsa_public_key(pub_pem)->public_key_jwk(kid);
+          }
+          catch (const std::exception& rsa_error)
+          {
+            throw std::runtime_error(
+              std::string("Unable to parse service public key as EC or RSA. ") +
+              "EC parse failed: " + ec_error.what() +
+              ". RSA parse failed: " + rsa_error.what());
+          }
+        }
+        json_jwk["kid"] = kid;
+        jwks.emplace_back(std::move(json_jwk));
+      }
+      nlohmann::json jwks_json;
+      jwks_json["keys"] = jwks;
+      return jwks_json;
+    }
+
+  protected:
+    void visit_entry(
+      const ccf::TxID& tx_id, const ccf::ServiceInfo& service_info) override
+    {
+      std::lock_guard guard(lock);
+
+      // It is possible for multiple entries in the ServiceInfo table to contain
+      // the same certificate, eg. if the service status changes. Using an
+      // std::set removes duplicates.
+      service_certificates.insert(service_info.cert);
+    }
+
+  private:
+    mutable std::mutex lock;
+
+    std::set<ccf::crypto::Pem> service_certificates;
+  };
+
+  /**
    * Compute a kid from a public key using SHA-256 hash of the DER encoding.
+   *
+   * Note: CCF has an equivalent internal function ccf::crypto::kid_from_key()
+   * in src/crypto/public_key.h. If it gets exposed in the public API with an
+   * ECPublicKeyPtr overload, we should switch to using it.
+   * See: https://github.com/microsoft/CCF/blob/main/src/crypto/public_key.cpp
    */
   static std::string kid_from_key(const ccf::crypto::ECPublicKeyPtr& key)
   {
@@ -145,6 +221,15 @@ namespace scitt
       out.version = SCITT_VERSION;
       return out;
     };
+
+    static nlohmann::json get_jwks(
+      const std::shared_ptr<ServiceKeyIndexingStrategy>& index,
+      ccf::endpoints::EndpointContext& ctx,
+      nlohmann::json&& params)
+    {
+      // TODO: this is not right when the indexer is not up to date
+      return index->get_jwks();
+    }
   }
 
   static void register_service_endpoints(
@@ -157,8 +242,12 @@ namespace scitt
     auto service_certificate_index =
       std::make_shared<ServiceCertificateIndexingStrategy>();
 
+    auto service_key_index = std::make_shared<ServiceKeyIndexingStrategy>();
+
     context.get_indexing_strategies().install_strategy(
       service_certificate_index);
+
+    context.get_indexing_strategies().install_strategy(service_key_index);
 
     auto get_transparency_config =
       [&](ccf::endpoints::ReadOnlyEndpointContext& ctx) {
@@ -172,8 +261,7 @@ namespace scitt
 
         nlohmann::json config;
         config["issuer"] = cfg.issuer;
-        config["jwks_uri"] =
-          fmt::format("https://{}/.well-known/scitt-keys", cfg.issuer);
+        config["jwks_uri"] = fmt::format("https://{}/jwks", cfg.issuer);
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE,
@@ -249,6 +337,23 @@ namespace scitt
       .install();
 
     /**
+     * This endpoint is indirectly mentioned in the RFC,
+     * through the "jwks_uri" field in the transparency configuration.
+     * See 2.1.1. Transparency Configuration
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+     */
+    registry
+      .make_endpoint(
+        "/jwks",
+        HTTP_GET,
+        ccf::json_adapter(
+          std::bind(endpoints::get_jwks, service_key_index, _1, _2)),
+        no_authn_policy)
+      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
+      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
+      .install();
+
+    /**
      * See Section 2.1 of draft-ietf-scitt-scrapi-08.
      * Returns all trusted service keys as a COSE_Key_Set in
      * application/cbor format.
@@ -311,10 +416,9 @@ namespace scitt
           auto kid = kid_from_key(key);
           if (kid == kid_value)
           {
-            set_cbor_response(
-              ctx,
-              HTTP_STATUS_OK,
-              cbor::cose_key_set_to_cbor({key_to_cose_key(key, kid)}));
+            // Return a single COSE Key (map), not a COSE Key Set (array)
+            // per Section 2.2 of draft-ietf-scitt-scrapi-09
+            set_cbor_response(ctx, HTTP_STATUS_OK, key_to_cose_key(key, kid));
             return;
           }
         }
@@ -323,8 +427,9 @@ namespace scitt
           ctx,
           HTTP_STATUS_NOT_FOUND,
           cbor::cbor_error(
-            "KeyNotFound",
-            fmt::format("Key with kid '{}' not found", kid_value)));
+            "No such key",
+            fmt::format(
+              "No key could be found for this '{}' value", kid_value)));
       };
 
     registry

@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+import json
 from hashlib import sha256
 
 import cbor2
@@ -8,6 +9,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
+from jwcrypto import jwk
 
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
@@ -53,6 +55,46 @@ def pem_cert_to_ccf_cose_key(cert_pem: str) -> dict:
     }
 
 
+def pem_cert_to_ccf_jwk(cert_pem: str) -> dict:
+    cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+    pkey_pem = cert.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    key = jwk.JWK.from_pem(pkey_pem)
+    jwk_from_cert = json.loads(key.export(private_key=False))
+    # jwcrypto sets the kid to the JWK thumbprint, which is not what CCF does
+    # because it would not work in CBOR/COSE contexts. Instead, CCF uses the
+    # SHA-256 hash of the DER-encoded public key, encoded as hex.
+    # The kid is to be used as an opaque handler by clients, but we want this
+    # test to be precise.
+    ccf_kid = (
+        sha256(
+            cert.public_key().public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        .digest()
+        .hex()
+    )
+    jwk_from_cert["kid"] = ccf_kid
+    return jwk_from_cert
+
+
+def test_jwks(client: Client):
+    """
+    Test that the JWKS endpoint returns the expected keys.
+    """
+
+    jwks = client.get_jwks()
+    assert len(jwks["keys"]) == 1
+
+    cert_pem = client.get("/node/network").json()["service_certificate"]
+    svc_jwk = pem_cert_to_ccf_jwk(cert_pem)
+    assert svc_jwk == jwks["keys"][0]
+
+
 def test_scitt_keys(client: Client):
     """
     Test that the SCITT keys endpoint returns the expected keys.
@@ -73,9 +115,10 @@ def test_scitt_key_by_kid(client: Client):
     keys = client.get_scitt_keys()
     assert len(keys) == 1
     kid = keys[0][2]  # label 2 is kid
-    key_set = client.get_scitt_key(kid)
-    assert len(key_set) == 1
-    assert key_set[0] == keys[0]
+    # Returns a single COSE Key (map), not a COSE Key Set (array)
+    single_key = client.get_scitt_key(kid)
+    assert isinstance(single_key, dict)
+    assert single_key == keys[0]
 
 
 def test_scitt_key_by_kid_not_found(client: Client):
@@ -84,7 +127,7 @@ def test_scitt_key_by_kid_not_found(client: Client):
     """
     with pytest.raises(ServiceError) as exc_info:
         client.get("/.well-known/scitt-keys/nonexistent-kid")
-    assert exc_info.value.code == "KeyNotFound"
+    assert exc_info.value.code == "No such key"
 
 
 @pytest.mark.parametrize(
@@ -146,6 +189,7 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
 
     old_network = client.get("/node/network").json()
     assert old_network["recovery_count"] == 0
+    old_jwk = pem_cert_to_ccf_jwk(old_network["service_certificate"])
     old_cose_key = pem_cert_to_ccf_cose_key(old_network["service_certificate"])
 
     restart_service()
@@ -153,6 +197,7 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
     new_network = client.get("/node/network").json()
     assert new_network["recovery_count"] == 1
     assert new_network["service_certificate"] != old_network["service_certificate"]
+    new_jwk = pem_cert_to_ccf_jwk(new_network["service_certificate"])
     new_cose_key = pem_cert_to_ccf_cose_key(new_network["service_certificate"])
 
     # Check that the service is still operating correctly
@@ -162,6 +207,11 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
     second_transparent_statement = client.submit_signed_statement_and_wait(
         second_signed_statement
     ).response_bytes
+
+    jwks = client.get_jwks()
+    assert len(jwks["keys"]) == 2
+    assert old_jwk in jwks["keys"]
+    assert new_jwk in jwks["keys"]
 
     keys = client.get_scitt_keys()
     assert len(keys) == 2
@@ -182,10 +232,7 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
 @pytest.mark.isolated_test
 def test_transparency_configuration(client, cchost):
     issuer = f"127.0.0.1:{cchost.rpc_port}"
-    reference = {
-        "issuer": issuer,
-        "jwks_uri": f"https://{issuer}/.well-known/scitt-keys",
-    }
+    reference = {"issuer": issuer, "jwks_uri": f"https://{issuer}/jwks"}
     config = client.get("/.well-known/transparency-configuration")
     assert config.status_code == 200
     assert config.headers["Content-Type"] == "application/cbor"

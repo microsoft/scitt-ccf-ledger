@@ -549,6 +549,11 @@ class Client(BaseClient):
     def get_version(self) -> dict:
         return self.get("/version").json()
 
+    def get_jwks(self) -> dict:
+        resp = self.get(f"/jwks")
+        resp.raise_for_status()
+        return resp.json()
+
     def get_scitt_keys(self) -> list:
         resp = self.get("/.well-known/scitt-keys")
         resp.raise_for_status()
