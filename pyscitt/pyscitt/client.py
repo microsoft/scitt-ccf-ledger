@@ -33,7 +33,7 @@ CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
 CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
 
-SCITT_API_VERSION_SCRAPI = "2026-01-11-preview"
+SCITT_API_VERSION_SCRAPI = "2026-03-26"
 
 
 class MemberAuthenticationMethod(ABC):
