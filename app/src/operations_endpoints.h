@@ -483,9 +483,9 @@ namespace scitt
    * with Location pointing to /entries/{txid}.
    *
    * For backward compatibility with legacy clients (eg. .NET SDK) that expect
-   * 202 Accepted with a CBOR body: if the request includes
-   * Accept: application/cbor, the old 202 + CBOR response is returned with
-   * Location: /operations/{txid}.
+   * 202 Accepted with a CBOR body: if the request does not include
+   * api-version=SCITT_API_VERSION_SCRAPI, the old 202 + CBOR response is
+   * returned with Location: /operations/{txid}.
    */
   static void operation_locally_committed_func(
     ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
@@ -495,14 +495,14 @@ namespace scitt
 
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
 
-    // Check if the client is a legacy client expecting CBOR (eg. .NET SDK).
-    // Legacy clients send Accept: application/cbor and expect 202 + CBOR body.
-    auto accept = ctx.rpc_ctx->get_request_header(ccf::http::headers::ACCEPT);
-    bool legacy_client = accept.has_value() &&
-      accept.value().find(ccf::http::headervalues::contenttype::CBOR) !=
-        std::string::npos;
+    // Check if the client requested SCRAPI v09 behavior via api-version.
+    const auto parsed_query =
+      ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
+    auto it = parsed_query.find("api-version");
+    bool scrapi =
+      it != parsed_query.end() && it->second == SCITT_API_VERSION_SCRAPI;
 
-    if (legacy_client)
+    if (!scrapi)
     {
       // Legacy flow: 202 Accepted with CBOR body and Location: /operations/
       GetOperation::Out operation{

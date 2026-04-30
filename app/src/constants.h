@@ -20,6 +20,11 @@ namespace scitt
   const std::string CT_SCITT_RECEIPT = "application/scitt-receipt+cose";
   const std::string CT_SCITT_STATEMENT = "application/scitt-statement+cose";
 
+  // API versioning for SCITT endpoints.
+  // The new version enables SCRAPI v09 behavior (303, 302, new content types).
+  // Older versions (or absent api-version) get legacy behavior.
+  const std::string SCITT_API_VERSION_SCRAPI = "2026-01-11-preview";
+
   namespace errors
   {
     const std::string IndexingInProgressRetryLater =
