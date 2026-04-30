@@ -15,6 +15,11 @@ namespace scitt
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
+  // IANA-registered SCITT content types
+  // https://www.iana.org/assignments/media-types/
+  const std::string CT_SCITT_RECEIPT = "application/scitt-receipt+cose";
+  const std::string CT_SCITT_STATEMENT = "application/scitt-statement+cose";
+
   namespace errors
   {
     const std::string IndexingInProgressRetryLater =

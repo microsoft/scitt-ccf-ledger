@@ -26,6 +26,8 @@ CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 CT_APPLICATION_JSON = "application/json"
 CT_APPLICATION_CBOR = "application/cbor"
 CT_APPLICATION_COSE = "application/cose"
+CT_SCITT_RECEIPT = "application/scitt-receipt+cose"
+CT_SCITT_STATEMENT = "application/scitt-statement+cose"
 CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
 CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
@@ -285,13 +287,15 @@ class BaseClient:
         """
         Parse the error response from the server and return a ServiceError instance.
         """
-        if response.is_success:
+        if response.is_success or response.is_redirect:
             return None
 
         content_type = response.headers.get("content-type", CT_APPLICATION_JSON)
         if (
             content_type == CT_APPLICATION_CBOR
             or content_type == CT_APPLICATION_COSE
+            or content_type == CT_SCITT_RECEIPT
+            or content_type == CT_SCITT_STATEMENT
             or content_type == CT_APPLICATION_CBOR_ERROR
         ):
             error = cbor2.loads(response.read())
@@ -332,8 +336,11 @@ class BaseClient:
             rolled-back.
 
         follow_redirects:
-            If True (default), automatically follow 307 and 308 redirect responses, preserving
-            all headers and request metadata. If False, return the redirect response as-is.
+            If True (default), automatically follow redirect responses:
+            - 302 Found: follow Location with Retry-After delay (polling pattern)
+            - 303 See Other: follow Location as GET, dropping the request body
+            - 307/308: follow Location, preserving the HTTP method and body
+            If False, return the redirect response as-is.
 
         Other keyword-arguments are passed to httpx.
         """
@@ -394,18 +401,42 @@ class BaseClient:
         while True:
             response = self.session.request(method, url, **kwargs)
 
-            # Handle 307/308 redirects while preserving headers and request metadata
-            if follow_redirects and response.status_code in (307, 308):
+            # Handle redirects (302 Found, 303 See Other, 307/308)
+            if follow_redirects and response.status_code in (302, 303, 307, 308):
                 location = response.headers.get("location")
                 if location:
-                    redirects += 1
-                    if redirects > max_redirects:
-                        raise ValueError(
-                            f"Too many redirects (exceeded {max_redirects})"
+                    # For 302 with Retry-After (polling pattern), use the
+                    # attempt/deadline counters rather than the redirect counter.
+                    retry_after = response.headers.get("retry-after")
+                    if retry_after:
+                        wait = (
+                            int(retry_after)
+                            if self.wait_time is None
+                            else self.wait_time
                         )
-                    # Resolve relative URLs against the current base URL
+                        if time.monotonic() + wait > deadline:
+                            raise ValueError("Too many retries")
+                        time.sleep(wait)
+                        attempt += 1
+                    else:
+                        redirects += 1
+                        if redirects > max_redirects:
+                            raise ValueError(
+                                f"Too many redirects (exceeded {max_redirects})"
+                            )
+
+                    # 302/303: switch to GET and drop the request body
+                    # (standard HTTP redirect semantics)
+                    if response.status_code in (302, 303):
+                        method = "GET"
+                        kwargs.pop("content", None)
+                        kwargs.pop("json", None)
+                        if "headers" in kwargs:
+                            kwargs["headers"].pop("Content-Type", None)
+                            kwargs["headers"].pop("content-type", None)
+
                     url = str(httpx.URL(location))
-                    LOG.debug(f"Following redirect to {url}")
+                    LOG.debug(f"Following {response.status_code} redirect to {url}")
                     continue
 
             log_parts = [method, url]
@@ -483,6 +514,9 @@ class BaseClient:
         """
         Issue a request, retrying on codes commonly used by CCF applications to indicate that a
         historical query to the KV is in progress and needs to be retried.
+
+        302 Found (SCRAPI v09 section 2.4.1, transaction still pending) is
+        handled automatically by the request method's redirect logic.
         """
         return self.get(
             *args,
@@ -558,13 +592,29 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> PendingSubmission:
+        """
+        Submit a signed statement asynchronously.
+
+        Per SCRAPI v09, POST /entries returns 303 See Other with a Location
+        header pointing to /entries/{txid}. The txid is extracted from the
+        Location header.
+
+        Falls back to the legacy 202 + CBOR OperationId flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            return PendingSubmission(tx)
         resp.raise_for_status()
+        # Legacy fallback: 202 with CBOR body
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         return PendingSubmission(operation_id)
@@ -573,13 +623,31 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> Submission:
+        """
+        Submit a signed statement and wait for the transparent statement.
+
+        Per SCRAPI v09, POST /entries returns 303, then polling
+        GET /entries/{txid} returns 302 while running and 200 with the
+        receipt when committed.
+
+        Falls back to the legacy /operations/ polling flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            self.wait_for_entry(tx)
+            statement = self.get_transparent_statement(tx)
+            return Submission(tx, tx, statement, False)
         resp.raise_for_status()
+        # Legacy fallback
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
@@ -590,13 +658,30 @@ class Client(BaseClient):
         self,
         signed_statement: bytes,
     ) -> Submission:
+        """
+        Submit a signed statement and wait for the receipt.
+
+        Per SCRAPI v09, POST /entries returns 303, then polling
+        GET /entries/{txid} returns 302 while running and 200 with the
+        receipt when committed.
+
+        Falls back to the legacy /operations/ polling flow if the server
+        returns 202.
+        """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
             headers=headers,
             content=signed_statement,
+            follow_redirects=False,
         )
+        if resp.status_code == HTTPStatus.SEE_OTHER:
+            location = resp.headers.get("location", "")
+            tx = location.rsplit("/entries/", 1)[-1]
+            receipt = self.wait_for_entry(tx)
+            return Submission(tx, tx, receipt, False)
         resp.raise_for_status()
+        # Legacy fallback
         operation = cbor2.loads(resp.read())
         operation_id = operation["OperationId"]
         tx = self.wait_for_operation(operation_id)
@@ -627,6 +712,12 @@ class Client(BaseClient):
         return Submission("", tx, receipt, False)
 
     def wait_for_operation(self, operation: str) -> str:
+        """
+        Legacy polling method using GET /operations/{id}.
+
+        Kept for backward compatibility with older servers that return 202
+        with CBOR operation status.
+        """
         resp = self.get(
             f"/operations/{operation}",
             retry_on=[
@@ -647,6 +738,24 @@ class Client(BaseClient):
             )
         else:
             raise ValueError("Invalid status {}".format(response["Status"]))
+
+    def wait_for_entry(self, tx: str) -> bytes:
+        """
+        Poll GET /entries/{txid} per SCRAPI v09 section 2.4.
+
+        302 Found (transaction still pending) is handled automatically by
+        the request method's redirect logic with Retry-After support.
+        Returns the COSE receipt when the server responds with 200 OK.
+        """
+        resp = self.get(
+            f"/entries/{tx}",
+            retry_on=[
+                HTTPStatus.TOO_MANY_REQUESTS.value,
+                HTTPStatus.SERVICE_UNAVAILABLE.value,
+                (HTTPStatus.SERVICE_UNAVAILABLE, "TransactionNotCached"),
+            ],
+        )
+        return resp.content
 
     def get_claim(self, tx: str) -> bytes:
         response = self.get_historical(f"/entries/{tx}")
