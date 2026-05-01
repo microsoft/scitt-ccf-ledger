@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "http_error.h"
 #include "tracing.h"
+#include "util.h"
 
 #include <ccf/endpoint_context.h>
 #include <ccf/historical_queries_adapter.h>
@@ -129,11 +130,7 @@ namespace scitt::historical
       {
         // Transaction is pending or not yet cached.
         // Check api-version to decide response style.
-        const auto parsed_query =
-          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-        auto it = parsed_query.find("api-version");
-        bool scrapi =
-          it != parsed_query.end() && it->second == SCITT_API_VERSION_SCRAPI;
+        bool scrapi = is_scrapi_api_version(ctx);
 
         if (scrapi)
         {

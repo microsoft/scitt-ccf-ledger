@@ -33,7 +33,7 @@ CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
 CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
 
-SCITT_API_VERSION_SCRAPI = "2026-03-26"
+SCITT_API_VERSION_2026_03_26 = "2026-03-26"
 
 
 class MemberAuthenticationMethod(ABC):
@@ -248,7 +248,7 @@ class BaseClient:
 
         api_version:
             The api-version query parameter sent with SCITT requests.
-            Set to SCITT_API_VERSION_SCRAPI for SCRAPI v09 behavior.
+            Set to SCITT_API_VERSION_2026_03_26 for SCRAPI v09 behavior.
             Defaults to None (legacy behavior).
         """
 

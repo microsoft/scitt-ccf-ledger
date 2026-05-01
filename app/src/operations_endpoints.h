@@ -484,7 +484,7 @@ namespace scitt
    *
    * For backward compatibility with legacy clients (eg. .NET SDK) that expect
    * 202 Accepted with a CBOR body: if the request does not include
-   * api-version=SCITT_API_VERSION_SCRAPI, the old 202 + CBOR response is
+   * api-version=SCITT_API_VERSION_2026_03_26, the old 202 + CBOR response is
    * returned with Location: /operations/{txid}.
    */
   static void operation_locally_committed_func(
@@ -496,11 +496,7 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
 
     // Check if the client requested SCRAPI v09 behavior via api-version.
-    const auto parsed_query =
-      ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-    auto it = parsed_query.find("api-version");
-    bool scrapi =
-      it != parsed_query.end() && it->second == SCITT_API_VERSION_SCRAPI;
+    bool scrapi = is_scrapi_api_version(ctx);
 
     if (!scrapi)
     {

@@ -15,7 +15,7 @@ import pytest
 from loguru import logger as LOG
 
 from pyscitt import crypto
-from pyscitt.client import SCITT_API_VERSION_SCRAPI, Client
+from pyscitt.client import SCITT_API_VERSION_2026_03_26, Client
 
 CT_APPLICATION_COSE = "application/cose"
 CT_SCITT_RECEIPT = "application/scitt-receipt+cose"
@@ -25,7 +25,7 @@ CT_SCITT_STATEMENT = "application/scitt-statement+cose"
 @pytest.fixture(scope="class")
 def scrapi_client(client: Client) -> Client:
     """Client configured with the SCRAPI v09 api-version."""
-    return client.replace(api_version=SCITT_API_VERSION_SCRAPI)
+    return client.replace(api_version=SCITT_API_VERSION_2026_03_26)
 
 
 def test_async_registration_returns_303(

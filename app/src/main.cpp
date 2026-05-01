@@ -117,24 +117,6 @@ namespace scitt
     }
   }
 
-  namespace
-  {
-    /**
-     * Returns true if the request includes
-     * api-version=SCITT_API_VERSION_SCRAPI. Used to gate SCRAPI v09 behavior
-     * (303 See Other, 302 Found, new content types) and preserve backward
-     * compatibility for older clients. Unknown or absent api-version values are
-     * treated as legacy.
-     */
-    bool is_scrapi_api_version(const ccf::endpoints::EndpointContext& ctx)
-    {
-      const auto parsed_query =
-        ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-      auto version = get_query_value<std::string>(parsed_query, "api-version");
-      return version.has_value() && version.value() == SCITT_API_VERSION_SCRAPI;
-    }
-  } // anonymous namespace
-
   /**
    * Obtain COSE receipt in the format described in
    * https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
