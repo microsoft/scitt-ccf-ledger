@@ -37,17 +37,6 @@ namespace scitt
     service_certificate,
     "serviceCertificate");
 
-  struct GetHistoricServiceParameters
-  {
-    struct Out
-    {
-      std::vector<GetServiceParameters::Out> parameters;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetHistoricServiceParameters::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetHistoricServiceParameters::Out, parameters);
-
   struct GetEntriesTransactionIds
   {
     struct Out

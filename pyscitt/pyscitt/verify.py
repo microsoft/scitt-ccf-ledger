@@ -186,7 +186,7 @@ class StaticTrustStore(TrustStore):
 
                 store[service_id] = ServiceParameters.from_dict(param)
 
-            # If the JSON file contains a list of parameters, parse each one (as returned by /parameters/historic)
+            # If the JSON file contains a list of parameters, parse each one
             params = data.get("parameters")
             if params and isinstance(params, list):
                 for param in params:
