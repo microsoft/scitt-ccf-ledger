@@ -10,6 +10,9 @@ PLATFORM=${PLATFORM:-snp}
 # Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
 
+# Variable to enable .NET SDK tests
+ENABLE_DOTNET_TESTS=${ENABLE_DOTNET_TESTS:-}
+
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
 
@@ -70,6 +73,18 @@ echo "Using pip index URL: ${PIP_INDEX_URL:-default}"
 pip install --disable-pip-version-check -q -e ./pyscitt
 pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
+
+# Enable .NET SDK tests if the variable is set
+if [ -n "$ENABLE_DOTNET_TESTS" ]; then
+    TEST_ARGS="$TEST_ARGS --enable-dotnet"
+    echo ".NET SDK tests enabled"
+    echo "Preparing .NET functional test project."
+    if ! command -v dotnet > /dev/null; then
+        echo "dotnet SDK is required to run the .NET functional tests."
+        exit 1
+    fi
+    dotnet restore ./test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj
+fi
 
 # Enable performance tests if the variable is set
 if [ -n "$ENABLE_PERF_TESTS" ]; then
