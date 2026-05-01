@@ -2,7 +2,9 @@
 
 using System.Formats.Cbor;
 using System.Net.Http;
+using System.Net.Security;
 using System.Security.Cryptography.Cose;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Azure;
 using Azure.Core.Pipeline;
@@ -17,7 +19,7 @@ class Program
     private const string OperationSubmit = "submit";
     private const string OperationVerify = "verify";
     private const string EndpointArgument = "--endpoint";
-    private const string AllowInsecureTlsArgument = "--allow-insecure-tls";
+    private const string CaCertificateArgument = "--ca-certificate";
 
 
     static void Main(string[] args)
@@ -32,13 +34,16 @@ class Program
         }
 
         Uri? endpoint = parsedArguments.Endpoint;
-        bool allowInsecureTls = parsedArguments.AllowInsecureTls;
+        string? caCertificatePath = parsedArguments.CaCertificatePath;
 
         if (endpoint is not null)
         {
             Console.WriteLine($"Using endpoint {{{endpoint}}}");
         }
-        Console.WriteLine($"Development TLS bypass {{{allowInsecureTls}}}");
+        if (caCertificatePath is not null)
+        {
+            Console.WriteLine($"Using CA certificate {{{caCertificatePath}}}");
+        }
 
         Console.WriteLine("Reading the input file...");
         using FileStream fileStream = File.OpenRead(parsedArguments.InputPath);
@@ -55,16 +60,9 @@ class Program
             {
                 options.IdentityClientEndpoint = resolvedIdentityEndpoint.ToString();
             }
-            // In the development environment, we are likely a self-signed certificate
-            if (allowInsecureTls)
+            if (caCertificatePath is not null)
             {
-                HttpClientHandler handler = new()
-                {
-                    ServerCertificateCustomValidationCallback =
-                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-                };
-                HttpClient httpClient = new(handler);
-                options.Transport = new HttpClientTransport(httpClient);
+                options.Transport = CreateHttpClientTransport(caCertificatePath);
             }
             CodeTransparencyClient client = new CodeTransparencyClient(submitEndpoint, options);
 
@@ -98,17 +96,10 @@ class Program
                 AuthorizedReceiptBehavior = AuthorizedReceiptBehavior.VerifyAllMatching,
                 UnauthorizedReceiptBehavior = UnauthorizedReceiptBehavior.FailIfPresent
             };
-            // Overriding the client options to make sure it pulls down the public keys from the development server which is using self signed keys
             CodeTransparencyClientOptions clientOptions = new();
-            if (allowInsecureTls)
+            if (caCertificatePath is not null)
             {
-                HttpClientHandler handler = new()
-                {
-                    ServerCertificateCustomValidationCallback =
-                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-                };
-                HttpClient httpClient = new(handler);
-                clientOptions.Transport = new HttpClientTransport(httpClient);
+                clientOptions.Transport = CreateHttpClientTransport(caCertificatePath);
             }
             CodeTransparencyClient.VerifyTransparentStatement(transparentStatementBytes, verificationOptions, clientOptions);
             Console.WriteLine("Verification succeeded: The statement was registered in the immutable ledger.");
@@ -121,7 +112,7 @@ class Program
     {
         List<string> positionals = new();
         Uri? endpoint = null;
-        bool allowInsecureTls = false;
+        string? caCertificatePath = null;
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -138,9 +129,14 @@ class Program
                 continue;
             }
 
-            if (argument == AllowInsecureTlsArgument)
+            if (argument == CaCertificateArgument)
             {
-                allowInsecureTls = true;
+                if (index + 1 >= args.Length)
+                {
+                    throw new ArgumentException($"Missing value for {CaCertificateArgument}");
+                }
+
+                caCertificatePath = args[++index];
                 continue;
             }
 
@@ -182,7 +178,58 @@ class Program
             throw new ArgumentException("Too many positional arguments for verify");
         }
 
-        return new ParsedArguments(operation, inputPath, outputPath, endpoint, allowInsecureTls);
+        return new ParsedArguments(operation, inputPath, outputPath, endpoint, caCertificatePath);
+    }
+
+    private static HttpClientTransport CreateHttpClientTransport(string caCertificatePath)
+    {
+        X509Certificate2 trustedCertificate = LoadCertificate(caCertificatePath);
+        HttpClientHandler handler = new()
+        {
+            ServerCertificateCustomValidationCallback = (_, certificate, _, sslPolicyErrors) =>
+                ValidateServerCertificate(certificate, trustedCertificate, sslPolicyErrors),
+        };
+
+        return new HttpClientTransport(new HttpClient(handler));
+    }
+
+    private static X509Certificate2 LoadCertificate(string certificatePath)
+    {
+        byte[] rawBytes = File.ReadAllBytes(certificatePath);
+        string certificateText = Encoding.ASCII.GetString(rawBytes);
+
+        return certificateText.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal)
+            ? X509Certificate2.CreateFromPem(certificateText)
+            : new X509Certificate2(rawBytes);
+    }
+
+    private static bool ValidateServerCertificate(
+        X509Certificate2? certificate,
+        X509Certificate2 trustedCertificate,
+        SslPolicyErrors sslPolicyErrors)
+    {
+        if (certificate is null)
+        {
+            return false;
+        }
+
+        if (sslPolicyErrors == SslPolicyErrors.None)
+        {
+            return true;
+        }
+
+        if (certificate.RawDataMemory.Span.SequenceEqual(trustedCertificate.RawDataMemory.Span))
+        {
+            return true;
+        }
+
+        using X509Chain chain = new();
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(trustedCertificate);
+        chain.ChainPolicy.ExtraStore.Add(trustedCertificate);
+
+        return chain.Build(certificate);
     }
 
     private static Uri ParseAbsoluteUri(string value, string argumentName)
@@ -211,12 +258,12 @@ class Program
         string inputPath,
         string? outputPath,
         Uri? endpoint,
-        bool allowInsecureTls)
+        string? caCertificatePath)
     {
         public string Operation { get; } = operation;
         public string InputPath { get; } = inputPath;
         public string? OutputPath { get; } = outputPath;
         public Uri? Endpoint { get; } = endpoint;
-        public bool AllowInsecureTls { get; } = allowInsecureTls;
+        public string? CaCertificatePath { get; } = caCertificatePath;
     }
 }

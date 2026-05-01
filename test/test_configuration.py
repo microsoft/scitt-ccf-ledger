@@ -363,6 +363,7 @@ class TestPolicyEngine:
         tmp_path: Path,
         service_url: str,
         configure_service,
+        client: Client,
     ):
         """
         This test submits an existing COSE message to the service using the .NET SDK, which applies the policy and returns a transparent statement.
@@ -373,7 +374,11 @@ class TestPolicyEngine:
         repo_root = Path(__file__).resolve().parent.parent
         input_path = repo_root / "test/payloads/cts-hashv-cwtclaims-b64url.cose"
         output_path = tmp_path / f"ts_{input_path.name}"
+        ca_certificate_path = tmp_path / "service-cert.pem"
         project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
+        cacert_der = client.get_parameters().certificate
+        ca_certificate = x509.load_der_x509_certificate(cacert_der, default_backend())
+        ca_certificate_path.write_bytes(ca_certificate.public_bytes(Encoding.PEM))
 
         def run_dotnet(
             operation: str, *paths: Path
@@ -388,7 +393,8 @@ class TestPolicyEngine:
                     "--",
                     "--endpoint",
                     service_url,
-                    "--allow-insecure-tls",
+                    "--ca-certificate",
+                    str(ca_certificate_path),
                     operation,
                     *(str(path) for path in paths),
                 ],
