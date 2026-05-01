@@ -130,7 +130,7 @@ namespace scitt::historical
       {
         // Transaction is pending or not yet cached.
         // Check api-version to decide response style.
-        bool scrapi = is_scrapi_api_version(ctx);
+        bool scrapi = is_scrapi_v9(ctx);
 
         if (scrapi)
         {

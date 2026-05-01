@@ -496,7 +496,7 @@ namespace scitt
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
 
     // Check if the client requested SCRAPI v09 behavior via api-version.
-    bool scrapi = is_scrapi_api_version(ctx);
+    bool scrapi = is_scrapi_v9(ctx);
 
     if (!scrapi)
     {

@@ -225,7 +225,7 @@ class BaseClient:
         wait_time: Optional[float] = None,
         development: bool = False,
         cacert: Optional[str] = None,
-        api_version: Optional[str] = None,
+        api_version: Optional[str] = SCITT_API_VERSION_2026_03_26,
     ):
         """
         Create a new BaseClient instance.
@@ -248,8 +248,8 @@ class BaseClient:
 
         api_version:
             The api-version query parameter sent with SCITT requests.
-            Set to SCITT_API_VERSION_2026_03_26 for SCRAPI v09 behavior.
-            Defaults to None (legacy behavior).
+            Defaults to SCITT_API_VERSION_2026_03_26.
+            Set to None for legacy behavior.
         """
 
         # Even though these are passed to the httpx.Client and not used

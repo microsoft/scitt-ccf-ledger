@@ -249,7 +249,7 @@ namespace scitt
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
         const auto wait_for_commit =
           get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
-        const bool scrapi = is_scrapi_api_version(ctx);
+        const bool scrapi = is_scrapi_v9(ctx);
         if (wait_for_commit)
         {
           ctx.rpc_ctx->set_consensus_committed_function(
@@ -489,9 +489,8 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            is_scrapi_api_version(ctx) ?
-              CT_SCITT_RECEIPT :
-              ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_RECEIPT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
@@ -550,9 +549,8 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(statement);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            is_scrapi_api_version(ctx) ?
-              CT_SCITT_STATEMENT :
-              ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_STATEMENT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**

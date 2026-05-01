@@ -17,14 +17,13 @@
 namespace scitt
 {
   /**
-   * Returns true if the request includes
-   * api-version=SCITT_API_VERSION_2026_03_26.
-   * Used to gate SCRAPI v09 behavior and preserve backward compatibility
+   * Returns true if the request includes the SCRAPI v9 api-version.
+   * Used to gate SCRAPI v9 behavior and preserve backward compatibility
    * for older clients. Unknown or absent api-version values are treated
    * as legacy.
    */
   template <typename ContextT>
-  bool is_scrapi_api_version(const ContextT& ctx)
+  bool is_scrapi_v9(const ContextT& ctx)
   {
     const auto parsed_query =
       ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
