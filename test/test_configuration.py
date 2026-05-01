@@ -5,9 +5,9 @@ import base64
 import json
 import os
 import os.path
-from pathlib import Path
 import subprocess
 from hashlib import sha256
+from pathlib import Path
 
 import cbor2
 import pycose
@@ -375,7 +375,9 @@ class TestPolicyEngine:
         output_path = tmp_path / f"ts_{input_path.name}"
         project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
 
-        def run_dotnet(operation: str, *paths: Path) -> subprocess.CompletedProcess[str]:
+        def run_dotnet(
+            operation: str, *paths: Path
+        ) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
                 [
                     "dotnet",
@@ -398,9 +400,9 @@ class TestPolicyEngine:
 
         result = run_dotnet("submit", input_path, output_path)
 
-        assert result.returncode == 0, (
-            f"dotnet submit failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"dotnet submit failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
         input_statement = input_path.read_bytes()
         transparent_statement = output_path.read_bytes()
