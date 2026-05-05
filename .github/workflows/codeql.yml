@@ -17,7 +17,12 @@ jobs:
     name: Analyze
     
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
-    container: mcr.microsoft.com/azurelinux/base/core:3.0
+    container:
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
+      options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
+      env:
+        SCITT_CI: 1
+        PLATFORM: virtual
     
     permissions:
       actions: read
@@ -77,8 +82,7 @@ jobs:
     
     - if: matrix.language == 'cpp'
       name: Build C++
-      run: |
-        PLATFORM=virtual ./build.sh
+      run: ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
