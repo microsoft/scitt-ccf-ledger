@@ -69,7 +69,7 @@ jobs:
       - name: Install dotnet test dependencies
         if: "${{ matrix.platform.name != 'snp' }}"
         run: |
-          tdnf install -y tdnf install dotnet-sdk-8.0.x86_64
+          tdnf install -y dotnet-sdk-8.0.x86_64
       - run: ./run_functional_tests.sh
         if: "${{ matrix.platform.name != 'snp' }}" # Functional tests are not supported on SNP platform
       - name: "Upload logs for ${{ matrix.platform.name }}"
