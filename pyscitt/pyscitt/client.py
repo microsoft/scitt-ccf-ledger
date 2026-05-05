@@ -4,6 +4,7 @@
 import base64
 import hashlib
 import json
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -31,6 +32,8 @@ CT_SCITT_STATEMENT = "application/scitt-statement+cose"
 CT_APPLICATION_CBOR_ERROR = "application/concise-problem-details+cbor"
 CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
+
+SCITT_API_VERSION_2026_03_26 = "2026-03-26"
 
 
 class MemberAuthenticationMethod(ABC):
@@ -222,6 +225,7 @@ class BaseClient:
         wait_time: Optional[float] = None,
         development: bool = False,
         cacert: Optional[str] = None,
+        api_version: Optional[str] = SCITT_API_VERSION_2026_03_26,
     ):
         """
         Create a new BaseClient instance.
@@ -241,6 +245,11 @@ class BaseClient:
 
         cacert:
             If set and development is False, will be used in TLS verification instead of the default bundle.
+
+        api_version:
+            The api-version query parameter sent with SCITT requests.
+            Defaults to SCITT_API_VERSION_2026_03_26.
+            Set to None for legacy behavior.
         """
 
         # Even though these are passed to the httpx.Client and not used
@@ -252,17 +261,22 @@ class BaseClient:
         self.wait_time = wait_time
         self.development = development
         self.cacert = cacert
+        self.api_version = api_version
 
         headers = {}
         if auth_token:
             headers["Authorization"] = "Bearer " + auth_token
+
+        params = {}
+        if api_version:
+            params["api-version"] = api_version
 
         tls_verification: Union[str, bool] = (
             cacert if cacert is not None else not development
         )
 
         self.session = httpx.Client(
-            base_url=url, headers=headers, verify=tls_verification
+            base_url=url, headers=headers, params=params, verify=tls_verification
         )
 
     def replace(self: SelfClient, **kwargs) -> SelfClient:
@@ -279,6 +293,7 @@ class BaseClient:
             "wait_time": self.wait_time,
             "development": self.development,
             "cacert": self.cacert,
+            "api_version": self.api_version,
         }
         values.update(kwargs)
         return self.__class__(**values)
@@ -337,7 +352,7 @@ class BaseClient:
 
         follow_redirects:
             If True (default), automatically follow redirect responses:
-            - 302 Found: follow Location with Retry-After delay (polling pattern)
+            - 302 Found: poll same Location with default wait (polling pattern)
             - 303 See Other: follow Location as GET, dropping the request body
             - 307/308: follow Location, preserving the HTTP method and body
             If False, return the redirect response as-is.
@@ -405,14 +420,18 @@ class BaseClient:
             if follow_redirects and response.status_code in (302, 303, 307, 308):
                 location = response.headers.get("location")
                 if location:
-                    # For 302 with Retry-After (polling pattern), use the
-                    # attempt/deadline counters rather than the redirect counter.
-                    retry_after = response.headers.get("retry-after")
-                    if retry_after:
+                    if response.status_code == 302:
+                        # 302 Found is used as a polling pattern (same URL).
+                        # Use Retry-After if present, otherwise default wait.
+                        retry_after = response.headers.get("retry-after")
                         wait = (
                             int(retry_after)
-                            if self.wait_time is None
-                            else self.wait_time
+                            if retry_after and self.wait_time is None
+                            else (
+                                self.wait_time
+                                if self.wait_time is not None
+                                else default_wait_time
+                            )
                         )
                         if time.monotonic() + wait > deadline:
                             raise ValueError("Too many retries")
@@ -588,6 +607,17 @@ class Client(BaseClient):
         resp.raise_for_status()
         return resp.json()
 
+    @staticmethod
+    def _extract_tx_from_location(location: str) -> str:
+        """Extract and validate the transaction ID from a Location header."""
+        parts = location.rsplit("/entries/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Location header does not contain /entries/: {location}")
+        tx = parts[1]
+        if not re.match(r"^\d+\.\d+$", tx):
+            raise ValueError(f"Invalid transaction ID in Location header: {tx}")
+        return tx
+
     def submit_signed_statement(
         self,
         signed_statement: bytes,
@@ -611,7 +641,7 @@ class Client(BaseClient):
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
-            tx = location.rsplit("/entries/", 1)[-1]
+            tx = self._extract_tx_from_location(location)
             return PendingSubmission(tx)
         resp.raise_for_status()
         # Legacy fallback: 202 with CBOR body
@@ -642,7 +672,7 @@ class Client(BaseClient):
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
-            tx = location.rsplit("/entries/", 1)[-1]
+            tx = self._extract_tx_from_location(location)
             self.wait_for_entry(tx)
             statement = self.get_transparent_statement(tx)
             return Submission(tx, tx, statement, False)
@@ -677,7 +707,7 @@ class Client(BaseClient):
         )
         if resp.status_code == HTTPStatus.SEE_OTHER:
             location = resp.headers.get("location", "")
-            tx = location.rsplit("/entries/", 1)[-1]
+            tx = self._extract_tx_from_location(location)
             receipt = self.wait_for_entry(tx)
             return Submission(tx, tx, receipt, False)
         resp.raise_for_status()
@@ -744,7 +774,7 @@ class Client(BaseClient):
         Poll GET /entries/{txid} per SCRAPI v09 section 2.4.
 
         302 Found (transaction still pending) is handled automatically by
-        the request method's redirect logic with Retry-After support.
+        the request method's redirect logic.
         Returns the COSE receipt when the server responds with 200 OK.
         """
         resp = self.get(

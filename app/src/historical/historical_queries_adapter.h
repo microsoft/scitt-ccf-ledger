@@ -2,12 +2,15 @@
 // Licensed under the MIT License.
 #pragma once
 
+#include "constants.h"
 #include "http_error.h"
 #include "tracing.h"
+#include "util.h"
 
 #include <ccf/endpoint_context.h>
 #include <ccf/historical_queries_adapter.h>
 #include <ccf/http_consts.h>
+#include <ccf/http_query.h>
 #include <ccf/json_handler.h>
 #include <ccf/odata_error.h>
 #include <ccf/rpc_context.h>
@@ -125,19 +128,30 @@ namespace scitt::historical
       }
       catch (const ServiceUnavailableCborError&)
       {
-        // Transaction is pending or not yet cached. Per SCRAPI v09
-        // section 2.4.1, return 302 Found with Location pointing to
-        // the same URL, so the client can retry.
-        auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
-        ctx.rpc_ctx->set_response_status(HTTP_STATUS_FOUND);
-        if (
-          auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+        // Transaction is pending or not yet cached.
+        // Check api-version to decide response style.
+        bool scrapi = is_scrapi_v9(ctx);
+
+        if (scrapi)
         {
-          ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::LOCATION,
-            fmt::format("https://{}/entries/{}", host.value(), tx_id_str));
+          // SCRAPI v09 section 2.4.1: return 302 Found with Location
+          // pointing to the same URL, so the client can retry.
+          auto tx_id_str = ctx.rpc_ctx->get_request_path_params().at("txid");
+          ctx.rpc_ctx->set_response_status(HTTP_STATUS_FOUND);
+          if (
+            auto host =
+              ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+          {
+            ctx.rpc_ctx->set_response_header(
+              ccf::http::headers::LOCATION,
+              fmt::format("https://{}/entries/{}", host.value(), tx_id_str));
+          }
         }
-        ctx.rpc_ctx->set_response_header(ccf::http::headers::RETRY_AFTER, "1");
+        else
+        {
+          // Legacy clients expect 503 Service Unavailable.
+          throw;
+        }
       }
     };
   }

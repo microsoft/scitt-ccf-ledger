@@ -77,7 +77,7 @@ namespace scitt
     std::string_view value = it->second;
     if constexpr (std::is_same_v<T, std::string>)
     {
-      return value;
+      return std::string(value);
     }
     else if constexpr (std::is_same_v<T, bool>)
     {
@@ -249,10 +249,11 @@ namespace scitt
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
         const auto wait_for_commit =
           get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
+        const bool scrapi = is_scrapi_v9(ctx);
         if (wait_for_commit)
         {
           ctx.rpc_ctx->set_consensus_committed_function(
-            [&context_](ccf::endpoints::CommittedTxInfo& info) {
+            [&context_, scrapi](ccf::endpoints::CommittedTxInfo& info) {
               auto host =
                 info.rpc_ctx->get_request_header(ccf::http::headers::HOST);
               if (info.status == ccf::FinalTxStatus::Invalid)
@@ -280,7 +281,9 @@ namespace scitt
 
               info.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
               info.rpc_ctx->set_response_header(
-                ccf::http::headers::CONTENT_TYPE, CT_SCITT_RECEIPT);
+                ccf::http::headers::CONTENT_TYPE,
+                scrapi ? CT_SCITT_RECEIPT :
+                         ccf::http::headervalues::contenttype::COSE);
               info.rpc_ctx->set_response_header(
                 ccf::http::headers::CCF_TX_ID, info.tx_id.to_str());
               if (host.has_value())
@@ -485,7 +488,9 @@ namespace scitt
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::CONTENT_TYPE, CT_SCITT_RECEIPT);
+            ccf::http::headers::CONTENT_TYPE,
+            is_scrapi_v9(ctx) ? CT_SCITT_RECEIPT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
@@ -543,7 +548,9 @@ namespace scitt
 
           ctx.rpc_ctx->set_response_body(statement);
           ctx.rpc_ctx->set_response_header(
-            ccf::http::headers::CONTENT_TYPE, CT_SCITT_STATEMENT);
+            ccf::http::headers::CONTENT_TYPE,
+            is_scrapi_v9(ctx) ? CT_SCITT_STATEMENT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**

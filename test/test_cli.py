@@ -196,7 +196,7 @@ def test_submit_wait_for_commit(run, tmp_path, cert_authority, configure_service
 def test_submit_default_async_flow(run, tmp_path, cert_authority, configure_service):
     """
     Test the CLI submit command without --wait-for-commit (default).
-    This uses the SCRAPI v09 async flow (POST /entries → 303 → poll → receipt)
+    This uses the async flow (POST /entries → poll → receipt)
     and saves the transparent statement to the --transparent-statement output path.
     """
     identity = cert_authority.create_identity(
