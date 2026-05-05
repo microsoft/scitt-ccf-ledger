@@ -358,6 +358,7 @@ class TestPolicyEngine:
         transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
 
+    @pytest.mark.dotnet
     def test_dotnet_submit_existing_cose_to_local_service(
         self,
         tmp_path: Path,
