@@ -484,7 +484,7 @@ namespace scitt
    *
    * For backward compatibility with legacy clients (eg. .NET SDK) that expect
    * 202 Accepted with a CBOR body: if the request does not include
-   * api-version=SCITT_API_VERSION_2026_03_26, the old 202 + CBOR response is
+   * api-version=2026-03-26, the old 202 + CBOR response is
    * returned with Location: /operations/{txid}.
    */
   static void operation_locally_committed_func(
