@@ -11,7 +11,7 @@ PLATFORM=${PLATFORM:-snp}
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
 
 # Variable to enable .NET SDK tests
-ENABLE_DOTNET_TESTS=${ENABLE_DOTNET_TESTS:-}
+ENABLE_DOTNET_TESTS=${ENABLE_DOTNET_TESTS:-0}
 
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
@@ -75,7 +75,7 @@ pip install --disable-pip-version-check -q wheel
 pip install --disable-pip-version-check -q -r test/requirements.txt
 
 # Enable .NET SDK tests if the variable is set
-if [ -n "$ENABLE_DOTNET_TESTS" ]; then
+if [ "$ENABLE_DOTNET_TESTS" = "1" ]; then
     TEST_ARGS="$TEST_ARGS --enable-dotnet"
     echo ".NET SDK tests enabled"
     echo "Preparing .NET functional test project."
