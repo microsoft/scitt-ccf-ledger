@@ -15,6 +15,16 @@ namespace scitt
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
+  // IANA-registered SCITT content types
+  // https://www.iana.org/assignments/media-types/
+  const std::string CT_SCITT_RECEIPT = "application/scitt-receipt+cose";
+  const std::string CT_SCITT_STATEMENT = "application/scitt-statement+cose";
+
+  // API versioning for SCITT endpoints.
+  // SCRAPI v9 enables new behavior (303, 302, new content types).
+  // Older versions (or absent api-version) get legacy behavior.
+  const std::string SCITT_API_VERSION_2026_03_26 = "2026-03-26";
+
   namespace errors
   {
     const std::string IndexingInProgressRetryLater =

@@ -51,6 +51,16 @@ scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development -
 # Received output.cose
 ```
 
+Alternatively, use `--wait-for-commit` to block until the transaction is committed and return the receipt directly in a single request, without polling:
+
+```sh
+scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development --url "https://localhost:8000" --transparent-statement output.cose --wait-for-commit
+
+# 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:402 - POST /entries?waitForCommit=true 200
+# Registered test/payloads/manifest.spdx.json.sha384.digest.cose as transaction 2.13
+# Received output.cose
+```
+
 ## Supported inputs
 
 See [inputs.md](./docs/inputs.md) to understand what you can register and store in the service.

@@ -3,8 +3,12 @@
 
 #pragma once
 
+#include "constants.h"
+
 #include <ccf/crypto/entropy.h>
 #include <ccf/crypto/pem.h>
+#include <ccf/http_query.h>
+#include <ccf/rpc_context.h>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -12,6 +16,21 @@
 
 namespace scitt
 {
+  /**
+   * Returns true if the request includes the SCRAPI v9 api-version.
+   * Used to gate SCRAPI v9 behavior and preserve backward compatibility
+   * for older clients. Unknown or absent api-version values are treated
+   * as legacy.
+   */
+  template <typename ContextT>
+  bool is_scrapi_v9(const ContextT& ctx)
+  {
+    const auto parsed_query =
+      ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
+    auto it = parsed_query.find("api-version");
+    return it != parsed_query.end() &&
+      it->second == SCITT_API_VERSION_2026_03_26;
+  }
   const static ccf::crypto::EntropyPtr ENTROPY = ccf::crypto::get_entropy();
 
   template <typename T, typename U>

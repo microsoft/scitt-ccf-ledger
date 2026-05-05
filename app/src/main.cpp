@@ -77,7 +77,7 @@ namespace scitt
     std::string_view value = it->second;
     if constexpr (std::is_same_v<T, std::string>)
     {
-      return value;
+      return std::string(value);
     }
     else if constexpr (std::is_same_v<T, bool>)
     {
@@ -244,7 +244,61 @@ namespace scitt
 
       verifier = std::make_unique<verifier::Verifier>();
 
-      auto register_signed_statement = [this](EndpointContext& ctx) {
+      auto register_signed_statement = [this, &context_](EndpointContext& ctx) {
+        const auto parsed_query =
+          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
+        const auto wait_for_commit =
+          get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
+        const bool scrapi = is_scrapi_v9(ctx);
+        if (wait_for_commit)
+        {
+          ctx.rpc_ctx->set_consensus_committed_function(
+            [&context_, scrapi](ccf::endpoints::CommittedTxInfo& info) {
+              auto host =
+                info.rpc_ctx->get_request_header(ccf::http::headers::HOST);
+              if (info.status == ccf::FinalTxStatus::Invalid)
+              {
+                info.rpc_ctx->set_response_status(
+                  HTTP_STATUS_SERVICE_UNAVAILABLE);
+                info.rpc_ctx->set_response_header(
+                  ccf::http::headers::CONTENT_TYPE,
+                  cbor::CBOR_ERROR_CONTENT_TYPE);
+                info.rpc_ctx->set_response_body(cbor::cbor_error(
+                  errors::InternalError,
+                  "The submission could not be committed and was rolled "
+                  "back, please retry"));
+                return;
+              }
+
+              auto receipt =
+                ccf::endpoints::build_receipt_for_committed_tx(context_, info);
+              if (receipt == nullptr)
+              {
+                return;
+              }
+
+              auto cose_receipt = get_cose_receipt(receipt);
+
+              info.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
+              info.rpc_ctx->set_response_header(
+                ccf::http::headers::CONTENT_TYPE,
+                scrapi ? CT_SCITT_RECEIPT :
+                         ccf::http::headervalues::contenttype::COSE);
+              info.rpc_ctx->set_response_header(
+                ccf::http::headers::CCF_TX_ID, info.tx_id.to_str());
+              if (host.has_value())
+              {
+                info.rpc_ctx->set_response_header(
+                  ccf::http::headers::LOCATION,
+                  fmt::format(
+                    "https://{}/entries/{}",
+                    host.value(),
+                    info.tx_id.to_str()));
+              }
+              info.rpc_ctx->set_response_body(cose_receipt);
+            });
+        }
+
         const auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
@@ -396,6 +450,9 @@ namespace scitt
         register_signed_statement,
         operation_locally_committed_func,
         authn_policy)
+        .add_query_parameter<bool>(
+          "waitForCommit",
+          ccf::endpoints::QueryParamPresence::OptionalParameter)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Always)
         .set_redirection_strategy(
           ccf::endpoints::RedirectionStrategy::ToPrimary)
@@ -432,17 +489,21 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_RECEIPT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
-       * Resolve Receipt, 2.1.4 in
+       * Resolve Receipt / Query Registration Status, 2.4 and 2.5 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       *
+       * Returns 302 Found with Retry-After if the transaction is still
+       * pending, or 200 OK with the COSE receipt when committed.
        */
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        scitt::historical::entry_adapter(
+        scitt::historical::entry_adapter_with_polling(
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -488,7 +549,8 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(statement);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_STATEMENT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
