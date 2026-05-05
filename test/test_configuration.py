@@ -8,6 +8,7 @@ import os.path
 import subprocess
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import urlparse
 
 import cbor2
 import pycose
@@ -427,7 +428,7 @@ class TestPolicyEngine:
 
         output_receipt = pycose.messages.Sign1Message.decode(output_receipts[0])
         output_cwt = output_receipt.phdr[crypto.CWTClaims]
-        assert output_cwt[crypto.CWT_ISS] == "127.0.0.1:8000"
+        assert output_cwt[crypto.CWT_ISS] == f"127.0.0.1:{urlparse(service_url).port}"
 
     def test_cose_sign1_tool_with_scitt_defaults(
         self, tmp_path, client: Client, configure_service
