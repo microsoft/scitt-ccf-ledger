@@ -612,6 +612,7 @@ class Client(BaseClient):
         resp = self.get(f"/.well-known/scitt-keys/{kid}")
         resp.raise_for_status()
         return cbor2.loads(resp.read())
+
     @staticmethod
     def _extract_tx_from_location(location: str) -> str:
         """Extract and validate the transaction ID from a Location header."""
