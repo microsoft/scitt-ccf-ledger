@@ -176,16 +176,17 @@ def test_submit_and_validate(
 
     (tmp_path / "transparent_statement.cose").write_bytes(statement)
 
-    params_resp = client.get("/parameters")
-    params_resp.raise_for_status()
-    (tmp_path / "params").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "params" / "scitt.json").write_bytes(params_resp.content)
+    # Fetch service keys from /.well-known/scitt-keys (COSE_Key_Set in CBOR)
+    keys_resp = client.get("/.well-known/scitt-keys")
+    keys_resp.raise_for_status()
+    (tmp_path / "trust_store").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "trust_store" / "scitt-keys.cbor").write_bytes(keys_resp.content)
 
     run(
         "validate",
         tmp_path / "transparent_statement.cose",
         "--service-trust-store",
-        (tmp_path / "params"),
+        (tmp_path / "trust_store"),
     )
 
     run(

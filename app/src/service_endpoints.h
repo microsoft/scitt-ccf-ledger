@@ -18,22 +18,6 @@
 
 namespace scitt
 {
-  static GetServiceParameters::Out certificate_to_service_parameters(
-    const std::vector<uint8_t>& certificate_der)
-  {
-    auto service_id = ccf::crypto::Sha256Hash(certificate_der).hex_str();
-
-    // TODO: extend to support multiple tree hash algorithms once CCF
-    // supports them
-
-    GetServiceParameters::Out out;
-    out.service_id = service_id;
-    out.tree_algorithm = "CCF";
-    out.signature_algorithm = JOSE_ALGORITHM_ES256;
-    out.service_certificate = ccf::crypto::b64_from_raw(certificate_der);
-    return out;
-  }
-
   /**
    * Compute a kid from a public key using SHA-256 hash of the DER encoding.
    *
@@ -73,15 +57,6 @@ namespace scitt
 
   namespace endpoints
   {
-    static GetServiceParameters::Out get_service_parameters(
-      ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
-    {
-      auto service = ctx.tx.template ro<ccf::Service>(ccf::Tables::SERVICE);
-      auto service_info = service->get().value();
-      auto service_cert_der = ccf::crypto::cert_pem_to_der(service_info.cert);
-      return certificate_to_service_parameters(service_cert_der);
-    }
-
     static Configuration get_configuration(
       ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
     {
@@ -126,20 +101,6 @@ namespace scitt
         ctx.rpc_ctx->set_response_body(nlohmann::json::to_cbor(config));
         return;
       };
-
-    /**
-     * The endpoint exposes the current service parameters.
-     */
-    registry
-      .make_endpoint(
-        "/parameters",
-        HTTP_GET,
-        ccf::json_adapter(endpoints::get_service_parameters),
-        no_authn_policy)
-      .set_auto_schema<void, GetServiceParameters::Out>()
-      .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-      .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
-      .install();
 
     /**
      * Convenience endpoint to provide the service configuration.
@@ -189,7 +150,8 @@ namespace scitt
           ccf::http::headers::CONTENT_TYPE,
           ccf::http::headervalues::contenttype::JSON);
         nlohmann::json error;
-        error["error"] = "Network identity subsystem not available";
+        error["error"] = "InternalError";
+        error["message"] = "Service keys temporarily unavailable";
         ctx.rpc_ctx->set_response_body(error.dump());
         return;
       }
@@ -235,7 +197,7 @@ namespace scitt
           ctx,
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           cbor::cbor_error(
-            "InternalError", "Network identity subsystem not available"));
+            "InternalError", "Service keys temporarily unavailable"));
         return;
       }
 
@@ -274,7 +236,7 @@ namespace scitt
             ctx,
             HTTP_STATUS_INTERNAL_SERVER_ERROR,
             cbor::cbor_error(
-              "InternalError", "Network identity subsystem not available"));
+              "InternalError", "Service keys temporarily unavailable"));
           return;
         }
 

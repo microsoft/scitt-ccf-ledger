@@ -20,7 +20,6 @@ from loguru import logger as LOG
 from . import crypto
 from .governance import CCF_GOV_API_VERSION, GovernanceClient
 from .receipt import Receipt
-from .verify import ServiceParameters
 
 CCF_TX_ID_HEADER = "x-ms-ccf-transaction-id"
 CT_APPLICATION_JSON = "application/json"
@@ -536,9 +535,6 @@ class Client(BaseClient):
     """
     Specialization of the BaseClient, aimed at interacting with a SCITT CCF ledger instance.
     """
-
-    def get_parameters(self) -> ServiceParameters:
-        return ServiceParameters.from_dict(self.get("/parameters").json())
 
     def get_constitution(self) -> str:
         return self.get(
