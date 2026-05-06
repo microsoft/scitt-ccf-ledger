@@ -12,6 +12,11 @@ def pytest_addoption(parser):
         action="store_true",
         help="Enable performance tests",
     )
+    parser.addoption(
+        "--enable-dotnet",
+        action="store_true",
+        help="Enable .NET SDK tests",
+    )
 
 
 def pytest_configure(config):
@@ -23,8 +28,19 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     if not config.getoption("--enable-perf"):
-        perf_skip = pytest.mark.skip(reason="performance testing was not enabled")
+        perf_skip = pytest.mark.skip(
+            reason="performance testing was not enabled; use --enable-perf"
+        )
 
         for item in items:
             if "perf" in item.keywords:
                 item.add_marker(perf_skip)
+
+    if not config.getoption("--enable-dotnet"):
+        dotnet_skip = pytest.mark.skip(
+            reason="dotnet testing was not selected; use --enable-dotnet"
+        )
+
+        for item in items:
+            if "dotnet" in item.keywords:
+                item.add_marker(dotnet_skip)

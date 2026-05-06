@@ -3,8 +3,12 @@
 
 import base64
 import json
+import os
 import os.path
+import subprocess
 from hashlib import sha256
+from pathlib import Path
+from urllib.parse import urlparse
 
 import cbor2
 import pycose
@@ -354,6 +358,77 @@ class TestPolicyEngine:
         # store statement
         transparent_statement = tmp_path / f"ts_{os.path.basename(filepath)}"
         transparent_statement.write_bytes(statement)
+
+    @pytest.mark.dotnet
+    def test_dotnet_submit_existing_cose_to_local_service(
+        self,
+        tmp_path: Path,
+        service_url: str,
+        configure_service,
+        client: Client,
+    ):
+        """
+        This test submits an existing COSE message to the service using the .NET SDK, which applies the policy and returns a transparent statement.
+        This allows avoiding unexpected regressions for the exisiting users of the SDK.
+        """
+        configure_service({"policy": policies.SAMPLE["js"]})
+
+        repo_root = Path(__file__).resolve().parent.parent
+        input_path = repo_root / "test/payloads/cts-hashv-cwtclaims-b64url.cose"
+        output_path = tmp_path / f"ts_{input_path.name}"
+        ca_certificate_path = tmp_path / "service-cert.pem"
+        project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
+        cacert_der = client.get_parameters().certificate
+        ca_certificate = x509.load_der_x509_certificate(cacert_der, default_backend())
+        ca_certificate_path.write_bytes(ca_certificate.public_bytes(Encoding.PEM))
+
+        def run_dotnet(
+            operation: str, *paths: Path
+        ) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [
+                    "dotnet",
+                    "run",
+                    "--no-restore",
+                    "--project",
+                    str(project_path),
+                    "--",
+                    "--endpoint",
+                    service_url,
+                    "--ca-certificate",
+                    str(ca_certificate_path),
+                    operation,
+                    *(str(path) for path in paths),
+                ],
+                cwd=repo_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        result = run_dotnet("submit", input_path, output_path)
+
+        assert (
+            result.returncode == 0
+        ), f"dotnet submit failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+
+        input_statement = input_path.read_bytes()
+        transparent_statement = output_path.read_bytes()
+
+        assert transparent_statement != input_statement
+
+        input_message = pycose.messages.CoseMessage.decode(input_statement)
+        output_message = pycose.messages.CoseMessage.decode(transparent_statement)
+        input_receipts = input_message.uhdr.get(crypto.SCITTReceipts, [])
+        output_receipts = output_message.uhdr.get(crypto.SCITTReceipts, [])
+
+        assert output_receipts
+        if input_receipts:
+            assert output_receipts[0] != input_receipts[0]
+
+        output_receipt = pycose.messages.Sign1Message.decode(output_receipts[0])
+        output_cwt = output_receipt.phdr[crypto.CWTClaims]
+        assert output_cwt[crypto.CWT_ISS] == f"127.0.0.1:{urlparse(service_url).port}"
 
     def test_cose_sign1_tool_with_scitt_defaults(
         self, tmp_path, client: Client, configure_service
