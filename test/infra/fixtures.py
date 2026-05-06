@@ -103,7 +103,7 @@ class ManagedCCHostFixtures:
                 )
                 client.governance.propose(proposal, must_pass=True)
                 client.get(
-                    "/parameters",
+                    "/version",
                     retry_on=[(HTTPStatus.NOT_FOUND, "FrontendNotOpen")],
                 )
 
@@ -301,5 +301,5 @@ def trust_store(client) -> StaticTrustStore:
     """
     Get the static trust store associated with the service.
     """
-    params = client.get_parameters()
-    return StaticTrustStore({params.service_id: params})
+    cose_keys = client.get_scitt_keys()
+    return StaticTrustStore(cose_keys=cose_keys)

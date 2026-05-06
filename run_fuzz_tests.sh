@@ -43,7 +43,7 @@ if [ "$DOCKER" = "1" ]; then
     CCF_NETWORK_PID=$!
     trap "kill $CCF_NETWORK_PID" EXIT
 
-    wait_for_service "$CCF_URL/parameters"
+    wait_for_service "$CCF_URL/version"
 else
     echo "Will use a built SCITT binary for testing..."
         
@@ -59,7 +59,7 @@ else
         --member-key workspace/member0_privk.pem \
         --member-cert workspace/member0_cert.pem;
     
-    wait_for_service "$CCF_URL/parameters"
+    wait_for_service "$CCF_URL/version"
 fi
 
 python3.12 -m test.fuzz_api_submissions

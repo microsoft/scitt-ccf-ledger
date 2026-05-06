@@ -25,13 +25,12 @@ source venv/bin/activate
 pip install --disable-pip-version-check -q -e ./pyscitt
 
 # Get service parameters
-echo -e "\nGetting service parameters"
+echo -e "\nGetting service keys"
 SERVICE_PARAMS_FOLDER="$OUTPUT_FOLDER"/service_params
 mkdir -p "$SERVICE_PARAMS_FOLDER"
 
-# Get historic parameters to populate the trust store with all the previous service identities
-# This is useful to verify entries that have been committed with a previous service identity (e.g., prior to a CCF disaster recovery)
-curl -k -f "$SCITT_URL"/parameters/historic > "$SERVICE_PARAMS_FOLDER"/scitt.json
+# Get service keys from /.well-known/scitt-keys endpoint (COSE_Key_Set in CBOR format)
+curl -k -f "$SCITT_URL"/.well-known/scitt-keys -o "$SERVICE_PARAMS_FOLDER"/scitt-keys.cbor
 
 echo -e "\nSubmitting claim to the ledger and getting receipt for the committed transaction"
 RECEIPT_FOLDER="$OUTPUT_FOLDER"/receipts

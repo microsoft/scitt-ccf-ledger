@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Union
 from urllib.parse import urlparse
 
+import cbor2
 import certifi
 
 from .. import governance
@@ -214,12 +215,12 @@ def setup_local_development(client: Client, trust_store_dir: Optional[Path]):
     client.wait_for_network_open()
 
     if trust_store_dir:
-        print(f"Adding service to {trust_store_dir} ...")
+        print(f"Adding service keys to {trust_store_dir} ...")
         trust_store_dir.mkdir(parents=True, exist_ok=True)
-        parameters = client.get_parameters().as_dict()
-        service_id = parameters["serviceId"]
-        path = trust_store_dir.joinpath(service_id + ".json")
-        path.write_text(json.dumps(parameters))
+        # Save COSE_Key_Set from /.well-known/scitt-keys as CBOR
+        scitt_keys = client.get_scitt_keys()
+        path = trust_store_dir.joinpath("scitt-keys.cbor")
+        path.write_bytes(cbor2.dumps(scitt_keys))
 
 
 def cli(fn):

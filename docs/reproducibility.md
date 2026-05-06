@@ -8,11 +8,10 @@ The assumption here is that the original build was done using a Docker.
 
 You need a couple pieces of information to begin with:
 
-- The ledger certificate. It might be distributed in a variety of ways by the ledger operator, please follow their guidance. Otherwise it is accessible at `https://<LEDGER-URL>/app/parameters`, e.g.:
+- The ledger certificate. It might be distributed in a variety of ways by the ledger operator, please follow their guidance. Otherwise it is accessible at `https://<LEDGER-URL>/node/network`, e.g.:
 
     ```sh
-    $ curl -k "https://<LEDGER-URL>/app/parameters" | jq -r .serviceCertificate | base64 -d > cacert.der
-    $ openssl x509 -inform der -in cacert.der > cacert.pem
+    $ curl -k "https://<LEDGER-URL>/node/network" | jq -r .service_certificate > cacert.pem
     ```
 
 - The quote of a running application code, get it from `https://<LEDGER-URL>/node/quotes` which will contain the measurements of each node in the network. They will be the same almost all of the time except when upgrading to the new version e.g.:

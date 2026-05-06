@@ -6,7 +6,7 @@ import datetime
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import cbor2
 import ccf.receipt
@@ -18,9 +18,6 @@ from pycose.messages import Sign1Message
 from pycose.messages.cosebase import CoseBase
 
 from . import crypto
-
-if TYPE_CHECKING:
-    from .verify import ServiceParameters
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
@@ -139,7 +136,7 @@ class LeafInfo:
 
 class ReceiptContents(ABC):
     @abstractmethod
-    def verify(self, tbs: bytes, service: "ServiceParameters"):
+    def verify(self, tbs: bytes, service: Any):
         pass
 
     @abstractmethod
@@ -178,7 +175,7 @@ class CCFReceiptContents(ReceiptContents):
 
         return bytes.fromhex(ccf.receipt.root(leaf, proof))
 
-    def verify(self, tbs: bytes, service: "ServiceParameters"):
+    def verify(self, tbs: bytes, service: Any):
         if service.tree_algorithm != "CCF":
             raise ValueError("treeAlgorithm must be CCF")
         if service.signature_algorithm != "ES256":
@@ -253,7 +250,7 @@ class Receipt:
         ]
         return cbor2.dumps(countersign_structure)
 
-    def verify(self, claim: Sign1Message, service_params: "ServiceParameters"):
+    def verify(self, claim: Sign1Message, service_params: Any):
         tbs = self.countersign_structure(claim)
         self.contents.verify(tbs, service_params)
 

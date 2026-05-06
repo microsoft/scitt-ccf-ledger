@@ -33,8 +33,9 @@ the service would have a `client` parameter, which is can use inside the test
 body.
 
 ```python
-def test_parameters(client: Client):
-  assert client.get_parameters()["treeAlgorithm"] == "CCF"
+def test_scitt_keys(client: Client):
+  keys = client.get_scitt_keys()
+  assert len(keys) > 0  # At least one service key
 ```
 
 The name of this parameter must match of the name of the fixtures. See below
