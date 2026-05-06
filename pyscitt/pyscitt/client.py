@@ -608,7 +608,7 @@ class Client(BaseClient):
         resp.raise_for_status()
         return cbor2.loads(resp.read())
 
-    def get_scitt_key(self, kid: str) -> list:
+    def get_scitt_key(self, kid: str) -> dict:
         resp = self.get(f"/.well-known/scitt-keys/{kid}")
         resp.raise_for_status()
         return cbor2.loads(resp.read())

@@ -497,8 +497,8 @@ namespace scitt
        * Resolve Receipt / Query Registration Status, 2.4 and 2.5 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
        *
-       * Returns 302 Found with Retry-After if the transaction is still
-       * pending, or 200 OK with the COSE receipt when committed.
+       * Returns 302 Found if the transaction is still pending,
+       * or 200 OK with the COSE receipt when committed.
        */
       make_endpoint(
         get_entry_receipt_path,

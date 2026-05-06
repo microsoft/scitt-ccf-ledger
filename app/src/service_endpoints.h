@@ -55,6 +55,21 @@ namespace scitt
     ctx.rpc_ctx->set_response_body(std::move(body));
   }
 
+  /**
+   * Set a CBOR error response with the correct
+   * application/concise-problem-details+cbor content type per RFC 9290.
+   */
+  static void set_cbor_error_response(
+    ccf::endpoints::ReadOnlyEndpointContext& ctx,
+    ccf::http_status status,
+    std::vector<uint8_t>&& body)
+  {
+    ctx.rpc_ctx->set_response_status(status);
+    ctx.rpc_ctx->set_response_header(
+      ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
+    ctx.rpc_ctx->set_response_body(std::move(body));
+  }
+
   namespace endpoints
   {
     static Configuration get_configuration(
@@ -184,7 +199,7 @@ namespace scitt
       .install();
 
     /**
-     * See Section 2.1 of draft-ietf-scitt-scrapi-08.
+     * See Section 2.1 of draft-ietf-scitt-scrapi-09.
      * Returns all trusted service keys as a COSE_Key_Set in
      * application/cbor format.
      */
@@ -193,7 +208,7 @@ namespace scitt
         context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
       if (!network_identity)
       {
-        set_cbor_response(
+        set_cbor_error_response(
           ctx,
           HTTP_STATUS_INTERNAL_SERVER_ERROR,
           cbor::cbor_error(
@@ -220,7 +235,7 @@ namespace scitt
       .install();
 
     /**
-     * See Section 2.2 of draft-ietf-scitt-scrapi-08.
+     * See Section 2.2 of draft-ietf-scitt-scrapi-09.
      * Returns a single trusted service key by kid value
      * as a COSE_Key in application/cbor format.
      */
@@ -232,7 +247,7 @@ namespace scitt
           context.get_subsystem<ccf::NetworkIdentitySubsystemInterface>();
         if (!network_identity)
         {
-          set_cbor_response(
+          set_cbor_error_response(
             ctx,
             HTTP_STATUS_INTERNAL_SERVER_ERROR,
             cbor::cbor_error(
@@ -253,7 +268,7 @@ namespace scitt
           }
         }
 
-        set_cbor_response(
+        set_cbor_error_response(
           ctx,
           HTTP_STATUS_NOT_FOUND,
           cbor::cbor_error(
@@ -274,7 +289,7 @@ namespace scitt
 
     /**
      * See 2.1.1. Transparency Configuration
-     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi-08/
+     * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi-09/
      */
     registry
       .make_read_only_endpoint(
