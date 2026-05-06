@@ -378,8 +378,10 @@ class TestPolicyEngine:
         output_path = tmp_path / f"ts_{input_path.name}"
         ca_certificate_path = tmp_path / "service-cert.pem"
         project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
-        cacert_der = client.get_parameters().certificate
-        ca_certificate = x509.load_der_x509_certificate(cacert_der, default_backend())
+        cacert_pem = client.get_service_certificate()
+        ca_certificate = x509.load_pem_x509_certificate(
+            cacert_pem.encode(), default_backend()
+        )
         ca_certificate_path.write_bytes(ca_certificate.public_bytes(Encoding.PEM))
 
         def run_dotnet(
