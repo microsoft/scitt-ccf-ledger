@@ -26,7 +26,7 @@ from .async_utils import EventLoopThread, race_tasks
 LOG.level("FAIL", no=60, color="<red>")
 LOG.level("FATAL", no=60, color="<red>")
 
-CCHOST_PID_FILE_NAME = "cchost.pid"
+CCHOST_PID_FILE_NAME = "my_node.pid"
 
 
 def unused_tcp_port(host) -> int:
@@ -45,8 +45,6 @@ def unused_tcp_port(host) -> int:
 
 class CCHost(EventLoopThread):
     binary: str
-    enclave_file: Path
-    platform: str
     workspace: Path
     constitution: List[Path]
 
@@ -77,8 +75,6 @@ class CCHost(EventLoopThread):
     def __init__(
         self,
         binary: str,
-        platform: str,
-        enclave_file: Path,
         workspace: Path,
         constitution: List[Path],
         rpc_port: int = 0,
@@ -93,16 +89,11 @@ class CCHost(EventLoopThread):
         if self.listen_rpc_port == 0:
             self.listen_rpc_port = unused_tcp_port("localhost")
         self.listen_node_port = node_port
-        self.platform = platform
 
         # Make the path absolutes, so they keep working even after we change
         # working directory when running cchost.
-        self.enclave_file = enclave_file.absolute()
         self.workspace = workspace.absolute()
         self.constitution = [f.absolute() for f in constitution]
-
-        if not self.enclave_file.exists():
-            raise ValueError(f"Enclave file at {self.enclave_file} does not exist")
 
         self.member_private_key, _ = crypto.generate_keypair(kty="ec")
         self.member_cert = crypto.generate_cert(self.member_private_key)
@@ -122,11 +113,7 @@ class CCHost(EventLoopThread):
         self.restart_request = self._create_event()
         self.clock_offset = 0
 
-        if platform == "snp":
-            if not snp_attestation_config or not snp_attestation_config.exists():
-                raise ValueError(
-                    "SNP attestation configuration file must be provided for SNP platform"
-                )
+        if snp_attestation_config and snp_attestation_config.is_file():
             self.snp_attestation_config = json.loads(
                 snp_attestation_config.absolute().read_text()
             )
@@ -186,7 +173,7 @@ class CCHost(EventLoopThread):
             self.binary,
             "--config",
             self.workspace / "config.json",
-            "--enclave-log-level",
+            "--log-level",
             "info",
             cwd=self.workspace,
             start_new_session=True,
@@ -332,16 +319,7 @@ class CCHost(EventLoopThread):
         if service_cert.exists():
             service_cert.rename(previous_service_cert)
 
-        PLATFORMS = {
-            "virtual": {"platform": "Virtual", "type": "Virtual"},
-            "snp": {"platform": "SNP", "type": "Release"},
-        }
-
         config = {
-            "enclave": {
-                "file": str(self.enclave_file),
-                **PLATFORMS[self.platform],
-            },
             "network": {
                 "rpc_interfaces": {
                     "rpc": {
@@ -397,10 +375,6 @@ class CCHost(EventLoopThread):
                 "recover": {
                     "initial_service_certificate_validity_days": 1,
                     "previous_service_identity_file": str(previous_service_cert),
-                    # "cose_signatures": {
-                    #     "issuer": f"127.0.0.1:{self.listen_rpc_port + 1}",
-                    #     "subject": "scitt.ccf.signature.v1",
-                    # },
                 },
             }
 
@@ -412,16 +386,8 @@ class CCHost(EventLoopThread):
         return super().__exit__(exc_type, exc_val, exc_tb)
 
 
-def get_enclave_path(platform: str, enclave_package) -> Path:
-    ENCLAVE_SUFFIX = {
-        "virtual": "virtual.so",
-        "snp": "snp.so",
-    }
-    return Path(f"{enclave_package}.{ENCLAVE_SUFFIX[platform]}")
-
-
-def get_default_cchost_path(platform: str) -> Path:
-    return Path(f"/opt/ccf_{platform}/bin/cchost")
+def get_default_cchost_path() -> Path:
+    return Path("/tmp/scitt/bin/cchost")
 
 
 def main():
@@ -438,18 +404,6 @@ def main():
         type=int,
         default=0,
         help="Port on which cchost will listen for node to node communication. By default, a random port is chosen.",
-    )
-    parser.add_argument(
-        "--platform",
-        default="virtual",
-        choices=["virtual", "snp"],
-        help="Type of enclave used when starting cchost",
-    )
-    parser.add_argument(
-        "--package",
-        "-p",
-        default="/tmp/scitt/lib/libscitt",
-        help="The enclave package to load",
     )
     parser.add_argument(
         "--constitution-file",
@@ -477,12 +431,9 @@ def main():
         shutil.rmtree(args.workspace)
     args.workspace.mkdir()
 
-    enclave_file = get_enclave_path(args.platform, args.package)
-    binary = args.cchost or get_default_cchost_path(args.platform)
+    binary = args.cchost or get_default_cchost_path()
     with CCHost(
         binary,
-        args.platform,
-        enclave_file,
         workspace=args.workspace,
         constitution=args.constitution_file,
         rpc_port=args.port,

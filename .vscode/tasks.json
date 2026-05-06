@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "shell",
-			"label": "CMake build virtual",
+			"label": "CMake build",
 			"command": "cmake",
 			"problemMatcher": [],
 			"detail": "CMake build workflow task",
@@ -13,7 +13,7 @@
 			"args": [
 				"--workflow",
 				"--preset",
-				"virtual"
+				"dev"
 			],
 			"group": {
 				"kind": "build",

@@ -14,40 +14,6 @@
 
 namespace scitt
 {
-  struct GetServiceParameters
-  {
-    struct Out
-    {
-      std::string service_id;
-      std::string tree_algorithm;
-      std::string signature_algorithm;
-      std::string service_certificate;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetServiceParameters::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
-    GetServiceParameters::Out,
-    service_id,
-    "serviceId",
-    tree_algorithm,
-    "treeAlgorithm",
-    signature_algorithm,
-    "signatureAlgorithm",
-    service_certificate,
-    "serviceCertificate");
-
-  struct GetHistoricServiceParameters
-  {
-    struct Out
-    {
-      std::vector<GetServiceParameters::Out> parameters;
-    };
-  };
-
-  DECLARE_JSON_TYPE(GetHistoricServiceParameters::Out);
-  DECLARE_JSON_REQUIRED_FIELDS(GetHistoricServiceParameters::Out, parameters);
-
   struct GetEntriesTransactionIds
   {
     struct Out

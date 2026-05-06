@@ -35,7 +35,7 @@
       ]
     },
     {
-      "name": "Debug node (virtual via gdb)",
+      "name": "Debug node (via gdb)",
       "type": "cppdbg",
       "request": "launch",
       "program": "/bin/bash",
@@ -69,7 +69,7 @@
     },
     {
       // This launch configuration relies on the CodeLLDB VS Code extension.
-      "name": "Debug node (virtual via CodeLLDB)",
+      "name": "Debug node (via CodeLLDB)",
       "type": "lldb",
       "request": "launch",
       "program": "/bin/bash",

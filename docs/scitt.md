@@ -24,4 +24,4 @@ scitt-ccf-ledger returns COSE Receipts, either standalone or embedded in Transpa
 
 ## API
 
-scitt-ccf-ledger is very close to the [SCITT Reference API Draft 04](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/04/), with the only known difference being the asynchronous registration flow, which still follows [SCITT Reference API Draft 03](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/03/).
+scitt-ccf-ledger implements the [SCITT Reference API (SCRAPI) Draft 09](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/09/).

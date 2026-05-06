@@ -30,8 +30,8 @@
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
 #include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
-#include <ccf/node/host_processes_interface.h>
 #include <ccf/node/quote.h>
+#include <ccf/run.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <ccf/service/tables/members.h>
 #include <ccf/service/tables/nodes.h>
@@ -77,7 +77,7 @@ namespace scitt
     std::string_view value = it->second;
     if constexpr (std::is_same_v<T, std::string>)
     {
-      return value;
+      return std::string(value);
     }
     else if constexpr (std::is_same_v<T, bool>)
     {
@@ -204,20 +204,21 @@ namespace scitt
       ccf::RESTVerb verb,
       const ccf::endpoints::EndpointFunction& f,
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
-      const ccf::AuthnPolicies& ap) override
+      const ccf::AuthnPolicies& ap)
     {
       const std::function<ccf::ApiResult(timespec & time)> get_time =
         [this](timespec& time) {
           return this->get_untrusted_host_time_v1(time);
         };
 
-      auto endpoint = ccf::UserEndpointRegistry::make_endpoint(
-        method,
-        verb,
-        tracing_adapter_first(error_adapter(f), method, get_time),
-        ap);
-      endpoint.locally_committed_func =
-        tracing_adapter_last(l, method, get_time);
+      auto endpoint =
+        ccf::UserEndpointRegistry::make_endpoint(
+          method,
+          verb,
+          tracing_adapter_first(error_adapter(f), method, get_time),
+          ap)
+          .set_locally_committed_function(
+            tracing_adapter_last(l, method, get_time));
       return endpoint;
     }
 
@@ -243,7 +244,61 @@ namespace scitt
 
       verifier = std::make_unique<verifier::Verifier>();
 
-      auto register_signed_statement = [this](EndpointContext& ctx) {
+      auto register_signed_statement = [this, &context_](EndpointContext& ctx) {
+        const auto parsed_query =
+          ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
+        const auto wait_for_commit =
+          get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
+        const bool scrapi = is_scrapi_v9(ctx);
+        if (wait_for_commit)
+        {
+          ctx.rpc_ctx->set_consensus_committed_function(
+            [&context_, scrapi](ccf::endpoints::CommittedTxInfo& info) {
+              auto host =
+                info.rpc_ctx->get_request_header(ccf::http::headers::HOST);
+              if (info.status == ccf::FinalTxStatus::Invalid)
+              {
+                info.rpc_ctx->set_response_status(
+                  HTTP_STATUS_SERVICE_UNAVAILABLE);
+                info.rpc_ctx->set_response_header(
+                  ccf::http::headers::CONTENT_TYPE,
+                  cbor::CBOR_ERROR_CONTENT_TYPE);
+                info.rpc_ctx->set_response_body(cbor::cbor_error(
+                  errors::InternalError,
+                  "The submission could not be committed and was rolled "
+                  "back, please retry"));
+                return;
+              }
+
+              auto receipt =
+                ccf::endpoints::build_receipt_for_committed_tx(context_, info);
+              if (receipt == nullptr)
+              {
+                return;
+              }
+
+              auto cose_receipt = get_cose_receipt(receipt);
+
+              info.rpc_ctx->set_response_status(HTTP_STATUS_CREATED);
+              info.rpc_ctx->set_response_header(
+                ccf::http::headers::CONTENT_TYPE,
+                scrapi ? CT_SCITT_RECEIPT :
+                         ccf::http::headervalues::contenttype::COSE);
+              info.rpc_ctx->set_response_header(
+                ccf::http::headers::CCF_TX_ID, info.tx_id.to_str());
+              if (host.has_value())
+              {
+                info.rpc_ctx->set_response_header(
+                  ccf::http::headers::LOCATION,
+                  fmt::format(
+                    "https://{}/entries/{}",
+                    host.value(),
+                    info.tx_id.to_str()));
+              }
+              info.rpc_ctx->set_response_body(cose_receipt);
+            });
+        }
+
         const auto& body = ctx.rpc_ctx->get_request_body();
         SCITT_DEBUG(
           "Signed Statement Registration body size: {} bytes", body.size());
@@ -395,6 +450,9 @@ namespace scitt
         register_signed_statement,
         operation_locally_committed_func,
         authn_policy)
+        .add_query_parameter<bool>(
+          "waitForCommit",
+          ccf::endpoints::QueryParamPresence::OptionalParameter)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Always)
         .set_redirection_strategy(
           ccf::endpoints::RedirectionStrategy::ToPrimary)
@@ -408,7 +466,7 @@ namespace scitt
 
       static constexpr auto get_entry_receipt_path = "/entries/{txid}";
       auto get_entry_receipt =
-        [this](
+        [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
           SCITT_DEBUG("Get transaction historical state");
@@ -431,17 +489,21 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(cose_receipt);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_RECEIPT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
-       * Resolve Receipt, 2.1.4 in
+       * Resolve Receipt / Query Registration Status, 2.4 and 2.5 in
        * https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/
+       *
+       * Returns 302 Found if the transaction is still pending,
+       * or 200 OK with the COSE receipt when committed.
        */
       make_endpoint(
         get_entry_receipt_path,
         HTTP_GET,
-        scitt::historical::entry_adapter(
+        scitt::historical::entry_adapter_with_polling(
           get_entry_receipt, state_cache, is_tx_committed),
         authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -451,7 +513,7 @@ namespace scitt
       static constexpr auto get_entry_statement_path =
         "/entries/{txid}/statement";
       auto get_entry_statement =
-        [this](
+        [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
           SCITT_DEBUG("Get transaction historical state");
@@ -487,7 +549,8 @@ namespace scitt
           ctx.rpc_ctx->set_response_body(statement);
           ctx.rpc_ctx->set_response_header(
             ccf::http::headers::CONTENT_TYPE,
-            ccf::http::headervalues::contenttype::COSE);
+            is_scrapi_v9(ctx) ? CT_SCITT_STATEMENT :
+                                ccf::http::headervalues::contenttype::COSE);
         };
 
       /**
@@ -660,3 +723,9 @@ namespace ccf
     return std::make_unique<scitt::AppEndpoints>(context);
   }
 } // namespace ccf
+
+// Main entrypoint
+int main(int argc, char** argv)
+{
+  return ccf::run(argc, argv);
+}

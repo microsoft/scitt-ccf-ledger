@@ -3,71 +3,41 @@
   "configurePresets": [
     {
       "name": "dev",
-      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/app",
       "installDir": "/tmp/scitt",
+      "displayName": "Dev",
+      "description": "Dev build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "clang-18",
         "CMAKE_CXX_COMPILER": "clang++-18",
         "CMAKE_BUILD_WITH_INSTALL_RPATH":"ON",
-        "BUILD_TESTS": "OFF",
+        "BUILD_TESTS": "ON",
         "ENABLE_CLANG_TIDY": "$env{ENABLE_CLANG_TIDY}"
       },
       "environment": {
         "NINJA_FLAGS": "-k 0",
         "CXXFLAGS": "-ferror-limit=0",
-        "GTEST_COLOR": "1"
-      }
-    },
-    {
-      "name": "dev-virtual",
-      "inherits": "dev",
-      "displayName": "Dev Virtual",
-      "description": "Dev build for virtual platform",
-      "cacheVariables": {
-        "COMPILE_TARGET": "virtual",
-        "BUILD_TESTS": "ON"
-      },
-      "environment": {
+        "GTEST_COLOR": "1",
         "CTEST_OUTPUT_ON_FAILURE": "1",
         "GTEST_CATCH_EXCEPTIONS": "0"
       }
     },
     {
-      "name": "dev-snp",
-      "inherits": "dev",
-      "displayName": "Dev SNP",
-      "description": "Dev build for SNP platform",
-      "cacheVariables": {
-        "COMPILE_TARGET": "snp",
-        "BUILD_TESTS": "OFF"
-      }
-    },
-    {
       "name": "bench",
-      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/app",
       "installDir": "/tmp/scitt",
+      "displayName": "Bench",
+      "description": "Bench build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_COMPILER": "clang-18",
         "CMAKE_CXX_COMPILER": "clang++-18",
         "CMAKE_BUILD_WITH_INSTALL_RPATH":"ON",
-        "BUILD_TESTS": "OFF",
+        "BUILD_TESTS": "ON",
         "ENABLE_CLANG_TIDY": "$env{ENABLE_CLANG_TIDY}"
-      }
-    },
-    {
-      "name": "bench-virtual",
-      "inherits": "bench",
-      "displayName": "Bench Virtual",
-      "description": "Bench build for virtual platform",
-      "cacheVariables": {
-        "COMPILE_TARGET": "virtual",
-        "BUILD_TESTS": "ON"
       },
       "environment": {
         "CTEST_OUTPUT_ON_FAILURE": "1",
@@ -77,22 +47,18 @@
   ],
   "buildPresets": [
     {
-      "name": "virtual",
-      "configurePreset": "dev-virtual"
+      "name": "dev",
+      "configurePreset": "dev"
     },
     {
-      "name": "snp",
-      "configurePreset": "dev-snp"
-    },
-    {
-      "name": "bench-virtual",
-      "configurePreset": "bench-virtual"
+      "name": "bench",
+      "configurePreset": "bench"
     }
   ],
   "testPresets": [
     {
-      "name": "virtual",
-      "configurePreset": "dev-virtual",
+      "name": "dev",
+      "configurePreset": "dev",
       "output": {
         "outputOnFailure": true
       }
@@ -100,45 +66,32 @@
   ],
   "workflowPresets": [
     {
-      "name": "virtual",
+      "name": "dev",
       "steps": [
         {
           "type": "configure",
-          "name": "dev-virtual"
+          "name": "dev"
         },
         {
           "type": "build",
-          "name": "virtual"
+          "name": "dev"
         },
         {
           "type": "test",
-          "name": "virtual"
+          "name": "dev"
         }
       ]
     },
     {
-      "name": "bench-virtual",
+      "name": "bench",
       "steps": [
         {
           "type": "configure",
-          "name": "bench-virtual"
+          "name": "bench"
         },
         {
           "type": "build",
-          "name": "bench-virtual"
-        }
-      ]
-    },
-    {
-      "name": "snp",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "dev-snp"
-        },
-        {
-          "type": "build",
-          "name": "snp"
+          "name": "bench"
         }
       ]
     }

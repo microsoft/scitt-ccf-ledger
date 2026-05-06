@@ -378,8 +378,10 @@ class TestPolicyEngine:
         output_path = tmp_path / f"ts_{input_path.name}"
         ca_certificate_path = tmp_path / "service-cert.pem"
         project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
-        cacert_der = client.get_parameters().certificate
-        ca_certificate = x509.load_der_x509_certificate(cacert_der, default_backend())
+        cacert_pem = client.get_service_certificate()
+        ca_certificate = x509.load_pem_x509_certificate(
+            cacert_pem.encode(), default_backend()
+        )
         ca_certificate_path.write_bytes(ca_certificate.public_bytes(Encoding.PEM))
 
         def run_dotnet(
@@ -440,7 +442,7 @@ export function apply(phdr) {{
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:_ZI-nfqGZ-fxTeeCyC31xeKEs30u3esA8mjXEgsDfTU::subject:CN:7931e33a-6d97-46e6-a796-ae51ab91f79f") {{ return "Invalid issuer"; }}
 if (phdr.cwt.sub !== "unknown.intent") {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat > (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
 
 return true;
 }}"""

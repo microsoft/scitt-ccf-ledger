@@ -11,6 +11,7 @@
 #include "tracing.h"
 #include "verified_details.h"
 
+#include <ccf/crypto/eddsa_key_pair.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
@@ -221,7 +222,7 @@ namespace scitt::verifier
             auto specific_jwk =
               vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyECPublic>();
             resolved_pem =
-              ccf::crypto::make_public_key(specific_jwk)->public_key_pem();
+              ccf::crypto::make_ec_public_key(specific_jwk)->public_key_pem();
           }
           break;
         }
@@ -232,6 +233,16 @@ namespace scitt::verifier
               vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyRSAPublic>();
             resolved_pem =
               ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
+          }
+          break;
+        }
+        case ccf::crypto::JsonWebKeyType::OKP:
+        {
+          {
+            auto specific_jwk = vm.public_key_jwk.value()
+                                  .get<ccf::crypto::JsonWebKeyEdDSAPublic>();
+            resolved_pem = ccf::crypto::make_eddsa_public_key(specific_jwk)
+                             ->public_key_pem();
           }
           break;
         }
@@ -289,10 +300,7 @@ namespace scitt::verifier
       std::span<uint8_t> payload;
       try
       {
-        // Instruct t_cose to ignore critical header params it does not
-        // understand as the attestedsvc header param is custom and not part of
-        // the COSE standard. Crit checking is done per issuer-type later on.
-        payload = cose::verify(data, public_key, true);
+        payload = cose::verify(data, public_key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {

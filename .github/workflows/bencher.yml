@@ -14,8 +14,6 @@ jobs:
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
-      env:
-        PLATFORM: virtual
     steps:
       - name: Setup environment
         run: |
@@ -29,11 +27,11 @@ jobs:
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD          
-      - name: Build and run virtual perf tests
+      - name: Build and run perf tests
         run: |
           ./scripts/setup-env.sh
-          PLATFORM=bench-virtual ./build.sh
-          PLATFORM=virtual ./run_functional_tests.sh -m bencher
+          PRESET=bench ./build.sh
+          ./run_functional_tests.sh -m bencher
         shell: bash
 
       - uses: bencherdev/bencher@main

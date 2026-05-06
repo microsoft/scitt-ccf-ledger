@@ -22,7 +22,6 @@ jobs:
       options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
       env:
         SCITT_CI: 1
-        PLATFORM: virtual
     
     permissions:
       actions: read
@@ -82,7 +81,8 @@ jobs:
     
     - if: matrix.language == 'cpp'
       name: Build C++
-      run: ./build.sh
+      run: |
+        ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

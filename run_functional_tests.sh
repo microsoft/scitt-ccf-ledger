@@ -5,7 +5,6 @@
 set -ex
 
 DOCKER=${DOCKER:-0}
-PLATFORM=${PLATFORM:-snp}
 
 # Variable to enable performance tests
 ENABLE_PERF_TESTS=${ENABLE_PERF_TESTS:-}
@@ -34,7 +33,7 @@ if [ "$DOCKER" = "1" ]; then
 
     # wait until the network is ready
     timeout=120
-    while ! curl -s -f -k $CCF_URL/parameters > /dev/null; do
+    while ! curl -s -f -k $CCF_URL/version > /dev/null; do
         echo "Waiting for service to be ready..."
         sleep 1
         timeout=$((timeout - 1))
@@ -53,7 +52,14 @@ else
     echo "List of files in SCITT_DIR $SCITT_DIR"
     ls -R $SCITT_DIR
 
-    TEST_ARGS="--start-cchost --platform=$PLATFORM --enclave-package=$SCITT_DIR/lib/libscitt --constitution=$SCITT_DIR/share/scitt/constitution --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
+    TEST_ARGS="--start-cchost --constitution=$SCITT_DIR/share/scitt/constitution"
+    if [ -n "$SNP_ATTESTATION_CONFIG" ]; then
+        if [ ! -f "$SNP_ATTESTATION_CONFIG" ]; then
+            echo "Error: SNP_ATTESTATION_CONFIG is set to '$SNP_ATTESTATION_CONFIG' but the file does not exist."
+            exit 1
+        fi
+        TEST_ARGS="$TEST_ARGS --snp-attestation-config=$SNP_ATTESTATION_CONFIG"
+    fi
 fi
 
 echo "Setting up python virtual environment."

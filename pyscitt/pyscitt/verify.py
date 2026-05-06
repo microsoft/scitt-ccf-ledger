@@ -5,7 +5,6 @@ import base64
 import json
 import ssl
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Dict, Optional
@@ -30,36 +29,6 @@ from pycose.messages import Sign1Message
 
 from . import crypto
 from .crypto import CWT_IAT, CWT_ISS, CWTClaims
-
-
-@dataclass
-class ServiceParameters:
-    tree_algorithm: str
-    signature_algorithm: str
-    certificate: bytes
-    service_id: Optional[str] = None
-
-    @staticmethod
-    def from_dict(data) -> "ServiceParameters":
-        """
-        Decode service parameters as returned by the /parameters endpoint.
-        """
-        return ServiceParameters(
-            tree_algorithm=data["treeAlgorithm"],
-            signature_algorithm=data["signatureAlgorithm"],
-            certificate=base64.b64decode(data["serviceCertificate"]),
-            service_id=data["serviceId"],
-        )
-
-    def as_dict(self) -> Dict[str, str]:
-        result = {
-            "treeAlgorithm": self.tree_algorithm,
-            "signatureAlgorithm": self.signature_algorithm,
-            "serviceCertificate": base64.b64encode(self.certificate).decode("ascii"),
-        }
-        if self.service_id is not None:
-            result["serviceId"] = self.service_id
-        return result
 
 
 class TrustStore(ABC):
@@ -140,62 +109,120 @@ def verify_transparent_statement(
 
 class StaticTrustStore(TrustStore):
     """
-    A static trust store, based on a list of trusted service certificates.
+    A static trust store, based on a list of trusted COSE keys from /.well-known/scitt-keys
+    or DER-encoded service certificates (legacy format).
     """
 
-    services: Dict[str, ServiceParameters] = {}
     trust_store_keys: dict = {}
 
-    def __init__(self, services: Dict[str, ServiceParameters]):
-        self.services = services
-        for _, service_params in self.services.items():
-            cert = load_der_x509_certificate(
-                service_params.certificate, default_backend()
-            )
-            key = cert.public_key()
-            kid = (
-                sha256(
-                    key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    def __init__(
+        self,
+        cose_keys: Optional[list] = None,
+        certificates: Optional[list] = None,
+    ):
+        self.trust_store_keys = {}
+
+        # Load keys from COSE_Key_Set (from /.well-known/scitt-keys)
+        if cose_keys:
+            for cose_key_dict in cose_keys:
+                cose_key = CoseKey.from_dict(cose_key_dict)  # type: ignore[var-annotated]
+                kid = cose_key.kid
+                if isinstance(kid, str):
+                    kid = kid.encode()
+                # Convert COSE_Key to cryptography public key
+                pub_key = self._cose_key_to_cryptography_key(cose_key)
+                self.trust_store_keys[kid] = pub_key
+
+        # Load keys from DER-encoded certificates (legacy format)
+        if certificates:
+            for cert_der in certificates:
+                cert = load_der_x509_certificate(cert_der, default_backend())
+                key = cert.public_key()
+                # Compute kid as hex-encoded SHA256 of public key DER
+                kid = (
+                    sha256(
+                        key.public_bytes(
+                            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+                        )
+                    )
+                    .digest()
+                    .hex()
+                    .encode()
                 )
-                .digest()
-                .hex()
-                .encode()
-            )
-            self.trust_store_keys[kid] = key
+                self.trust_store_keys[kid] = key
+
+    @property
+    def services(self):
+        return {}
+
+    @staticmethod
+    def _cose_key_to_cryptography_key(cose_key: CoseKey) -> CertificatePublicKeyTypes:
+        """Convert a pycose CoseKey to a cryptography public key."""
+        from cryptography.hazmat.primitives.asymmetric.ec import (
+            SECP256R1,
+            SECP384R1,
+            SECP521R1,
+            EllipticCurvePublicNumbers,
+        )
+        from pycose.keys.curves import P256, P384, P521
+
+        # Map COSE curve to cryptography curve
+        curve_map = {
+            P256: SECP256R1(),
+            P384: SECP384R1(),
+            P521: SECP521R1(),
+        }
+
+        curve = curve_map.get(cose_key.crv)  # type: ignore[attr-defined]
+        if curve is None:
+            raise ValueError(f"Unsupported curve: {cose_key.crv}")  # type: ignore[attr-defined]
+
+        x_int = int.from_bytes(cose_key.x, "big")  # type: ignore[attr-defined]
+        y_int = int.from_bytes(cose_key.y, "big")  # type: ignore[attr-defined]
+        pub_numbers = EllipticCurvePublicNumbers(x_int, y_int, curve)
+        return pub_numbers.public_key(default_backend())
 
     @staticmethod
     def load(path: Path) -> "StaticTrustStore":
         """
-        Populate a static trust store from a directory. Each JSON file in the
-        directory corresponds to a trusted service identity.
+        Populate a static trust store from a directory containing:
+        - CBOR files with COSE_Key_Set (from /.well-known/scitt-keys)
+        - JSON files with service certificates (legacy format for backwards compatibility)
         """
-        store = {}
-        for path in path.glob("**/*.json"):
-            with open(path) as f:
-                data = json.load(f)
+        cose_keys = []
+        certificates = []
 
-            def _parse_service_param(param: dict):
-                service_id = param.get("serviceId")
-                if not isinstance(service_id, str) or not service_id:
-                    raise ValueError("serviceId must be a non-empty string")
+        # Load CBOR files (COSE_Key_Set from /.well-known/scitt-keys)
+        for cbor_path in path.glob("**/*.cbor"):
+            with open(cbor_path, "rb") as f:
+                data = cbor2.loads(f.read())
+            # COSE_Key_Set is an array of COSE_Key maps
+            if isinstance(data, list):
+                cose_keys.extend(data)
 
-                if service_id in store:
-                    raise ValueError(
-                        f"Duplicate service ID while reading trust store: {service_id}"
-                    )
+        # Load JSON files (legacy format with service certificates)
+        for json_path in path.glob("**/*.json"):
+            with open(json_path, encoding="utf-8") as json_file:
+                data = json.load(json_file)
 
-                store[service_id] = ServiceParameters.from_dict(param)
+            def _extract_certificates(param: dict):
+                cert_b64 = param.get("serviceCertificate")
+                if cert_b64:
+                    certificates.append(base64.b64decode(cert_b64))
 
-            # If the JSON file contains a list of parameters, parse each one (as returned by /parameters/historic)
+            # If the JSON file contains a list of parameters, extract from each
             params = data.get("parameters")
             if params and isinstance(params, list):
                 for param in params:
-                    _parse_service_param(param)
-            # Otherwise, assume the JSON file contains a single set of parameters (as returned by /parameters)
+                    _extract_certificates(param)
+            # Otherwise, assume the JSON file contains a single set of parameters
             else:
-                _parse_service_param(data)
+                _extract_certificates(data)
 
-        return StaticTrustStore(store)
+        return StaticTrustStore(
+            cose_keys=cose_keys if cose_keys else None,
+            certificates=certificates if certificates else None,
+        )
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         parsed = Sign1Message.decode(receipt)

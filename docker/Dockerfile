@@ -1,4 +1,4 @@
-ARG CCF_VERSION="6.0.27"
+ARG CCF_VERSION="7.0.2"
 
 # Pin a specific Azure Linux base image tag for reproducibility.
 # Dependabot will monitor and update this FROM line.
@@ -8,7 +8,6 @@ FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260401 AS base
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
-ARG CCF_PLATFORM
 
 # Install minimal tools, download reproduce JSON, and extract snapshot time
 # Note: No need to pin package versions here as this stage doesn't contribute
@@ -16,44 +15,47 @@ ARG CCF_PLATFORM
 RUN tdnf install -y \
     ca-certificates \
     jq && \
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce-${CCF_PLATFORM}.json" -o /tmp/reproduce.json && \
+    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce.json" -o /tmp/reproduce.json && \
     jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime
 
 FROM base AS builder
 
 ARG CCF_VERSION
-ARG CCF_PLATFORM
 ARG SCITT_VERSION_OVERRIDE
 
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 
-# Install dependencies and CCF development package
+# Install dependencies and CCF development package first for better layer caching
 RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git && \
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ./ccf.rpm
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git rpm-build && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm"
 
-# Build CCF app
+# Copy the app source code after installing dependencies so that
+# changes to app/ don't invalidate the dependency layer above.
 COPY ./app /tmp/app/
+
+# Build the app and package as RPM
 RUN mkdir /tmp/app-build && \
     cd /tmp/app-build && \
     CC=clang-18 CXX=clang++-18 cmake -GNinja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
-    -DCOMPILE_TARGET=${CCF_PLATFORM} \
     -DBUILD_TESTS=OFF \
     -DSCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE} \
     /tmp/app && \
-    ninja && ninja install
+    ninja && \
+    cpack -G RPM
 
 FROM base
 
 ARG CCF_VERSION
-ARG CCF_PLATFORM
 
 # Copy the extracted snapshot time from the snapshot-extractor stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
+
+# Copy the built RPM packages from the builder stage
+COPY --from=builder /tmp/app-build/*.rpm /tmp/
 
 WORKDIR /usr/src/app
 
@@ -61,24 +63,17 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     ca-certificates \
     tini \
-    tar \
     nmap-ncat && \
     \
-    # Use the CCF runtime package which contains the minimal dependencies for running CCF applications
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_${CCF_PLATFORM}_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
-    \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
-    ./ccf.rpm && \
-    rm ./ccf.rpm && \
+    /tmp/*.rpm && \
+    rm -rf /tmp/*.rpm && \
     \
-    mv "/opt/ccf_${CCF_PLATFORM}/bin/cchost" "/usr/bin/cchost" && \
+    mv "/opt/scitt/bin/cchost" "/usr/bin/cchost" && \
     \
     tdnf autoremove -y && \
     tdnf clean all && \
     rm -rf /var/cache/tdnf /var/lib/rpm/__db* /var/lib/tdnf/*
-
-COPY --from=builder /usr/src/app/lib/libscitt.${CCF_PLATFORM}.so libscitt.${CCF_PLATFORM}.so
-COPY --from=builder /usr/src/app/share/VERSION VERSION
 
 WORKDIR /host/node
 COPY docker/start-app.sh start-app.sh

@@ -22,7 +22,6 @@ All instructions below assume a Linux operating system and the availability of D
 First, start the service in one terminal window:
 
 ```sh
-export PLATFORM=virtual
 ./docker/build.sh
 ./docker/run-dev.sh
 
@@ -48,6 +47,16 @@ scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development -
 # 2025-11-06 13:19:18.012 | DEBUG    | pyscitt.client:request:402 - GET /operations/2.13 (attempt #2) 200
 # 2025-11-06 13:19:18.015 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement 503 TransactionNotCached
 # 2025-11-06 13:19:19.017 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement (attempt #2) 200
+# Registered test/payloads/manifest.spdx.json.sha384.digest.cose as transaction 2.13
+# Received output.cose
+```
+
+Alternatively, use `--wait-for-commit` to block until the transaction is committed and return the receipt directly in a single request, without polling:
+
+```sh
+scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development --url "https://localhost:8000" --transparent-statement output.cose --wait-for-commit
+
+# 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:402 - POST /entries?waitForCommit=true 200
 # Registered test/payloads/manifest.spdx.json.sha384.digest.cose as transaction 2.13
 # Received output.cose
 ```

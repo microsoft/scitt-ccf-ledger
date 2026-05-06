@@ -22,7 +22,7 @@ export function apply(phdr) {{
 // Check exact issuer 
 if (phdr.cwt.iss !== "did:x509:0:sha256:HnwZ4lezuxq_GVcl_Sk7YWW170qAD0DZBLXilXet0jg::eku:1.3.6.1.4.1.311.10.3.13") {{ return "Invalid issuer"; }}
 if (phdr.cwt.svn === undefined || phdr.cwt.svn < 0) {{ return "Invalid SVN"; }}
-if (phdr.cwt.iat === undefined || phdr.cwt.iat < (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
+if (phdr.cwt.iat === undefined || phdr.cwt.iat > (Math.floor(Date.now() / 1000)) ) {{ return "Invalid iat"; }}
 
 return true;
 }}"""
@@ -363,5 +363,153 @@ def test_write_throughput(
     bf = Bencher()
     bf.set(
         f"Throughput {test_name}",
+        Throughput(value=submissions_per_second),
+    )
+
+
+@pytest.mark.bencher
+def test_wait_for_commit_latency(client: Client, cert_authority, configure_service):
+    """
+    Measure end-to-end latency of POST /entries?waitForCommit=true.
+    Compares against the traditional submit + poll + get_receipt flow.
+    """
+    client.wait_time = 0.1
+
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": (
+                    f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+                )
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+    iterations = 50
+
+    # Measure wait_for_commit latency
+    latency_ns = []
+    for i in range(iterations):
+        start = time.time()
+        client.submit_signed_statement_wait_for_commit(signed_statement)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
+
+    df = DataFrame({"latency (ns)": latency_ns})
+    print("wait_for_commit latency:")
+    print(df.describe())
+
+    bf = Bencher()
+    bf.set(
+        "wait_for_commit Latency",
+        Latency(
+            value=cast(float, df["latency (ns)"].mean()),
+            high_value=cast(float, df["latency (ns)"].max()),
+            low_value=cast(float, df["latency (ns)"].min()),
+        ),
+    )
+
+    # Measure traditional submit + wait_for_receipt latency for comparison
+    latency_ns = []
+    for i in range(iterations):
+        start = time.time()
+        client.submit_signed_statement_and_wait_for_receipt(signed_statement)
+        latency_ns.append((time.time() - start) * 1_000_000_000)
+
+    df = DataFrame({"latency (ns)": latency_ns})
+    print("submit + poll + get_receipt latency:")
+    print(df.describe())
+
+    bf.set(
+        "Poll-based Receipt Latency",
+        Latency(
+            value=cast(float, df["latency (ns)"].mean()),
+            high_value=cast(float, df["latency (ns)"].max()),
+            low_value=cast(float, df["latency (ns)"].min()),
+        ),
+    )
+
+
+@pytest.mark.bencher
+def test_wait_for_commit_throughput(client: Client, cert_authority, configure_service):
+    """
+    Measure throughput of concurrent POST /entries?waitForCommit=true requests.
+    Each request blocks until consensus, so this measures how many receipts
+    we can obtain per second with parallel submissions.
+    """
+    client.wait_time = 0.001
+
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": (
+                    f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+                )
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+
+    duration_s = 30
+    max_workers = 16
+    warmup_requests = max_workers
+    lock = threading.Lock()
+    completed_count = 0
+    errors = 0
+    last_error = None
+    stop = False
+
+    def _submit():
+        nonlocal completed_count, errors, last_error
+        while not stop:
+            try:
+                client.submit_signed_statement_wait_for_commit(signed_statement)
+                with lock:
+                    completed_count += 1
+            except Exception as e:
+                with lock:
+                    errors += 1
+                    last_error = e
+
+    # Warmup
+    for _ in range(warmup_requests):
+        client.submit_signed_statement_wait_for_commit(signed_statement)
+
+    start = time.monotonic()
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_submit) for _ in range(max_workers)]
+        time.sleep(duration_s)
+        stop = True
+        for fut in futures:
+            fut.result()
+    elapsed = time.monotonic() - start
+
+    submissions_per_second = completed_count / elapsed
+    error_rate = errors / max(completed_count + errors, 1)
+
+    print(
+        f"wait_for_commit throughput: {completed_count} submissions in {elapsed:.2f}s"
+    )
+    print(f"  Rate: {submissions_per_second:.2f} submissions/s")
+    print(f"  Errors: {errors} ({error_rate:.1%})")
+    if last_error:
+        print(f"  Last error: {last_error}")
+
+    assert error_rate < 0.01, (
+        f"Error rate too high: {error_rate:.1%} ({errors}/{completed_count + errors}). "
+        f"Last error: {last_error}"
+    )
+    assert submissions_per_second > 0, "No successful submissions"
+
+    bf = Bencher()
+    bf.set(
+        "wait_for_commit Throughput",
         Throughput(value=submissions_per_second),
     )
