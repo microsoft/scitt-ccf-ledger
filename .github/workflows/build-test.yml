@@ -36,6 +36,7 @@ jobs:
         SCITT_CI: 1
         # Additional CMake flags.
         ENABLE_CLANG_TIDY: ON
+        ENABLE_DOTNET_TESTS: 1
     steps:
       - name: Setup environment
         run: |
@@ -53,6 +54,9 @@ jobs:
 
       - run: ./scripts/setup-env.sh
       - run: ./build.sh
+      - name: Install dotnet test dependencies
+        run: |
+          tdnf install -y dotnet-sdk-8.0.x86_64
       - run: ./run_functional_tests.sh
       - name: "Upload logs"
         uses: actions/upload-artifact@v4
