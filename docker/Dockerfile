@@ -2,7 +2,7 @@ ARG CCF_VERSION="7.0.2"
 
 # Pin a specific Azure Linux base image tag for reproducibility.
 # Dependabot will monitor and update this FROM line.
-FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260401 AS base
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260506 AS base
 
 # Initial stage to download and extract the tdnf snapshot time
 FROM base AS snapshot-extractor
