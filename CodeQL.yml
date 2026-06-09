@@ -1,0 +1,3 @@
+path_classifiers:
+  library:
+    - "app/build/app/_deps/regocpp-src/src/builtins/crypto.cc"
