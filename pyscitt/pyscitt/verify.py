@@ -173,7 +173,7 @@ class StaticTrustStore(TrustStore):
             P521: SECP521R1(),
         }
 
-        curve = curve_map.get(cose_key.crv)  # type: ignore[attr-defined]
+        curve = curve_map.get(cose_key.crv)  # type: ignore[attr-defined] # CodeQL [SM04458] The curve_map is using the approved cryptographic curves P256, P384, and P521. Anything other than it will be rejected and not used for verification, so it does not pose a security risk.
         if curve is None:
             raise ValueError(f"Unsupported curve: {cose_key.crv}")  # type: ignore[attr-defined]
 
