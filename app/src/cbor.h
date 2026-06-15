@@ -223,6 +223,7 @@ namespace scitt::cbor
   // COSE EC curve constants (RFC 9052)
   static constexpr int64_t COSE_EC_CURVE_P256 = 1;
   static constexpr int64_t COSE_EC_CURVE_P384 = 2;
+  static constexpr int64_t COSE_EC_CURVE_P521 = 3;
 
   // COSE Key parameter labels (RFC 9052)
   static constexpr int64_t COSE_KEY_PARAM_KTY = 1;
@@ -243,6 +244,8 @@ namespace scitt::cbor
         return COSE_EC_CURVE_P256;
       case ccf::crypto::CurveID::SECP384R1:
         return COSE_EC_CURVE_P384;
+      case ccf::crypto::CurveID::SECP521R1:
+        return COSE_EC_CURVE_P521;
       case ccf::crypto::CurveID::NONE:
       case ccf::crypto::CurveID::CURVE25519:
       case ccf::crypto::CurveID::X25519:
