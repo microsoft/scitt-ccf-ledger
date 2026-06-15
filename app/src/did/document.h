@@ -118,7 +118,9 @@ namespace scitt::did::alt
   struct DIDDocument
   {
     std::string id;
-    std::string context;
+    // @context may be a single string or an array of strings per the W3C DID
+    // spec, so it is stored as raw JSON rather than a fixed type.
+    nlohmann::json context = {};
     std::string type;
     std::vector<DIDDocumentVerificationMethod> verification_method = {};
     nlohmann::json assertion_method = {};
