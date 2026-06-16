@@ -42,11 +42,11 @@ source venv/bin/activate
 # Use the CLI to submit a test payload
 scitt submit test/payloads/manifest.spdx.json.sha384.digest.cose --development --url "https://localhost:8000" --transparent-statement output.cose
 
-# 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:402 - POST /entries 202
-# 2025-11-06 13:19:16.009 | DEBUG    | pyscitt.client:request:402 - GET /operations/2.13 202
-# 2025-11-06 13:19:18.012 | DEBUG    | pyscitt.client:request:402 - GET /operations/2.13 (attempt #2) 200
-# 2025-11-06 13:19:18.015 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement 503 TransactionNotCached
-# 2025-11-06 13:19:19.017 | DEBUG    | pyscitt.client:request:402 - GET /entries/2.13/statement (attempt #2) 200
+# 2025-11-06 13:19:16.006 | DEBUG    | pyscitt.client:request:469 - POST /entries 303
+# 2025-11-06 13:19:18.009 | DEBUG    | pyscitt.client:request:457 - Following 302 redirect to https://localhost:8000/entries/2.13
+# 2025-11-06 13:19:20.012 | DEBUG    | pyscitt.client:request:457 - Following 302 redirect to https://localhost:8000/entries/2.13
+# 2025-11-06 13:19:20.015 | DEBUG    | pyscitt.client:request:469 - GET https://localhost:8000/entries/2.13 (attempt #3) 200
+# 2025-11-06 13:19:20.018 | DEBUG    | pyscitt.client:request:469 - GET /entries/2.13/statement 200
 # Registered test/payloads/manifest.spdx.json.sha384.digest.cose as transaction 2.13
 # Received output.cose
 ```
