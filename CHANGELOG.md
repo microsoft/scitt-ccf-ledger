@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.18.0]
+### Changes
+- 09b5c99 Update CCF to v7 and align API with SCRAPI v09 (#390)
+- ccd92d2 add dotnet sdk evaluation regression test (#398)
+- 7654281 Bump azurelinux/base/core from 3.0.20260304 to 3.0.20260401 in /docker (#391)
+
 ## [0.17.1]
 ### Changes
 - b7c45ce Update CCF version from 6.0.26 to 6.0.27 (#389)
@@ -432,3 +438,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.16.5]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.16.5
 [0.17.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.0
 [0.17.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.1
+[0.18.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.18.0

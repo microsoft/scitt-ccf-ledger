@@ -7,10 +7,12 @@ from pyscitt import crypto
 
 
 class JwtIssuer:
-    def __init__(self, name="example.com"):
+    def __init__(self, name="https://example.com"):
         self.name = name
         self.key, _ = crypto.generate_rsa_keypair()
-        self.cert = crypto.generate_cert(self.key, cn=name)
+        # The certificate is self-signed, so it must be a CA to chain to itself
+        # as required by the constitution's set_jwt_issuer validation.
+        self.cert = crypto.generate_cert(self.key, cn=name, ca=True)
         self.key_id = crypto.get_cert_fingerprint(self.cert)
 
     def create_token(self, claims={}):
