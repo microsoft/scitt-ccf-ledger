@@ -169,13 +169,13 @@ namespace scitt::verifier
       }
 
       // Then authenticate the did:x509 claim against the x5chain
-      std::vector<std::string> pem_chain;
+      std::vector<std::string> pem_certs;
       for (auto const& c : phdr.x5chain.value())
       {
-        pem_chain.push_back(ccf::crypto::cert_der_to_pem(c).str());
+        pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
       }
       auto resolved_jwk_str = didx509::resolve_jwk(
-        pem_chain,
+        pem_certs,
         phdr.cwt_claims.iss.value(),
         true /* Do not validate time */);
       auto resolved_jwk_json = nlohmann::json::parse(resolved_jwk_str);
