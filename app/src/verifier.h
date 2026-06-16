@@ -174,55 +174,60 @@ namespace scitt::verifier
       {
         pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
       }
-      auto resolved_jwk_str = didx509::resolve_jwk(
-        pem_certs,
-        phdr.cwt_claims.iss.value(),
-        true /* Do not validate time */);
-      auto resolved_jwk_json = nlohmann::json::parse(resolved_jwk_str);
-
-      auto resolved_jwk = resolved_jwk_json.get<ccf::crypto::JsonWebKey>();
       auto signing_key_pem =
         ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_pem();
       ccf::crypto::Pem resolved_pem;
-
-      switch (resolved_jwk.kty)
+      try
       {
-        case ccf::crypto::JsonWebKeyType::EC:
+        auto resolved_jwk_str = didx509::resolve_jwk(
+          pem_certs,
+          phdr.cwt_claims.iss.value(),
+          true /* Do not validate time */);
+        auto resolved_jwk_json = nlohmann::json::parse(resolved_jwk_str);
+
+        auto resolved_jwk = resolved_jwk_json.get<ccf::crypto::JsonWebKey>();
+        switch (resolved_jwk.kty)
         {
+          case ccf::crypto::JsonWebKeyType::EC:
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyECPublic>();
             resolved_pem =
               ccf::crypto::make_ec_public_key(specific_jwk)->public_key_pem();
+            break;
           }
-          break;
-        }
-        case ccf::crypto::JsonWebKeyType::RSA:
-        {
+          case ccf::crypto::JsonWebKeyType::RSA:
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyRSAPublic>();
             resolved_pem =
               ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
+            break;
           }
-          break;
-        }
-        case ccf::crypto::JsonWebKeyType::OKP:
-        {
+          case ccf::crypto::JsonWebKeyType::OKP:
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyEdDSAPublic>();
             resolved_pem = ccf::crypto::make_eddsa_public_key(specific_jwk)
                              ->public_key_pem();
+            break;
           }
-          break;
+          default:
+          {
+            throw VerificationError(fmt::format(
+              "Verification method public key (kty: {}) is unsupported",
+              resolved_jwk.kty));
+          }
         }
-        default:
-        {
-          throw VerificationError(fmt::format(
-            "Verification method public key (kty: {}) is unsupported",
-            resolved_jwk.kty));
-        }
+      }
+      catch (const VerificationError&)
+      {
+        throw;
+      }
+      catch (const std::exception& e)
+      {
+        throw VerificationError(
+          fmt::format("Failed to resolve did:x509 issuer: {}", e.what()));
       }
 
       if (resolved_pem != signing_key_pem)
