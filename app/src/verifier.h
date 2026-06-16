@@ -169,47 +169,18 @@ namespace scitt::verifier
       }
 
       // Then authenticate the did:x509 claim against the x5chain
-      std::string pem_chain;
+      std::vector<std::string> pem_chain;
       for (auto const& c : phdr.x5chain.value())
       {
-        pem_chain += ccf::crypto::cert_der_to_pem(c).str();
+        pem_chain.push_back(ccf::crypto::cert_der_to_pem(c).str());
       }
-      auto did_document_str = didx509::resolve(
+      auto resolved_jwk_str = didx509::resolve_jwk(
         pem_chain,
         phdr.cwt_claims.iss.value(),
         true /* Do not validate time */);
-      scitt::did::alt::DIDDocument did_document =
-        nlohmann::json::parse(did_document_str);
+      auto resolved_jwk_json = nlohmann::json::parse(resolved_jwk_str);
 
-      if (did_document.verification_method.empty())
-      {
-        throw VerificationError(
-          "Could not find verification method in resolved DID "
-          "document");
-      }
-      // x5chain has a single leaf certificate, so the verification
-      // method should also have a single key
-      if (did_document.verification_method.size() != 1)
-      {
-        throw VerificationError(
-          "Unexpected number of verification methods in resolved DID "
-          "document");
-      }
-      auto const& vm = did_document.verification_method[0];
-      if (vm.controller != phdr.cwt_claims.iss.value())
-      {
-        throw VerificationError(
-          "Verification method controller does not match issuer");
-      }
-
-      if (!vm.public_key_jwk.has_value())
-      {
-        throw VerificationError(
-          "Verification method does not contain a public key");
-      }
-
-      auto resolved_jwk =
-        vm.public_key_jwk.value().get<ccf::crypto::JsonWebKey>();
+      auto resolved_jwk = resolved_jwk_json.get<ccf::crypto::JsonWebKey>();
       auto signing_key_pem =
         ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_pem();
       ccf::crypto::Pem resolved_pem;
@@ -220,7 +191,7 @@ namespace scitt::verifier
         {
           {
             auto specific_jwk =
-              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyECPublic>();
+              resolved_jwk_json.get<ccf::crypto::JsonWebKeyECPublic>();
             resolved_pem =
               ccf::crypto::make_ec_public_key(specific_jwk)->public_key_pem();
           }
@@ -230,7 +201,7 @@ namespace scitt::verifier
         {
           {
             auto specific_jwk =
-              vm.public_key_jwk.value().get<ccf::crypto::JsonWebKeyRSAPublic>();
+              resolved_jwk_json.get<ccf::crypto::JsonWebKeyRSAPublic>();
             resolved_pem =
               ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
           }
@@ -239,8 +210,8 @@ namespace scitt::verifier
         case ccf::crypto::JsonWebKeyType::OKP:
         {
           {
-            auto specific_jwk = vm.public_key_jwk.value()
-                                  .get<ccf::crypto::JsonWebKeyEdDSAPublic>();
+            auto specific_jwk =
+              resolved_jwk_json.get<ccf::crypto::JsonWebKeyEdDSAPublic>();
             resolved_pem = ccf::crypto::make_eddsa_public_key(specific_jwk)
                              ->public_key_pem();
           }
