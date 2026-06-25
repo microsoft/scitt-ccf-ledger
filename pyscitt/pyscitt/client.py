@@ -608,7 +608,11 @@ class Client(BaseClient):
         resp.raise_for_status()
         return cbor2.loads(resp.read())
 
-    def get_scitt_key(self, kid: str) -> dict:
+    def get_scitt_key(self, kid: Union[str, bytes]) -> dict:
+        # The COSE_Key 'kid' is a bstr (RFC 9052), but the URL path expects its
+        # textual (hex) form, so decode bytes to str when needed.
+        if isinstance(kid, bytes):
+            kid = kid.decode()
         resp = self.get(f"/.well-known/scitt-keys/{kid}")
         resp.raise_for_status()
         return cbor2.loads(resp.read())
