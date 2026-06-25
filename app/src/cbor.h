@@ -275,7 +275,7 @@ namespace scitt::cbor
     QCBOREncode_Init(&ectx, output_buf);
     QCBOREncode_OpenMap(&ectx);
     QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_KTY, COSE_KEY_TYPE_EC2);
-    QCBOREncode_AddTextToMapN(&ectx, COSE_KEY_PARAM_KID, from_string(kid));
+    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_KID, from_string(kid));
     QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_CRV, crv);
     QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_X, from_bytes(x));
     QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_Y, from_bytes(y));
