@@ -13,8 +13,11 @@
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
 #include <chrono>
+#include <memory>
+#include <optional>
 #include <rego/rego.hh>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -405,6 +408,65 @@ namespace scitt
       return obj;
     }
 
+    // Caches a compiled JS policy interpreter, keyed by the SHA-256 digest of
+    // the policy source. Constructing a CommonContext (a QuickJS runtime with
+    // all CCF extensions) and recompiling the policy module are relatively
+    // expensive and were previously repeated on every submission. Because a
+    // policy's "apply" function is a pure function of its inputs, the
+    // interpreter and the compiled function can be safely reused across
+    // submissions for the same policy. This mirrors the Rego BundleWrapper
+    // cache above, and the interpreter reuse CCF performs for dynamic JS
+    // endpoints.
+    //
+    // The cache is thread_local, so each worker thread keeps its own
+    // interpreter and no synchronisation on the QuickJS runtime is required.
+    class JsPolicyInterpreterCache
+    {
+      // Declaration order matters for destruction: apply_func holds an owning
+      // reference into interpreter's context, so it must be destroyed first.
+      // Members are destroyed in reverse declaration order, hence interpreter
+      // is declared before apply_func.
+      std::unique_ptr<ccf::js::CommonContext> interpreter;
+      std::optional<ccf::js::core::JSWrappedValue> apply_func;
+      ccf::crypto::Sha256Hash policy_digest = {};
+
+    public:
+      // Returns the cached interpreter and compiled "apply" function for the
+      // given policy, (re)building them when the policy changes. Throws
+      // BadRequestCborError if the policy module is invalid.
+      std::pair<ccf::js::CommonContext&, ccf::js::core::JSWrappedValue&> get(
+        const PolicyScript& script, const std::string& policy_name)
+      {
+        auto new_digest = ccf::crypto::Sha256Hash(script);
+        if (!apply_func.has_value() || new_digest != policy_digest)
+        {
+          // Drop the previously compiled function before replacing its
+          // interpreter, since it references the interpreter's context.
+          apply_func.reset();
+          interpreter =
+            std::make_unique<ccf::js::CommonContext>(ccf::js::TxAccess::APP_RO);
+          try
+          {
+            apply_func =
+              interpreter->get_exported_function(script, "apply", policy_name);
+          }
+          catch (const std::exception& e)
+          {
+            // Leave the cache empty so the next call retries cleanly.
+            apply_func.reset();
+            interpreter.reset();
+            throw BadRequestCborError(
+              scitt::errors::PolicyError,
+              fmt::format("Invalid policy module: {}", e.what()));
+          }
+          policy_digest = new_digest;
+        }
+        return {*interpreter, *apply_func};
+      }
+    };
+
+    inline thread_local JsPolicyInterpreterCache js_policy_interpreter_cache;
+
     static inline std::optional<std::string> apply_js_policy(
       const PolicyScript& script,
       const std::string& policy_name,
@@ -414,22 +476,14 @@ namespace scitt
       const std::optional<verifier::VerifiedSevSnpAttestationDetails>& details)
     {
       auto start = std::chrono::steady_clock::now();
-      // Allow the policy to access common globals (including shims for
-      // builtins) like "console", "ccf.crypto"
-      ccf::js::CommonContext interpreter(ccf::js::TxAccess::APP_RO);
-
-      ccf::js::core::JSWrappedValue apply_func;
-      try
-      {
-        apply_func =
-          interpreter.get_exported_function(script, "apply", policy_name);
-      }
-      catch (const std::exception& e)
-      {
-        throw BadRequestCborError(
-          scitt::errors::PolicyError,
-          fmt::format("Invalid policy module: {}", e.what()));
-      }
+      // Reuse a cached interpreter and compiled policy function for this policy
+      // instead of rebuilding the QuickJS runtime (with all CCF extensions) and
+      // recompiling the policy module on every submission. The cache is keyed
+      // on the policy's digest and refreshed automatically when the policy
+      // changes. The interpreter still gives the policy access to common
+      // globals (including shims for builtins) like "console" and "ccf.crypto".
+      auto [interpreter, apply_func] =
+        js_policy_interpreter_cache.get(script, policy_name);
 
       auto end = std::chrono::steady_clock::now();
       auto elapsed =
