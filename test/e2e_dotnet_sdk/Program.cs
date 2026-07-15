@@ -68,17 +68,15 @@ class Program
 
             Console.WriteLine(parsedArguments.UseAsync ? "Sending the signature (async)..." : "Sending the signature...");
             // CreateEntry (with waitForCommit) registers the statement and returns the
-            // registration receipt. The id needed to download the full transparent
-            // statement is returned in the Location response header (".../entries/{entryId}").
-            Response<BinaryData> createEntryResponse = parsedArguments.UseAsync
+            // registration receipt. The entry id (registration transaction id) is
+            // extracted directly from the receipt, which works whether the entry was
+            // committed inline or via a 303 redirect (the Location header is not
+            // preserved across the redirect).
+            Response<BinaryData> receiptResponse = parsedArguments.UseAsync
                 ? await client.CreateEntryAsync(content, true, default)
                 : client.CreateEntry(content, true, default);
-            if (!createEntryResponse.GetRawResponse().Headers.TryGetValue("Location", out string? location)
-                || string.IsNullOrEmpty(location))
-            {
-                throw new Exception("CreateEntry response did not include a Location header with the entry id");
-            }
-            string entryId = location[(location.LastIndexOf('/') + 1)..];
+            BinaryData receipt = receiptResponse.Value;
+            string entryId = CcfReceipt.GetRegistrationTransactionId(receipt.ToArray());
 
             Console.WriteLine($"Waiting for the transparent statement for entry {{{entryId}}}...");
             Response<BinaryData> transparentStatement = parsedArguments.UseAsync
