@@ -360,8 +360,10 @@ class TestPolicyEngine:
         transparent_statement.write_bytes(statement)
 
     @pytest.mark.dotnet
+    @pytest.mark.parametrize("use_async", [False, True], ids=["sync", "async"])
     def test_dotnet_submit_existing_cose_to_local_service(
         self,
+        use_async: bool,
         tmp_path: Path,
         service_url: str,
         configure_service,
@@ -370,6 +372,7 @@ class TestPolicyEngine:
         """
         This test submits an existing COSE message to the service using the .NET SDK, which applies the policy and returns a transparent statement.
         This allows avoiding unexpected regressions for the exisiting users of the SDK.
+        Both the synchronous and asynchronous CreateEntry (waitForCommit) code paths are exercised.
         """
         configure_service({"policy": policies.SAMPLE["js"]})
 
@@ -387,6 +390,7 @@ class TestPolicyEngine:
         def run_dotnet(
             operation: str, *paths: Path
         ) -> subprocess.CompletedProcess[str]:
+            optional_flags = ["--async"] if use_async else []
             return subprocess.run(
                 [
                     "dotnet",
@@ -399,6 +403,7 @@ class TestPolicyEngine:
                     service_url,
                     "--ca-certificate",
                     str(ca_certificate_path),
+                    *optional_flags,
                     operation,
                     *(str(path) for path in paths),
                 ],
