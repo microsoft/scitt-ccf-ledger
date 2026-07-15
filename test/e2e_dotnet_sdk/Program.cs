@@ -9,7 +9,6 @@ using System.Text;
 using Azure;
 using Azure.Core.Pipeline;
 using Azure.Security.CodeTransparency;
-using Azure.Security.CodeTransparency.Receipt;
 
 /// <summary>
 /// The main entry point of this script which will be executed in the python test.
@@ -67,7 +66,7 @@ class Program
             CodeTransparencyClient client = new CodeTransparencyClient(submitEndpoint, options);
 
             Console.WriteLine("Sending the signature...");
-            Operation<BinaryData> operationResult = client.CreateEntry(WaitUntil.Completed, content);
+            Response<BinaryData> operationResult = client.CreateEntry(content, true, default);
             string entryId = CborUtils.GetStringValueFromCborMapByKey(operationResult.Value.ToArray(), "EntryId");
 
             Console.WriteLine($"Waiting for the transparent statement...");
