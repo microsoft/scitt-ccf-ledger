@@ -136,9 +136,15 @@ namespace scitt
       JWT jwt;
       bool allow_unauthenticated = false;
 
-      // When true, read endpoints (GET) allow unauthenticated access even
-      // when allow_unauthenticated is false and JWT is configured for writes.
-      bool allow_unauthenticated_reads = true;
+      // When set, controls whether read endpoints (GET) allow unauthenticated
+      // access independently of allow_unauthenticated. When unset, inherits
+      // the value of allow_unauthenticated to preserve existing behavior.
+      std::optional<bool> allow_unauthenticated_reads;
+
+      bool get_allow_unauthenticated_reads() const
+      {
+        return allow_unauthenticated_reads.value_or(allow_unauthenticated);
+      }
 
       bool operator==(const Authentication& other) const = default;
     };
