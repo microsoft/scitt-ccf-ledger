@@ -9,7 +9,6 @@ using System.Text;
 using Azure;
 using Azure.Core.Pipeline;
 using Azure.Security.CodeTransparency;
-using Azure.Security.CodeTransparency.Receipt;
 
 /// <summary>
 /// The main entry point of this script which will be executed in the python test.
@@ -20,9 +19,10 @@ class Program
     private const string OperationVerify = "verify";
     private const string EndpointArgument = "--endpoint";
     private const string CaCertificateArgument = "--ca-certificate";
+    private const string AsyncArgument = "--async";
 
 
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         ParsedArguments parsedArguments = ParseArguments(args);
 
@@ -66,12 +66,22 @@ class Program
             }
             CodeTransparencyClient client = new CodeTransparencyClient(submitEndpoint, options);
 
-            Console.WriteLine("Sending the signature...");
-            Operation<BinaryData> operationResult = client.CreateEntry(WaitUntil.Completed, content);
-            string entryId = CborUtils.GetStringValueFromCborMapByKey(operationResult.Value.ToArray(), "EntryId");
+            Console.WriteLine(parsedArguments.UseAsync ? "Sending the signature (async)..." : "Sending the signature...");
+            // CreateEntry (with waitForCommit) registers the statement and returns the
+            // registration receipt. The entry id (registration transaction id) is
+            // extracted directly from the receipt, which works whether the entry was
+            // committed inline or via a 303 redirect (the Location header is not
+            // preserved across the redirect).
+            Response<BinaryData> receiptResponse = parsedArguments.UseAsync
+                ? await client.CreateEntryAsync(content, true, default)
+                : client.CreateEntry(content, true, default);
+            BinaryData receipt = receiptResponse.Value;
+            string entryId = CcfReceipt.GetRegistrationTransactionId(receipt.ToArray());
 
-            Console.WriteLine($"Waiting for the transparent statement...");
-            Response<BinaryData> transparentStatement = client.GetEntryStatement(entryId);
+            Console.WriteLine($"Waiting for the transparent statement for entry {{{entryId}}}...");
+            Response<BinaryData> transparentStatement = parsedArguments.UseAsync
+                ? await client.GetEntryStatementAsync(entryId)
+                : client.GetEntryStatement(entryId);
             if (transparentStatement.GetRawResponse().Status != 200)
             {
                 Console.WriteLine($"Get transparent statement did not succeed {transparentStatement.GetRawResponse().Status}");
@@ -113,6 +123,7 @@ class Program
         List<string> positionals = new();
         Uri? endpoint = null;
         string? caCertificatePath = null;
+        bool useAsync = false;
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -137,6 +148,12 @@ class Program
                 }
 
                 caCertificatePath = args[++index];
+                continue;
+            }
+
+            if (argument == AsyncArgument)
+            {
+                useAsync = true;
                 continue;
             }
 
@@ -178,7 +195,7 @@ class Program
             throw new ArgumentException("Too many positional arguments for verify");
         }
 
-        return new ParsedArguments(operation, inputPath, outputPath, endpoint, caCertificatePath);
+        return new ParsedArguments(operation, inputPath, outputPath, endpoint, caCertificatePath, useAsync);
     }
 
     private static HttpClientTransport CreateHttpClientTransport(string caCertificatePath)
@@ -258,12 +275,14 @@ class Program
         string inputPath,
         string? outputPath,
         Uri? endpoint,
-        string? caCertificatePath)
+        string? caCertificatePath,
+        bool useAsync)
     {
         public string Operation { get; } = operation;
         public string InputPath { get; } = inputPath;
         public string? OutputPath { get; } = outputPath;
         public Uri? Endpoint { get; } = endpoint;
         public string? CaCertificatePath { get; } = caCertificatePath;
+        public bool UseAsync { get; } = useAsync;
     }
 }
