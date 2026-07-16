@@ -126,4 +126,33 @@ namespace scitt
       }
     }
   };
+
+  /**
+   * An authentication policy for read endpoints that allows unauthenticated
+   * access based on the `allowUnauthenticatedReads` configuration option.
+   *
+   * This enables a split auth model where write endpoints require JWT
+   * authentication while read endpoints remain publicly accessible.
+   */
+  class ConfigurableEmptyAuthnReadPolicy : public ccf::EmptyAuthnPolicy
+  {
+    std::unique_ptr<ccf::AuthnIdentity> authenticate(
+      ccf::kv::ReadOnlyTx& tx,
+      const std::shared_ptr<ccf::RpcContext>& ctx,
+      std::string& error_reason) override
+    {
+      auto handle = tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE);
+      auto cfg = handle->get().value_or(Configuration{});
+      if (
+        cfg.authentication.allow_unauthenticated ||
+        cfg.authentication.allow_unauthenticated_reads)
+      {
+        return EmptyAuthnPolicy::authenticate(tx, ctx, error_reason);
+      }
+      else
+      {
+        return nullptr;
+      }
+    }
+  };
 }

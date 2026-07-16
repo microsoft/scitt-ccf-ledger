@@ -136,6 +136,10 @@ namespace scitt
       JWT jwt;
       bool allow_unauthenticated = false;
 
+      // When true, read endpoints (GET) allow unauthenticated access even
+      // when allow_unauthenticated is false and JWT is configured for writes.
+      bool allow_unauthenticated_reads = true;
+
       bool operator==(const Authentication& other) const = default;
     };
 
@@ -177,7 +181,9 @@ namespace scitt
     jwt,
     "jwt",
     allow_unauthenticated,
-    "allowUnauthenticated");
+    "allowUnauthenticated",
+    allow_unauthenticated_reads,
+    "allowUnauthenticatedReads");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration);
