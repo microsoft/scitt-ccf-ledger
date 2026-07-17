@@ -231,6 +231,13 @@ namespace scitt
         std::make_shared<ConfigurableJwtAuthnPolicy>(),
       };
 
+      // Read endpoints use a read-aware policy that respects
+      // allowUnauthenticatedReads, enabling write-only JWT enforcement.
+      const ccf::AuthnPolicies read_authn_policy = {
+        std::make_shared<ConfigurableEmptyAuthnPolicy>(true),
+        std::make_shared<ConfigurableJwtAuthnPolicy>(),
+      };
+
       SCITT_DEBUG("Get historical state from CCF");
       auto& state_cache = context.get_historical_state();
 
@@ -505,7 +512,7 @@ namespace scitt
         HTTP_GET,
         scitt::historical::entry_adapter_with_polling(
           get_entry_receipt, state_cache, is_tx_committed),
-        authn_policy)
+        read_authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
@@ -563,7 +570,7 @@ namespace scitt
         HTTP_GET,
         scitt::historical::entry_adapter(
           get_entry_statement, state_cache, is_tx_committed),
-        authn_policy)
+        read_authn_policy)
         .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
         .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
@@ -698,7 +705,7 @@ namespace scitt
         get_entries_tx_ids_path,
         HTTP_GET,
         ccf::json_adapter(get_entries_tx_ids),
-        authn_policy)
+        read_authn_policy)
         .set_auto_schema<void, GetEntriesTransactionIds::Out>()
         .add_query_parameter<size_t>(
           "from", ccf::endpoints::QueryParamPresence::OptionalParameter)
@@ -710,7 +717,7 @@ namespace scitt
 
       register_service_endpoints(context, *this);
 
-      register_operations_endpoints(context, *this, authn_policy);
+      register_operations_endpoints(context, *this, read_authn_policy);
     }
   };
 } // namespace scitt

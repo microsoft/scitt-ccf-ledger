@@ -106,9 +106,20 @@ namespace scitt
    * This policy is always included in the compile time set of policies, but the
    * `authentication.allow_unauthenticated` boolean service configuration option
    * controls whether it is active. The option is false by default.
+   *
+   * When constructed with is_read_policy=true, the policy also checks
+   * `allowUnauthenticatedReads`, enabling a split auth model where write
+   * endpoints require JWT while read endpoints remain publicly accessible.
    */
   class ConfigurableEmptyAuthnPolicy : public ccf::EmptyAuthnPolicy
   {
+    bool is_read_policy_;
+
+  public:
+    explicit ConfigurableEmptyAuthnPolicy(bool is_read_policy = false) :
+      is_read_policy_(is_read_policy)
+    {}
+
     std::unique_ptr<ccf::AuthnIdentity> authenticate(
       ccf::kv::ReadOnlyTx& tx,
       const std::shared_ptr<ccf::RpcContext>& ctx,
@@ -116,7 +127,14 @@ namespace scitt
     {
       auto handle = tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE);
       auto cfg = handle->get().value_or(Configuration{});
-      if (cfg.authentication.allow_unauthenticated)
+
+      bool allow = cfg.authentication.allow_unauthenticated;
+      if (!allow && is_read_policy_)
+      {
+        allow = cfg.authentication.get_allow_unauthenticated_reads();
+      }
+
+      if (allow)
       {
         return EmptyAuthnPolicy::authenticate(tx, ctx, error_reason);
       }

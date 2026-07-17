@@ -101,6 +101,30 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
 }
 ```
 
+### Per-Endpoint Authentication (Write-Only JWT)
+
+By default, when `allowUnauthenticated` is `false`, all endpoints (reads and writes) require JWT authentication. The optional `allowUnauthenticatedReads` field can be set to decouple read and write authentication:
+
+- When `allowUnauthenticatedReads` is **not set**, it inherits the value of `allowUnauthenticated` (preserving existing behavior).
+- When `allowUnauthenticatedReads` is **true**, read endpoints (`GET /entries/*`, `GET /operations/*`) allow unauthenticated access while write endpoints (`POST /entries`) still require JWT.
+- When `allowUnauthenticatedReads` is **false**, all endpoints require JWT.
+
+Example: require JWT for writes only, reads are open:
+```json
+"authentication": {
+  "allowUnauthenticated": false,
+  "allowUnauthenticatedReads": true,
+  "jwt": {
+    "requiredClaims": {
+      "aud": "https://mst-instance.confidential-ledger.azure.com",
+      "iss": "https://login.microsoftonline.com/{tenant-id}/v2.0"
+    }
+  }
+}
+```
+
+Note: Service endpoints (`/configuration`, `/version`, `/jwks`) are always publicly accessible regardless of authentication settings.
+
 ## Policy object
 
 ### Accepted algorithms
