@@ -69,7 +69,9 @@ def _rfc9162_root(entry: bytes, encoded_proof: bytes) -> bytes:
         or not 0 <= leaf_index < tree_size
     ):
         raise ValueError("invalid inclusion proof position")
-    if not isinstance(path, list) or not path:
+    if not isinstance(path, list):
+        raise ValueError("inclusion proof path must be a list")
+    if not path and tree_size != 1:
         raise ValueError("inclusion proof path must not be empty")
     if any(not isinstance(value, bytes) or len(value) != 32 for value in path):
         raise ValueError("inclusion proof path hashes must be 32 bytes")
