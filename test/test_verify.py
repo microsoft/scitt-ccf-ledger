@@ -332,6 +332,7 @@ class TestVerifyTransparentStatement:
         receipt.phdr = {
             CWTClaims: {CWT_ISS: issuer},
             KID: b"test_kid",
+            395: 2,
         }
         receipt.payload = b""
         receipt._signature = b"fake_sig"
@@ -384,7 +385,10 @@ class TestVerifyTransparentStatement:
     @patch("pyscitt.verify.ccf.cose.verify_receipt")
     def test_returns_none_issuer_when_no_cwt_claims(self, mock_verify_receipt):
         receipt = Sign1Message()
-        receipt.phdr = {KID: b"test_kid"}
+        receipt.phdr = {
+            KID: b"test_kid",
+            395: 2,
+        }
         receipt.payload = b""
         receipt._signature = b"fake_sig"
         receipt_bytes = receipt.encode(tag=True, sign=False)

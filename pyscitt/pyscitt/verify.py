@@ -15,7 +15,7 @@ import httpx
 from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.types import CertificatePublicKeyTypes
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
@@ -30,6 +30,10 @@ from pycose.messages import Sign1Message
 from . import crypto
 from .crypto import CWT_IAT, CWT_ISS, CWTClaims
 
+COSE_HEADER_PARAM_VDS = 395
+VDS_RFC9162_SHA256 = 1
+VDS_CCF = 2
+
 
 class TrustStore(ABC):
     @property
@@ -38,7 +42,7 @@ class TrustStore(ABC):
         pass
 
     @abstractmethod
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
         """
         Look up a service's public key based on the protected headers from a
         receipt. Raises an exception if not matching service is found.
@@ -53,6 +57,99 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
         raise ValueError("signature is invalid")
 
 
+def _rfc9162_root(entry: bytes, encoded_proof: bytes) -> bytes:
+    proof = cbor2.loads(encoded_proof)
+    if not isinstance(proof, list) or len(proof) != 3:
+        raise ValueError("inclusion proof must contain three elements")
+    tree_size, leaf_index, path = proof
+    if (
+        type(tree_size) is not int
+        or tree_size <= 0
+        or type(leaf_index) is not int
+        or not 0 <= leaf_index < tree_size
+    ):
+        raise ValueError("invalid inclusion proof position")
+    if not isinstance(path, list) or not path:
+        raise ValueError("inclusion proof path must not be empty")
+    if any(not isinstance(value, bytes) or len(value) != 32 for value in path):
+        raise ValueError("inclusion proof path hashes must be 32 bytes")
+
+    fn, sn = leaf_index, tree_size - 1
+    root = sha256(b"\x00" + entry).digest()
+    for value in path:
+        if sn == 0:
+            raise ValueError("inclusion proof path is too long")
+        if fn & 1 or fn == sn:
+            root = sha256(b"\x01" + value + root).digest()
+            while fn and not fn & 1:
+                fn >>= 1
+                sn >>= 1
+        else:
+            root = sha256(b"\x01" + root + value).digest()
+        fn >>= 1
+        sn >>= 1
+    if sn != 0:
+        raise ValueError("inclusion proof path is too short")
+    return root
+
+
+def _verify_rfc9162_receipt(
+    receipt: Sign1Message,
+    service_key: PublicKeyTypes,
+    statement: bytes,
+) -> None:
+    vdp = receipt.uhdr.get(396)
+    if not isinstance(vdp, dict) or set(vdp) != {-1}:
+        raise ValueError("receipt vdp must contain only inclusion proofs")
+    proofs = vdp[-1]
+    if not isinstance(proofs, list) or not proofs:
+        raise ValueError("receipt must contain at least one inclusion proof")
+
+    entry = sha256(statement).digest()
+    payload = receipt.payload
+    receipt.key = CoseKey.from_pem_public_key(
+        service_key.public_bytes(
+            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
+        ).decode()
+    )
+    for proof in proofs:
+        if not isinstance(proof, bytes):
+            raise ValueError("receipt inclusion proofs must be byte strings")
+        root = _rfc9162_root(entry, proof)
+        if payload is not None and payload != root:
+            continue
+        receipt.payload = root
+        if receipt.verify_signature():
+            return
+    raise ValueError("receipt signature is invalid")
+
+
+def verify_receipt(
+    receipt: bytes,
+    service_key: PublicKeyTypes,
+    input_signed_statement: bytes,
+) -> None:
+    parsed = Sign1Message.decode(receipt)
+    vds = parsed.phdr.get(COSE_HEADER_PARAM_VDS)
+
+    if type(vds) is not int:
+        raise ValueError(f"unsupported receipt vds: {vds}")
+
+    if vds == VDS_RFC9162_SHA256:
+        _verify_rfc9162_receipt(parsed, service_key, input_signed_statement)
+        return
+
+    if vds == VDS_CCF:
+        ccf.cose.verify_receipt(
+            receipt,
+            service_key,  # type: ignore[arg-type]
+            sha256(input_signed_statement).digest(),
+        )
+        return
+
+    raise ValueError(f"unsupported receipt vds: {vds}")
+
+
 def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
@@ -62,9 +159,7 @@ def verify_transparent_statement(
     receipt_details = []
     for receipt in st.uhdr[crypto.SCITTReceipts]:
         service_key = service_trust_store.get_key(receipt)
-        ccf.cose.verify_receipt(
-            receipt, service_key, sha256(input_signed_statement).digest()
-        )
+        verify_receipt(receipt, service_key, input_signed_statement)
 
         # ccf.cose.verify_receipt should be improved to return full detail from the receipt
         # at which point the following parsing can be removed and the details can be returned directly from the verify_receipt function.
@@ -89,12 +184,13 @@ def verify_transparent_statement(
             inclusion_proofs = uhdr[396].get(-1, [])
             if inclusion_proofs:
                 proof = cbor2.loads(inclusion_proofs[0])
-                leaf = proof.get(1)
-                if leaf and len(leaf) > 1:
-                    ce = leaf[1]
-                    parts = ce.split(":") if isinstance(ce, str) else []
-                    if len(parts) >= 2:
-                        regtxid = parts[1]
+                if isinstance(proof, dict):
+                    leaf = proof.get(1)
+                    if leaf and len(leaf) > 1:
+                        ce = leaf[1]
+                        parts = ce.split(":") if isinstance(ce, str) else []
+                        if len(parts) >= 2:
+                            regtxid = parts[1]
 
         receipt_details.append(
             {
@@ -109,8 +205,8 @@ def verify_transparent_statement(
 
 class StaticTrustStore(TrustStore):
     """
-    A static trust store, based on a list of trusted COSE keys from /.well-known/scitt-keys
-    or DER-encoded service certificates (legacy format).
+    A static trust store based on an explicit key, trusted COSE keys from
+    /.well-known/scitt-keys, or DER-encoded service certificates.
     """
 
     trust_store_keys: dict = {}
@@ -119,8 +215,10 @@ class StaticTrustStore(TrustStore):
         self,
         cose_keys: Optional[list] = None,
         certificates: Optional[list] = None,
+        key: Optional[PublicKeyTypes] = None,
     ):
         self.trust_store_keys = {}
+        self.key = key
 
         # Load keys from COSE_Key_Set (from /.well-known/scitt-keys)
         if cose_keys:
@@ -156,7 +254,7 @@ class StaticTrustStore(TrustStore):
         return {}
 
     @staticmethod
-    def _cose_key_to_cryptography_key(cose_key: CoseKey) -> CertificatePublicKeyTypes:
+    def _cose_key_to_cryptography_key(cose_key: CoseKey) -> PublicKeyTypes:
         """Convert a pycose CoseKey to a cryptography public key."""
         from cryptography.hazmat.primitives.asymmetric.ec import (
             SECP256R1,
@@ -224,7 +322,9 @@ class StaticTrustStore(TrustStore):
             certificates=certificates if certificates else None,
         )
 
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
+        if self.key is not None:
+            return self.key
         parsed = Sign1Message.decode(receipt)
         kid = parsed.phdr[KID]
         return self.trust_store_keys[kid]
@@ -375,7 +475,7 @@ class DynamicTrustStore(TrustStore):
     def services(self):
         raise NotImplementedError()
 
-    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+    def get_key(self, receipt: bytes) -> PublicKeyTypes:
         """
         Look up a service's public key based on the protected headers from a receipt.
         """
