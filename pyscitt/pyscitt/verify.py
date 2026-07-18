@@ -30,6 +30,9 @@ from pycose.messages import Sign1Message
 from . import crypto
 from .crypto import CWT_IAT, CWT_ISS, CWTClaims
 
+COSE_HEADER_PARAM_VDS = 395
+VDS_CCF = 2
+
 
 class TrustStore(ABC):
     @property
