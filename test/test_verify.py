@@ -20,8 +20,10 @@ from pycose.messages import Sign1Message
 
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
+    COSE_HEADER_PARAM_VDS,
     DynamicTrustStore,
     DynamicTrustStoreClient,
+    VDS_CCF,
     verify_transparent_statement,
 )
 
@@ -384,7 +386,10 @@ class TestVerifyTransparentStatement:
     @patch("pyscitt.verify.ccf.cose.verify_receipt")
     def test_returns_none_issuer_when_no_cwt_claims(self, mock_verify_receipt):
         receipt = Sign1Message()
-        receipt.phdr = {KID: b"test_kid"}
+        receipt.phdr = {
+            KID: b"test_kid",
+            COSE_HEADER_PARAM_VDS: VDS_CCF,
+        }
         receipt.payload = b""
         receipt._signature = b"fake_sig"
         receipt_bytes = receipt.encode(tag=True, sign=False)
