@@ -20,6 +20,8 @@ from pycose.messages import Sign1Message
 
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
+    COSE_HEADER_PARAM_VDS,
+    VDS_CCF,
     DynamicTrustStore,
     DynamicTrustStoreClient,
     verify_transparent_statement,
@@ -332,7 +334,7 @@ class TestVerifyTransparentStatement:
         receipt.phdr = {
             CWTClaims: {CWT_ISS: issuer},
             KID: b"test_kid",
-            395: 2,
+            COSE_HEADER_PARAM_VDS: VDS_CCF,
         }
         receipt.payload = b""
         receipt._signature = b"fake_sig"
@@ -387,7 +389,7 @@ class TestVerifyTransparentStatement:
         receipt = Sign1Message()
         receipt.phdr = {
             KID: b"test_kid",
-            395: 2,
+            COSE_HEADER_PARAM_VDS: VDS_CCF,
         }
         receipt.payload = b""
         receipt._signature = b"fake_sig"
