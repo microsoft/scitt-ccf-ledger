@@ -121,7 +121,7 @@ def _verify_rfc9162_receipt(
         receipt.payload = root
         if receipt.verify_signature():
             return
-    raise ValueError("receipt signature is invalid")
+    raise ValueError("receipt proof or signature is invalid")
 
 
 def verify_receipt(

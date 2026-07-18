@@ -28,6 +28,7 @@ STATEMENT = VECTOR_DIR / "statement.cose"
 RECEIPT = VECTOR_DIR / "receipt.cose"
 TRANSPARENT_STATEMENT = VECTOR_DIR / "transparent-statement.cose"
 LOG_KEY = VECTOR_DIR / "log-key.pub"
+TAMPERED_VECTOR_DIR = VECTOR_DIR.parent / "fail-tampered-path"
 
 
 def test_rfc9942_vectors_are_pinned():
@@ -104,15 +105,31 @@ def test_ccf_dispatch_requires_vds2(mock_ccf_verify):
     )
 
 
-def test_rejects_tampered_inclusion_path():
-    parts = _receipt_parts()
-    proof = cbor2.loads(parts[1][396][-1][0])
-    proof[2][0] = bytes([proof[2][0][0] ^ 1]) + proof[2][0][1:]
-    parts[1][396][-1][0] = cbor2.dumps(proof)
+def test_rejects_published_tampered_path():
+    expected = {
+        "statement.cose": "341df0ce74c5d59c84a122a646008caa1a27c709e350c817e98c16237145003a",
+        "receipt.cose": "86cf14037b459454dfe0655ad9a460e8aab9099f77c8b9aaf612ca7724743e1f",
+        "log-key.pub": "582b48b4c5efc94b02f063193e5df5d70f2ce1e7b08645495e1f9826f20bb42a",
+        "transparent-statement.cose": "aac71b1eeecb0cd2760c71a1ff79d11c98b6e44a7fac3bc939e5cf94819ab2a5",
+    }
+    assert {
+        name: hashlib.sha256((TAMPERED_VECTOR_DIR / name).read_bytes()).hexdigest()
+        for name in expected
+    } == expected
 
-    with pytest.raises(ValueError, match="receipt signature is invalid"):
-        verify_receipt(
-            _encode_receipt(parts),
-            load_pem_public_key(LOG_KEY.read_bytes()),
-            STATEMENT.read_bytes(),
+    transparent_path = TAMPERED_VECTOR_DIR / "transparent-statement.cose"
+    transparent_statement = transparent_path.read_bytes()
+
+    assert cbor2.loads(transparent_statement).value[1] == {
+        394: [(TAMPERED_VECTOR_DIR / "receipt.cose").read_bytes()]
+    }
+    assert (
+        strip_uhdr(transparent_statement)
+        == (TAMPERED_VECTOR_DIR / "statement.cose").read_bytes()
+    )
+
+    with pytest.raises(ValueError, match="receipt proof or signature is invalid"):
+        validate_transparent_statement(
+            transparent_path,
+            service_key=TAMPERED_VECTOR_DIR / "log-key.pub",
         )
