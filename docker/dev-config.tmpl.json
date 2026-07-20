@@ -20,6 +20,10 @@
     ]
   },
   "worker_threads": 1,
+  "ledger_signatures": {
+    "tx_count": 5000,
+    "delay": "100ms"
+  },
   "command": {
     "type": "Start",
     "service_certificate_file": "/host/service_cert.pem",

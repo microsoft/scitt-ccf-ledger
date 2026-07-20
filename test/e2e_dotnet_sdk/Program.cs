@@ -368,16 +368,19 @@ class Program
         await Task.WhenAll(tasks);
         stopwatch.Stop();
 
+        int successes = inputFiles.Length - failures;
         double seconds = stopwatch.Elapsed.TotalSeconds;
-        double throughput = seconds > 0 ? inputFiles.Length / seconds : 0;
+        // Base throughput on successful submissions so it stays consistent with
+        // the recorded latency and per-second samples (which only count successes).
+        double throughput = seconds > 0 ? successes / seconds : 0;
         Console.WriteLine(
-            $"Load test complete: {inputFiles.Length} submissions, {failures} failures, " +
-            $"total {seconds:F2}s, throughput {throughput:F2} req/s");
+            $"Load test complete: {inputFiles.Length} submissions, {successes} successes, " +
+            $"{failures} failures, total {seconds:F2}s, throughput {throughput:F2} req/s");
 
         if (parsedArguments.StatsFile is string statsFile)
         {
             WriteLoadStats(
-                statsFile, inputFiles.Length, failures, seconds, throughput,
+                statsFile, inputFiles.Length, successes, failures, seconds, throughput,
                 concurrency, useAsync, latenciesMs, completionsPerSecond);
             Console.WriteLine($"Load stats written to {{{statsFile}}}");
         }
@@ -396,6 +399,7 @@ class Program
     private static void WriteLoadStats(
         string path,
         int submissions,
+        int successes,
         int failures,
         double totalSeconds,
         double throughput,
@@ -419,6 +423,7 @@ class Program
         var stats = new
         {
             submissions,
+            successes,
             failures,
             total_seconds = Math.Round(totalSeconds, 3),
             throughput_rps = Math.Round(throughput, 2),

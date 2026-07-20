@@ -9,9 +9,6 @@ from pathlib import Path
 from test.load_test.docker_monitor import DockerMonitor
 
 import pytest
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import Encoding
 
 from pyscitt import crypto
 from pyscitt.client import Client
@@ -156,23 +153,21 @@ class TestLoad:
             signed_statement = crypto.sign_json_statement(
                 identity, {"foo": "bar", "idx": i}, cwt=True
             )
-            (statements_dir / f"signed_statement{i}.cose").write_bytes(
-                signed_statement
-            )
+            (statements_dir / f"signed_statement{i}.cose").write_bytes(signed_statement)
 
         # Write the service CA certificate so the SDK can trust the endpoint.
+        # get_service_certificate() already returns PEM, so write it as-is to
+        # preserve the full content (including any chain).
         repo_root = Path(__file__).resolve().parent.parent
         project_path = repo_root / "test/e2e_dotnet_sdk/pipeline-dotnet-cts-cli.csproj"
         ca_certificate_path = tmp_path / "service-cert.pem"
-        cacert_pem = client.get_service_certificate()
-        ca_certificate = x509.load_pem_x509_certificate(
-            cacert_pem.encode(), default_backend()
-        )
-        ca_certificate_path.write_bytes(ca_certificate.public_bytes(Encoding.PEM))
+        ca_certificate_path.write_text(client.get_service_certificate())
 
         # Build the project once up front so the load run can use --no-build.
+        # Allow restore here so the test is self-contained when run directly with
+        # pytest (the wrapper script restores separately for warmed CI builds).
         build = subprocess.run(
-            ["dotnet", "build", "--no-restore", str(project_path)],
+            ["dotnet", "build", str(project_path)],
             cwd=repo_root,
             check=False,
             capture_output=True,
@@ -227,9 +222,9 @@ class TestLoad:
                 monitor.save(docker_stats_file)
 
         print(result.stdout)
-        assert result.returncode == 0, (
-            f"dotnet load failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"dotnet load failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
         # Generate charts from the stats produced by the .NET load run.
         chart_cmd = [

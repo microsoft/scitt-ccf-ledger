@@ -101,7 +101,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate charts for the .NET SDK load test stats."
     )
-    parser.add_argument("stats_json", type=Path, help="Path to the .NET load stats JSON")
+    parser.add_argument(
+        "stats_json", type=Path, help="Path to the .NET load stats JSON"
+    )
     parser.add_argument("output_dir", type=Path, help="Directory to write charts to")
     parser.add_argument(
         "--docker-stats",
