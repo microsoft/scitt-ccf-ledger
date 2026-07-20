@@ -58,10 +58,13 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
 
 
 def _rfc9162_root(entry: bytes, encoded_proof: bytes) -> bytes:
+    # https://www.rfc-editor.org/rfc/rfc9162.html#name-verifying-a-tree-head-given
     proof = cbor2.loads(encoded_proof)
     if not isinstance(proof, list) or len(proof) != 3:
         raise ValueError("inclusion proof must contain three elements")
     tree_size, leaf_index, path = proof
+
+    # RFC 9162, Section 2.1.3.2, Step 1: the leaf must be in the tree.
     if (
         type(tree_size) is not int
         or tree_size <= 0
@@ -71,28 +74,38 @@ def _rfc9162_root(entry: bytes, encoded_proof: bytes) -> bytes:
         raise ValueError("invalid inclusion proof position")
     if not isinstance(path, list):
         raise ValueError("inclusion proof path must be a list")
-    if not path and tree_size != 1:
-        raise ValueError("inclusion proof path must not be empty")
-    if any(not isinstance(value, bytes) or len(value) != 32 for value in path):
+    if any(not isinstance(p, bytes) or len(p) != 32 for p in path):
         raise ValueError("inclusion proof path hashes must be 32 bytes")
 
+    # Steps 2 and 3: track the leaf and tree indexes, starting at the leaf hash.
     fn, sn = leaf_index, tree_size - 1
-    root = sha256(b"\x00" + entry).digest()
-    for value in path:
+    r = sha256(b"\x00" + entry).digest()
+
+    # Step 4: combine each missing node with the root computed so far.
+    for p in path:
+        # Step 4(a): reaching the tree root before exhausting the path is invalid.
         if sn == 0:
             raise ValueError("inclusion proof path is too long")
+
+        # Step 4(b): if LSB(fn) is set or fn == sn, put p on the left.
         if fn & 1 or fn == sn:
-            root = sha256(b"\x01" + value + root).digest()
+            r = sha256(b"\x01" + p + r).digest()
+
+            # Step 4(b)(ii): shift until LSB(fn) is set or fn is zero.
             while fn and not fn & 1:
                 fn >>= 1
                 sn >>= 1
         else:
-            root = sha256(b"\x01" + root + value).digest()
+            r = sha256(b"\x01" + r + p).digest()
+
+        # Step 4(c): move both indexes one level toward the root.
         fn >>= 1
         sn >>= 1
+
+    # Step 5: the path is complete only after reaching the tree root.
     if sn != 0:
         raise ValueError("inclusion proof path is too short")
-    return root
+    return r
 
 
 def _verify_rfc9162_receipt(
