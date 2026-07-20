@@ -186,20 +186,20 @@ def verify_transparent_statement(
             issuer = cwt.get(CWT_ISS)
             iat = cwt.get(CWT_IAT)
 
-        # Extract txid from ccf.v1 protected header
         sigtxid = None
-        ccf_v1 = parsed.phdr.get("ccf.v1")
-        if isinstance(ccf_v1, dict):
-            sigtxid = ccf_v1.get("txid")
-
-        # Extract registration txid from internal-evidence in inclusion proof leaf
         regtxid = None
-        uhdr = parsed.uhdr
-        if 396 in uhdr:
-            inclusion_proofs = uhdr[396].get(-1, [])
-            if inclusion_proofs:
-                proof = cbor2.loads(inclusion_proofs[0])
-                if isinstance(proof, dict):
+        if parsed.phdr[COSE_HEADER_PARAM_VDS] == VDS_CCF:
+            # Extract txid from ccf.v1 protected header
+            ccf_v1 = parsed.phdr.get("ccf.v1")
+            if isinstance(ccf_v1, dict):
+                sigtxid = ccf_v1.get("txid")
+
+            # Extract registration txid from internal-evidence in inclusion proof leaf
+            uhdr = parsed.uhdr
+            if 396 in uhdr:
+                inclusion_proofs = uhdr[396].get(-1, [])
+                if inclusion_proofs:
+                    proof = cbor2.loads(inclusion_proofs[0])
                     leaf = proof.get(1)
                     if leaf and len(leaf) > 1:
                         ce = leaf[1]
