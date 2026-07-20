@@ -19,6 +19,7 @@
       "dNSName:localhost"
     ]
   },
+  "worker_threads": 1,
   "command": {
     "type": "Start",
     "service_certificate_file": "/host/service_cert.pem",

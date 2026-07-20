@@ -23,6 +23,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "perf: only run test if performance testing is enabled."
     )
+    config.addinivalue_line(
+        "markers", "dotnet: only run test if .NET SDK testing is enabled."
+    )
     config.addinivalue_line("markers", "bencher: benchmark tests using bencher.")
 
 

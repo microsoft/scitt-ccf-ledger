@@ -195,6 +195,8 @@ Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev
 
 ### Load tests
 
+#### HTTP based
+
 To run load tests, you can use the `load_test.py` script located in the `tests` directory. This script allows you to simulate a high load on the scitt-ccf-ledger application and measure its performance under stress.
 
 ```bash
@@ -203,6 +205,17 @@ DOCKER=1 ./run_functional_tests.sh -m perf -k test_load --enable-perf
 ```
 
 The output will be stored in the `tests/load_test/locust_stats.json` file, and the chart images generated in `tests/load_test/charts`.
+
+#### .NET SDK based
+
+To run the same load through the .NET SDK (single process, concurrent, `waitForCommit`):
+
+```bash
+./docker/build.sh
+DOCKER=1 ENABLE_DOTNET_TESTS=1 ./run_functional_tests.sh -m perf -k test_dotnet_load --enable-perf
+```
+
+The run stats are stored in `tests/load_test/dotnet_load_stats.json` (throughput, latency percentiles, per-second completions), and chart images are generated in `tests/load_test/charts` (`dotnet_throughput.png`, `dotnet_latency.png`, and `dotnet_docker_resources.png` in Docker mode).
 
 ### Address sanitization
 
