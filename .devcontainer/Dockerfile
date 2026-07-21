@@ -17,8 +17,15 @@ RUN tdnf update -y && \
     docker-buildx \
     clang-tools-extra-devel && \
     \
-    # Install the CCF development package
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" -o ccf.rpm && \
+    # Download the CCF development package
+    CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
+    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o ccf.rpm && \
+    \
+    # Verify against the SHA-256 GitHub publishes for the release asset (the API
+    # 'digest' field) instead of a hardcoded per-version hash; fails on mismatch.
+    CCF_RPM_SHA256=$(curl -sSL "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${CCF_VERSION}" | jq -r --arg name "${CCF_RPM}" '.assets[] | select(.name == $name) | .digest | ltrimstr("sha256:")') && \
+    [ -n "${CCF_RPM_SHA256}" ] && \
+    echo "${CCF_RPM_SHA256}  ccf.rpm" | sha256sum -c - && \
     \
     tdnf install -y ./ccf.rpm && \
     rm ./ccf.rpm && \
