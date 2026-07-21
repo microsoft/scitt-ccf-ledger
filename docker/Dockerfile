@@ -26,10 +26,19 @@ ARG SCITT_VERSION_OVERRIDE
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 
-# Install dependencies and CCF development package first for better layer caching
+# Install dependencies and CCF development package first for better layer caching.
+# The CCF RPM is downloaded and verified against the SHA-256 that GitHub publishes
+# for the release asset (the API 'digest' field) before installation; a checksum
+# mismatch fails the build.
 RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git rpm-build && \
-    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm"
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git jq rpm-build && \
+    CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
+    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
+    CCF_RPM_SHA256=$(curl -sSL "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${CCF_VERSION}" | jq -r --arg name "${CCF_RPM}" '.assets[] | select(.name == $name) | .digest | ltrimstr("sha256:")') && \
+    [ -n "${CCF_RPM_SHA256}" ] && \
+    echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
+    rm -f /tmp/ccf.rpm
 
 # Copy the app source code after installing dependencies so that
 # changes to app/ don't invalidate the dependency layer above.
