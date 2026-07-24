@@ -1,7 +1,15 @@
 # pyscitt: Python CLI tools for SCITT CCF Ledger
 
-Tools to sign claims and interact with a SCITT CCF Ledger.
+Tools to interact with a SCITT CCF Ledger and to verify transparent statements.
 
 For more information, please find the `scitt-ccf-ledger` repository at https://github.com/microsoft/scitt-ccf-ledger.
 
 Package sources are available at https://github.com/microsoft/scitt-ccf-ledger/tree/main/pyscitt.
+
+## Installation
+
+```bash
+pip install pyscitt
+```
+
+
