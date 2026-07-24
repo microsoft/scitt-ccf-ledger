@@ -103,11 +103,20 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
 
 ### Per-Endpoint Authentication (Write-Only JWT)
 
-By default, when `allowUnauthenticated` is `false`, all endpoints (reads and writes) require JWT authentication. The optional `allowUnauthenticatedReads` field can be set to decouple read and write authentication:
+The optional `allowUnauthenticatedReads` field can widen unauthenticated access to selected SCITT retrieval endpoints while keeping statement registration protected by JWT. It does not override `allowUnauthenticated` when the service is already configured to allow unauthenticated access.
 
-- When `allowUnauthenticatedReads` is **not set**, it inherits the value of `allowUnauthenticated` (preserving existing behavior).
-- When `allowUnauthenticatedReads` is **true**, read endpoints (`GET /entries/*`, `GET /operations/*`) allow unauthenticated access while write endpoints (`POST /entries`) still require JWT.
-- When `allowUnauthenticatedReads` is **false**, all endpoints require JWT.
+| `allowUnauthenticated` | `allowUnauthenticatedReads` | Statement registration | Selected retrieval endpoints |
+| --- | --- | --- | --- |
+| `false` | not set or `false` | JWT required | JWT required |
+| `false` | `true` | JWT required | Unauthenticated access allowed |
+| `true` | any value | Unauthenticated access allowed | Unauthenticated access allowed |
+
+The selected retrieval endpoints are:
+
+- `GET /entries/{txid}`
+- `GET /entries/{txid}/statement`
+- `GET /entries/txIds`
+- `GET /operations/{txid}`
 
 Example: require JWT for writes only, reads are open:
 ```json
@@ -123,7 +132,7 @@ Example: require JWT for writes only, reads are open:
 }
 ```
 
-Note: Service endpoints (`/configuration`, `/version`, `/jwks`) are always publicly accessible regardless of authentication settings.
+Service metadata endpoints remain publicly accessible regardless of authentication settings. These include `/configuration`, `/version`, `/jwks`, `/.well-known/scitt-keys`, `/.well-known/scitt-keys/{kid_value}`, and `/.well-known/transparency-configuration`.
 
 ## Policy object
 

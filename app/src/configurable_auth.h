@@ -108,8 +108,8 @@ namespace scitt
    * controls whether it is active. The option is false by default.
    *
    * When constructed with is_read_policy=true, the policy also checks
-   * `allowUnauthenticatedReads`, enabling a split auth model where write
-   * endpoints require JWT while read endpoints remain publicly accessible.
+   * `allowUnauthenticatedReads`, enabling selected SCITT retrieval endpoints
+   * to allow unauthenticated access while write endpoints require JWT.
    */
   class ConfigurableEmptyAuthnPolicy : public ccf::EmptyAuthnPolicy
   {

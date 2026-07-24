@@ -231,8 +231,8 @@ namespace scitt
         std::make_shared<ConfigurableJwtAuthnPolicy>(),
       };
 
-      // Read endpoints use a read-aware policy that respects
-      // allowUnauthenticatedReads, enabling write-only JWT enforcement.
+      // Selected SCITT retrieval endpoints use a read-aware policy that
+      // respects allowUnauthenticatedReads.
       const ccf::AuthnPolicies read_authn_policy = {
         std::make_shared<ConfigurableEmptyAuthnPolicy>(true),
         std::make_shared<ConfigurableJwtAuthnPolicy>(),

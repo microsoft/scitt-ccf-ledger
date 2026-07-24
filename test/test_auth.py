@@ -10,6 +10,47 @@ from .infra.assertions import service_error
 from .infra.jwt_issuer import JwtIssuer
 
 
+def configure_authentication(
+    configure_service,
+    *,
+    allow_unauthenticated: bool,
+    required_claims=None,
+    allow_unauthenticated_reads=None,
+):
+    auth_config = {
+        "allowUnauthenticated": allow_unauthenticated,
+        "jwt": {"requiredClaims": required_claims},
+    }
+    if allow_unauthenticated_reads is not None:
+        auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
+    configure_service(
+        {
+            "authentication": auth_config,
+            "policy": {"policyScript": "export function apply(phdr) { return true; }"},
+        }
+    )
+
+
+def application_read_requests(client: Client, tx: str):
+    return {
+        "entry receipt": lambda: client.get_receipt(tx),
+        "transparent statement": lambda: client.get_transparent_statement(tx),
+        "transaction ID enumeration": lambda: client.get("/entries/txIds"),
+        "operation status": lambda: client.get(f"/operations/{tx}"),
+    }
+
+
+def assert_application_reads_succeed(client: Client, tx: str):
+    for request in application_read_requests(client, tx).values():
+        request()
+
+
+def assert_application_reads_require_authentication(client: Client, tx: str):
+    for request in application_read_requests(client, tx).values():
+        with service_error("InvalidAuthenticationInfo"):
+            request()
+
+
 class TestAuthentication:
     @pytest.fixture(scope="class")
     def signed_statement(self, cert_authority):
@@ -30,26 +71,8 @@ class TestAuthentication:
 
     @pytest.fixture
     def setup(self, configure_service):
-        def f(
-            *,
-            allow_unauthenticated: bool,
-            required_claims=None,
-            allow_unauthenticated_reads=None,
-        ):
-            auth_config = {
-                "allowUnauthenticated": allow_unauthenticated,
-                "jwt": {"requiredClaims": required_claims},
-            }
-            if allow_unauthenticated_reads is not None:
-                auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
-            configure_service(
-                {
-                    "authentication": auth_config,
-                    "policy": {
-                        "policyScript": "export function apply(phdr) { return true; }"
-                    },
-                }
-            )
+        def f(**kwargs):
+            configure_authentication(configure_service, **kwargs)
 
         return f
 
@@ -134,26 +157,8 @@ class TestPerEndpointAuthentication:
 
     @pytest.fixture
     def setup(self, configure_service):
-        def f(
-            *,
-            allow_unauthenticated: bool,
-            required_claims=None,
-            allow_unauthenticated_reads=None,
-        ):
-            auth_config = {
-                "allowUnauthenticated": allow_unauthenticated,
-                "jwt": {"requiredClaims": required_claims},
-            }
-            if allow_unauthenticated_reads is not None:
-                auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
-            configure_service(
-                {
-                    "authentication": auth_config,
-                    "policy": {
-                        "policyScript": "export function apply(phdr) { return true; }"
-                    },
-                }
-            )
+        def f(**kwargs):
+            configure_authentication(configure_service, **kwargs)
 
         return f
 
@@ -179,12 +184,13 @@ class TestPerEndpointAuthentication:
             ).submit_signed_statement_and_wait(signed_statement)
         ).tx
 
-        # Read without JWT should also fail (inherits allowUnauthenticated=false)
-        with service_error("InvalidAuthenticationInfo"):
-            client.get_receipt(tx)
+        # Reads without JWT should also fail (inherits allowUnauthenticated=false)
+        assert_application_reads_require_authentication(client, tx)
 
-        # Read with JWT should succeed
-        client.replace(auth_token=valid_issuer.create_token()).get_receipt(tx)
+        # Reads with JWT should succeed
+        assert_application_reads_succeed(
+            client.replace(auth_token=valid_issuer.create_token()), tx
+        )
 
     def test_unauthenticated_reads_with_jwt_writes(
         self, setup, client: Client, signed_statement, valid_issuer
@@ -210,15 +216,15 @@ class TestPerEndpointAuthentication:
             ).submit_signed_statement_and_wait(signed_statement)
         ).tx
 
-        # Read without JWT should succeed (allowUnauthenticatedReads=true)
-        client.get_receipt(tx)
+        # Selected reads should succeed without JWT.
+        assert_application_reads_succeed(client, tx)
 
-    def test_all_endpoints_require_jwt(
+    def test_application_endpoints_require_jwt(
         self, setup, client: Client, signed_statement, valid_issuer
     ):
         """
         When both allowUnauthenticated and allowUnauthenticatedReads are false,
-        all endpoints require JWT.
+        statement registration and selected retrieval endpoints require JWT.
         """
         setup(
             allow_unauthenticated=False,
@@ -237,12 +243,13 @@ class TestPerEndpointAuthentication:
             ).submit_signed_statement_and_wait(signed_statement)
         ).tx
 
-        # Read without JWT should fail
-        with service_error("InvalidAuthenticationInfo"):
-            client.get_receipt(tx)
+        # Reads without JWT should fail
+        assert_application_reads_require_authentication(client, tx)
 
-        # Read with JWT should succeed
-        client.replace(auth_token=valid_issuer.create_token()).get_receipt(tx)
+        # Reads with JWT should succeed
+        assert_application_reads_succeed(
+            client.replace(auth_token=valid_issuer.create_token()), tx
+        )
 
     def test_allow_unauthenticated_overrides_reads(
         self, setup, client: Client, signed_statement
@@ -256,9 +263,9 @@ class TestPerEndpointAuthentication:
             allow_unauthenticated_reads=False,
         )
 
-        # Both write and read should succeed without JWT
+        # Both writes and selected reads should succeed without JWT.
         tx = client.submit_signed_statement_and_wait(signed_statement).tx
-        client.get_receipt(tx)
+        assert_application_reads_succeed(client, tx)
 
     def test_backward_compatibility_no_new_field(
         self, setup, client: Client, signed_statement, valid_issuer
@@ -281,6 +288,11 @@ class TestPerEndpointAuthentication:
             ).submit_signed_statement_and_wait(signed_statement)
         ).tx
 
-        # Read without JWT should also fail (backward compat)
-        with service_error("InvalidAuthenticationInfo"):
-            client.get_receipt(tx)
+        # Reads without JWT should also fail (backward compat)
+        assert_application_reads_require_authentication(client, tx)
+
+        # Reads with the configured JWT should succeed.
+        assert_application_reads_succeed(
+            client.replace(auth_token=valid_issuer.create_token({"aud": "compat"})),
+            tx,
+        )
