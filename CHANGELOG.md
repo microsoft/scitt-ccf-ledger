@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.19.0]
+### Changes
+- 9b81478 Read Endpoints JWT policy enforcement configurable with allowUnauthenticatedReads flag (#420)
+- 44a1ec3 use ccf dep (min 7.0.6) with expanded range of allowed crypto library versions (#431)
+- 0ffd897 Bump azurelinux/base/core from 3.0.20260711 to 3.0.20260722 in /docker (#430)
+- 6820111 Verify CCF RPM checksum before install (AB#38023378) (#429)
+- 8268ffb Adds dotnet sdk based load test (#428)
+
 ## [0.18.0]
 ### Changes
 - 09b5c99 Update CCF to v7 and align API with SCRAPI v09 (#390)
