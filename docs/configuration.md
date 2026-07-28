@@ -101,6 +101,39 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
 }
 ```
 
+### Per-Endpoint Authentication (Write-Only JWT)
+
+The optional `allowUnauthenticatedReads` field can widen unauthenticated access to selected SCITT retrieval endpoints while keeping statement registration protected by JWT. It does not override `allowUnauthenticated` when the service is already configured to allow unauthenticated access.
+
+| `allowUnauthenticated` | `allowUnauthenticatedReads` | Statement registration | Selected retrieval endpoints |
+| --- | --- | --- | --- |
+| `false` | not set or `false` | JWT required | JWT required |
+| `false` | `true` | JWT required | Unauthenticated access allowed |
+| `true` | any value | Unauthenticated access allowed | Unauthenticated access allowed |
+
+The selected retrieval endpoints are:
+
+- `GET /entries/{txid}`
+- `GET /entries/{txid}/statement`
+- `GET /entries/txIds`
+- `GET /operations/{txid}`
+
+Example: require JWT for writes only, reads are open:
+```json
+"authentication": {
+  "allowUnauthenticated": false,
+  "allowUnauthenticatedReads": true,
+  "jwt": {
+    "requiredClaims": {
+      "aud": "https://mst-instance.confidential-ledger.azure.com",
+      "iss": "https://login.microsoftonline.com/{tenant-id}/v2.0"
+    }
+  }
+}
+```
+
+Service metadata endpoints remain publicly accessible regardless of authentication settings. These include `/configuration`, `/version`, `/jwks`, `/.well-known/scitt-keys`, `/.well-known/scitt-keys/{kid_value}`, and `/.well-known/transparency-configuration`.
+
 ## Policy object
 
 ### Accepted algorithms

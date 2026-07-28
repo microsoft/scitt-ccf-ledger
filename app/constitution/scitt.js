@@ -25,6 +25,7 @@ actions.set("set_scitt_configuration",
       checkType(args.configuration.authentication, "object?", "configuration.authentication");
       if (args.configuration.authentication) {
         checkType(args.configuration.authentication.allowUnauthenticated, "boolean?", "configuration.authentication.allowUnauthenticated");
+        checkType(args.configuration.authentication.allowUnauthenticatedReads, "boolean?", "configuration.authentication.allowUnauthenticatedReads");
         checkType(args.configuration.authentication.jwt, "object?", "configuration.authentication.jwt");
         if (args.configuration.authentication.jwt) {
           checkType(args.configuration.authentication.jwt.requiredClaims, "object?", "configuration.authentication.jwt.requiredClaims");
