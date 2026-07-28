@@ -447,3 +447,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.17.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.0
 [0.17.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.1
 [0.18.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.18.0
+[0.19.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.19.0
