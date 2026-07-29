@@ -2,7 +2,12 @@
 
 The ledger application is running in a trusted execution environment and has a measurement associated with it which does not change. The goal is to reproduce the same measured value from the source code to ensure the code can be trusted, transparent and auditable.
 
-The assumption here is that the original build was done using a Docker.
+There are two related checks:
+
+1. Authenticate the deployed image layers against the ledger security policy.
+2. Rebuild the image from source and compare the rebuilt layers with the authenticated layers.
+
+The first check can be performed for any accessible historical image. The second check requires all build inputs to be deterministic or preserved. A source commit and Dockerfile alone are not sufficient when generated files contain timestamps, database state, or order that depends on the build host.
 
 ## Prerequisites
 
@@ -20,18 +25,31 @@ You need a couple pieces of information to begin with:
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/node/quotes > node-quotes.json
     ```
 
-- Source code version which was used to build the application, usually found in `https://<LEDGER-URL>/app/version`. If `app/version` is ambiguous then check the build logs of the Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
+- Image version, usually found in `https://<LEDGER-URL>/app/version`.
 
     ```sh
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".version"
     "0.12.3-0-gaaaaaaa"
     ```
 
+  Treat this value as the image version, not necessarily as an unambiguous source revision. Official image labels may identify the wrapper pipeline repository rather than the SCITT source repository. Obtain the resolved SCITT commit from the pipeline checkout or build record.
+
 - Security policy used to verify the container image ([ccf docs](https://microsoft.github.io/CCF/main/governance/gov_api_schemas/2024-07-01.html#get--gov-service-join-policy)), it will contain image layers, e.g.:
 
     ```sh
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/gov/service/join-policy?api-version=2024-07-01 > service-join-policy.json
     ```
+
+- The original build record. Preserve or obtain:
+
+  - the resolved SCITT source commit and image tag;
+  - the complete Docker command and build context;
+  - the Docker Engine and BuildKit versions;
+  - the base image reference and digest;
+  - source file modes and modification times, or the build's `SOURCE_DATE_EPOCH`;
+  - the original image digest and, when available, the saved image tarball.
+
+  These values should be published as release artifacts for future builds.
 
 ### Extract measurements from the report
 
@@ -85,11 +103,23 @@ $ curl -s -LO https://openpolicyagent.org/downloads/v1.1.0/opa_linux_amd64_stati
 $ chmod 755 opa_linux_amd64_static
 $ ./opa_linux_amd64_static parse ccepolicy.rego -f json > ccepolicy.json
 
-# jq find the containers rule and extract layers of each container
-$ cat ccepolicy.json | jq '[ .rules[] | select(.head.name == "containers") | .head.value.value[].value[] | select(.[].value == "layers") | .[1].value | map(.value) ]' > containerlayers.json
+# Preserve container names while extracting their layers.
+$ jq '[ .rules[] |
+    select(.head.name == "containers") |
+    .head.value.value[] |
+    (.value | map({key: .[0].value, value: .[1]}) | from_entries) |
+    {name: .name.value, layers: [.layers.value[].value]}
+  ]' ccepolicy.json > containerlayers.json
 ```
 
-`containerlayers.json` should contain layers of all containers, our application and a `pause` container with a single layer.
+`containerlayers.json` should contain the names and layers of all containers, including the SCITT application and a `pause` container. Inspect it, identify the application container name for the deployment, and select it rather than assuming it is the first entry:
+
+```sh
+$ jq . containerlayers.json
+$ jq -r '.[] | select(.name == "<APPLICATION-CONTAINER-NAME>") | .layers[]' containerlayers.json > expected-layers.txt
+```
+
+The `name` field is policy-generator and deployment dependent. Older policies may omit it or use a different identifier. If it is absent, inspect the policy and select the application entry using the available identity fields or its position; verify that `expected-layers.txt` is not empty before continuing.
 
 **Note:** image layers in the security policy use [dmverity hashes](https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html), hence you will need to convert the built container image before comparison, see [`microsoft/integrity-vhd` CLI](https://github.com/microsoft/integrity-vhd/tree/main/cmd/dmverity-vhd).
 
@@ -111,43 +141,84 @@ Now it is clear that the contents of the policy (image layers) can be trusted in
 
 ### 2. Build container and compare layers
 
-- Using the source code version that was obtained above, i.e. `"0.12.3-0-gaaaaaaa"`, clone the repository locally. The version is a long format [git describe output](https://git-scm.com/docs/git-describe):
+First, if the original image is accessible, compute its dmverity hashes and compare them with `expected-layers.txt`. This authenticates the deployed image independently of whether a historical rebuild is possible.
 
-    ```sh
-    $ git clone --depth 1 --branch 0.12.3 git@github.com:microsoft/scitt-ccf-ledger.git toreproduce
-    $ cd toreproduce
-    ```
-- Identify the expected CCF build image version and base image by inspecting the Dockerfile used for building the binary:
+Use a recent `dmverity-vhd` version that supports the OCI image layout emitted by current Docker versions. Record the exact `integrity-vhd` commit used:
 
-    ```sh
-    $ cat docker/Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=7.0.10
+```sh
+$ git clone --depth 1 https://github.com/microsoft/integrity-vhd.git
+$ git -C integrity-vhd checkout a63cb455d8cab7a3441d1c0cb10dac4d658e20ce
+$ git -C integrity-vhd rev-parse HEAD
+$ go build -C integrity-vhd -o ../dmverity-vhd ./cmd/dmverity-vhd
+$ docker pull <ORIGINAL-IMAGE>
+$ ./dmverity-vhd --docker roothash -i <ORIGINAL-IMAGE> > original-roothash.json
+$ jq -r '.layers[]' original-roothash.json > original-layers.txt
+$ diff -u expected-layers.txt original-layers.txt
+```
 
-    $ cat docker/Dockerfile | grep BASE_IMAGE=
-    ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250402
-    ```
-- Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
+Older `dmverity-vhd` releases may report missing hashes when reading a modern OCI-formatted `docker save` tarball. Prefer `--docker` with a compatible version, or use a tarball only after confirming that the tool supports its layout.
 
-    ```sh
-    $ export CCF_VERSION="7.0.10"
-    $ export BASE_IMAGE="mcr.microsoft.com/azurelinux/base/core:3.0.20250402"
-    $ docker run -it --rm \
-        -w /__w/1/s -v $(pwd):/__w/1/s \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        ${BASE_IMAGE} git config --global --add safe.directory "*" && SAVE_IMAGE_PATH=image.tar ./docker/build.sh
-    ```
-- Convert saved image layers with dmverity cli
+To rebuild, check out the resolved SCITT commit from the build record:
 
-    ```sh
-    $ curl -LO https://github.com/microsoft/integrity-vhd/releases/download/v1.4/dmverity-vhd
-    $ chmod +x dmverity-vhd
-    $ ./dmverity-vhd --tarball ./image.tar roothash -i ignore
-    Layer 0 root hash: 3f61e43c03c18bda3c34c47a15d4025f4d4f2166e6db4c70218c39e8da8ef8da
-    Layer 1 root hash: 444465dedcbb724d19ec6ffcb642ba830ea98137e26b7d39eb7fd65b1b9a5223
-    Layer 2 root hash: f4132181247193a0a6c34c15ba625518dffefb639eb4017bb32450e0c6951094
-    ...
-    ```
-- Check if the layers from `containerlayers.json` and the output above match.
+```sh
+$ git clone https://github.com/microsoft/scitt-ccf-ledger.git source
+$ git -C source checkout <SCITT-COMMIT>
+```
+
+Official OneBranch builds copy the checked-out sources into an `artifacts` build context and invoke the Docker task with BuildKit, cache disabled, and a version override. Reproduce the command recorded in the build log. A representative command is:
+
+```sh
+$ export IMAGE_TAG="<APP-VERSION>"
+$ export IMAGE="scitt-reproduction:${IMAGE_TAG}"
+$ export ARTIFACTS="$(pwd)/artifacts"
+$ mkdir -p "${ARTIFACTS}"
+$ (cd source && tar --exclude=env -cf - .) | tar -xf - -C "${ARTIFACTS}"
+
+$ DOCKER_BUILDKIT=1 docker build \
+    --pull \
+    --no-cache \
+    --force-rm \
+    -f "${ARTIFACTS}/docker/Dockerfile" \
+    --build-arg SCITT_VERSION_OVERRIDE="${IMAGE_TAG}" \
+    -t "${IMAGE}" \
+    "${ARTIFACTS}"
+```
+
+The absolute build-context path, such as `/mnt/vss/_work/docker/artifacts`, is normally not stored in layers copied by this Dockerfile. The context's contents, modes, modification times, ignore rules, and relative paths do affect the result. Mounting the context at the path from the log is useful for faithfully replaying the command, but does not replace preserving its metadata.
+
+Do not use `docker/build.sh` to reproduce an official image unless the build log shows that it was used. That script derives the version with `git describe` and does not include all flags or labels added by the official Docker task.
+
+Compute and compare the rebuilt hashes:
+
+```sh
+$ ./dmverity-vhd --docker roothash -i "${IMAGE}" > rebuilt-roothash.json
+$ jq -r '.layers[]' rebuilt-roothash.json > rebuilt-layers.txt
+$ diff -u expected-layers.txt rebuilt-layers.txt
+```
+
+Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.
+
+#### Historical build limitations
+
+Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone. The current image build has included:
+
+- source checkout modes and modification times in `COPY` layers;
+- build timestamps in RPM headers and static archive members;
+- generated trust stores whose serialization order can depend on the build host filesystem;
+- RPM, TDNF, `ldconfig`, and SQLite state generated during package installation.
+
+Changing only the source mount path does not fix these differences. Replaying the historical wall clock can recover some layers, but host-dependent ordering and database state are not fully described by the build log. Do not silently treat a partial layer match as successful reproduction.
+
+#### Requirements for reproducible future releases
+
+For future images to be independently reproducible:
+
+1. Derive and publish a stable `SOURCE_DATE_EPOCH`, normally from the resolved source commit.
+2. Normalize file modes and modification times in every emitted layer.
+3. Build RPMs and static archives with deterministic timestamps and ordering.
+4. Canonicalize generated trust stores and avoid or canonicalize mutable package-manager, linker-cache, and SQLite state.
+5. Publish the resolved source commit, build-context archive, Dockerfile digest, Docker Engine and BuildKit versions, complete build command, base image digest, image digest, and dmverity hashes.
+6. Rebuild on a separate clean worker and compare all dmverity layers before publishing the release.
 
 ### 3. Verify UVM
 
