@@ -222,7 +222,7 @@ For future images to be independently reproducible:
 
 #### Continuous reproducibility check
 
-The `Docker reproducibility` GitHub Actions workflow creates one build-context archive from the checked-out commit. It normalizes path order, ownership, modes, and modification times using `SOURCE_DATE_EPOCH`, which is the source commit timestamp. Two clean GitHub-hosted jobs download that same archive and build the canonical `docker/Dockerfile` independently without shared caches. A final job compares the complete Docker image IDs and fails if they differ.
+The `Docker reproducibility` GitHub Actions workflow creates one build-context archive from the checked-out commit. It normalizes path order, ownership, modes, and modification times using `SOURCE_DATE_EPOCH`, which is the source commit timestamp. Two clean GitHub-hosted jobs download that same archive and build the canonical `docker/Dockerfile` independently without shared caches or run-specific BuildKit provenance. A final job compares the complete Docker image IDs and fails if they differ.
 
 This gate detects nondeterminism in both filesystem layers and image configuration. It does not replace comparing release dmverity layer hashes with the authenticated security policy.
 

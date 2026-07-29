@@ -104,6 +104,7 @@ jobs:
             --pull \
             --no-cache \
             --force-rm \
+            --provenance=false \
             --iidfile image-id.txt \
             --file context/docker/Dockerfile \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
