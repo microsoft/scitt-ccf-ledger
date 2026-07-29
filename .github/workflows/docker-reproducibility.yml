@@ -1,0 +1,156 @@
+name: "Docker reproducibility"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-context:
+    name: Prepare deterministic build context
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create deterministic build context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
+          context_dir="${RUNNER_TEMP}/docker-context"
+
+          mkdir -p "${context_dir}"
+          git checkout-index --all --prefix="${context_dir}/"
+          tar \
+            --create \
+            --file=docker-context.tar \
+            --sort=name \
+            --format=posix \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --mtime="@${SOURCE_DATE_EPOCH}" \
+            --mode='a-s,u+rwX,go+rX,go-w' \
+            --pax-option=delete=atime,delete=ctime \
+            --directory="${context_dir}" \
+            .
+
+          {
+            echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
+            echo "SCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE}"
+          } > build-metadata.env
+          sha256sum docker-context.tar > docker-context.tar.sha256
+
+      - name: Upload deterministic build context
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-context
+          path: |
+            docker-context.tar
+            docker-context.tar.sha256
+            build-metadata.env
+          if-no-files-found: error
+          retention-days: 1
+
+  build-image:
+    name: Build image (${{ matrix.build }})
+    needs: prepare-context
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - one
+          - two
+    steps:
+      - name: Download deterministic build context
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-build-context
+          path: repro-input
+
+      - name: Build image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd repro-input
+          sha256sum --check docker-context.tar.sha256
+          set -a
+          source build-metadata.env
+          set +a
+
+          mkdir context
+          tar --extract --file=docker-context.tar --directory=context
+
+          DOCKER_BUILDKIT=1 docker build \
+            --platform linux/amd64 \
+            --pull \
+            --no-cache \
+            --force-rm \
+            --iidfile image-id.txt \
+            --file context/docker/Dockerfile \
+            --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
+            --build-arg SCITT_VERSION_OVERRIDE="${SCITT_VERSION_OVERRIDE}" \
+            --tag "scitt-reproducibility:${{ matrix.build }}" \
+            context
+
+          printf '%s' "$(
+            docker image inspect \
+              --format '{{.Id}}' \
+              "scitt-reproducibility:${{ matrix.build }}"
+          )" > inspected-image-id.txt
+          cmp image-id.txt inspected-image-id.txt
+
+      - name: Upload image ID
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-id-${{ matrix.build }}
+          path: repro-input/image-id.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  compare-images:
+    name: Compare image IDs
+    needs: build-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download image IDs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: docker-image-id-*
+          path: image-ids
+
+      - name: Compare image IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          first=image-ids/docker-image-id-one/image-id.txt
+          second=image-ids/docker-image-id-two/image-id.txt
+
+          echo "Build one image ID: $(cat "${first}")"
+          echo "Build two image ID: $(cat "${second}")"
+
+          if ! cmp --silent "${first}" "${second}"; then
+            echo "::error::The Docker image is not reproducible: independently built image IDs differ."
+            exit 1
+          fi
+
+          echo "Docker image is reproducible: matching image ID $(cat "${first}")"
