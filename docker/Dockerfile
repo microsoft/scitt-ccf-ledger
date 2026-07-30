@@ -1,4 +1,5 @@
 ARG CCF_VERSION="7.0.10"
+ARG CCF_RPM_SHA256="4c7f31109aba8893015f4466071d5d964f7117ae0233dd074c96e47eadafe1bc"
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
@@ -25,6 +26,7 @@ FROM base AS builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 ARG SOURCE_DATE_EPOCH=0
+ARG CCF_RPM_SHA256
 
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
@@ -37,7 +39,6 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git jq rpm-build && \
     CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
-    CCF_RPM_SHA256=$(curl -sSL "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${CCF_VERSION}" | jq -r --arg name "${CCF_RPM}" '.assets[] | select(.name == $name) | .digest | ltrimstr("sha256:")') && \
     [ -n "${CCF_RPM_SHA256}" ] && \
     echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
