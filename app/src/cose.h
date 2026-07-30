@@ -370,7 +370,7 @@ namespace scitt::cose
         // byte string, not an array.
         // But other implementations mistakenly serialise single certs as bstrs
         // in arrays, so we are not strict here.
-        SCITT_INFO("Single cert found in x5chain array in COSE header.");
+        SCITT_DEBUG("Single cert found in x5chain array in COSE header.");
       }
     }
     else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
@@ -379,7 +379,7 @@ namespace scitt::cose
     }
     else
     {
-      SCITT_FAIL("Type: {}", x5chain.uDataType);
+      SCITT_DEBUG("Unsupported x5chain value type: {}", x5chain.uDataType);
       throw COSEDecodeError(
         "Value type of x5chain in COSE header is not array or byte "
         "string.");

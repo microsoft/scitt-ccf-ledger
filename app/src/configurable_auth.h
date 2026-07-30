@@ -86,15 +86,15 @@ namespace scitt
     static void log_auth_error(
       const std::shared_ptr<ccf::RpcContext>& ctx, std::string& error_reason)
     {
-      // CCF returns any errors in the auth policy with a 401 status
+      // Authentication runs before the tracing adapter creates a server
+      // request ID, so emit a self-contained audit record using the optional
+      // client request ID. CCF returns all auth policy errors with status 401.
       CCF_APP_INFO(
-        "ClientRequestId={} Verb={} URL={} Status=401",
+        "ClientRequestId={} Verb={} URL={} Status=401 "
+        "Code=InvalidAuthenticationInfo Reason={}",
         ctx->get_request_header("x-ms-client-request-id").value_or(""),
         ctx->get_request_verb().c_str(),
-        ctx->get_request_url());
-      CCF_APP_INFO(
-        "ClientRequestId={} Code=InvalidAuthenticationInfo {}",
-        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        ctx->get_request_url(),
         error_reason);
     }
   };
