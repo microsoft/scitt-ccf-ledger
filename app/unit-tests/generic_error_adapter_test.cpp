@@ -35,6 +35,43 @@ namespace
 
   using EndpointFunction = std::function<void(MockContext& args)>;
 
+  class CapturingLogger : public ccf::logger::AbstractLogger
+  {
+  public:
+    std::vector<ccf::LoggerLevel> levels;
+
+    void write(const ccf::logger::LogLine& line) override
+    {
+      levels.push_back(line.log_level);
+    }
+  };
+
+  class ScopedLogger
+  {
+  private:
+    ccf::LoggerLevel previous_level;
+    std::vector<std::unique_ptr<ccf::logger::AbstractLogger>> previous_loggers;
+
+  public:
+    CapturingLogger* logger;
+
+    ScopedLogger() :
+      previous_level(ccf::logger::config::level()),
+      previous_loggers(std::move(ccf::logger::config::loggers()))
+    {
+      ccf::logger::config::level() = ccf::LoggerLevel::TRACE;
+      auto capturing_logger = std::make_unique<CapturingLogger>();
+      logger = capturing_logger.get();
+      ccf::logger::config::loggers().emplace_back(std::move(capturing_logger));
+    }
+
+    ~ScopedLogger()
+    {
+      ccf::logger::config::loggers() = std::move(previous_loggers);
+      ccf::logger::config::level() = previous_level;
+    }
+  };
+
   // Test function that throws an HTTPError
   void test_function(MockContext& ctx)
   {
@@ -42,11 +79,28 @@ namespace
     throw BadRequestCborError("BadRequest", "This is a bad request");
   }
 
+  void test_unhandled_exception(MockContext& ctx)
+  {
+    (void)ctx;
+    throw std::runtime_error("Unexpected failure");
+  }
+
+  void test_policy_error(MockContext& ctx)
+  {
+    (void)ctx;
+    throw BadRequestCborError(errors::PolicyError, "Invalid configured policy");
+  }
+
   // Unit test for generic_error_adapter
   TEST(GenericErrorAdapterTest, HandlesHTTPError)
   {
+    ScopedLogger logs;
+    std::optional<std::string> error_code;
     auto adapted_function =
-      generic_error_adapter<EndpointFunction, MockContext>(test_function);
+      generic_error_adapter<EndpointFunction, MockContext>(
+        test_function, [&error_code](MockContext&, const std::string& code) {
+          error_code = code;
+        });
 
     MockContext ctx;
 
@@ -82,6 +136,52 @@ namespace
       });
 
     adapted_function(ctx);
+    EXPECT_EQ(error_code, "BadRequest");
+    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::DEBUG));
+  }
+
+  TEST(GenericErrorAdapterTest, HandlesUnhandledException)
+  {
+    ScopedLogger logs;
+    std::optional<std::string> error_code;
+    auto adapted_function =
+      generic_error_adapter<EndpointFunction, MockContext>(
+        test_unhandled_exception,
+        [&error_code](MockContext&, const std::string& code) {
+          error_code = code;
+        });
+
+    MockContext ctx;
+
+    EXPECT_CALL(
+      *ctx.rpc_ctx, set_response_status(HTTP_STATUS_INTERNAL_SERVER_ERROR));
+    EXPECT_CALL(
+      *ctx.rpc_ctx,
+      set_response_header(
+        ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE));
+    EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_));
+
+    adapted_function(ctx);
+    EXPECT_EQ(error_code, errors::InternalError);
+    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::FAIL));
+  }
+
+  TEST(GenericErrorAdapterTest, LogsPolicyErrorAsFailure)
+  {
+    ScopedLogger logs;
+    auto adapted_function =
+      generic_error_adapter<EndpointFunction, MockContext>(test_policy_error);
+    MockContext ctx;
+
+    EXPECT_CALL(*ctx.rpc_ctx, set_response_status(HTTP_STATUS_BAD_REQUEST));
+    EXPECT_CALL(
+      *ctx.rpc_ctx,
+      set_response_header(
+        ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE));
+    EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_));
+
+    adapted_function(ctx);
+    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::FAIL));
   }
 
 }
