@@ -75,6 +75,7 @@ ARG SOURCE_DATE_EPOCH=0
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
+    set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     ca-certificates \
@@ -88,7 +89,41 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     \
     tdnf autoremove -y && \
     tdnf clean all && \
+    canonicalize_pem_bundle() { \
+        bundle="$1"; \
+        marker="$2"; \
+        cert_dir=$(mktemp -d); \
+        sed -n \
+            "/-----BEGIN ${marker}-----/,/-----END ${marker}-----/p" \
+            "${bundle}" > "${cert_dir}/certificates.pem"; \
+        csplit -s -z \
+            -f "${cert_dir}/certificate-" \
+            -b '%04d.pem' \
+            "${cert_dir}/certificates.pem" \
+            "/-----BEGIN ${marker}-----/" \
+            '{*}'; \
+        rm "${cert_dir}/certificates.pem"; \
+        find "${cert_dir}" -type f -print0 | \
+            xargs -0 sha256sum | \
+            LC_ALL=C sort | \
+            while read -r digest cert; do \
+                cat "${cert}"; \
+            done > "${bundle}.sorted"; \
+        cat "${bundle}.sorted" > "${bundle}"; \
+        rm -rf "${cert_dir}" "${bundle}.sorted"; \
+        grep -q -- "-----BEGIN ${marker}-----" "${bundle}"; \
+    } && \
+    canonicalize_pem_bundle \
+        /etc/pki/ca-trust/extracted/pem/email-ca-bundle.pem \
+        CERTIFICATE && \
+    canonicalize_pem_bundle \
+        /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        CERTIFICATE && \
+    canonicalize_pem_bundle \
+        /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
+        "TRUSTED CERTIFICATE" && \
     rm -rf \
+        /etc/pki/ca-trust/extracted/edk2 \
         /etc/pki/ca-trust/extracted/java \
         /opt/scitt/include \
         /opt/scitt/lib64/*.a \
