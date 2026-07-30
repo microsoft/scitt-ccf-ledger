@@ -117,12 +117,37 @@ jobs:
               --format '{{.Id}}' \
               "scitt-reproducibility:${{ matrix.build }}"
           )" > image-id.txt
+          docker image inspect \
+            --format '{{range .RootFS.Layers}}{{println .}}{{end}}' \
+            "scitt-reproducibility:${{ matrix.build }}" > layer-digests.txt
+          docker run \
+            --rm \
+            --entrypoint /bin/bash \
+            "scitt-reproducibility:${{ matrix.build }}" \
+            -c '
+              set -euo pipefail
+              find / -xdev \
+                ! -path /etc/hostname \
+                ! -path /etc/hosts \
+                ! -path /etc/resolv.conf \
+                -printf "%y|%m|%U|%G|%T@|%s|%p|%l\n" |
+                LC_ALL=C sort
+              find / -xdev -type f \
+                ! -path /etc/hostname \
+                ! -path /etc/hosts \
+                ! -path /etc/resolv.conf \
+                -exec sha256sum {} + |
+                LC_ALL=C sort -k2
+            ' > filesystem-manifest.txt
 
       - name: Upload image ID
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-id-${{ matrix.build }}
-          path: repro-input/image-id.txt
+          path: |
+            repro-input/image-id.txt
+            repro-input/layer-digests.txt
+            repro-input/filesystem-manifest.txt
           if-no-files-found: error
           retention-days: 1
 
@@ -149,6 +174,14 @@ jobs:
           echo "Build two image ID: $(cat "${second}")"
 
           if ! cmp --silent "${first}" "${second}"; then
+            echo "Layer digest differences:"
+            diff -u \
+              image-ids/docker-image-id-one/layer-digests.txt \
+              image-ids/docker-image-id-two/layer-digests.txt || true
+            echo "Filesystem differences:"
+            diff -u \
+              image-ids/docker-image-id-one/filesystem-manifest.txt \
+              image-ids/docker-image-id-two/filesystem-manifest.txt || true
             echo "::error::The Docker image is not reproducible: independently built image IDs differ."
             exit 1
           fi
