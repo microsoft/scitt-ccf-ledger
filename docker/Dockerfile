@@ -1,8 +1,8 @@
 ARG CCF_VERSION="7.0.10"
 
-# Pin a specific Azure Linux base image tag for reproducibility.
+# Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
-FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260722 AS base
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260722@sha256:a30e18dd24a8080ee0b72d0f998a688e99380678a407bdd7c3a0ac7417b15eb3 AS base
 
 # Initial stage to download and extract the tdnf snapshot time
 FROM base AS snapshot-extractor
@@ -41,12 +41,7 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     [ -n "${CCF_RPM_SHA256}" ] && \
     echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
-    rm -f /tmp/ccf.rpm && \
-    printf '%s\n' \
-        '%use_source_date_epoch_as_buildtime 1' \
-        '%clamp_mtime_to_source_date_epoch 1' \
-        '%_buildhost reproducible' \
-        > /root/.rpmmacros
+    rm -f /tmp/ccf.rpm
 
 # Copy the app source code after installing dependencies so that
 # changes to app/ don't invalidate the dependency layer above.

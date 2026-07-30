@@ -226,7 +226,7 @@ For future images to be independently reproducible:
 
 The `Docker reproducibility` GitHub Actions workflow creates one build-context archive from the checked-out commit. It normalizes path order, ownership, modes, and modification times using `SOURCE_DATE_EPOCH`, which is the source commit timestamp. Two clean GitHub-hosted jobs download that same archive and build the canonical `docker/Dockerfile` independently without shared caches or run-specific BuildKit provenance. A final job compares the complete Docker image IDs and fails if they differ.
 
-The Dockerfile also uses `SOURCE_DATE_EPOCH` to normalize generated files and directories. Transient build artifacts are mounted into the final stage instead of copied into separate layers, deterministic archive and RPM settings are enabled, and runtime-irrelevant package databases, caches, development archives, and Java trust-store output are removed.
+The Dockerfile also uses `SOURCE_DATE_EPOCH` to normalize generated files and directories. Transient build artifacts are mounted into the final stage instead of copied into separate layers, and runtime-irrelevant package databases, caches, and development archives are normalized or removed. Following CCF's package-reproduction approach, the RPM build-host, build-time, and file-mtime controls are defined in `app/cpack.cmake` so they apply outside this Dockerfile as well. Base images and fetched source dependencies are pinned to immutable digests or commits.
 
 This gate detects nondeterminism in both filesystem layers and image configuration. It does not replace comparing release dmverity layer hashes with the authenticated security policy.
 

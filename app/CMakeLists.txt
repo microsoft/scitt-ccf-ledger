@@ -33,7 +33,8 @@ set(BUILD_QCBOR_TEST OFF CACHE STRING "" FORCE)
 FetchContent_Declare(
   qcbor
   GIT_REPOSITORY https://github.com/laurencelundblade/QCBOR.git
-  GIT_TAG        v1.6.1
+  # https://github.com/laurencelundblade/QCBOR/releases/tag/v1.6.1
+  GIT_TAG        930708bb86481e88879eb1d87fd4d664f1d69503
 )
 FetchContent_MakeAvailable(qcbor)
 
