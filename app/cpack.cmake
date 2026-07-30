@@ -8,7 +8,7 @@ set(CPACK_RPM_FILE_NAME "scitt")
 set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/scitt")
 set(
   CPACK_RPM_SPEC_MORE_DEFINE
-  "%define _buildhost reproducible
+  "%define _buildhost scitthost
 %define use_source_date_epoch_as_buildtime Y
 %define clamp_mtime_to_source_date_epoch Y
 "
