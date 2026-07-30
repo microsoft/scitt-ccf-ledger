@@ -122,19 +122,23 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     canonicalize_pem_bundle \
         /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
         "TRUSTED CERTIFICATE" && \
-    rm -rf \
-        /etc/pki/ca-trust/extracted/edk2 \
+    for state_dir in \
         /etc/pki/ca-trust/extracted/java \
-        /opt/scitt/include \
-        /opt/scitt/lib64/*.a \
-        /opt/scitt/lib64/cmake \
-        /opt/scitt/share/regocpp/cmake \
-        /root/.gnupg \
         /usr/lib/sysimage/tdnf \
         /var/cache/ldconfig \
         /var/cache/tdnf \
         /var/lib/rpm \
-        /var/lib/tdnf && \
+        /var/lib/tdnf; do \
+        if [ -d "${state_dir}" ]; then \
+            find "${state_dir}" -type f \
+                -exec sh -c 'for file do : > "${file}"; done' sh {} +; \
+        fi; \
+    done && \
+    rm -rf \
+        /opt/scitt/include \
+        /opt/scitt/lib64/*.a \
+        /opt/scitt/lib64/cmake \
+        /opt/scitt/share/regocpp/cmake && \
     mkdir -p /usr/src/app /host/node && \
     install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
     find /etc /host /opt /root /run /tmp /usr /var \
