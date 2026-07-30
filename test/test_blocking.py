@@ -1,7 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import time
 from hashlib import sha256
+from http import HTTPStatus
 
 import cbor2
 import ccf.cose
@@ -70,5 +72,23 @@ def test_blocking_entries(
         submission.response_bytes,
         service_key,
         sha256(signed_statement).digest(),
+    )
+
+    deadline = time.monotonic() + 3
+    regular_receipt = client.session.get(
+        "/node/receipt", params={"transaction_id": submission.tx}
+    )
+    while (
+        regular_receipt.status_code == HTTPStatus.ACCEPTED
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.1)
+        regular_receipt = client.session.get(
+            "/node/receipt", params={"transaction_id": submission.tx}
+        )
+
+    assert regular_receipt.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, (
+        "Traditional receipt should be unavailable with COSE-only ledger "
+        f"signatures, got {regular_receipt.status_code}"
     )
     LOG.info("Receipt verification: PASSED")
