@@ -171,6 +171,7 @@ Official OneBranch builds copy the checked-out sources into an `artifacts` build
 $ export IMAGE_TAG="<APP-VERSION>"
 $ export IMAGE="scitt-reproduction:${IMAGE_TAG}"
 $ export ARTIFACTS="$(pwd)/artifacts"
+$ export SOURCE_DATE_EPOCH="$(git -C source show -s --format=%ct HEAD)"
 $ mkdir -p "${ARTIFACTS}"
 $ (cd source && tar --exclude=env -cf - .) | tar -xf - -C "${ARTIFACTS}"
 
@@ -179,6 +180,7 @@ $ DOCKER_BUILDKIT=1 docker build \
     --no-cache \
     --force-rm \
     -f "${ARTIFACTS}/docker/Dockerfile" \
+    --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
     --build-arg SCITT_VERSION_OVERRIDE="${IMAGE_TAG}" \
     -t "${IMAGE}" \
     "${ARTIFACTS}"
@@ -223,6 +225,8 @@ For future images to be independently reproducible:
 #### Continuous reproducibility check
 
 The `Docker reproducibility` GitHub Actions workflow creates one build-context archive from the checked-out commit. It normalizes path order, ownership, modes, and modification times using `SOURCE_DATE_EPOCH`, which is the source commit timestamp. Two clean GitHub-hosted jobs download that same archive and build the canonical `docker/Dockerfile` independently without shared caches or run-specific BuildKit provenance. A final job compares the complete Docker image IDs and fails if they differ.
+
+The Dockerfile also uses `SOURCE_DATE_EPOCH` to normalize generated files and directories. Transient build artifacts are mounted into the final stage instead of copied into separate layers, deterministic archive and RPM settings are enabled, and runtime-irrelevant package databases, caches, development archives, and Java trust-store output are removed.
 
 This gate detects nondeterminism in both filesystem layers and image configuration. It does not replace comparing release dmverity layer hashes with the authenticated security policy.
 

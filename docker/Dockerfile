@@ -8,6 +8,7 @@ FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260722 AS base
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
+ARG SOURCE_DATE_EPOCH=0
 
 # Install minimal tools, download reproduce JSON, and extract snapshot time
 # Note: No need to pin package versions here as this stage doesn't contribute
@@ -16,12 +17,14 @@ RUN tdnf install -y \
     ca-certificates \
     jq && \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce.json" -o /tmp/reproduce.json && \
-    jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime
+    jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime && \
+    touch -d "@${SOURCE_DATE_EPOCH}" /tmp/tdnf_snapshottime
 
 FROM base AS builder
 
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
+ARG SOURCE_DATE_EPOCH=0
 
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
@@ -38,7 +41,12 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     [ -n "${CCF_RPM_SHA256}" ] && \
     echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
-    rm -f /tmp/ccf.rpm
+    rm -f /tmp/ccf.rpm && \
+    printf '%s\n' \
+        '%use_source_date_epoch_as_buildtime 1' \
+        '%clamp_mtime_to_source_date_epoch 1' \
+        '%_buildhost reproducible' \
+        > /root/.rpmmacros
 
 # Copy the app source code after installing dependencies so that
 # changes to app/ don't invalidate the dependency layer above.
@@ -51,42 +59,56 @@ RUN mkdir /tmp/app-build && \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_PREFIX=/usr/src/app \
     -DBUILD_TESTS=OFF \
+    -DCMAKE_C_ARCHIVE_CREATE="<CMAKE_AR> qcD <TARGET> <LINK_FLAGS> <OBJECTS>" \
+    -DCMAKE_CXX_ARCHIVE_CREATE="<CMAKE_AR> qcD <TARGET> <LINK_FLAGS> <OBJECTS>" \
     -DSCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE} \
     /tmp/app && \
-    ninja && \
-    cpack -G RPM
+    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} ninja && \
+    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} cpack -G RPM && \
+    touch -d "@${SOURCE_DATE_EPOCH}" /tmp/app-build/*.rpm
 
 FROM base
 
 ARG CCF_VERSION
+ARG SOURCE_DATE_EPOCH=0
 
-# Copy the extracted snapshot time from the snapshot-extractor stage
-COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
-
-# Copy the built RPM packages from the builder stage
-COPY --from=builder /tmp/app-build/*.rpm /tmp/
-
-WORKDIR /usr/src/app
-
-RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
+RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
+    --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
+    --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
+    TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
     ca-certificates \
     tini \
     nmap-ncat && \
     \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
-    /tmp/*.rpm && \
-    rm -rf /tmp/*.rpm && \
+    /tmp/app-build/*.rpm && \
     \
     mv "/opt/scitt/bin/cchost" "/usr/bin/cchost" && \
     \
     tdnf autoremove -y && \
     tdnf clean all && \
-    rm -rf /var/cache/tdnf /var/lib/rpm/__db* /var/lib/tdnf/*
-
+    rm -rf \
+        /etc/pki/ca-trust/extracted/java \
+        /opt/scitt/include \
+        /opt/scitt/lib64/*.a \
+        /opt/scitt/lib64/cmake \
+        /opt/scitt/share/regocpp/cmake \
+        /usr/lib/sysimage/tdnf \
+        /var/cache/ldconfig \
+        /var/cache/tdnf \
+        /var/lib/rpm \
+        /var/lib/tdnf && \
+    mkdir -p /usr/src/app /host/node && \
+    install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
+    find /etc /host /opt /usr /var \
+        -xdev \
+        ! -path /etc/hostname \
+        ! -path /etc/hosts \
+        ! -path /etc/resolv.conf \
+        -newermt "@${SOURCE_DATE_EPOCH}" \
+        -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
 WORKDIR /host/node
-COPY docker/start-app.sh start-app.sh
-RUN ["chmod", "+x", "start-app.sh"]
 
 # Use tini to handle zombie processes and signal forwarding
 # since we use a custom script to start the app 

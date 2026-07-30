@@ -10,12 +10,14 @@ DOCKERFILE="Dockerfile"
 
 # uses longer version of tags to avoid situations when tag is reassigned to a different commit, e.g. 0.12.1-2-g0b45e35
 SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
+SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
 
-echo "Building Dockerfile=$DOCKERFILE tag=$DOCKER_TAG SCITT_VERSION_OVERRIDE=$SCITT_VERSION_OVERRIDE"
+echo "Building Dockerfile=$DOCKERFILE tag=$DOCKER_TAG SCITT_VERSION_OVERRIDE=$SCITT_VERSION_OVERRIDE SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
 
 DOCKER_BUILDKIT=1 docker build \
     -t "$DOCKER_TAG" \
     -f docker/$DOCKERFILE \
+    --build-arg SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
     --build-arg SCITT_VERSION_OVERRIDE="$SCITT_VERSION_OVERRIDE" \
     .
 

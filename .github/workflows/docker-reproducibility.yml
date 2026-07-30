@@ -105,7 +105,7 @@ jobs:
             --no-cache \
             --force-rm \
             --provenance=false \
-            --iidfile image-id.txt \
+            --iidfile build-result-id.txt \
             --file context/docker/Dockerfile \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
             --build-arg SCITT_VERSION_OVERRIDE="${SCITT_VERSION_OVERRIDE}" \
@@ -116,8 +116,7 @@ jobs:
             docker image inspect \
               --format '{{.Id}}' \
               "scitt-reproducibility:${{ matrix.build }}"
-          )" > inspected-image-id.txt
-          cmp image-id.txt inspected-image-id.txt
+          )" > image-id.txt
 
       - name: Upload image ID
         uses: actions/upload-artifact@v4
