@@ -4,8 +4,16 @@
 #include "cbor.h"
 #include "http_error.h"
 
+#include <cstdint>
+#include <functional>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace testing;
 using namespace scitt;
