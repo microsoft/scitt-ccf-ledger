@@ -129,6 +129,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /opt/scitt/lib64/*.a \
         /opt/scitt/lib64/cmake \
         /opt/scitt/share/regocpp/cmake \
+        /root/.gnupg \
         /usr/lib/sysimage/tdnf \
         /var/cache/ldconfig \
         /var/cache/tdnf \
@@ -136,13 +137,18 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /var/lib/tdnf && \
     mkdir -p /usr/src/app /host/node && \
     install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
-    find /etc /host /opt /usr /var \
+    find /etc /host /opt /root /run /tmp /usr /var \
         -xdev \
         ! -path /etc/hostname \
         ! -path /etc/hosts \
         ! -path /etc/resolv.conf \
+        ! -path /tmp/app-build \
+        ! -path '/tmp/app-build/*' \
+        ! -path /tmp/start-app.sh \
+        ! -path /tmp/tdnf_snapshottime \
         -newermt "@${SOURCE_DATE_EPOCH}" \
-        -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
+        -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + && \
+    touch -d "@${SOURCE_DATE_EPOCH}" /
 WORKDIR /host/node
 
 # Use tini to handle zombie processes and signal forwarding
