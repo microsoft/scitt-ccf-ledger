@@ -4,6 +4,7 @@
 #include "cbor.h"
 #include "http_error.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <gmock/gmock.h>
@@ -45,38 +46,53 @@ namespace
 
   class CapturingLogger : public ccf::logger::AbstractLogger
   {
-  public:
-    std::vector<ccf::LoggerLevel> levels;
+  private:
+    std::vector<ccf::LoggerLevel> levels_;
 
+  public:
     void write(const ccf::logger::LogLine& line) override
     {
-      levels.push_back(line.log_level);
+      levels_.push_back(line.log_level);
+    }
+
+    [[nodiscard]] const std::vector<ccf::LoggerLevel>& levels() const
+    {
+      return levels_;
     }
   };
 
   class ScopedLogger
   {
   private:
-    ccf::LoggerLevel previous_level;
-    std::vector<std::unique_ptr<ccf::logger::AbstractLogger>> previous_loggers;
+    ccf::LoggerLevel previous_level_;
+    CapturingLogger* logger_;
 
   public:
-    CapturingLogger* logger;
-
-    ScopedLogger() :
-      previous_level(ccf::logger::config::level()),
-      previous_loggers(std::move(ccf::logger::config::loggers()))
+    ScopedLogger() : previous_level_(ccf::logger::config::level())
     {
       ccf::logger::config::level() = ccf::LoggerLevel::TRACE;
       auto capturing_logger = std::make_unique<CapturingLogger>();
-      logger = capturing_logger.get();
+      logger_ = capturing_logger.get();
       ccf::logger::config::loggers().emplace_back(std::move(capturing_logger));
     }
 
     ~ScopedLogger()
     {
-      ccf::logger::config::loggers() = std::move(previous_loggers);
-      ccf::logger::config::level() = previous_level;
+      auto& loggers = ccf::logger::config::loggers();
+      const auto it = std::find_if(
+        loggers.begin(), loggers.end(), [this](const auto& candidate) {
+          return candidate.get() == logger_;
+        });
+      if (it != loggers.end())
+      {
+        loggers.erase(it);
+      }
+      ccf::logger::config::level() = previous_level_;
+    }
+
+    [[nodiscard]] const std::vector<ccf::LoggerLevel>& levels() const
+    {
+      return logger_->levels();
     }
   };
 
@@ -145,7 +161,7 @@ namespace
 
     adapted_function(ctx);
     EXPECT_EQ(error_code, "BadRequest");
-    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::DEBUG));
+    EXPECT_THAT(logs.levels(), ElementsAre(ccf::LoggerLevel::DEBUG));
   }
 
   TEST(GenericErrorAdapterTest, HandlesUnhandledException)
@@ -171,7 +187,7 @@ namespace
 
     adapted_function(ctx);
     EXPECT_EQ(error_code, errors::InternalError);
-    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::FAIL));
+    EXPECT_THAT(logs.levels(), ElementsAre(ccf::LoggerLevel::FAIL));
   }
 
   TEST(GenericErrorAdapterTest, LogsPolicyErrorAsFailure)
@@ -189,7 +205,7 @@ namespace
     EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_));
 
     adapted_function(ctx);
-    EXPECT_THAT(logs.logger->levels, ElementsAre(ccf::LoggerLevel::FAIL));
+    EXPECT_THAT(logs.levels(), ElementsAre(ccf::LoggerLevel::FAIL));
   }
 
 }
