@@ -187,6 +187,8 @@ Docker labels affect the image configuration and full image digest, but not the 
 
 Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone as the environment changed over time introducing values that change on each build. To mitigate against these issues, an automated reproducibility check is run on every commit.
 
+The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The OneBranch pipeline creates the same normalized context and a canonical local reference build before running `onebranch.pipeline.imagebuildinfo`. It requires the ordered filesystem layer digests of the reference and published images to match exactly. Their complete image IDs are expected to differ because the governed OneBranch task adds pipeline traceability labels to the image configuration; those labels do not alter filesystem or dmverity layer hashes.
+
 ### 3. Verify UVM
 
 The details of how to reproduce the UVM (to compare it to a `measurement` in the report) are not ready yet.
@@ -200,5 +202,4 @@ $ cat node-quote.json | jq -r '.uvm_endorsements' | base64 -d > uvm_endorsements
 ```
 
 UVM endorsement policy can also be seen in `service-join-policy.json`.
-
 

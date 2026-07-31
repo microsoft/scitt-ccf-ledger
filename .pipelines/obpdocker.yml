@@ -41,21 +41,61 @@ jobs:
         fetchDepth: 0
         lfs: false
 
-      # copy sources to the output dir and it will be then used by the docker build task
-      - task: CopyFiles@2
-        displayName: Prepare sources for docker build
-        inputs:
-          SourceFolder: $(Build.SourcesDirectory)
-          Contents: |
-              **/*
-              !env/**/*
-          TargetFolder: '$(Build.SourcesDirectory)/out'
+      - script: |
+          set -euo pipefail
+
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
+
+          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
+          echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
+          echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}"
+          echo "SCITT_VERSION_OVERRIDE: ${SCITT_VERSION_OVERRIDE}"
+
+          context_dir="$(Build.SourcesDirectory)/out"
+          context_archive="$(Agent.TempDirectory)/docker-context.tar"
+
+          rm -rf "${context_dir}"
+          mkdir -p "${context_dir}"
+          git checkout-index --all --prefix="${context_dir}/"
+          tar \
+            --create \
+            --file="${context_archive}" \
+            --sort=name \
+            --format=posix \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --mtime="@${SOURCE_DATE_EPOCH}" \
+            --mode='a-s,u+rwX,go+rX,go-w' \
+            --pax-option=delete=atime,delete=ctime \
+            --directory="${context_dir}" \
+            .
+          rm -rf "${context_dir}"
+          mkdir -p "${context_dir}"
+          tar \
+            --extract \
+            --file="${context_archive}" \
+            --directory="${context_dir}"
+          sha256sum "${context_archive}"
+        displayName: Prepare deterministic Docker context
 
       - script: |
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
-          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
-          echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}"
-        displayName: Derive source commit timestamp
+          set -euo pipefail
+
+          DOCKER_BUILDKIT=1 docker build \
+            --platform linux/amd64 \
+            --pull \
+            --no-cache \
+            --force-rm \
+            --provenance=false \
+            --file "$(Build.SourcesDirectory)/out/docker/${{ parameters.DockerFile }}" \
+            --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" \
+            --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)" \
+            --tag scitt-reproducibility:ado-reference \
+            "$(Build.SourcesDirectory)/out"
+        displayName: Build reproducibility reference image
+        target: host
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
@@ -81,6 +121,38 @@ jobs:
           enable_cache: false
           enable_acr_push: true 
           enable_service_tree_acr_path: false
-          arguments: --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}"
+          arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
+
+      - script: |
+          set -euo pipefail
+
+          reference_image="scitt-reproducibility:ado-reference"
+          onebranch_image="${{ parameters.AcrName }}.azurecr.io/scitt:${{ parameters.DockerTag }}"
+          reference_layers="$(Agent.TempDirectory)/reference-layers.txt"
+          onebranch_layers="$(Agent.TempDirectory)/onebranch-layers.txt"
+
+          docker image inspect \
+            --format '{{range .RootFS.Layers}}{{println .}}{{end}}' \
+            "${reference_image}" > "${reference_layers}"
+          docker image inspect \
+            --format '{{range .RootFS.Layers}}{{println .}}{{end}}' \
+            "${onebranch_image}" > "${onebranch_layers}"
+
+          echo "Reference image ID: $(docker image inspect --format '{{.Id}}' "${reference_image}")"
+          echo "OneBranch image ID: $(docker image inspect --format '{{.Id}}' "${onebranch_image}")"
+          echo "Reference filesystem layers:"
+          cat "${reference_layers}"
+          echo "OneBranch filesystem layers:"
+          cat "${onebranch_layers}"
+
+          if ! cmp --silent "${reference_layers}" "${onebranch_layers}"; then
+            diff -u "${reference_layers}" "${onebranch_layers}" || true
+            echo "##vso[task.logissue type=error]The OneBranch Docker image filesystem layers are not reproducible."
+            exit 1
+          fi
+
+          echo "OneBranch Docker image filesystem layers are reproducible."
+        displayName: Verify OneBranch image reproducibility
+        target: host
           
