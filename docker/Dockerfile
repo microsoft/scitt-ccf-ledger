@@ -3,7 +3,7 @@ ARG CCF_RPM_SHA256="4c7f31109aba8893015f4466071d5d964f7117ae0233dd074c96e47eadaf
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
-FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260728 AS base
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260728@sha256:4ecd6b297db85c54ec2df07145a28536c3655a3e98e54eb2364189bc4e6eac23 AS base
 
 # Initial stage to download and extract the tdnf snapshot time
 FROM base AS snapshot-extractor
