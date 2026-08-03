@@ -250,10 +250,10 @@ namespace scitt
       {
         if (log.status == Succeeded || log.status == Failed)
         {
-          // This is a less severe invalid transition. We just log it as INFO
+          // This is a less severe invalid transition. We just log it as DEBUG
           // and don't abort. We still return false, to stop the indexing
           // strategy from proceeding further.
-          SCITT_INFO(
+          SCITT_DEBUG(
             "Repeated completion of operation {} at {}, from {} to {}",
             operation_id.to_str(),
             tx_id.to_str(),
@@ -269,7 +269,8 @@ namespace scitt
         if (current_status.has_value())
         {
           SCITT_FAIL(
-            "Got unexpected event {} at {} for existing operation {} in state",
+            "Got unexpected event {} at {} for existing operation {} in state "
+            "{}",
             nlohmann::json(log.status).dump(),
             tx_id.to_str(),
             operation_id.to_str(),
@@ -328,7 +329,7 @@ namespace scitt
       if (it != operations_.begin())
       {
         SCITT_DEBUG(
-          "Removing {} operations from indexing strategy",
+          "Removing {} expired operations from indexing strategy",
           std::distance(operations_.begin(), it));
 
         lower_bound = std::prev(it)->first + 1;
@@ -491,7 +492,7 @@ namespace scitt
     ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
   {
     std::string tx_str = tx_id.to_str();
-    SCITT_DEBUG("New operation was locally committed with tx={}", tx_str);
+    SCITT_TRACE("New operation was locally committed with tx={}", tx_str);
 
     ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
 
