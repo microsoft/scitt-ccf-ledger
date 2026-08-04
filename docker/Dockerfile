@@ -1,24 +1,37 @@
 ARG CCF_VERSION="7.0.10"
 ARG CCF_RPM_SHA256="4c7f31109aba8893015f4466071d5d964f7117ae0233dd074c96e47eadafe1bc"
+# SHA-256 of the CCF release reproduce.json, and the tdnf snapshot time it
+# contains. The snapshot time determines every package version installed below,
+# so it is pinned here rather than being trusted from an unverified download.
+ARG CCF_REPRODUCE_SHA256="49abb909abeae9abc5481be641513fd3644b5623fdc8769889de95f5489c11c8"
+ARG TDNF_SNAPSHOTTIME="1784205407"
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
 FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260728@sha256:4ecd6b297db85c54ec2df07145a28536c3655a3e98e54eb2364189bc4e6eac23 AS base
 
-# Initial stage to download and extract the tdnf snapshot time
+# Initial stage to verify the pinned tdnf snapshot time against the CCF release
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
+ARG CCF_REPRODUCE_SHA256
+ARG TDNF_SNAPSHOTTIME
 ARG SOURCE_DATE_EPOCH=0
 
-# Install minimal tools, download reproduce JSON, and extract snapshot time
+# Install minimal tools, download reproduce JSON, and check the snapshot time
 # Note: No need to pin package versions here as this stage doesn't contribute
-# to the final image - it only extracts metadata used by subsequent stages
+# to the final image - it only validates metadata used by subsequent stages
 RUN tdnf install -y \
     ca-certificates \
     jq && \
     curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce.json" -o /tmp/reproduce.json && \
-    jq -r '.tdnf_snapshottime' /tmp/reproduce.json > /tmp/tdnf_snapshottime && \
+    echo "${CCF_REPRODUCE_SHA256}  /tmp/reproduce.json" | sha256sum -c - && \
+    PUBLISHED_SNAPSHOTTIME=$(jq -r '.tdnf_snapshottime' /tmp/reproduce.json) && \
+    if [ "${PUBLISHED_SNAPSHOTTIME}" != "${TDNF_SNAPSHOTTIME}" ]; then \
+        echo "Pinned TDNF_SNAPSHOTTIME ${TDNF_SNAPSHOTTIME} does not match CCF ${PUBLISHED_SNAPSHOTTIME}" >&2; \
+        exit 1; \
+    fi && \
+    printf '%s' "${TDNF_SNAPSHOTTIME}" > /tmp/tdnf_snapshottime && \
     touch -d "@${SOURCE_DATE_EPOCH}" /tmp/tdnf_snapshottime
 
 FROM base AS builder
@@ -89,6 +102,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         bundle="$1"; \
         marker="$2"; \
         cert_dir=$(mktemp -d); \
+        before=$(grep -c -- "-----BEGIN ${marker}-----" "${bundle}" || true); \
         sed -n \
             "/-----BEGIN ${marker}-----/,/-----END ${marker}-----/p" \
             "${bundle}" > "${cert_dir}/certificates.pem"; \
@@ -107,7 +121,11 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
             done > "${bundle}.sorted"; \
         cat "${bundle}.sorted" > "${bundle}"; \
         rm -rf "${cert_dir}" "${bundle}.sorted"; \
-        grep -q -- "-----BEGIN ${marker}-----" "${bundle}"; \
+        after=$(grep -c -- "-----BEGIN ${marker}-----" "${bundle}" || true); \
+        if [ "${before}" -lt 1 ] || [ "${before}" != "${after}" ]; then \
+            echo "Trust bundle ${bundle} changed from ${before} to ${after} certificates" >&2; \
+            exit 1; \
+        fi; \
     } && \
     canonicalize_pem_bundle \
         /etc/pki/ca-trust/extracted/pem/email-ca-bundle.pem \
@@ -118,6 +136,9 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     canonicalize_pem_bundle \
         /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
         "TRUSTED CERTIFICATE" && \
+    mkdir -p /opt/scitt/share && \
+    rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | \
+        LC_ALL=C sort > /opt/scitt/share/packages.txt && \
     for state_dir in \
         /etc/pki/ca-trust/extracted/java \
         /usr/lib/sysimage/tdnf \
@@ -137,8 +158,11 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /opt/scitt/share/regocpp/cmake && \
     mkdir -p /usr/src/app /host/node && \
     install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
-    find /etc /host /opt /root /run /tmp /usr /var \
+    find / \
         -xdev \
+        ! -path /dev \
+        ! -path /proc \
+        ! -path /sys \
         ! -path /etc/hostname \
         ! -path /etc/hosts \
         ! -path /etc/resolv.conf \

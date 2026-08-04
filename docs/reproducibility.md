@@ -152,26 +152,41 @@ $ git clone https://github.com/microsoft/scitt-ccf-ledger.git source
 $ git -C source checkout <TAG or COMMIT>
 ```
 
-Reproduce the command used in the build. A representative command is:
+All builds go through `scripts/reproduce-image.sh`, which is the single source of
+truth for the build context and the Docker arguments. The GitHub Actions gate, the
+OneBranch pipeline and the steps below all call it, so they cannot drift apart:
 
 ```sh
-$ export IMAGE_TAG="<APP-VERSION>"
-$ export IMAGE="scitt-reproduction:${IMAGE_TAG}"
-$ export ARTIFACTS="$(pwd)/artifacts"
-$ export SOURCE_DATE_EPOCH="$(git -C source show -s --format=%ct HEAD)"
-$ mkdir -p "${ARTIFACTS}"
-$ (cd source && tar --exclude=env -cf - .) | tar -xf - -C "${ARTIFACTS}"
-
-$ DOCKER_BUILDKIT=1 docker build \
-    --pull \
-    --no-cache \
-    --force-rm \
-    -f "${ARTIFACTS}/docker/Dockerfile" \
-    --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
-    --build-arg SCITT_VERSION_OVERRIDE="${IMAGE_TAG}" \
-    -t "${IMAGE}" \
-    "${ARTIFACTS}"
+$ cd source
+$ ./scripts/reproduce-image.sh all "scitt-reproduction:<APP-VERSION>" ../reproduction
 ```
+
+This normalizes the build context from the git index (stable path order, ownership,
+modes and mtimes derived from `SOURCE_DATE_EPOCH`), builds the image with the
+canonical arguments, and writes `../reproduction/reproduce.json` describing exactly
+what went into the image.
+
+When reproducing a *published* image, do not let the version and timestamp be
+re-derived from git, because new tags and commits change them. Take them from the
+image itself and pass them explicitly:
+
+```sh
+$ docker run --rm --entrypoint cat <ORIGINAL-IMAGE> /opt/scitt/share/VERSION
+$ export SCITT_VERSION_OVERRIDE="<value printed above>"
+$ export SOURCE_DATE_EPOCH="$(git -C source show -s --format=%ct <COMMIT>)"
+$ export SOURCE_COMMIT="<COMMIT>"
+$ (cd source && ./scripts/reproduce-image.sh all "scitt-reproduction:${SCITT_VERSION_OVERRIDE}" ../reproduction)
+```
+
+The individual steps (`context`, `extract`, `build`, `manifest`) can also be run
+separately; run `./scripts/reproduce-image.sh --help` for the details.
+
+Two files inside the image help diagnose a mismatch:
+
+- `/opt/scitt/share/VERSION` - the version the image was built with.
+- `/opt/scitt/share/packages.txt` - the exact list of RPMs installed at build time,
+  captured before the RPM database is removed. Comparing this between the original
+  and the rebuild immediately shows whether a dependency moved.
 
 Compute and compare the rebuilt hashes:
 
@@ -187,7 +202,7 @@ Docker labels affect the image configuration and full image digest, but not the 
 
 Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone as the environment changed over time introducing values that change on each build. To mitigate against these issues, an automated reproducibility check is run on every commit.
 
-The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The OneBranch pipeline creates the same normalized context and a canonical local reference build before running `onebranch.pipeline.imagebuildinfo`. It requires the ordered filesystem layer digests of the reference and published images to match exactly. Their complete image IDs are expected to differ because the governed OneBranch task adds pipeline traceability labels to the image configuration; those labels do not alter filesystem or dmverity layer hashes.
+The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The second build deliberately runs in a different environment (different context path depth, time zone, locale and umask) so that any sensitivity to the build environment fails the gate immediately instead of surfacing years later. It also runs for release tags, and publishes the `reproduce.json` manifest of the verified build as a workflow artifact. The OneBranch pipeline creates the same normalized context and a canonical local reference build before running `onebranch.pipeline.imagebuildinfo`. It requires the ordered filesystem layer digests of the reference and published images to match exactly. Their complete image IDs are expected to differ because the governed OneBranch task adds pipeline traceability labels to the image configuration; those labels do not alter filesystem or dmverity layer hashes.
 
 ### 3. Verify UVM
 

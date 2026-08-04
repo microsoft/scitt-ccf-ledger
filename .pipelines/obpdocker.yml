@@ -41,61 +41,41 @@ jobs:
         fetchDepth: 0
         lfs: false
 
+      # The context is produced by scripts/reproduce-image.sh so that this
+      # pipeline, the GitHub reproducibility gate and the documented manual
+      # steps all build from byte-identical inputs.
       - script: |
           set -euo pipefail
-
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
-          SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
-
-          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
-          echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
-          echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}"
-          echo "SCITT_VERSION_OVERRIDE: ${SCITT_VERSION_OVERRIDE}"
 
           context_dir="$(Build.SourcesDirectory)/out"
           context_archive="$(Agent.TempDirectory)/docker-context.tar"
 
+          ./scripts/reproduce-image.sh context "${context_archive}"
+
+          set -a
+          . "$(Agent.TempDirectory)/build-metadata.env"
+          set +a
+
+          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
+          echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
+          echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
+
           rm -rf "${context_dir}"
-          mkdir -p "${context_dir}"
-          git checkout-index --all --prefix="${context_dir}/"
-          tar \
-            --create \
-            --file="${context_archive}" \
-            --sort=name \
-            --format=posix \
-            --owner=0 \
-            --group=0 \
-            --numeric-owner \
-            --mtime="@${SOURCE_DATE_EPOCH}" \
-            --mode='a-s,u+rwX,go+rX,go-w' \
-            --pax-option=delete=atime,delete=ctime \
-            --directory="${context_dir}" \
-            .
-          rm -rf "${context_dir}"
-          mkdir -p "${context_dir}"
-          tar \
-            --extract \
-            --file="${context_archive}" \
-            --directory="${context_dir}"
-          sha256sum "${context_archive}"
+          ./scripts/reproduce-image.sh extract "${context_archive}" "${context_dir}"
         displayName: Prepare deterministic Docker context
 
       - script: |
           set -euo pipefail
 
-          DOCKER_BUILDKIT=1 docker build \
-            --platform linux/amd64 \
-            --pull \
-            --no-cache \
-            --force-rm \
-            --provenance=false \
-            --file "$(Build.SourcesDirectory)/out/docker/${{ parameters.DockerFile }}" \
-            --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" \
-            --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)" \
-            --tag scitt-reproducibility:ado-reference \
-            "$(Build.SourcesDirectory)/out"
+          ./scripts/reproduce-image.sh build \
+            "$(Build.SourcesDirectory)/out" \
+            scitt-reproducibility:ado-reference
         displayName: Build reproducibility reference image
         target: host
+        env:
+          SOURCE_DATE_EPOCH: $(SOURCE_DATE_EPOCH)
+          SCITT_VERSION_OVERRIDE: $(SCITT_VERSION_OVERRIDE)
+          SOURCE_COMMIT: $(SOURCE_COMMIT)
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
@@ -155,4 +135,18 @@ jobs:
           echo "OneBranch Docker image filesystem layers are reproducible."
         displayName: Verify OneBranch image reproducibility
         target: host
+
+      - script: |
+          set -euo pipefail
+
+          ./scripts/reproduce-image.sh manifest \
+            "${{ parameters.AcrName }}.azurecr.io/scitt:${{ parameters.DockerTag }}" \
+            "$(Agent.TempDirectory)/reproduce.json" \
+            "$(Build.SourcesDirectory)/out"
+        displayName: Record image reproduction manifest
+        target: host
+        env:
+          SOURCE_DATE_EPOCH: $(SOURCE_DATE_EPOCH)
+          SCITT_VERSION_OVERRIDE: $(SCITT_VERSION_OVERRIDE)
+          SOURCE_COMMIT: $(SOURCE_COMMIT)
           

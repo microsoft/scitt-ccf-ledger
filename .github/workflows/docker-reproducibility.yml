@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "*.*.*"
   pull_request:
     branches:
       - main
@@ -28,34 +30,7 @@ jobs:
 
       - name: Create deterministic build context
         shell: bash
-        run: |
-          set -euo pipefail
-
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
-          SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
-          context_dir="${RUNNER_TEMP}/docker-context"
-
-          mkdir -p "${context_dir}"
-          git checkout-index --all --prefix="${context_dir}/"
-          tar \
-            --create \
-            --file=docker-context.tar \
-            --sort=name \
-            --format=posix \
-            --owner=0 \
-            --group=0 \
-            --numeric-owner \
-            --mtime="@${SOURCE_DATE_EPOCH}" \
-            --mode='a-s,u+rwX,go+rX,go-w' \
-            --pax-option=delete=atime,delete=ctime \
-            --directory="${context_dir}" \
-            .
-
-          {
-            echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
-            echo "SCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE}"
-          } > build-metadata.env
-          sha256sum docker-context.tar > docker-context.tar.sha256
+        run: ./scripts/reproduce-image.sh context "${PWD}/docker-context.tar"
 
       - name: Upload deterministic build context
         uses: actions/upload-artifact@v4
@@ -75,10 +50,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build:
-          - one
-          - two
+        # The second build deliberately differs in every way that must not
+        # affect the image, so that sensitivity to the build environment is
+        # caught here rather than years later when an image has to be rebuilt.
+        include:
+          - build: one
+            context_subdir: ctx
+            timezone: UTC
+            locale: C.UTF-8
+            umask: "022"
+          - build: two
+            context_subdir: nested/much/deeper/workspace/ctx
+            timezone: Pacific/Kiritimati
+            locale: C
+            umask: "077"
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download deterministic build context
         uses: actions/download-artifact@v4
         with:
@@ -87,43 +76,36 @@ jobs:
 
       - name: Build image
         shell: bash
+        env:
+          TZ: ${{ matrix.timezone }}
+          LC_ALL: ${{ matrix.locale }}
         run: |
           set -euo pipefail
 
-          cd repro-input
-          sha256sum --check docker-context.tar.sha256
+          umask ${{ matrix.umask }}
+
+          (cd repro-input && sha256sum --check docker-context.tar.sha256)
+
           set -a
-          source build-metadata.env
+          # shellcheck disable=SC1091
+          source repro-input/build-metadata.env
           set +a
 
-          mkdir context
-          tar --extract --file=docker-context.tar --directory=context
+          tag="scitt-reproducibility:${{ matrix.build }}"
+          context="${RUNNER_TEMP}/${{ matrix.context_subdir }}"
 
-          DOCKER_BUILDKIT=1 docker build \
-            --platform linux/amd64 \
-            --pull \
-            --no-cache \
-            --force-rm \
-            --provenance=false \
-            --iidfile build-result-id.txt \
-            --file context/docker/Dockerfile \
-            --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
-            --build-arg SCITT_VERSION_OVERRIDE="${SCITT_VERSION_OVERRIDE}" \
-            --tag "scitt-reproducibility:${{ matrix.build }}" \
-            context
+          ./scripts/reproduce-image.sh extract repro-input/docker-context.tar "${context}"
+          ./scripts/reproduce-image.sh build "${context}" "${tag}"
+          ./scripts/reproduce-image.sh manifest "${tag}" repro-input/reproduce.json "${context}"
 
-          printf '%s' "$(
-            docker image inspect \
-              --format '{{.Id}}' \
-              "scitt-reproducibility:${{ matrix.build }}"
-          )" > image-id.txt
+          printf '%s' "$(docker image inspect --format '{{.Id}}' "${tag}")" > repro-input/image-id.txt
           docker image inspect \
             --format '{{range .RootFS.Layers}}{{println .}}{{end}}' \
-            "scitt-reproducibility:${{ matrix.build }}" > layer-digests.txt
+            "${tag}" > repro-input/layer-digests.txt
           docker run \
             --rm \
             --entrypoint /bin/bash \
-            "scitt-reproducibility:${{ matrix.build }}" \
+            "${tag}" \
             -c '
               set -euo pipefail
               find / -xdev \
@@ -138,7 +120,7 @@ jobs:
                 ! -path /etc/resolv.conf \
                 -exec sha256sum {} + |
                 LC_ALL=C sort -k2
-            ' > filesystem-manifest.txt
+            ' > repro-input/filesystem-manifest.txt
 
       - name: Upload image ID
         uses: actions/upload-artifact@v4
@@ -148,6 +130,7 @@ jobs:
             repro-input/image-id.txt
             repro-input/layer-digests.txt
             repro-input/filesystem-manifest.txt
+            repro-input/reproduce.json
           if-no-files-found: error
           retention-days: 1
 
@@ -187,3 +170,11 @@ jobs:
           fi
 
           echo "Docker image is reproducible: matching image ID $(cat "${first}")"
+
+      - name: Upload reproduction manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-reproduce-manifest
+          path: image-ids/docker-image-id-one/reproduce.json
+          if-no-files-found: error
+          retention-days: 90
