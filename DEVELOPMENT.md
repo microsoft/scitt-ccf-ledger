@@ -274,3 +274,27 @@ To run the SCITT functional tests on SNP, you would run:
 ```sh
 SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
 ```
+
+### AWS SEV-SNP instances (m6a, c6a)
+
+AWS SEV-SNP instances run on shared tenancy hardware and therefore report a
+VLEK-signed attestation report rather than a VCEK-signed one. The chip ID in
+such a report is all zeroes, so the VCEK endpoint used on Azure cannot be
+queried and the AMD KDS VLEK certificate chain must be used instead.
+
+Support for this requires a CCF build that understands VLEK-signed reports.
+See `CCF_RPM_DIR` in [docker/README.md](docker/README.md) for building the
+image against a local CCF RPM.
+
+A ready-made attestation configuration is provided in
+[docker/aws-snp-attestation.json](docker/aws-snp-attestation.json):
+
+```sh
+SNP_ATTESTATION_CONFIG=docker/aws-snp-attestation.json ./docker/run-dev.sh
+```
+
+Note that `snp_security_policy_file`, `snp_uvm_endorsements_file` and
+`snp_endorsements_file` are all specific to Azure Confidential Containers and
+must be omitted on AWS. Cached endorsements do not apply to VLEK reports, so
+the node fetches the certificate chain from AMD KDS at startup and requires
+outbound network access to `kdsintf.amd.com`.

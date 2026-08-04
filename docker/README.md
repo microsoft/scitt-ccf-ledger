@@ -10,6 +10,13 @@ To build a docker image, run the following command from the root of the reposito
 ./docker/build.sh
 ```
 
+To build against a locally packaged CCF development RPM, set `CCF_RPM_DIR` to
+the directory containing `ccf_devel*.rpm`:
+
+```bash
+CCF_RPM_DIR=/home/ubuntu/CCF/build-vlek ./docker/build.sh
+```
+
 To run a docker container using a built image, run the following command from the root of the repository:
 
 ```bash

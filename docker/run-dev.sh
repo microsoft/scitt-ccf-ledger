@@ -81,6 +81,14 @@ else
     )
 fi
 
+# Expose the SEV-SNP guest device when running on SNP hardware, so that the
+# node can request an attestation report from the firmware.
+if [ -e /dev/sev-guest ]; then
+    DOCKER_FLAGS+=(
+        "--device=/dev/sev-guest"
+    )
+fi
+
 echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, and tag $DOCKER_TAG"
 docker run --name "$CONTAINER_NAME" \
     -d \

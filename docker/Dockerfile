@@ -1,5 +1,10 @@
 ARG CCF_VERSION="7.0.10"
 ARG CCF_RPM_SHA256="4c7f31109aba8893015f4466071d5d964f7117ae0233dd074c96e47eadafe1bc"
+ARG USE_LOCAL_CCF_RPM=0
+
+# This empty stage can be overridden with:
+# --build-context ccf-rpm=/path/to/directory/containing/ccf_devel*.rpm
+FROM scratch AS ccf-rpm
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
@@ -27,6 +32,7 @@ ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 ARG SOURCE_DATE_EPOCH=0
 ARG CCF_RPM_SHA256
+ARG USE_LOCAL_CCF_RPM
 
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
@@ -35,12 +41,19 @@ COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 # The CCF RPM is downloaded and verified against the SHA-256 that GitHub publishes
 # for the release asset (the API 'digest' field) before installation; a checksum
 # mismatch fails the build.
-RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
+RUN --mount=type=bind,from=ccf-rpm,source=/,target=/tmp/ccf-rpm,ro \
+    TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git jq rpm-build && \
-    CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
-    [ -n "${CCF_RPM_SHA256}" ] && \
-    echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
+    if [ "${USE_LOCAL_CCF_RPM}" = "1" ]; then \
+        set -- /tmp/ccf-rpm/ccf_devel*.rpm; \
+        [ "$#" -eq 1 ] && [ -f "$1" ]; \
+        cp "$1" /tmp/ccf.rpm; \
+    else \
+        CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm"; \
+        curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm; \
+        [ -n "${CCF_RPM_SHA256}" ]; \
+        echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c -; \
+    fi && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
     rm -f /tmp/ccf.rpm
 
