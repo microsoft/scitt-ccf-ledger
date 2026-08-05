@@ -121,6 +121,11 @@ jobs:
                 -exec sha256sum {} + |
                 LC_ALL=C sort -k2
             ' > repro-input/filesystem-manifest.txt
+          docker run \
+            --rm \
+            --entrypoint sha256sum \
+            "${tag}" \
+            /var/lib/rpm/rpmdb.sqlite > repro-input/rpmdb-sha256.txt
 
       - name: Upload image ID
         uses: actions/upload-artifact@v4
@@ -130,6 +135,7 @@ jobs:
             repro-input/image-id.txt
             repro-input/layer-digests.txt
             repro-input/filesystem-manifest.txt
+            repro-input/rpmdb-sha256.txt
             repro-input/reproduce.json
           if-no-files-found: error
           retention-days: 1
@@ -154,6 +160,8 @@ jobs:
           second_id=image-ids/docker-image-id-two/image-id.txt
           first_layers=image-ids/docker-image-id-one/layer-digests.txt
           second_layers=image-ids/docker-image-id-two/layer-digests.txt
+          first_rpmdb=image-ids/docker-image-id-one/rpmdb-sha256.txt
+          second_rpmdb=image-ids/docker-image-id-two/rpmdb-sha256.txt
 
           echo "Build one image ID: $(cat "${first_id}")"
           echo "Build two image ID: $(cat "${second_id}")"
@@ -161,17 +169,24 @@ jobs:
           if ! cmp --silent "${first_layers}" "${second_layers}"; then
             echo "Filesystem layer digest differences:"
             diff -u "${first_layers}" "${second_layers}" || true
+            echo "Build one RPM database: $(cat "${first_rpmdb}")"
+            echo "Build two RPM database: $(cat "${second_rpmdb}")"
+            if ! cmp --silent "${first_rpmdb}" "${second_rpmdb}"; then
+              echo "::error::RPM database content differs: build one $(cut -d ' ' -f 1 "${first_rpmdb}"), build two $(cut -d ' ' -f 1 "${second_rpmdb}")"
+            fi
             echo "Filesystem differences:"
             filesystem_diff=$(diff -u \
               image-ids/docker-image-id-one/filesystem-manifest.txt \
               image-ids/docker-image-id-two/filesystem-manifest.txt || true)
-            if [ -n "${filesystem_diff}" ]; then
-              echo "${filesystem_diff}"
+            substantive_diff=$(printf '%s\n' "${filesystem_diff}" |
+              grep -Ev '^([-+]{3}|@@|[-+]d\|555\|0\|0\|[^|]+\|0\|/(proc|sys)\|)' || true)
+            if [ -n "${substantive_diff}" ]; then
+              echo "${substantive_diff}"
               while IFS= read -r line; do
                 echo "::error::Filesystem difference: ${line}"
-              done < <(printf '%s\n' "${filesystem_diff}" | head -n 30)
+              done < <(printf '%s\n' "${substantive_diff}" | head -n 30)
             else
-              echo "::error::Filesystem manifests match; the layer archive differs in metadata not captured by the manifest, such as extended attributes or entry encoding."
+              echo "::error::Image filesystem manifests match after excluding runtime /proc and /sys mountpoint timestamps; the layer archive differs in metadata not captured by the manifest, such as extended attributes or entry encoding."
             fi
             echo "::error::The Docker image filesystem layers are not reproducible. Build one: $(paste -sd, "${first_layers}"); build two: $(paste -sd, "${second_layers}")"
             exit 1
