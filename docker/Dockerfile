@@ -94,6 +94,7 @@ ARG SOURCE_DATE_EPOCH=0
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
+    --mount=type=bind,source=docker/canonicalize-rpmdb.sh,target=/tmp/canonicalize-rpmdb.sh \
     --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
     set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
@@ -151,7 +152,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     rpm -qa --qf '%{NAME}-%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' | \
         LC_ALL=C sort > /opt/scitt/share/packages.txt && \
     rpm -e --justdb --nodeps --noscripts scitt && \
-    /tmp/sqlite3 /var/lib/rpm/rpmdb.sqlite 'VACUUM;' && \
+    /tmp/canonicalize-rpmdb.sh /tmp/sqlite3 /var/lib/rpm/rpmdb.sqlite && \
     rpm -qa > /dev/null && \
     rm -f \
         /var/lib/rpm/.rpm.lock \
@@ -185,6 +186,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /etc/resolv.conf \
         ! -path /tmp/app-build \
         ! -path '/tmp/app-build/*' \
+        ! -path /tmp/canonicalize-rpmdb.sh \
         ! -path /tmp/sqlite3 \
         ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \
