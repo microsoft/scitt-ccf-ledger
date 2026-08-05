@@ -39,7 +39,7 @@ jobs:
           path: |
             docker-context.tar
             docker-context.tar.sha256
-            build-metadata.env
+            build-metadata.json
           if-no-files-found: error
           retention-days: 1
 
@@ -86,10 +86,10 @@ jobs:
 
           (cd repro-input && sha256sum --check docker-context.tar.sha256)
 
-          set -a
-          # shellcheck disable=SC1091
-          source repro-input/build-metadata.env
-          set +a
+          SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_commit)
+          SOURCE_DATE_EPOCH=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_date_epoch)
+          SCITT_VERSION_OVERRIDE=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json scitt_version)
+          export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
 
           tag="scitt-reproducibility:${{ matrix.build }}"
           context="${RUNNER_TEMP}/${{ matrix.context_subdir }}"

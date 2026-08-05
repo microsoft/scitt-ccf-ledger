@@ -30,11 +30,12 @@ Usage: scripts/reproduce-image.sh <command> [arguments]
 
 Commands:
   context <archive>                Write a normalized build context archive and
-                                   a build-metadata.env file next to it.
+                                   a build-metadata.json file next to it.
   extract <archive> <directory>    Extract a context archive deterministically.
   build <directory> <tag> [args..] Build the image with canonical arguments.
                                    Extra arguments are passed to docker build.
   manifest <tag> <file> [context]  Write a reproduce.json build manifest.
+  metadata <file> <key>            Print one build-metadata.json value.
   all [tag] [output-directory]     Run all of the steps above in one go.
 
 Environment:
@@ -58,15 +59,27 @@ repo_root() {
 # git is only consulted for values that were not supplied, which allows these
 # commands to run against an extracted context outside of a git checkout.
 resolve_inputs() {
+    local root
+    root=$(repo_root)
+
+    if [ -z "${SOURCE_COMMIT:-}" ]; then
+        SOURCE_COMMIT=$(git -C "${root}" rev-parse HEAD)
+    fi
+    SOURCE_COMMIT=$(git -C "${root}" rev-parse --verify "${SOURCE_COMMIT}^{commit}")
+
     if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
-        SOURCE_DATE_EPOCH=$(git -C "$(repo_root)" show -s --format=%ct HEAD)
+        SOURCE_DATE_EPOCH=$(git -C "${root}" show -s --format=%ct "${SOURCE_COMMIT}")
     fi
     if [ -z "${SCITT_VERSION_OVERRIDE:-}" ]; then
-        SCITT_VERSION_OVERRIDE=$(git -C "$(repo_root)" describe --tags --long --always)
+        SCITT_VERSION_OVERRIDE=$(git -C "${root}" describe --tags --long --always "${SOURCE_COMMIT}")
     fi
-    if [ -z "${SOURCE_COMMIT:-}" ]; then
-        SOURCE_COMMIT=$(git -C "$(repo_root)" rev-parse HEAD)
-    fi
+
+    case "${SOURCE_DATE_EPOCH}" in
+        '' | *[!0-9]*)
+            echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2
+            exit 1
+            ;;
+    esac
 
     export SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE SOURCE_COMMIT
 }
@@ -76,18 +89,27 @@ resolve_inputs() {
 # normalized away.
 cmd_context() {
     local archive="$1"
-    local root staging metadata
+    local root staging metadata context_sha256 submodules
 
     root=$(repo_root)
     resolve_inputs
 
     archive=$(realpath -m "${archive}")
-    metadata="$(dirname "${archive}")/build-metadata.env"
+    metadata="$(dirname "${archive}")/build-metadata.json"
     staging=$(mktemp -d)
     REPRO_STAGING_DIR="${staging}"
 
     mkdir -p "$(dirname "${archive}")"
-    (cd "${root}" && git checkout-index --all --prefix="${staging}/")
+    submodules=$(git -C "${root}" ls-tree -r --full-tree "${SOURCE_COMMIT}" |
+        awk '$1 == "160000" {print $4}')
+    if [ -n "${submodules}" ]; then
+        echo "Reproducible contexts do not yet support git submodules:" >&2
+        echo "${submodules}" >&2
+        exit 1
+    fi
+
+    git -C "${root}" archive --format=tar "${SOURCE_COMMIT}" |
+        tar --extract --file=- --directory="${staging}"
 
     tar \
         --create \
@@ -103,30 +125,59 @@ cmd_context() {
         --directory="${staging}" \
         .
 
-    {
-        echo "SOURCE_COMMIT=${SOURCE_COMMIT}"
-        echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
-        echo "SCITT_VERSION_OVERRIDE=${SCITT_VERSION_OVERRIDE}"
-    } > "${metadata}"
+    context_sha256=$(sha256sum "${archive}" | cut -d ' ' -f 1)
+    printf '%s  %s\n' "${context_sha256}" "$(basename "${archive}")" \
+        > "${archive}.sha256"
 
-    (cd "$(dirname "${archive}")" && sha256sum "$(basename "${archive}")" > "$(basename "${archive}").sha256")
+    CONTEXT_SHA256="${context_sha256}" python3 - "${metadata}" <<'PY'
+import json
+import os
+import sys
+
+metadata = {
+    "context_sha256": os.environ["CONTEXT_SHA256"],
+    "source_commit": os.environ["SOURCE_COMMIT"],
+    "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
+    "scitt_version": os.environ["SCITT_VERSION_OVERRIDE"],
+}
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(metadata, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
+
+    rm -rf "${staging}"
+    REPRO_STAGING_DIR=""
 
     echo "Wrote ${archive}"
     cat "${metadata}"
 }
 
-# --preserve-permissions keeps extraction independent of the caller's umask,
-# so the build context cannot vary with the environment it is unpacked in.
+# Extract into a temporary sibling and rename it into place. Refusing an
+# existing destination prevents deleted source files from surviving a rebuild.
 cmd_extract() {
     local archive="$1"
     local directory="$2"
+    local parent staging
 
-    mkdir -p "${directory}"
+    directory=$(realpath -m "${directory}")
+    if [ -e "${directory}" ]; then
+        echo "Extraction destination already exists: ${directory}" >&2
+        exit 1
+    fi
+
+    parent=$(dirname "${directory}")
+    mkdir -p "${parent}"
+    staging=$(mktemp -d "${parent}/.repro-context.XXXXXX")
+    REPRO_STAGING_DIR="${staging}"
+
     tar \
         --extract \
         --preserve-permissions \
         --file="${archive}" \
-        --directory="${directory}"
+        --directory="${staging}"
+
+    mv "${staging}" "${directory}"
+    REPRO_STAGING_DIR=""
 }
 
 cmd_build() {
@@ -157,6 +208,22 @@ dockerfile_arg() {
     sed -n "s/^ARG ${name}=\"\{0,1\}\([^\"]*\)\"\{0,1\}[[:space:]]*$/\1/p" "${dockerfile}" | head -n1
 }
 
+cmd_metadata() {
+    local metadata="$1"
+    local key="$2"
+
+    python3 - "${metadata}" "${key}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    value = json.load(f)[sys.argv[2]]
+if isinstance(value, (dict, list)):
+    raise SystemExit(f"{sys.argv[2]} is not a scalar value")
+print(value)
+PY
+}
+
 # Record everything a third party needs to rebuild this exact image, following
 # the same idea as the reproduce.json that CCF publishes with its releases.
 cmd_manifest() {
@@ -174,25 +241,40 @@ cmd_manifest() {
     docker_version=$(docker version --format '{{.Server.Version}}')
     buildx_version=$(docker buildx version 2>/dev/null | head -n1 || echo "unknown")
 
-    {
-        echo "{"
-        echo "  \"schema_version\": 1,"
-        echo "  \"source_commit\": \"${SOURCE_COMMIT}\","
-        echo "  \"source_date_epoch\": ${SOURCE_DATE_EPOCH},"
-        echo "  \"scitt_version\": \"${SCITT_VERSION_OVERRIDE}\","
-        echo "  \"base_image\": \"${base_image}\","
-        echo "  \"ccf_version\": \"$(dockerfile_arg "${dockerfile}" CCF_VERSION)\","
-        echo "  \"ccf_rpm_sha256\": \"$(dockerfile_arg "${dockerfile}" CCF_RPM_SHA256)\","
-        echo "  \"ccf_reproduce_sha256\": \"$(dockerfile_arg "${dockerfile}" CCF_REPRODUCE_SHA256)\","
-        echo "  \"tdnf_snapshottime\": \"$(dockerfile_arg "${dockerfile}" TDNF_SNAPSHOTTIME)\","
-        echo "  \"docker_version\": \"${docker_version}\","
-        echo "  \"buildx_version\": \"${buildx_version}\","
-        echo "  \"image_id\": \"${image_id}\","
-        echo "  \"layers\": ["
-        echo "${layers}" | sed '/^$/d' | sed 's/.*/    "&",/' | sed '$ s/,$//'
-        echo "  ]"
-        echo "}"
-    } > "${output}"
+    mkdir -p "$(dirname "${output}")"
+    BASE_IMAGE="${base_image}" \
+    CCF_VERSION_VALUE="$(dockerfile_arg "${dockerfile}" CCF_VERSION)" \
+    CCF_RPM_SHA256_VALUE="$(dockerfile_arg "${dockerfile}" CCF_RPM_SHA256)" \
+    CCF_REPRODUCE_SHA256_VALUE="$(dockerfile_arg "${dockerfile}" CCF_REPRODUCE_SHA256)" \
+    TDNF_SNAPSHOTTIME_VALUE="$(dockerfile_arg "${dockerfile}" TDNF_SNAPSHOTTIME)" \
+    DOCKER_VERSION_VALUE="${docker_version}" \
+    BUILDX_VERSION_VALUE="${buildx_version}" \
+    IMAGE_ID="${image_id}" \
+    LAYERS="${layers}" \
+        python3 - "${output}" <<'PY'
+import json
+import os
+import sys
+
+manifest = {
+    "schema_version": 1,
+    "source_commit": os.environ["SOURCE_COMMIT"],
+    "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
+    "scitt_version": os.environ["SCITT_VERSION_OVERRIDE"],
+    "base_image": os.environ["BASE_IMAGE"],
+    "ccf_version": os.environ["CCF_VERSION_VALUE"],
+    "ccf_rpm_sha256": os.environ["CCF_RPM_SHA256_VALUE"],
+    "ccf_reproduce_sha256": os.environ["CCF_REPRODUCE_SHA256_VALUE"],
+    "tdnf_snapshottime": os.environ["TDNF_SNAPSHOTTIME_VALUE"],
+    "docker_version": os.environ["DOCKER_VERSION_VALUE"],
+    "buildx_version": os.environ["BUILDX_VERSION_VALUE"],
+    "image_id": os.environ["IMAGE_ID"],
+    "layers": os.environ["LAYERS"].splitlines(),
+}
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(manifest, f, indent=2, sort_keys=True)
+    f.write("\n")
+PY
 
     cat "${output}"
 }
@@ -205,14 +287,19 @@ cmd_all() {
     mkdir -p "${output}"
     output=$(realpath "${output}")
     context="${output}/context"
+    if [ -e "${context}" ]; then
+        echo "Reproduction output already contains a context: ${context}" >&2
+        echo "Use a new output directory for each reproduction." >&2
+        exit 1
+    fi
 
     cmd_context "${output}/docker-context.tar"
     cmd_extract "${output}/docker-context.tar" "${context}"
 
-    set -a
-    # shellcheck disable=SC1091
-    . "${output}/build-metadata.env"
-    set +a
+    SOURCE_COMMIT=$(cmd_metadata "${output}/build-metadata.json" source_commit)
+    SOURCE_DATE_EPOCH=$(cmd_metadata "${output}/build-metadata.json" source_date_epoch)
+    SCITT_VERSION_OVERRIDE=$(cmd_metadata "${output}/build-metadata.json" scitt_version)
+    export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
 
     cmd_build "${context}" "${tag}"
     cmd_manifest "${tag}" "${output}/reproduce.json" "${context}"
@@ -227,6 +314,7 @@ main() {
         extract) cmd_extract "$@" ;;
         build) cmd_build "$@" ;;
         manifest) cmd_manifest "$@" ;;
+        metadata) cmd_metadata "$@" ;;
         all) cmd_all "$@" ;;
         -h | --help | help) usage ;;
         *)

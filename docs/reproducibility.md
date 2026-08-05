@@ -4,7 +4,14 @@ The ledger application is running in a trusted execution environment and has a m
 
 ## Prerequisites
 
-You need a couple pieces of information to begin with:
+The rebuild requires Linux, Git, Python 3, GNU tar, `jq`, Docker with BuildKit
+0.11 or newer, and enough disk space for two uncached image builds. The
+reproducibility checks in this guide compare the ordered, uncompressed
+filesystem layers used to derive dmverity measurements. Registry manifests,
+compression, signatures, attestations and pipeline-added image labels are
+outside that comparison.
+
+You also need a couple pieces of information to begin with:
 
 - The ledger certificate. It might be distributed in a variety of ways by the ledger operator, please follow their guidance. Otherwise it is accessible at `https://<LEDGER-URL>/node/network`, e.g.:
 
@@ -149,22 +156,25 @@ To rebuild, check out the resolved SCITT version using the application version t
 
 ```sh
 $ git clone https://github.com/microsoft/scitt-ccf-ledger.git source
-$ git -C source checkout <TAG or COMMIT>
+$ git -C source checkout --detach <TAG or COMMIT>
 ```
 
-All builds go through `scripts/reproduce-image.sh`, which is the single source of
-truth for the build context and the Docker arguments. The GitHub Actions gate, the
-OneBranch pipeline and the steps below all call it, so they cannot drift apart:
+Manual builds and the GitHub Actions gate go through
+`scripts/reproduce-image.sh`. The OneBranch pipeline uses the same normalized
+context and build arguments with its governed `imagebuildinfo` task, because
+OneBranch does not permit custom Docker commands in that job:
 
 ```sh
 $ cd source
-$ ./scripts/reproduce-image.sh all "scitt-reproduction:<APP-VERSION>" ../reproduction
+$ export IMAGE="scitt-reproduction:<APP-VERSION>"
+$ ./scripts/reproduce-image.sh all "${IMAGE}" ../reproduction
 ```
 
-This normalizes the build context from the git index (stable path order, ownership,
-modes and mtimes derived from `SOURCE_DATE_EPOCH`), builds the image with the
-canonical arguments, and writes `../reproduction/reproduce.json` describing exactly
-what went into the image.
+This archives the selected source commit (not the mutable working tree or git
+index), normalizes path order, ownership, modes and mtimes derived from
+`SOURCE_DATE_EPOCH`, builds the image with the canonical arguments, and writes
+`../reproduction/reproduce.json`. The output directory must be new so deleted
+source files cannot survive from an earlier build.
 
 When reproducing a *published* image, do not let the version and timestamp be
 re-derived from git, because new tags and commits change them. Take them from the
@@ -174,19 +184,27 @@ image itself and pass them explicitly:
 $ docker run --rm --entrypoint cat <ORIGINAL-IMAGE> /opt/scitt/share/VERSION
 $ export SCITT_VERSION_OVERRIDE="<value printed above>"
 $ export SOURCE_DATE_EPOCH="$(git -C source show -s --format=%ct <COMMIT>)"
-$ export SOURCE_COMMIT="<COMMIT>"
-$ (cd source && ./scripts/reproduce-image.sh all "scitt-reproduction:${SCITT_VERSION_OVERRIDE}" ../reproduction)
+$ export SOURCE_COMMIT="$(git -C source rev-parse <COMMIT>)"
+$ export IMAGE="scitt-reproduction:${SCITT_VERSION_OVERRIDE}"
+$ (cd source && ./scripts/reproduce-image.sh all "${IMAGE}" ../reproduction)
 ```
 
 The individual steps (`context`, `extract`, `build`, `manifest`) can also be run
-separately; run `./scripts/reproduce-image.sh --help` for the details.
+separately; run `./scripts/reproduce-image.sh --help` for the details. The
+context command writes `build-metadata.json` and a SHA-256 file next to the
+archive. The build rejects repositories containing submodules until their
+contents can be normalized explicitly.
 
 Two files inside the image help diagnose a mismatch:
 
 - `/opt/scitt/share/VERSION` - the version the image was built with.
-- `/opt/scitt/share/packages.txt` - the exact list of RPMs installed at build time,
-  captured before the RPM database is removed. Comparing this between the original
-  and the rebuild immediately shows whether a dependency moved.
+- `/opt/scitt/share/packages.txt` - the sorted name, epoch, version, release and
+  architecture of every RPM installed at build time. A valid, canonical RPM
+  database is retained for the operating-system packages so package inspection,
+  later `tdnf` operations and vulnerability scanning continue to work. The
+  SCITT entry is recorded in `packages.txt` and removed from the database after
+  installation because its development-only static archives are not shipped in
+  the runtime image.
 
 Compute and compare the rebuilt hashes:
 
@@ -202,7 +220,15 @@ Docker labels affect the image configuration and full image digest, but not the 
 
 Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone as the environment changed over time introducing values that change on each build. To mitigate against these issues, an automated reproducibility check is run on every commit.
 
-The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The second build deliberately runs in a different environment (different context path depth, time zone, locale and umask) so that any sensitivity to the build environment fails the gate immediately instead of surfacing years later. It also runs for release tags, and publishes the `reproduce.json` manifest of the verified build as a workflow artifact. The OneBranch pipeline creates the same normalized context and a canonical local reference build before running `onebranch.pipeline.imagebuildinfo`. It requires the ordered filesystem layer digests of the reference and published images to match exactly. Their complete image IDs are expected to differ because the governed OneBranch task adds pipeline traceability labels to the image configuration; those labels do not alter filesystem or dmverity layer hashes.
+The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The second build deliberately runs in a different environment (different context path depth, time zone, locale and umask) so that any sensitivity to the build environment fails the gate immediately instead of surfacing years later. It also runs for release tags, and publishes the `reproduce.json` manifest of the verified build as a workflow artifact.
+
+The OneBranch pipeline builds the same normalized context twice with the governed
+`imagebuildinfo` task. The reference build disables pipeline metadata; the
+published build retains the required traceability labels. Their saved image
+archives are compared by reading the ordered `rootfs.diff_ids` from each image
+configuration. Complete image IDs are expected to differ because labels alter
+the image configuration, but matching filesystem layer digests establish the
+layer and dmverity reproducibility required by this guide.
 
 ### 3. Verify UVM
 
@@ -217,4 +243,3 @@ $ cat node-quote.json | jq -r '.uvm_endorsements' | base64 -d > uvm_endorsements
 ```
 
 UVM endorsement policy can also be seen in `service-join-policy.json`.
-

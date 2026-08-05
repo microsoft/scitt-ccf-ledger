@@ -76,6 +76,16 @@ RUN mkdir /tmp/app-build && \
     SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} cpack -G RPM && \
     touch -d "@${SOURCE_DATE_EPOCH}" /tmp/app-build/*.rpm
 
+# The SCITT RPM contains static development archives that are removed from the
+# runtime image. Their package-header digests are not reproducible, so the
+# transient SCITT database record is removed and the remaining OS package
+# database is vacuumed into a canonical SQLite representation.
+FROM base AS rpmdb-tools
+
+ARG TDNF_SNAPSHOTTIME
+
+RUN tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} sqlite
+
 FROM base
 
 ARG CCF_VERSION
@@ -83,6 +93,7 @@ ARG SOURCE_DATE_EPOCH=0
 
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
+    --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
     --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
     set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
@@ -137,14 +148,20 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
         "TRUSTED CERTIFICATE" && \
     mkdir -p /opt/scitt/share && \
-    rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | \
+    rpm -qa --qf '%{NAME}-%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' | \
         LC_ALL=C sort > /opt/scitt/share/packages.txt && \
+    rpm -e --justdb --nodeps --noscripts scitt && \
+    /tmp/sqlite3 /var/lib/rpm/rpmdb.sqlite 'VACUUM;' && \
+    rm -f \
+        /var/lib/rpm/.rpm.lock \
+        /var/lib/rpm/rpmdb.sqlite-shm \
+        /var/lib/rpm/rpmdb.sqlite-wal && \
+    rpm -qa > /dev/null && \
     for state_dir in \
         /etc/pki/ca-trust/extracted/java \
         /usr/lib/sysimage/tdnf \
         /var/cache/ldconfig \
         /var/cache/tdnf \
-        /var/lib/rpm \
         /var/lib/tdnf; do \
         if [ -d "${state_dir}" ]; then \
             find "${state_dir}" -type f \
@@ -168,6 +185,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /etc/resolv.conf \
         ! -path /tmp/app-build \
         ! -path '/tmp/app-build/*' \
+        ! -path /tmp/sqlite3 \
         ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \
         -newermt "@${SOURCE_DATE_EPOCH}" \

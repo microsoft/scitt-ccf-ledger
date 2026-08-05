@@ -37,7 +37,7 @@ DOCKER_BUILDKIT=1 docker build \
 echo "Inspecting Docker image $DOCKER_TAG"
 docker image inspect "$DOCKER_TAG"
 
-if [ -n "$SAVE_IMAGE_PATH" ]; then  
+if [ -n "$SAVE_IMAGE_PATH" ]; then
     echo "Saving image to $SAVE_IMAGE_PATH"
     docker save "$DOCKER_TAG" -o "$SAVE_IMAGE_PATH"
 else
