@@ -135,7 +135,7 @@ jobs:
           retention-days: 1
 
   compare-images:
-    name: Compare image IDs
+    name: Compare filesystem layers
     needs: build-image
     runs-on: ubuntu-latest
     steps:
@@ -145,31 +145,36 @@ jobs:
           pattern: docker-image-id-*
           path: image-ids
 
-      - name: Compare image IDs
+      - name: Compare filesystem layers
         shell: bash
         run: |
           set -euo pipefail
 
-          first=image-ids/docker-image-id-one/image-id.txt
-          second=image-ids/docker-image-id-two/image-id.txt
+          first_id=image-ids/docker-image-id-one/image-id.txt
+          second_id=image-ids/docker-image-id-two/image-id.txt
+          first_layers=image-ids/docker-image-id-one/layer-digests.txt
+          second_layers=image-ids/docker-image-id-two/layer-digests.txt
 
-          echo "Build one image ID: $(cat "${first}")"
-          echo "Build two image ID: $(cat "${second}")"
+          echo "Build one image ID: $(cat "${first_id}")"
+          echo "Build two image ID: $(cat "${second_id}")"
 
-          if ! cmp --silent "${first}" "${second}"; then
-            echo "Layer digest differences:"
-            diff -u \
-              image-ids/docker-image-id-one/layer-digests.txt \
-              image-ids/docker-image-id-two/layer-digests.txt || true
+          if ! cmp --silent "${first_layers}" "${second_layers}"; then
+            echo "Filesystem layer digest differences:"
+            diff -u "${first_layers}" "${second_layers}" || true
             echo "Filesystem differences:"
             diff -u \
               image-ids/docker-image-id-one/filesystem-manifest.txt \
               image-ids/docker-image-id-two/filesystem-manifest.txt || true
-            echo "::error::The Docker image is not reproducible: independently built image IDs differ."
+            echo "::error::The Docker image filesystem layers are not reproducible. Build one: $(paste -sd, "${first_layers}"); build two: $(paste -sd, "${second_layers}")"
             exit 1
           fi
 
-          echo "Docker image is reproducible: matching image ID $(cat "${first}")"
+          if ! cmp --silent "${first_id}" "${second_id}"; then
+            echo "::warning::Filesystem layers match, but image configuration IDs differ. Pipeline labels and builder metadata are outside this gate's scope."
+          fi
+
+          echo "Docker image filesystem layers are reproducible:"
+          cat "${first_layers}"
 
       - name: Upload reproduction manifest
         uses: actions/upload-artifact@v4

@@ -220,7 +220,15 @@ Docker labels affect the image configuration and full image digest, but not the 
 
 Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone as the environment changed over time introducing values that change on each build. To mitigate against these issues, an automated reproducibility check is run on every commit.
 
-The GitHub Actions check builds the same normalized source context twice on independent runners and requires the complete image IDs to match. The second build deliberately runs in a different environment (different context path depth, time zone, locale and umask) so that any sensitivity to the build environment fails the gate immediately instead of surfacing years later. It also runs for release tags, and publishes the `reproduce.json` manifest of the verified build as a workflow artifact.
+The GitHub Actions check builds the same normalized source context twice on
+independent runners and requires the ordered filesystem layer digests to match
+exactly. Complete image IDs are printed for diagnostics but are not gated,
+because image configuration metadata is outside the dmverity layer comparison
+scope. The second build deliberately runs in a different environment (different
+context path depth, time zone, locale and umask) so that filesystem sensitivity
+fails the gate immediately instead of surfacing years later. It also runs for
+release tags and publishes the `reproduce.json` manifest of the verified build
+as a workflow artifact.
 
 The OneBranch pipeline builds the same normalized context twice with the governed
 `imagebuildinfo` task. The reference build disables pipeline metadata; the
