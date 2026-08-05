@@ -152,11 +152,11 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         LC_ALL=C sort > /opt/scitt/share/packages.txt && \
     rpm -e --justdb --nodeps --noscripts scitt && \
     /tmp/sqlite3 /var/lib/rpm/rpmdb.sqlite 'VACUUM;' && \
+    rpm -qa > /dev/null && \
     rm -f \
         /var/lib/rpm/.rpm.lock \
         /var/lib/rpm/rpmdb.sqlite-shm \
         /var/lib/rpm/rpmdb.sqlite-wal && \
-    rpm -qa > /dev/null && \
     for state_dir in \
         /etc/pki/ca-trust/extracted/java \
         /usr/lib/sysimage/tdnf \

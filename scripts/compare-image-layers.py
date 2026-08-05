@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
@@ -6,9 +6,10 @@ import json
 import sys
 import tarfile
 from pathlib import PurePosixPath
+from typing import Any
 
 
-def read_json(archive: tarfile.TarFile, path: str) -> object:
+def read_json(archive: tarfile.TarFile, path: str) -> Any:
     member = archive.extractfile(path)
     if member is None:
         raise ValueError(f"{path} is not a regular file")
@@ -46,7 +47,10 @@ def read_layers(path: str) -> list[str]:
 
 def main() -> int:
     if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <first-image.tar> <second-image.tar>", file=sys.stderr)
+        print(
+            f"Usage: {sys.argv[0]} <first-image.tar> <second-image.tar>",
+            file=sys.stderr,
+        )
         return 2
 
     first = read_layers(sys.argv[1])
