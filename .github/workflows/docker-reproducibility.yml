@@ -162,9 +162,17 @@ jobs:
             echo "Filesystem layer digest differences:"
             diff -u "${first_layers}" "${second_layers}" || true
             echo "Filesystem differences:"
-            diff -u \
+            filesystem_diff=$(diff -u \
               image-ids/docker-image-id-one/filesystem-manifest.txt \
-              image-ids/docker-image-id-two/filesystem-manifest.txt || true
+              image-ids/docker-image-id-two/filesystem-manifest.txt || true)
+            if [ -n "${filesystem_diff}" ]; then
+              echo "${filesystem_diff}"
+              while IFS= read -r line; do
+                echo "::error::Filesystem difference: ${line}"
+              done < <(printf '%s\n' "${filesystem_diff}" | head -n 30)
+            else
+              echo "::error::Filesystem manifests match; the layer archive differs in metadata not captured by the manifest, such as extended attributes or entry encoding."
+            fi
             echo "::error::The Docker image filesystem layers are not reproducible. Build one: $(paste -sd, "${first_layers}"); build two: $(paste -sd, "${second_layers}")"
             exit 1
           fi
