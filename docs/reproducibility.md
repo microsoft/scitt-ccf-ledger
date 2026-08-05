@@ -230,6 +230,16 @@ fails the gate immediately instead of surfacing years later. It also runs for
 release tags and publishes the `reproduce.json` manifest of the verified build
 as a workflow artifact.
 
+The runtime filesystem is copied below `/rootfs` in an intermediate stage before
+the final `FROM scratch` stage. This prevents BuildKit's runtime-injected
+`/etc/hosts`, `/etc/hostname` and `/etc/resolv.conf` mounts from changing parent
+directory timestamps after the Dockerfile's timestamp sweep. The canonicalizer
+sets every retained timestamp to `SOURCE_DATE_EPOCH` and restores hardlink
+groups that overlay copy-up would otherwise split. The final image therefore
+contains one canonical filesystem layer (plus any metadata-only empty layer)
+rather than retaining the Azure Linux base layer separately. Compare rebuilt
+and deployed images as ordered layer lists; do not assume a fixed layer count.
+
 The OneBranch pipeline builds the same normalized context twice with the governed
 `imagebuildinfo` task. The reference build disables pipeline metadata; the
 published build retains the required traceability labels. Their saved image

@@ -86,7 +86,7 @@ ARG TDNF_SNAPSHOTTIME
 
 RUN tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} sqlite
 
-FROM base
+FROM base AS runtime
 
 ARG CCF_VERSION
 ARG SOURCE_DATE_EPOCH=0
@@ -193,6 +193,26 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         -newermt "@${SOURCE_DATE_EPOCH}" \
         -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + && \
     touch -d "@${SOURCE_DATE_EPOCH}" /
+
+# BuildKit injects /etc/hosts, /etc/hostname, and /etc/resolv.conf while RUN
+# executes. Their parent-directory timestamps can leak host timing into the
+# layer after the timestamp sweep above. Copy the completed filesystem below a
+# non-special path, where every entry can be normalized before the final copy.
+FROM base AS rootfs-normalizer
+
+ARG SOURCE_DATE_EPOCH=0
+
+COPY --from=runtime / /rootfs/
+
+RUN --mount=type=bind,source=docker/canonicalize-rootfs.sh,target=/tmp/canonicalize-rootfs.sh \
+    /bin/bash /tmp/canonicalize-rootfs.sh /rootfs "${SOURCE_DATE_EPOCH}"
+
+FROM scratch
+
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+COPY --from=rootfs-normalizer /rootfs/ /
+
 WORKDIR /host/node
 
 # Use tini to handle zombie processes and signal forwarding
