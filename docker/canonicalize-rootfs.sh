@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
