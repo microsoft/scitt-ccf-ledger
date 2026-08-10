@@ -77,10 +77,7 @@ jobs:
         displayName: 'Build reproducibility reference image'
         retryCountOnTaskFailure: 1
         inputs:
-          # OneBranch keys saved image outputs by repository name. Keep the
-          # reference build distinct so the published build below cannot
-          # replace its archive.
-          repositoryName: scitt-reference
+          repositoryName: scitt
           dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
           dockerFileContextPath: artifacts
           registry: ${{ parameters.AcrName }}.azurecr.io
@@ -95,6 +92,29 @@ jobs:
           enable_service_tree_acr_path: false
           arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
+
+      # Preserve the first task's output outside ob_outputDirectory before the
+      # second governed image task runs. OneBranch owns that output directory
+      # and may replace image-build artifacts while expanding subsequent tasks.
+      - script: |
+          set -euo pipefail
+
+          reference_image="$(Build.SourcesDirectory)/out/${{ parameters.Name }}-reference.tar"
+          staged_reference="$(Agent.TempDirectory)/${{ parameters.Name }}-reference.tar"
+
+          if [ ! -s "${reference_image}" ]; then
+            echo "##vso[task.logissue type=error]Reference image archive was not created at ${reference_image}"
+            find "$(Build.SourcesDirectory)/out" \
+              -maxdepth 4 \
+              -type f \
+              \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' -o -name '*-metadata.json' \) \
+              -printf 'OneBranch output: %p (%s bytes)\n' 2>/dev/null || true
+            exit 1
+          fi
+
+          cp "${reference_image}" "${staged_reference}"
+          echo "Preserved reference image archive at ${staged_reference}"
+        displayName: Preserve reproducibility reference image
 
       - task: onebranch.pipeline.imagebuildinfo@1
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
@@ -118,12 +138,12 @@ jobs:
       - script: |
           set -euo pipefail
 
-          reference_image="$(Build.SourcesDirectory)/out/${{ parameters.Name }}-reference.tar"
+          reference_image="$(Agent.TempDirectory)/${{ parameters.Name }}-reference.tar"
           published_image="$(Build.SourcesDirectory)/out/${{ parameters.Name }}.tar"
 
           for image in "${reference_image}" "${published_image}"; do
             if [ ! -s "${image}" ]; then
-              echo "Expected OneBranch image archive was not created: ${image}" >&2
+              echo "##vso[task.logissue type=error]Expected OneBranch image archive was not created: ${image}"
               echo "Image-related files under the OneBranch output directory:" >&2
               find "$(Build.SourcesDirectory)/out" \
                 -maxdepth 4 \
