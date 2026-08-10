@@ -93,29 +93,6 @@ jobs:
           arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
 
-      # Preserve the first task's output outside ob_outputDirectory before the
-      # second governed image task runs. OneBranch owns that output directory
-      # and may replace image-build artifacts while expanding subsequent tasks.
-      - script: |
-          set -euo pipefail
-
-          reference_image="$(Build.SourcesDirectory)/out/${{ parameters.Name }}-reference.tar"
-          staged_reference="$(Agent.TempDirectory)/${{ parameters.Name }}-reference.tar"
-
-          if [ ! -s "${reference_image}" ]; then
-            echo "##vso[task.logissue type=error]Reference image archive was not created at ${reference_image}"
-            find "$(Build.SourcesDirectory)/out" \
-              -maxdepth 4 \
-              -type f \
-              \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' -o -name '*-metadata.json' \) \
-              -printf 'OneBranch output: %p (%s bytes)\n' 2>/dev/null || true
-            exit 1
-          fi
-
-          cp "${reference_image}" "${staged_reference}"
-          echo "Preserved reference image archive at ${staged_reference}"
-        displayName: Preserve reproducibility reference image
-
       - task: onebranch.pipeline.imagebuildinfo@1
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
         retryCountOnTaskFailure: 1 
@@ -135,17 +112,42 @@ jobs:
           arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
 
+  # OneBranch materializes saveImageToPath during governed post-processing,
+  # after all user steps in the build job. Compare the published job artifact
+  # from a dependent job so both saved image archives are available.
+  - job: ${{ parameters.Name }}_verify_reproducibility
+    displayName: Verify Docker image reproducibility
+    dependsOn: ${{ parameters.Name }}
+    pool:
+      type: linux
+    variables:
+      ob_git_checkout: true
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
+
+    steps:
+      - checkout: SCITT
+        path: s/
+        fetchDepth: 1
+        lfs: false
+
+      - task: DownloadPipelineArtifact@2
+        displayName: Download Docker image archives
+        inputs:
+          buildType: current
+          artifact: drop_docker_${{ parameters.Name }}
+          targetPath: $(Build.SourcesDirectory)/dst/docker
+
       - script: |
           set -euo pipefail
 
-          reference_image="$(Agent.TempDirectory)/${{ parameters.Name }}-reference.tar"
-          published_image="$(Build.SourcesDirectory)/out/${{ parameters.Name }}.tar"
+          reference_image="$(Build.SourcesDirectory)/dst/docker/${{ parameters.Name }}-reference.tar"
+          published_image="$(Build.SourcesDirectory)/dst/docker/${{ parameters.Name }}.tar"
 
           for image in "${reference_image}" "${published_image}"; do
             if [ ! -s "${image}" ]; then
               echo "##vso[task.logissue type=error]Expected OneBranch image archive was not created: ${image}"
-              echo "Image-related files under the OneBranch output directory:" >&2
-              find "$(Build.SourcesDirectory)/out" \
+              echo "Image-related files in the downloaded Docker artifact:" >&2
+              find "$(Build.SourcesDirectory)/dst/docker" \
                 -maxdepth 4 \
                 -type f \
                 \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' -o -name '*-metadata.json' \) \
@@ -156,5 +158,5 @@ jobs:
 
           ./scripts/compare-image-layers.py \
             "${reference_image}" \
-            "${published_image}"
+            "${published_image}" | tee "$(Build.SourcesDirectory)/out/reproducibility.txt"
         displayName: Verify OneBranch image reproducibility
