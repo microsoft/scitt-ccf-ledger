@@ -157,6 +157,7 @@ jobs:
           done
 
           comparison_output="$(Build.SourcesDirectory)/out/reproducibility.txt"
+          mkdir -p "$(dirname "${comparison_output}")"
           if ! ./scripts/compare-image-layers.py \
               "${reference_image}" \
               "${published_image}" > "${comparison_output}" 2>&1; then
