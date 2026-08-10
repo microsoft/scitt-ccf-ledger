@@ -156,7 +156,16 @@ jobs:
             fi
           done
 
-          ./scripts/compare-image-layers.py \
-            "${reference_image}" \
-            "${published_image}" | tee "$(Build.SourcesDirectory)/out/reproducibility.txt"
+          comparison_output="$(Build.SourcesDirectory)/out/reproducibility.txt"
+          if ! ./scripts/compare-image-layers.py \
+              "${reference_image}" \
+              "${published_image}" > "${comparison_output}" 2>&1; then
+            cat "${comparison_output}"
+            while IFS= read -r line; do
+              echo "##vso[task.logissue type=error]${line}"
+            done < "${comparison_output}"
+            exit 1
+          fi
+
+          cat "${comparison_output}"
         displayName: Verify OneBranch image reproducibility
