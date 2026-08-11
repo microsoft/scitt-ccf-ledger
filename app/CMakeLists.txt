@@ -59,9 +59,7 @@ FetchContent_MakeAvailable(regocpp)
 # add linking options
 # add SAN options if CCF is built with them
 add_ccf_app(scitt
-  SRCS
-    src/ledger_sign_mode.cpp
-    src/main.cpp
+  SRCS src/main.cpp
 )
 
 # Mark third-party targets as SYSTEM so their headers (and transitive deps)
