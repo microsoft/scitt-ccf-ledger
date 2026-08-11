@@ -159,6 +159,7 @@ jobs:
           comparison_output="$(Build.SourcesDirectory)/out/reproducibility.txt"
           mkdir -p "$(dirname "${comparison_output}")"
           if ! ./scripts/compare-image-layers.py \
+              --output-layers "$(Build.SourcesDirectory)/out/image-layers.txt" \
               "${reference_image}" \
               "${published_image}" > "${comparison_output}" 2>&1; then
             cat "${comparison_output}"
@@ -169,4 +170,11 @@ jobs:
           fi
 
           cat "${comparison_output}"
+
+          # Published for cross-checking against the image-layers.txt that the
+          # GitHub release carries for the same commit. The two build systems
+          # use different Docker and BuildKit versions, so this is the only
+          # record that shows whether they still agree.
+          echo "Filesystem layers of the published image:"
+          cat "$(Build.SourcesDirectory)/out/image-layers.txt"
         displayName: Verify OneBranch image reproducibility

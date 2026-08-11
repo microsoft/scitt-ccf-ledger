@@ -50,28 +50,56 @@ than the original build used. Both are recorded in the image itself
 EOF
 }
 
+# Prints the repository root, or nothing when this is not a git checkout.
+# Reproducing a published image only needs the recorded build inputs, so the
+# absence of a repository is not by itself an error.
 repo_root() {
-    git rev-parse --show-toplevel
+    git rev-parse --show-toplevel 2>/dev/null || true
+}
+
+require_repo_root() {
+    local root
+    root=$(repo_root)
+    if [ -z "${root}" ]; then
+        echo "This command must run inside a git checkout of the repository." >&2
+        exit 1
+    fi
+    printf '%s' "${root}"
 }
 
 # Resolve the build inputs, preferring explicitly provided values so that an
 # old image can be rebuilt even after new tags or commits have been created.
-# git is only consulted for values that were not supplied, which allows these
-# commands to run against an extracted context outside of a git checkout.
+# git is only consulted for values that were not supplied, which allows build
+# and manifest to run against an extracted context outside of a git checkout,
+# using only the values recorded in build-metadata.json or reproduce.json.
 resolve_inputs() {
-    local root
+    local root resolved name missing=""
+
     root=$(repo_root)
-
-    if [ -z "${SOURCE_COMMIT:-}" ]; then
-        SOURCE_COMMIT=$(git -C "${root}" rev-parse HEAD)
+    if [ -n "${root}" ]; then
+        if [ -z "${SOURCE_COMMIT:-}" ]; then
+            SOURCE_COMMIT=$(git -C "${root}" rev-parse HEAD)
+        fi
+        if resolved=$(git -C "${root}" rev-parse --verify --quiet "${SOURCE_COMMIT}^{commit}"); then
+            SOURCE_COMMIT="${resolved}"
+        fi
+        if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+            SOURCE_DATE_EPOCH=$(git -C "${root}" show -s --format=%ct "${SOURCE_COMMIT}")
+        fi
+        if [ -z "${SCITT_VERSION_OVERRIDE:-}" ]; then
+            SCITT_VERSION_OVERRIDE=$(git -C "${root}" describe --tags --long --always "${SOURCE_COMMIT}")
+        fi
     fi
-    SOURCE_COMMIT=$(git -C "${root}" rev-parse --verify "${SOURCE_COMMIT}^{commit}")
 
-    if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
-        SOURCE_DATE_EPOCH=$(git -C "${root}" show -s --format=%ct "${SOURCE_COMMIT}")
-    fi
-    if [ -z "${SCITT_VERSION_OVERRIDE:-}" ]; then
-        SCITT_VERSION_OVERRIDE=$(git -C "${root}" describe --tags --long --always "${SOURCE_COMMIT}")
+    for name in SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE; do
+        if [ -z "${!name:-}" ]; then
+            missing="${missing} ${name}"
+        fi
+    done
+    if [ -n "${missing}" ]; then
+        echo "Outside a git checkout these must be set explicitly:${missing}" >&2
+        echo "Each one is recorded in build-metadata.json and reproduce.json." >&2
+        exit 1
     fi
 
     case "${SOURCE_DATE_EPOCH}" in
@@ -91,8 +119,11 @@ cmd_context() {
     local archive="$1"
     local root staging metadata context_sha256 submodules
 
-    root=$(repo_root)
+    root=$(require_repo_root)
     resolve_inputs
+    # Archiving requires the commit itself, not merely a recorded identifier.
+    SOURCE_COMMIT=$(git -C "${root}" rev-parse --verify "${SOURCE_COMMIT}^{commit}")
+    export SOURCE_COMMIT
 
     archive=$(realpath -m "${archive}")
     metadata="$(dirname "${archive}")/build-metadata.json"
@@ -230,8 +261,13 @@ cmd_manifest() {
     local tag="$1"
     local output="$2"
     local context="${3:-$(repo_root)}"
-    local dockerfile="${context}/docker/Dockerfile"
-    local base_image image_id layers docker_version buildx_version
+    local dockerfile base_image image_id layers docker_version buildx_version
+
+    if [ -z "${context}" ]; then
+        echo "A context directory is required outside a git checkout." >&2
+        exit 1
+    fi
+    dockerfile="${context}/docker/Dockerfile"
 
     resolve_inputs
 

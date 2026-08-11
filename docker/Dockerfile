@@ -205,7 +205,13 @@ ARG SOURCE_DATE_EPOCH=0
 COPY --from=runtime / /rootfs/
 
 RUN --mount=type=bind,source=docker/canonicalize-rootfs.sh,target=/tmp/canonicalize-rootfs.sh \
-    /bin/bash /tmp/canonicalize-rootfs.sh /rootfs "${SOURCE_DATE_EPOCH}"
+    /bin/bash /tmp/canonicalize-rootfs.sh /rootfs "${SOURCE_DATE_EPOCH}" && \
+    if [ ! -d /rootfs/host/node ]; then \
+        echo "The final stage WORKDIR /host/node must already exist here." >&2; \
+        echo "BuildKit stamps directories that WORKDIR creates with the wall" >&2; \
+        echo "clock, which would make the image unreproducible." >&2; \
+        exit 1; \
+    fi
 
 FROM scratch
 

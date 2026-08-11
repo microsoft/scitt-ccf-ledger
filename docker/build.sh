@@ -17,7 +17,12 @@ ROOT_DIR=$( dirname "$SCRIPT_DIR" )
 # working tree so that uncommitted changes are picked up.
 if [ "$REPRODUCIBLE" != "0" ]; then
     echo "Building reproducibly via scripts/reproduce-image.sh"
-    exec "$ROOT_DIR/scripts/reproduce-image.sh" all "$DOCKER_TAG"
+    "$ROOT_DIR/scripts/reproduce-image.sh" all "$DOCKER_TAG"
+    if [ -n "$SAVE_IMAGE_PATH" ]; then
+        echo "Saving image to $SAVE_IMAGE_PATH"
+        docker save "$DOCKER_TAG" -o "$SAVE_IMAGE_PATH"
+    fi
+    exit 0
 fi
 
 # uses longer version of tags to avoid situations when tag is reassigned to a different commit, e.g. 0.12.1-2-g0b45e35

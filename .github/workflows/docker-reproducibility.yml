@@ -206,3 +206,38 @@ jobs:
           path: image-ids/docker-image-id-one/reproduce.json
           if-no-files-found: error
           retention-days: 90
+
+  publish-manifest:
+    name: Publish reproduction manifest
+    needs: compare-images
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Workflow artifacts expire, but reproducing a release years from now
+      # requires the exact inputs this build used. Attach them to the release
+      # so the recorded layer digests outlive artifact retention and can be
+      # checked by the scheduled re-verification and by third parties.
+      - name: Download verified build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-id-one
+          path: manifest
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp manifest/reproduce.json release-assets/reproduce.json
+          cp manifest/layer-digests.txt release-assets/image-layers.txt
+          echo "Publishing reproduction manifest:"
+          cat release-assets/reproduce.json
+
+      - name: Attach manifest to the release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-assets/reproduce.json
+            release-assets/image-layers.txt

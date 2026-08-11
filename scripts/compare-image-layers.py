@@ -2,6 +2,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import argparse
 import json
 import sys
 import tarfile
@@ -46,15 +47,24 @@ def read_layers(path: str) -> list[str]:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print(
-            f"Usage: {sys.argv[0]} <first-image.tar> <second-image.tar>",
-            file=sys.stderr,
-        )
-        return 2
+    parser = argparse.ArgumentParser(
+        description="Compare the ordered filesystem layers of two image archives.",
+    )
+    parser.add_argument("first", help="First Docker or OCI image archive")
+    parser.add_argument("second", help="Second Docker or OCI image archive")
+    parser.add_argument(
+        "--output-layers",
+        metavar="PATH",
+        help=(
+            "Write the verified layer digests to PATH, one per line, so the "
+            "result can be compared with the digests another build system or "
+            "a published release manifest recorded."
+        ),
+    )
+    args = parser.parse_args()
 
-    first = read_layers(sys.argv[1])
-    second = read_layers(sys.argv[2])
+    first = read_layers(args.first)
+    second = read_layers(args.second)
 
     print("First image filesystem layers:")
     print("\n".join(first))
@@ -64,6 +74,10 @@ def main() -> int:
     if first != second:
         print("The image filesystem layers are not reproducible.", file=sys.stderr)
         return 1
+
+    if args.output_layers:
+        with open(args.output_layers, "w", encoding="utf-8") as handle:
+            handle.write("".join(f"{layer}\n" for layer in first))
 
     print("The image filesystem layers are reproducible.")
     return 0

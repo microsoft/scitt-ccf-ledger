@@ -4,12 +4,18 @@ The ledger application is running in a trusted execution environment and has a m
 
 ## Prerequisites
 
-The rebuild requires Linux, Git, Python 3, GNU tar, `jq`, Docker with BuildKit
-0.11 or newer, and enough disk space for two uncached image builds. The
-reproducibility checks in this guide compare the ordered, uncompressed
-filesystem layers used to derive dmverity measurements. Registry manifests,
-compression, signatures, attestations and pipeline-added image labels are
-outside that comparison.
+The rebuild requires Linux on `x86_64`, Git, Python 3, GNU tar, `jq`, Docker
+with BuildKit 0.11 or newer, and enough disk space for two uncached image
+builds. The reproducibility checks in this guide compare the ordered,
+uncompressed filesystem layers used to derive dmverity measurements. Registry
+manifests, compression, signatures, attestations and pipeline-added image labels
+are outside that comparison.
+
+Releases carry two assets that record what was built and verified:
+`reproduce.json`, listing the build inputs and the Docker and BuildKit versions
+used, and `image-layers.txt`, listing the verified filesystem layer digests.
+Start from those when reproducing a published release, and reproduce with the
+recorded tool versions if an exact match is required.
 
 You also need a couple pieces of information to begin with:
 
@@ -195,6 +201,19 @@ context command writes `build-metadata.json` and a SHA-256 file next to the
 archive. The build rejects repositories containing submodules until their
 contents can be normalized explicitly.
 
+Only `context` needs a git checkout, because it archives a commit. Given a
+context archive and the recorded `SOURCE_COMMIT`, `SOURCE_DATE_EPOCH` and
+`SCITT_VERSION_OVERRIDE`, the `extract`, `build` and `manifest` steps run
+without one, so an archived context can be rebuilt long after the repository
+that produced it is unavailable:
+
+```sh
+$ export SOURCE_COMMIT=... SOURCE_DATE_EPOCH=... SCITT_VERSION_OVERRIDE=...
+$ ./reproduce-image.sh extract docker-context.tar ./context
+$ ./reproduce-image.sh build ./context "${IMAGE}"
+$ ./reproduce-image.sh manifest "${IMAGE}" ./reproduce.json ./context
+```
+
 Two files inside the image help diagnose a mismatch:
 
 - `/opt/scitt/share/VERSION` - the version the image was built with.
@@ -227,8 +246,19 @@ because image configuration metadata is outside the dmverity layer comparison
 scope. The second build deliberately runs in a different environment (different
 context path depth, time zone, locale and umask) so that filesystem sensitivity
 fails the gate immediately instead of surfacing years later. It also runs for
-release tags and publishes the `reproduce.json` manifest of the verified build
-as a workflow artifact.
+release tags, and for those it attaches `reproduce.json` and `image-layers.txt`
+to the GitHub release. Workflow artifacts expire, so the release assets are the
+durable record of what a release was built from and which layers it produced.
+
+Because that check builds twice at the same moment, it detects sensitivity to
+the build environment but cannot detect an input that changes or disappears as
+time passes: both builds would consume the same changed input and still agree.
+The `Historical docker reproducibility` workflow covers that case. It runs
+weekly, rebuilds the most recent release tag, and compares the result with the
+`reproduce.json` published for that release, reporting which recorded input
+changed when the layers no longer match. It can also be started manually
+against any tag or commit. A failure there means a published image can no
+longer be reproduced, which is the failure mode this guide exists to prevent.
 
 The runtime filesystem is copied below `/rootfs` in an intermediate stage before
 the final `FROM scratch` stage. This prevents BuildKit's runtime-injected
@@ -246,7 +276,52 @@ published build retains the required traceability labels. Their saved image
 archives are compared by reading the ordered `rootfs.diff_ids` from each image
 configuration. Complete image IDs are expected to differ because labels alter
 the image configuration, but matching filesystem layer digests establish the
-layer and dmverity reproducibility required by this guide.
+layer and dmverity reproducibility required by this guide. That job also writes
+the verified digests to `out/image-layers.txt`.
+
+#### Known limits of the automated checks
+
+These checks are deliberately scoped, and it is worth knowing what they do not
+prove:
+
+- **The two build systems are not compared with each other.** GitHub Actions and
+  OneBranch each verify that two of their own builds agree, but they run
+  different Docker and BuildKit versions. Nothing automatically asserts that the
+  image pushed to ACR has the same layers as the release GitHub verified.
+  Compare `out/image-layers.txt` from the pipeline with the `image-layers.txt`
+  attached to the release for the same commit when that matters.
+- **The build toolchain is not pinned.** Layer normalization is performed by the
+  Dockerfile itself, because BuildKit does not rewrite layer timestamps for
+  `SOURCE_DATE_EPOCH`; it only uses it for the image configuration. A future
+  BuildKit that changes how layers are encoded could therefore change the
+  digests. `reproduce.json` records the `docker` and `buildx` versions that
+  produced a verified image, so reproduce with those versions when an exact
+  match is required.
+- **The dmverity conversion is not gated.** The checks compare Docker layer
+  diff IDs. Identical diff IDs mean identical uncompressed layer content, but
+  the conversion to dmverity root hashes also depends on the `dmverity-vhd`
+  version, so record the `integrity-vhd` commit used, as shown above.
+- **Build inputs are fetched from the network.** The base image digest, the CCF
+  release assets, the `tdnf` package snapshot and the pinned source
+  dependencies must all still be served for a rebuild to succeed. The weekly
+  historical check is what reveals when one of them stops being available.
+
+When investigating a suspected timestamp leak, BuildKit can clamp every layer
+timestamp to `SOURCE_DATE_EPOCH` on export. If a build only becomes
+reproducible with this enabled, something in the image is still carrying a
+build-time timestamp:
+
+```sh
+$ docker buildx build --provenance=false --no-cache \
+    --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
+    --build-arg SCITT_VERSION_OVERRIDE="${SCITT_VERSION_OVERRIDE}" \
+    --output type=docker,dest=image.tar,rewrite-timestamp=true \
+    -f context/docker/Dockerfile context
+```
+
+This is a diagnostic rather than part of the canonical build, which must stay
+identical across both pipelines. It requires BuildKit 0.13 or newer and cannot
+be combined with loading the image directly into the daemon.
 
 ### 3. Verify UVM
 

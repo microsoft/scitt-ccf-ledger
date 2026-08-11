@@ -1,0 +1,148 @@
+name: "Historical docker reproducibility"
+
+# The per-commit gate builds the same source twice at the same moment, so it
+# only detects sensitivity to the build environment. It cannot detect an input
+# that changes or disappears as time passes: both builds would consume the same
+# changed input and agree with each other. This workflow rebuilds an already
+# released commit long after it was published and compares the result with the
+# layer digests recorded at release time, which is what actually keeps the
+# published images reproducible over the years.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Release tag or commit to re-verify. Defaults to the latest release tag."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.ref || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild-released-image:
+    name: Rebuild a released image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the revision to re-verify
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested="${{ inputs.ref }}"
+          if [ -z "${requested}" ]; then
+            requested=$(git tag --list --sort=-v:refname | head -n1)
+          fi
+          if [ -z "${requested}" ]; then
+            echo "::notice::No release tag exists yet, so there is nothing to re-verify."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify --quiet "${requested}^{commit}" > /dev/null; then
+            echo "::error::Revision ${requested} does not exist in this repository."
+            exit 1
+          fi
+
+          # Releases published before the reproducible build entry point exists
+          # cannot be rebuilt by this workflow, and that is expected rather than
+          # a reproducibility failure.
+          if ! git cat-file -e "${requested}:scripts/reproduce-image.sh" 2>/dev/null; then
+            echo "::notice::${requested} predates scripts/reproduce-image.sh, so it cannot be re-verified."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ref=${requested}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Re-verifying ${requested}"
+
+      - name: Check out the released revision
+        if: steps.resolve.outputs.skip == 'false'
+        shell: bash
+        run: git checkout --detach "${{ steps.resolve.outputs.ref }}"
+
+      - name: Rebuild the released image
+        if: steps.resolve.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A failure here usually means an input the release depends on is no
+          # longer available, which is the drift this workflow exists to catch.
+          if ! ./scripts/reproduce-image.sh all \
+              "scitt-historical:${{ steps.resolve.outputs.ref }}" \
+              "${RUNNER_TEMP}/reproduction"; then
+            echo "::error::Rebuilding ${{ steps.resolve.outputs.ref }} failed. An input it depends on may have changed or been withdrawn."
+            exit 1
+          fi
+
+      - name: Compare with the digests recorded at release time
+        if: steps.resolve.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rebuilt="${RUNNER_TEMP}/reproduction/reproduce.json"
+          recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+          ref='${{ steps.resolve.outputs.ref }}'
+
+          echo "Rebuilt manifest:"
+          cat "${rebuilt}"
+
+          if ! gh release download "${ref}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --pattern reproduce.json \
+              --output "${recorded}" 2> "${RUNNER_TEMP}/download.log"; then
+            cat "${RUNNER_TEMP}/download.log"
+            echo "::notice::${ref} has no published reproduce.json, so only the rebuild itself was verified."
+            exit 0
+          fi
+
+          jq -r '.layers[]' "${recorded}" > "${RUNNER_TEMP}/recorded-layers.txt"
+          jq -r '.layers[]' "${rebuilt}" > "${RUNNER_TEMP}/rebuilt-layers.txt"
+
+          echo "Layers recorded at release time:"
+          cat "${RUNNER_TEMP}/recorded-layers.txt"
+          echo "Layers produced by this rebuild:"
+          cat "${RUNNER_TEMP}/rebuilt-layers.txt"
+
+          if ! cmp --silent "${RUNNER_TEMP}/recorded-layers.txt" "${RUNNER_TEMP}/rebuilt-layers.txt"; then
+            diff -u \
+              "${RUNNER_TEMP}/recorded-layers.txt" \
+              "${RUNNER_TEMP}/rebuilt-layers.txt" || true
+            echo "::error::${ref} no longer rebuilds to its published filesystem layers. Compare the recorded and current build inputs in reproduce.json."
+            for field in base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version; do
+              was=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${recorded}")
+              now=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${rebuilt}")
+              if [ "${was}" != "${now}" ]; then
+                echo "::error::Input ${field} changed since release: ${was} -> ${now}"
+              fi
+            done
+            exit 1
+          fi
+
+          echo "${ref} still rebuilds to its published filesystem layers."
+
+      - name: Upload the rebuild manifest
+        if: steps.resolve.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-reproduce-manifest
+          path: ${{ runner.temp }}/reproduction/reproduce.json
+          if-no-files-found: error
+          retention-days: 90
