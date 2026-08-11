@@ -26,6 +26,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-build-inputs:
+    name: Check pinned build inputs are still available
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # This runs even when no release can be rebuilt yet, because it is the
+      # earliest warning that an input a future rebuild depends on has been
+      # withdrawn or changed underneath its pin.
+      - name: Probe pinned build inputs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! ./scripts/check-build-inputs.sh --json "${RUNNER_TEMP}/build-inputs.json"; then
+            echo "::error::A pinned build input is no longer available or has changed. Published images that depend on it can no longer be rebuilt as published."
+            exit 1
+          fi
+
+      - name: Upload the input availability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-input-availability
+          path: ${{ runner.temp }}/build-inputs.json
+          if-no-files-found: ignore
+          retention-days: 90
+
   rebuild-released-image:
     name: Rebuild a released image
     runs-on: ubuntu-latest
@@ -126,7 +157,7 @@ jobs:
               "${RUNNER_TEMP}/recorded-layers.txt" \
               "${RUNNER_TEMP}/rebuilt-layers.txt" || true
             echo "::error::${ref} no longer rebuilds to its published filesystem layers. Compare the recorded and current build inputs in reproduce.json."
-            for field in base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version; do
+            for field in base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version docker_version buildx_version; do
               was=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${recorded}")
               now=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${rebuilt}")
               if [ "${was}" != "${now}" ]; then

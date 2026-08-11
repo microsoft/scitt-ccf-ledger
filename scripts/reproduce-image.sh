@@ -36,12 +36,15 @@ Commands:
                                    Extra arguments are passed to docker build.
   manifest <tag> <file> [context]  Write a reproduce.json build manifest.
   metadata <file> <key>            Print one build-metadata.json value.
+  toolchain [context]              Check the local builder versions.
   all [tag] [output-directory]     Run all of the steps above in one go.
 
 Environment:
   SOURCE_DATE_EPOCH        Defaults to the HEAD commit timestamp.
   SCITT_VERSION_OVERRIDE   Defaults to git describe --tags --long --always.
   SOURCE_COMMIT            Defaults to the HEAD commit hash.
+  STRICT_TOOLCHAIN         Set to 1 to fail, rather than warn, when the
+                           builder is newer than the highest verified version.
 
 The version and timestamp must be supplied explicitly when reproducing a
 published image, because re-deriving them from git can yield a different value
@@ -211,12 +214,119 @@ cmd_extract() {
     REPRO_STAGING_DIR=""
 }
 
+builder_docker_version() {
+    docker version --format '{{.Server.Version}}'
+}
+
+# github.com/docker/buildx v0.33.0-desktop.1 <commit> -> 0.33.0
+builder_buildx_version() {
+    docker buildx version 2>/dev/null |
+        head -n1 |
+        awk '{print $2}' |
+        sed 's/^v//; s/-.*$//'
+}
+
+# Compares dotted versions, tolerating the differing component counts that
+# builders report.
+version_at_least() {
+    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
+}
+
+# Truncates a version to the component count of a reference, so that a maximum
+# expressed as a major version does not reject every patch release of it.
+version_prefix() {
+    local version="$1" reference="$2" components
+    components=$(printf '%s' "${reference}" | awk -F. '{print NF}')
+    if [ -z "${components}" ] || [ "${components}" -lt 1 ]; then
+        printf '%s' "${version}"
+        return 0
+    fi
+    printf '%s' "${version}" | cut -d. -f"1-${components}"
+}
+
+# Fails when the builder is older than a required minimum. An absent
+# expectation is not an error, so that contexts archived before a given
+# expectation existed can still be rebuilt.
+require_min_version() {
+    local name="$1" actual="$2" minimum="$3"
+
+    [ -n "${minimum}" ] || return 0
+    if ! version_at_least "${actual}" "${minimum}"; then
+        echo "${name} ${actual} is older than the minimum ${minimum}." >&2
+        exit 1
+    fi
+}
+
+# Reports, without failing, that the builder is newer than anything this
+# expectation has been verified against.
+report_if_newer() {
+    local name="$1" actual="$2" maximum="$3"
+
+    [ -n "${maximum}" ] || return 0
+    if ! version_at_least "${maximum}" "$(version_prefix "${actual}" "${maximum}")"; then
+        printf ' %s %s > %s' "${name}" "${actual}" "${maximum}"
+    fi
+}
+
+# The Dockerfile, not BuildKit, is what normalizes layer timestamps, so the
+# builder version is part of the reproducibility contract rather than an
+# incidental detail. See docker/toolchain.env.
+check_toolchain() {
+    local context="${1:-}" env_file docker_actual buildx_actual drift=""
+
+    env_file="${context}/docker/toolchain.env"
+    if [ ! -f "${env_file}" ]; then
+        echo "No toolchain expectations found at ${env_file}, skipping check." >&2
+        return 0
+    fi
+
+    # Expectations are read with defaults rather than assumed to be present, so
+    # that a context archived by an older or newer revision of this repository
+    # cannot fail the build merely by declaring a different set of them.
+    # shellcheck source=../docker/toolchain.env
+    . "${env_file}"
+
+    docker_actual=$(builder_docker_version)
+    buildx_actual=$(builder_buildx_version)
+    [ -n "${docker_actual}" ] || docker_actual="0"
+    [ -n "${buildx_actual}" ] || buildx_actual="0"
+
+    require_min_version docker "${docker_actual}" "${SCITT_MIN_DOCKER_VERSION:-}"
+    require_min_version buildx "${buildx_actual}" "${SCITT_MIN_BUILDX_VERSION:-}"
+
+    drift="${drift}$(report_if_newer docker "${docker_actual}" "${SCITT_MAX_VERIFIED_DOCKER_VERSION:-}")"
+    drift="${drift}$(report_if_newer buildx "${buildx_actual}" "${SCITT_MAX_VERIFIED_BUILDX_VERSION:-}")"
+
+    if [ -n "${drift}" ]; then
+        echo "Builder is newer than the highest verified version:${drift}" >&2
+        echo "The image may still be reproducible, but this combination has not been verified." >&2
+        echo "Raise the values in docker/toolchain.env once the reproducibility gate passes on it." >&2
+        if [ "${STRICT_TOOLCHAIN:-0}" = "1" ]; then
+            exit 1
+        fi
+        return 0
+    fi
+
+    echo "Builder versions are within the verified range: docker ${docker_actual}, buildx ${buildx_actual}"
+}
+
+cmd_toolchain() {
+    local context="${1:-$(repo_root)}"
+
+    if [ -z "${context}" ]; then
+        echo "A context directory is required outside a git checkout." >&2
+        exit 1
+    fi
+    check_toolchain "${context}"
+}
+
 cmd_build() {
     local directory="$1"
     local tag="$2"
     shift 2
 
     resolve_inputs
+    check_toolchain "${directory}"
 
     DOCKER_BUILDKIT=1 docker build \
         --platform linux/amd64 \
@@ -351,6 +461,7 @@ main() {
         build) cmd_build "$@" ;;
         manifest) cmd_manifest "$@" ;;
         metadata) cmd_metadata "$@" ;;
+        toolchain) cmd_toolchain "$@" ;;
         all) cmd_all "$@" ;;
         -h | --help | help) usage ;;
         *)

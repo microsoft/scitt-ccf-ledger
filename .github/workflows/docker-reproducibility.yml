@@ -74,6 +74,25 @@ jobs:
           name: docker-build-context
           path: repro-input
 
+      # Both builds in this job run on the same runner image, so a builder
+      # upgrade affects them equally and they still agree with each other.
+      # Reporting it as a warning keeps that visible without blocking unrelated
+      # work; the scheduled historical rebuild is where a builder change is
+      # compared against digests recorded years earlier.
+      - name: Check builder toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! output=$(./scripts/reproduce-image.sh toolchain "${PWD}" 2>&1); then
+            echo "${output}"
+            exit 1
+          fi
+          echo "${output}"
+          if printf '%s' "${output}" | grep -q "newer than the highest verified"; then
+            echo "::warning::The build ran on a builder newer than the highest verified version. Confirm the layers are unchanged and then raise the values in docker/toolchain.env."
+          fi
+
       - name: Build image
         shell: bash
         env:

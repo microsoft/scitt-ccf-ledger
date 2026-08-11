@@ -260,6 +260,11 @@ changed when the layers no longer match. It can also be started manually
 against any tag or commit. A failure there means a published image can no
 longer be reproduced, which is the failure mode this guide exists to prevent.
 
+That workflow also probes the pinned build inputs on every run, independently
+of whether a release can be rebuilt yet. Because the probe does not need a
+build, it reports a withdrawn or silently changed input in the week it happens,
+while re-pinning is still straightforward.
+
 The runtime filesystem is copied below `/rootfs` in an intermediate stage before
 the final `FROM scratch` stage. This prevents BuildKit's runtime-injected
 `/etc/hosts`, `/etc/hostname` and `/etc/resolv.conf` mounts from changing parent
@@ -290,21 +295,48 @@ prove:
   image pushed to ACR has the same layers as the release GitHub verified.
   Compare `out/image-layers.txt` from the pipeline with the `image-layers.txt`
   attached to the release for the same commit when that matters.
-- **The build toolchain is not pinned.** Layer normalization is performed by the
-  Dockerfile itself, because BuildKit does not rewrite layer timestamps for
-  `SOURCE_DATE_EPOCH`; it only uses it for the image configuration. A future
-  BuildKit that changes how layers are encoded could therefore change the
-  digests. `reproduce.json` records the `docker` and `buildx` versions that
-  produced a verified image, so reproduce with those versions when an exact
-  match is required.
+- **The build toolchain is not pinned to an exact version.** Layer
+  normalization is performed by the Dockerfile itself, because BuildKit does not
+  rewrite layer timestamps for `SOURCE_DATE_EPOCH`; it only uses it for the
+  image configuration. A future BuildKit that changes how layers are encoded
+  could therefore change the
+  digests. `docker/toolchain.env` declares the minimum builder versions, which
+  are enforced, and the highest versions the reproducibility gate has verified,
+  which are reported but allowed. `reproduce.json` records the `docker` and
+  `buildx` versions that produced a verified image, so reproduce with those
+  versions when an exact match is required. Set `STRICT_TOOLCHAIN=1` to turn
+  the report into an error:
+
+  ```sh
+  $ ./scripts/reproduce-image.sh toolchain
+  $ STRICT_TOOLCHAIN=1 ./scripts/reproduce-image.sh build context scitt:local
+  ```
+
+  When a newer builder is reported and the rebuilt layers still match, raise
+  `SCITT_MAX_VERIFIED_DOCKER_VERSION` and `SCITT_MAX_VERIFIED_BUILDX_VERSION`
+  in that file so the new version becomes the verified baseline.
 - **The dmverity conversion is not gated.** The checks compare Docker layer
   diff IDs. Identical diff IDs mean identical uncompressed layer content, but
   the conversion to dmverity root hashes also depends on the `dmverity-vhd`
   version, so record the `integrity-vhd` commit used, as shown above.
 - **Build inputs are fetched from the network.** The base image digest, the CCF
   release assets, the `tdnf` package snapshot and the pinned source
-  dependencies must all still be served for a rebuild to succeed. The weekly
-  historical check is what reveals when one of them stops being available.
+  dependencies must all still be served for a rebuild to succeed. None of them
+  carries a retention guarantee, so their availability is probed weekly, and
+  the same probe can be run at any time:
+
+  ```sh
+  $ ./scripts/check-build-inputs.sh
+  $ ./scripts/check-build-inputs.sh --verify-checksums --json inputs.json
+  ```
+
+  It checks that the base image manifest still resolves by digest, that the CCF
+  release assets are still served and still hash to their pinned values, that
+  the package repositories backing the pinned `tdnf` snapshot time are still
+  published, and that every pinned source dependency commit is still reachable.
+  A failure means images depending on that input can no longer be rebuilt as
+  published, so it needs attention even though nothing in the current source
+  has changed.
 
 When investigating a suspected timestamp leak, BuildKit can clamp every layer
 timestamp to `SOURCE_DATE_EPOCH` on export. If a build only becomes
