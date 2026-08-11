@@ -51,12 +51,6 @@ jobs:
               !env/**/*
           TargetFolder: '$(Build.SourcesDirectory)/out'
 
-      - script: |
-          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
-          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
-          echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}"
-        displayName: Derive source commit timestamp
-
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage
@@ -81,6 +75,6 @@ jobs:
           enable_cache: false
           enable_acr_push: true 
           enable_service_tree_acr_path: false
-          arguments: --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}"
+          arguments: --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}"
           endpoint: ${{ parameters.AcrEndpoint }}
           

@@ -33,8 +33,7 @@ set(BUILD_QCBOR_TEST OFF CACHE STRING "" FORCE)
 FetchContent_Declare(
   qcbor
   GIT_REPOSITORY https://github.com/laurencelundblade/QCBOR.git
-  # https://github.com/laurencelundblade/QCBOR/releases/tag/v1.6.1
-  GIT_TAG        930708bb86481e88879eb1d87fd4d664f1d69503
+  GIT_TAG        v1.6.1
 )
 FetchContent_MakeAvailable(qcbor)
 
@@ -60,7 +59,9 @@ FetchContent_MakeAvailable(regocpp)
 # add linking options
 # add SAN options if CCF is built with them
 add_ccf_app(scitt
-  SRCS src/main.cpp
+  SRCS
+    src/ledger_sign_mode.cpp
+    src/main.cpp
 )
 
 # Mark third-party targets as SYSTEM so their headers (and transitive deps)
