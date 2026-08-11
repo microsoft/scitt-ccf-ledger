@@ -7,7 +7,6 @@ set -e
 SAVE_IMAGE_PATH=${SAVE_IMAGE_PATH:-""}
 DOCKER_TAG=${DOCKER_TAG:-"scitt"}
 DOCKERFILE="Dockerfile"
-CCF_RPM_DIR=${CCF_RPM_DIR:-""}
 
 # uses longer version of tags to avoid situations when tag is reassigned to a different commit, e.g. 0.12.1-2-g0b45e35
 SCITT_VERSION_OVERRIDE=$(git describe --tags --long --always)
@@ -21,15 +20,6 @@ DOCKER_ARGS=(
     --build-arg SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
     --build-arg SCITT_VERSION_OVERRIDE="$SCITT_VERSION_OVERRIDE"
 )
-
-if [ -n "$CCF_RPM_DIR" ]; then
-    CCF_RPM_DIR=$(realpath "$CCF_RPM_DIR")
-    echo "Using local CCF development RPM from $CCF_RPM_DIR"
-    DOCKER_ARGS+=(
-        --build-arg USE_LOCAL_CCF_RPM=1
-        --build-context "ccf-rpm=$CCF_RPM_DIR"
-    )
-fi
 
 DOCKER_BUILDKIT=1 docker build "${DOCKER_ARGS[@]}" .
 

@@ -1,8 +1,0 @@
-{
-  "snp_endorsements_servers": [
-    {
-      "type": "AMD",
-      "url": "kdsintf.amd.com"
-    }
-  ]
-}
