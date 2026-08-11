@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 import base64
 import json
 from dataclasses import dataclass
-from typing import Optional, Union
+from datetime import datetime, timezone
+from typing import Iterable, Optional, Union
 
 from . import crypto
 
@@ -196,6 +197,25 @@ def transition_service_to_open_proposal(
                 "name": "transition_service_to_open",
                 "args": args,
             }
+        ]
+    }
+
+
+def transition_nodes_to_trusted_proposal(node_ids: Iterable[str]) -> dict:
+    """
+    Build a proposal transitioning each of the given nodes to Trusted.
+
+    A single proposal covering every node keeps the number of reconfigurations,
+    and therefore the number of elections, to a minimum.
+    """
+    valid_from = str(datetime.now(timezone.utc))
+    return {
+        "actions": [
+            {
+                "name": "transition_node_to_trusted",
+                "args": {"node_id": node_id, "valid_from": valid_from},
+            }
+            for node_id in node_ids
         ]
     }
 
