@@ -466,6 +466,25 @@ def generate_charts(
         samples = docker_stats["samples"]
         df_docker = pd.DataFrame(samples)
 
+        # A cluster is monitored as a whole: the plotted totals are the sum over
+        # every container, with each container also drawn individually.
+        container_names = docker_stats.get("containers") or []
+        if not container_names:
+            container_names = sorted(
+                {name for s in samples for name in s.get("per_container", {})}
+            )
+        is_cluster = len(container_names) > 1
+        cluster_label = (
+            f"{len(container_names)} containers"
+            if is_cluster
+            else (docker_stats.get("container") or "unknown")
+        )
+
+        def container_series(name, field):
+            return [
+                s.get("per_container", {}).get(name, {}).get(field) for s in samples
+            ]
+
         fig, (ax_cpu, ax_mem) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
 
         ax_cpu.plot(
@@ -474,7 +493,7 @@ def generate_charts(
             color="#E91E63",
             linewidth=1.2,
             alpha=0.8,
-            label="CPU %",
+            label="Total CPU %" if is_cluster else "CPU %",
         )
         cpu_mean = df_docker["cpu_percent"].mean()
         cpu_max = df_docker["cpu_percent"].max()
@@ -506,10 +525,17 @@ def generate_charts(
             alpha=0.15,
             color="#E91E63",
         )
+        if is_cluster:
+            for name in container_names:
+                ax_cpu.plot(
+                    df_docker["elapsed_seconds"],
+                    container_series(name, "cpu_percent"),
+                    linewidth=1,
+                    alpha=0.7,
+                    label=name.split("-")[-1],
+                )
         ax_cpu.set_ylabel("CPU Usage (%)")
-        ax_cpu.set_title(
-            f"Docker Container CPU Usage — {docker_stats.get('container', 'unknown')}"
-        )
+        ax_cpu.set_title(f"Docker Container CPU Usage — {cluster_label}")
         ax_cpu.legend(loc="upper left")
         ax_cpu.grid(True, alpha=0.3)
 
@@ -519,7 +545,7 @@ def generate_charts(
             color="#673AB7",
             linewidth=1.2,
             alpha=0.8,
-            label="Memory Used (MB)",
+            label="Total Memory Used (MB)" if is_cluster else "Memory Used (MB)",
         )
         mem_mean = df_docker["mem_used_mb"].mean()
         mem_max = df_docker["mem_used_mb"].max()
@@ -545,6 +571,15 @@ def generate_charts(
             alpha=0.15,
             color="#673AB7",
         )
+        if is_cluster:
+            for name in container_names:
+                ax_mem.plot(
+                    df_docker["elapsed_seconds"],
+                    container_series(name, "mem_used_mb"),
+                    linewidth=1,
+                    alpha=0.7,
+                    label=name.split("-")[-1],
+                )
         if df_docker["mem_limit_mb"].max() > 0:
             mem_limit = df_docker["mem_limit_mb"].iloc[0]
             ax_mem.axhline(
@@ -557,9 +592,7 @@ def generate_charts(
             )
         ax_mem.set_xlabel("Elapsed Time (seconds)")
         ax_mem.set_ylabel("Memory Usage (MB)")
-        ax_mem.set_title(
-            f"Docker Container Memory Usage — {docker_stats.get('container', 'unknown')}"
-        )
+        ax_mem.set_title(f"Docker Container Memory Usage — {cluster_label}")
         ax_mem.legend(loc="upper left")
         ax_mem.grid(True, alpha=0.3)
 
@@ -570,7 +603,7 @@ def generate_charts(
         # Append resource stats to summary
         summary_lines += [
             "",
-            f"Docker Resource Usage ({docker_stats.get('container', 'N/A')})",
+            f"Docker Resource Usage ({cluster_label})",
             "-" * 40,
             f"  Samples Collected:  {len(samples)}",
             f"  CPU Mean:           {cpu_mean:.1f}%",
@@ -579,6 +612,23 @@ def generate_charts(
             f"  Memory Max:         {mem_max:.0f} MB",
             f"  Memory Limit:       {df_docker['mem_limit_mb'].iloc[0]:.0f} MB",
         ]
+
+        if is_cluster:
+            summary_lines += ["", "  Per container:"]
+            for name in container_names:
+                cpu = [
+                    v for v in container_series(name, "cpu_percent") if v is not None
+                ]
+                mem = [
+                    v for v in container_series(name, "mem_used_mb") if v is not None
+                ]
+                if not cpu:
+                    continue
+                summary_lines.append(
+                    f"    {name}: CPU mean {sum(cpu)/len(cpu):.1f}% / "
+                    f"max {max(cpu):.1f}%, "
+                    f"memory mean {sum(mem)/len(mem):.0f} MB / max {max(mem):.0f} MB"
+                )
 
     summary_text = "\n".join(summary_lines)
     (output_dir / "summary.txt").write_text(summary_text)

@@ -228,6 +228,8 @@ DOCKER=1 NODE_COUNT=3 ./run_functional_tests.sh -m perf -k test_load --enable-pe
 
 The output will be stored in the `test/load_test/locust_stats.json` file, and the chart images generated in `test/load_test/charts`.
 
+When `NODE_COUNT` is greater than 1 the load is driven through the load balancer, and the resource usage of every node and of the load balancer is collected: `summary.txt` and `docker_resource_usage.png` report the cluster totals along with a per-container breakdown.
+
 #### .NET SDK based
 
 To run the same load through the .NET SDK (single process, concurrent, `waitForCommit`):

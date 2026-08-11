@@ -35,6 +35,22 @@ class Submitter(FastHttpUser):
         for path in Path(claims_dir).glob("*.cose"):
             self._signed_statements.append(path.read_bytes())
 
+    def _reconnect(self):
+        """
+        Drop the pooled connection so the next request opens a new one.
+
+        When the service is a cluster behind an L4 load balancer, balancing
+        happens per connection: every request sent over a kept-alive connection
+        is served by the same node. Historical state is fetched and cached per
+        node, so a retry is only worth making against a different node. Closing
+        the connection lets the load balancer route the next attempt elsewhere,
+        which is what a client would do in production.
+        """
+        try:
+            self.client.client.close()
+        except Exception:
+            pass
+
     @task
     def submit_signed_statement(self):
         start = time.perf_counter()
@@ -125,4 +141,9 @@ class Submitter(FastHttpUser):
                 else:
                     resp.failure(f"Statement poll failed: {resp.status_code}")
                     return
+            # The first couple of attempts stay on the same connection, since a
+            # transaction is normally cached within a second of being asked for.
+            # Beyond that the node is unlikely to resolve it, so move to another.
+            if _ >= 1:
+                self._reconnect()
             gevent.sleep(0.3 * (_ + 1))
