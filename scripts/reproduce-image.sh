@@ -283,7 +283,7 @@ check_toolchain() {
     # Expectations are read with defaults rather than assumed to be present, so
     # that a context archived by an older or newer revision of this repository
     # cannot fail the build merely by declaring a different set of them.
-    # shellcheck source=../docker/toolchain.env
+    # shellcheck source=/dev/null
     . "${env_file}"
 
     docker_actual=$(builder_docker_version)

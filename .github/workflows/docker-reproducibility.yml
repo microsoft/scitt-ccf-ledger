@@ -255,7 +255,7 @@ jobs:
           cat release-assets/reproduce.json
 
       - name: Attach manifest to the release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/reproduce.json
