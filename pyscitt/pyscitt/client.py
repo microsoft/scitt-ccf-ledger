@@ -353,8 +353,14 @@ class BaseClient:
             If True (default), automatically follow redirect responses:
             - 302 Found: poll same Location with default wait (polling pattern)
             - 303 See Other: follow Location as GET, dropping the request body
-            - 307/308: follow Location, preserving the HTTP method and body
-            If False, return the redirect response as-is.
+            If False, 302 and 303 responses are returned as-is, which callers
+            use where the redirect carries protocol meaning, such as the 303
+            returned by POST /entries.
+
+            307/308 responses are always followed, preserving the HTTP method
+            and body. CCF uses them to redirect a write away from a backup and
+            onto the primary, so they are a property of the node which happened
+            to serve the request rather than part of the API contract.
 
         Other keyword-arguments are passed to httpx.
         """
@@ -415,8 +421,12 @@ class BaseClient:
         while True:
             response = self.session.request(method, url, **kwargs)
 
-            # Handle redirects (302 Found, 303 See Other, 307/308)
-            if follow_redirects and response.status_code in (302, 303, 307, 308):
+            # Handle redirects (302 Found, 303 See Other, 307/308).
+            # A 307/308 is CCF redirecting a write to the primary and is
+            # followed even when the caller asked for redirects to be returned,
+            # as it says nothing about the outcome of the request.
+            redirect_statuses = (302, 303, 307, 308) if follow_redirects else (307, 308)
+            if response.status_code in redirect_statuses:
                 location = response.headers.get("location")
                 if location:
                     if response.status_code == 302:
