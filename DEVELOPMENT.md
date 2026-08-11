@@ -75,6 +75,17 @@ The script is used in testing, it starts the docker image and sets basic [config
 ./docker/run-dev.sh
 ```
 
+To start a multi-node network instead, set `NODE_COUNT`:
+
+```sh
+NODE_COUNT=3 ./docker/run-dev.sh
+```
+
+Requests go to the nginx round robin load balancer on `https://localhost:8000`,
+which forwards them to the nodes; node `i` itself is reachable on
+`https://localhost:$((8001 + i))`. See
+[docker/README.md](./docker/README.md) for the available tuning variables.
+
 ### In your development environment
 
 1. Build first (see above)
@@ -176,6 +187,17 @@ The script will launch the built Docker image and will execute tests against it:
 DOCKER=1 ./run_functional_tests.sh
 ```
 
+By default this runs against a single node. Set `NODE_COUNT` to run the same
+tests against a multi-node network instead, reached through the round robin load
+balancer, which additionally covers request distribution and the redirection of
+writes to the primary:
+
+```sh
+DOCKER=1 NODE_COUNT=3 ./run_functional_tests.sh
+```
+
+See [docker/README.md](./docker/README.md) for the cluster details.
+
 **Using your host environment**
 
 ```sh
@@ -201,7 +223,7 @@ To run load tests, you can use the `test_load` test in `test/test_load.py` (with
 
 ```bash
 ./docker/build.sh
-DOCKER=1 ./run_functional_tests.sh -m perf -k test_load --enable-perf
+DOCKER=1 NODE_COUNT=3 ./run_functional_tests.sh -m perf -k test_load --enable-perf
 ```
 
 The output will be stored in the `test/load_test/locust_stats.json` file, and the chart images generated in `test/load_test/charts`.
@@ -275,26 +297,3 @@ To run the SCITT functional tests on SNP, you would run:
 SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
 ```
 
-### AWS SEV-SNP instances (m6a, c6a)
-
-AWS SEV-SNP instances run on shared tenancy hardware and therefore report a
-VLEK-signed attestation report rather than a VCEK-signed one. The chip ID in
-such a report is all zeroes, so the VCEK endpoint used on Azure cannot be
-queried and the AMD KDS VLEK certificate chain must be used instead.
-
-Support for this requires a CCF build that understands VLEK-signed reports.
-See `CCF_RPM_DIR` in [docker/README.md](docker/README.md) for building the
-image against a local CCF RPM.
-
-A ready-made attestation configuration is provided in
-[docker/aws-snp-attestation.json](docker/aws-snp-attestation.json):
-
-```sh
-SNP_ATTESTATION_CONFIG=docker/aws-snp-attestation.json ./docker/run-dev.sh
-```
-
-Note that `snp_security_policy_file`, `snp_uvm_endorsements_file` and
-`snp_endorsements_file` are all specific to Azure Confidential Containers and
-must be omitted on AWS. Cached endorsements do not apply to VLEK reports, so
-the node fetches the certificate chain from AMD KDS at startup and requires
-outbound network access to `kdsintf.amd.com`.

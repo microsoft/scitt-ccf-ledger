@@ -4,6 +4,15 @@
 
 set -e
 
+# Multi-node clusters are handled by a dedicated script, which needs per-node
+# configuration and governance to trust the joining nodes.
+NODE_COUNT=${NODE_COUNT:-1}
+if [ "$NODE_COUNT" -gt 1 ]; then
+    exec "$(dirname "$0")/run-dev-cluster.sh" "$@"
+fi
+
+echo "Starting a single-node CCF network for development and functional testing."
+
 if ! command -v python &> /dev/null && ! command -v python3.12 &> /dev/null; then
     echo "Neither python nor python3.12 could be found."
     echo "On Azure Linux, run: tdnf install python3.12"
@@ -61,12 +70,14 @@ echo "Create a volume to store the workspace"
 docker volume create "$VOLUME_NAME"
 
 echo "Copy the workspace to the volume"
-# Note that this requires running a temporary container
-# https://stackoverflow.com/a/56085040
-tar -C "$WORKSPACE" -c . | docker run --rm \
-    -v "$VOLUME_NAME":/host -i \
-    --entrypoint "" \
-    "$DOCKER_TAG" bash -c "tdnf install -y tar && tar -C /host -x"
+# Note that this requires a temporary container to mount the volume.
+# `docker cp` is used rather than piping a tar into the container, because the
+# image contains neither `tar` nor a usable package manager to install it with.
+# The container is only created, never started, which is enough for `docker cp`
+# to write through to the mounted volume.
+COPY_HELPER=$(docker create -v "$VOLUME_NAME":/host --entrypoint "" "$DOCKER_TAG" true)
+docker cp "$WORKSPACE"/. "$COPY_HELPER":/host
+docker rm "$COPY_HELPER" > /dev/null
 
 # Determine networking flags
 if [ "$DOCKER_IN_DOCKER" = "1" ]; then
