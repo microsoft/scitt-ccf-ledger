@@ -87,18 +87,6 @@ WORKER_THREADS=${WORKER_THREADS:-1}
 # limit (hardcoded in CCF), so the batch replicates in a single message.
 SIG_DELAY=${SIG_DELAY:-"100ms"}
 SIG_TX_COUNT=${SIG_TX_COUNT:-10}
-# MESSAGE_TIMEOUT only bounds how long a *small* batch waits before being
-# flushed to followers. Under sustained load the append_entries size limit is
-# reached first and the heartbeat is irrelevant, so this mainly protects
-# latency at low request rates.
-MESSAGE_TIMEOUT=${MESSAGE_TIMEOUT:-"100ms"}
-ELECTION_TIMEOUT=${ELECTION_TIMEOUT:-"4000ms"}
-TICK_INTERVAL=${TICK_INTERVAL:-"10ms"}
-
-# Each in-flight waitForCommit submission occupies a connection for the whole
-# commit latency, so a load test needs (rate * latency) concurrent sessions.
-MAX_OPEN_SESSIONS_SOFT=${MAX_OPEN_SESSIONS_SOFT:-1000}
-MAX_OPEN_SESSIONS_HARD=${MAX_OPEN_SESSIONS_HARD:-1010}
 
 # Whether joining nodes bootstrap from a snapshot of the primary. Left off,
 # because a node which joins from a snapshot has no ledger below the snapshot
@@ -223,8 +211,6 @@ EOF
       "interface_name": {
         "bind_address": "0.0.0.0:${RPC_PORT}",
         "published_address": "${CCF_HOST}:${RPC_PORT}",
-        "max_open_sessions_soft": ${MAX_OPEN_SESSIONS_SOFT},
-        "max_open_sessions_hard": ${MAX_OPEN_SESSIONS_HARD},
         "http_configuration": {"max_body_size": "2MB"},
         "redirections": {
           "to_primary": {"kind": "NodeByRole", "target": {"role": "primary"}}
@@ -252,15 +238,10 @@ EOF
     "node_to_node_address_file": "/host/${NAME}/node.node_address",
     "rpc_addresses_file": "/host/${NAME}/node.rpc_addresses"
   },
-  "consensus": {
-    "message_timeout": "${MESSAGE_TIMEOUT}",
-    "election_timeout": "${ELECTION_TIMEOUT}"
-  },
   "ledger_signatures": {
     "tx_count": ${SIG_TX_COUNT},
     "delay": "${SIG_DELAY}"
   },
-  "tick_interval": "${TICK_INTERVAL}",
   "worker_threads": ${WORKER_THREADS},
   "command": ${COMMAND}
 }
@@ -299,7 +280,7 @@ error_log /dev/stderr notice;
 pid /tmp/nginx.pid;
 
 events {
-    worker_connections $((MAX_OPEN_SESSIONS_HARD * 2));
+    worker_connections 2500;
 }
 
 stream {

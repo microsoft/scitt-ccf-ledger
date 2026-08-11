@@ -29,6 +29,15 @@ COSE_INCLUSION_PROOF_KEY = -1
 # is the internal evidence holding the registration transaction ID.
 INCLUSION_PROOF_LEAF_KEY = 1
 
+# Attempt index from which a statement retry is made on a new connection.
+#
+# Reconnecting is only useful against a cluster behind an L4 load balancer, and
+# it is not free: a TLS handshake costs the service roughly an order of
+# magnitude more than serving the request itself. Most 503s are transient (the
+# transaction is simply not cached yet) and clear on the next attempt over the
+# same connection, so only persistent ones are worth moving to another node.
+RECONNECT_AFTER_ATTEMPTS = 4
+
 
 @events.init_command_line_parser.add_listener
 def init_parser(parser):
@@ -143,7 +152,7 @@ class Submitter(FastHttpUser):
     def _wait_for_statement(self, entry_id, max_retries=20):
         import gevent
 
-        for _ in range(max_retries):
+        for attempt in range(max_retries):
             with self.client.get(
                 f"/entries/{entry_id}/statement?api-version={SCITT_API_VERSION}",
                 name="GET /entries/[id]/statement",
@@ -153,16 +162,16 @@ class Submitter(FastHttpUser):
                     return
                 elif resp.status_code == 503:
                     # if it is the last retry, report failure instead of success to capture in stats
-                    if _ == max_retries - 1:
+                    if attempt == max_retries - 1:
                         resp.failure("Statement not available after max retries")
                     else:
                         resp.success()
                 else:
                     resp.failure(f"Statement poll failed: {resp.status_code}")
                     return
-            # The first couple of attempts stay on the same connection, since a
-            # transaction is normally cached within a second of being asked for.
-            # Beyond that the node is unlikely to resolve it, so move to another.
-            if _ >= 1:
+            # A retry on the same connection is served by the same node, and a
+            # new connection costs a TLS handshake, so only reconnect once the
+            # transaction has failed to appear for several attempts.
+            if attempt >= RECONNECT_AFTER_ATTEMPTS:
                 self._reconnect()
-            gevent.sleep(0.3 * (_ + 1))
+            gevent.sleep(0.3 * (attempt + 1))

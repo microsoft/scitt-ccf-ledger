@@ -30,6 +30,14 @@ WORKSPACE=${WORKSPACE:-"workspace/"}
 
 VOLUME_NAME="${CONTAINER_NAME}-vol"
 
+# Resources given to the node. The defaults are deliberately small so that a
+# development node leaves the rest of the machine free, but they are the main
+# limit on throughput: raise them when measuring performance.
+CPUS=${CPUS:-2}
+MEMORY=${MEMORY:-2g}
+
+LOG_LEVEL=${LOG_LEVEL:-"info"}
+
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
 
@@ -100,15 +108,15 @@ if [ -e /dev/sev-guest ]; then
     )
 fi
 
-echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, and tag $DOCKER_TAG"
+echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, tag $DOCKER_TAG, cpus $CPUS, memory $MEMORY and $WORKER_THREADS worker thread(s)"
 docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
-    --cpus=1 \
-    --memory=2g \
+    --cpus="$CPUS" \
+    --memory="$MEMORY" \
     -v "$VOLUME_NAME":/host \
     --entrypoint "cchost" \
-    "$DOCKER_TAG" --config /host/dev-config.json
+    "$DOCKER_TAG" --config /host/dev-config.json --log-level "$LOG_LEVEL"
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then

@@ -21,7 +21,7 @@
   },
   "worker_threads": 1,
   "ledger_signatures": {
-    "tx_count": 5000,
+    "tx_count": 10,
     "delay": "100ms"
   },
   "command": {
