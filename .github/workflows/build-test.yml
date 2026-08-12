@@ -103,10 +103,12 @@ jobs:
           gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
           tdnf update -y
           # Only the Docker client is needed, as the daemon is the host's one.
-          # The application itself is built into the image, so none of the CCF
-          # build dependencies are required here.
+          # docker/build.sh builds with BuildKit, which requires the buildx CLI
+          # plugin. The application itself is built into the image, so none of
+          # the CCF build dependencies are required here.
           tdnf install -y --disablerepo azurelinux-official-ms-non-oss \
-            ca-certificates git hostname jq moby-cli openssl python3-pip tar
+            ca-certificates docker-buildx git hostname jq moby-cli openssl \
+            python3-pip tar
       - name: Checkout repository with tags
         uses: actions/checkout@v4
         with:
