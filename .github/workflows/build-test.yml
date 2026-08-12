@@ -4,6 +4,13 @@ on:
     branches:
       - main
   pull_request:
+    # 'labeled' is needed so that adding the run-test-on-mult-nodes label to an
+    # open pull request triggers the multi-node job below.
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
   workflow_dispatch:
 
 concurrency:
@@ -63,6 +70,64 @@ jobs:
         if: success() || failure()
         with:
           name: logs
+          path: |
+            /tmp/pytest-of-root/*current/*current/*.{out,err}
+            /tmp/pytest-of-root/*current/*current/config.json
+          if-no-files-found: warn
+
+  build-test-multi-node:
+    name: CI (3 node cluster)
+    needs: checks
+    # Running a cluster is a lot more expensive than a single node, so it is
+    # opt-in: label the pull request with run-test-on-mult-nodes, or trigger the
+    # workflow manually.
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-test-on-mult-nodes') || github.event_name == 'workflow_dispatch' }}
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    env:
+      SCITT_CI: 1
+      # Run the tests against a cluster fronted by a round robin load balancer,
+      # rather than against a single node.
+      DOCKER: 1
+      NODE_COUNT: 3
+      # Puts the sibling containers in this container's network namespace, so
+      # that the load balancer is reachable on localhost from the tests.
+      DOCKER_IN_DOCKER: 1
+    container:
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
+      # The nodes and the load balancer run as sibling containers, started
+      # through the host's Docker daemon.
+      options: --user root -v /var/run/docker.sock:/var/run/docker.sock
+    steps:
+      - name: Setup environment
+        run: |
+          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
+          tdnf update -y
+          # Only the Docker client is needed, as the daemon is the host's one.
+          # The application itself is built into the image, so none of the CCF
+          # build dependencies are required here.
+          tdnf install -y --disablerepo azurelinux-official-ms-non-oss \
+            ca-certificates git hostname jq moby-cli openssl python3-pip tar
+      - name: Checkout repository with tags
+        uses: actions/checkout@v4
+        with:
+          # docker/build.sh derives the image version with git describe.
+          fetch-depth: 0
+
+      # Work-around for https://github.com/actions/runner/issues/2033
+      - name: Work around git safe.directory in container
+        run: |
+          chown -R $(id -u):$(id -g) $PWD
+          git config --global --add safe.directory $PWD
+
+      - name: Build the image
+        run: ./docker/build.sh
+      - name: Run functional tests against a ${{ env.NODE_COUNT }} node cluster
+        run: ./run_functional_tests.sh
+      - name: "Upload logs"
+        uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: logs-multi-node
           path: |
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json
