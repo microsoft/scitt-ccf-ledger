@@ -417,6 +417,12 @@ This can also be used to restrict the maximum size to a value smaller than the d
 
 Please refer to the latest [CCF configuration documentation](https://microsoft.github.io/CCF/main/operations/configuration.html) to understand all of the possible options.
 
+### Ledger signature mode
+
+The application selects the CCF ledger signature mode at link time through [`ccf::get_ledger_sign_mode()`](../app/src/ledger_sign_mode.cpp). This build uses `CoseAllowDualJoin`: nodes emit only COSE Sign1 ledger signatures while continuing to accept join requests from nodes using CCF's default `Dual` mode. This supports the first phase of a rolling upgrade to COSE-only ledger signatures.
+
+The mode is not part of the CCF node JSON configuration. Once every node in every ledger has been upgraded, change the callback to return `CoseOnly` and perform a second rolling upgrade. After COSE-only signatures have advanced beyond the latest traditional signature, the ledger cannot be recovered with a `Dual` binary; use a `CoseAllowDualJoin` or `CoseOnly` binary. See [Upgrading to COSE-Only Ledger Signatures](https://ccf.dev/main/operations/configuration.html#upgrading-to-cose-only-ledger-signatures) for the complete sequence.
+
 ### Historical cache soft limit
 
 The size of the historical state cache can be configured per node using the `historical_cache_soft_limit` option in the [CCF node configuration](https://ccf.dev/main/operations/configuration.html#historical-cache-soft-limit). Once the soft limit is exceeded, least recently used states will be evicted from the cache.

@@ -498,7 +498,7 @@ namespace scitt::verifier
       if (!cert)
       {
         unsigned long ec = ERR_get_error();
-        SCITT_INFO(
+        SCITT_DEBUG(
           "Could not parse PEM certificate: {}",
           ccf::crypto::OpenSSL::error_string(ec));
         throw VerificationError("Could not parse certificate");
@@ -515,7 +515,7 @@ namespace scitt::verifier
       if (!cert)
       {
         unsigned long ec = ERR_get_error();
-        SCITT_INFO(
+        SCITT_DEBUG(
           "Could not parse DER certificate: {}",
           ccf::crypto::OpenSSL::error_string(ec));
         throw VerificationError("Could not parse certificate");

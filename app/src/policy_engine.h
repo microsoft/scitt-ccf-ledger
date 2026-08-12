@@ -85,21 +85,21 @@ namespace
       if (new_digest != policy_digest)
       {
         rego::Interpreter interpreter;
+        interpreter.log_level(rego::LogLevel::None);
         auto rv = interpreter.add_module("policy.rego", policy);
         if (rv != nullptr)
         {
-          CCF_APP_FAIL(
-            "Failed to load policy: {}", interpreter.output_to_string(rv));
-          throw std::domain_error("Invalid policy module (add_module)");
+          throw std::domain_error(fmt::format(
+            "Invalid policy module (add_module): {}",
+            interpreter.output_to_string(rv)));
         }
         interpreter.entrypoints({"policy/allow", "policy/errors"});
         trieste::Node bundle_node = interpreter.build();
         if (bundle_node->type() == rego::ErrorSeq)
         {
-          CCF_APP_FAIL(
-            "Failed to build policy bundle: {}",
-            interpreter.output_to_string(bundle_node));
-          throw std::domain_error("Invalid policy module (build)");
+          throw std::domain_error(fmt::format(
+            "Invalid policy module (build): {}",
+            interpreter.output_to_string(bundle_node)));
         }
         bundle = rego::BundleDef::from_node(bundle_node);
         policy_digest = new_digest;
@@ -434,7 +434,7 @@ namespace scitt
       auto end = std::chrono::steady_clock::now();
       auto elapsed =
         std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-      CCF_APP_INFO("JS runtime setup in {}us", elapsed.count());
+      SCITT_TRACE("JS runtime setup in {}us", elapsed.count());
       start = std::chrono::steady_clock::now();
 
       auto phdr_val = protected_header_to_js_val(interpreter, phdr);
@@ -449,7 +449,7 @@ namespace scitt
           10 * 1024 * 1024, // max_heap_bytes (10MB)
           1024 * 1024, // max_stack_bytes (1MB)
           1000, // max_execution_time_ms (1s)
-          true, // log_exception_details
+          false, // log_exception_details
           false, // return_exception_details
           0, // max_cached_interpreters
         },
@@ -471,7 +471,7 @@ namespace scitt
       end = std::chrono::steady_clock::now();
       elapsed =
         std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-      CCF_APP_INFO("JS input construction and eval in {}us", elapsed.count());
+      SCITT_TRACE("JS input construction and eval in {}us", elapsed.count());
 
       if (result.is_str())
       {
@@ -650,6 +650,7 @@ namespace scitt
 
     auto input = rego_input_mapping(phdr, payload, details);
     rego::Interpreter interpreter;
+    interpreter.log_level(rego::LogLevel::None);
     interpreter.stmt_limit(statement_limit);
 
     auto tv = interpreter.set_input(input);
