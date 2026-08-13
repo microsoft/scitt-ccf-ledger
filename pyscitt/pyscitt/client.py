@@ -11,7 +11,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from http import HTTPStatus
-from typing import Any, Dict, Iterable, Literal, Optional, TypeVar, Union, overload
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    TypeVar,
+    Union,
+    overload,
+)
 from urllib.parse import urlencode
 
 import cbor2
@@ -33,6 +43,9 @@ CBOR_ERR_TITLE_TAG = -1
 CBOR_ERR_DETAIL_TAG = -2
 
 SCITT_API_VERSION_2026_03_26 = "2026-03-26"
+
+# How often to ask a node whether it has caught up with a transaction yet.
+NODE_CATCHUP_POLL_INTERVAL = 0.05
 
 
 class MemberAuthenticationMethod(ABC):
@@ -277,6 +290,11 @@ class BaseClient:
         self.session = httpx.Client(
             base_url=url, headers=headers, params=params, verify=tls_verification
         )
+
+        # Clients addressing one specific node, used to check how far each node
+        # in the network has caught up. Created on demand, and kept so that
+        # their connections are reused.
+        self._node_clients: Dict[str, Any] = {}
 
     def replace(self: SelfClient, **kwargs) -> SelfClient:
         """
@@ -523,7 +541,12 @@ class BaseClient:
         response = self.get(
             "/node/tx",
             params={"transaction_id": tx},
-            retry_on=[lambda r: r.is_success and r.json()["status"] == "Pending"],
+            # A node which has not yet received the transaction reports it as
+            # Unknown, which is only a definitive answer once the transaction
+            # is known to exist elsewhere in the network.
+            retry_on=[
+                lambda r: r.is_success and r.json()["status"] in ("Pending", "Unknown")
+            ],
         )
 
         status = response.json()["status"]
@@ -531,6 +554,60 @@ class BaseClient:
             raise RuntimeError(
                 f"Transaction {tx} was not committed. Status is {status}"
             )
+
+    def get_node_urls(self) -> List[str]:
+        """
+        Return the URL of every trusted node in the network.
+        """
+        nodes = self.get("/node/network/nodes").json()["nodes"]
+        urls = []
+        for node in nodes:
+            if node.get("status") != "Trusted":
+                continue
+            for interface in node["rpc_interfaces"].values():
+                urls.append(f"https://{interface['published_address']}")
+                break
+        return urls
+
+    def _node_client(self: SelfClient, url: str) -> SelfClient:
+        """
+        Return a client for one specific node, reusing its connection pool.
+        """
+        client = self._node_clients.get(url)
+        if client is None:
+            # Nodes catch up with each other in a few hundred milliseconds, so
+            # poll far more often than the default retry interval.
+            client = self.replace(url=url, wait_time=NODE_CATCHUP_POLL_INTERVAL)
+            self._node_clients[url] = client
+        return client
+
+    def wait_for_confirmation_on_all_nodes(self, tx: str):
+        """
+        Wait until a transaction has been applied by every trusted node.
+
+        Only a majority of the network is needed for a transaction to commit,
+        and a node which has not applied it yet keeps answering reads from its
+        older state. Where requests are spread over the network by a load
+        balancer, waiting for every node to catch up is what makes a read
+        issued after a write actually observe that write.
+
+        This is a no-op against a single node network, which is always
+        immediately consistent with itself.
+        """
+        urls = self.get_node_urls()
+        if len(urls) <= 1:
+            return
+
+        for url in urls:
+            try:
+                self._node_client(url).wait_for_confirmation(tx)
+            except httpx.TransportError as e:
+                # A node which cannot be reached cannot be serving reads
+                # either, so it does not affect what a subsequent request
+                # observes. This is expected of a node which has only just been
+                # trusted and is still starting up.
+                LOG.warning(f"Skipping unreachable node {url}: {e}")
+                self._node_clients.pop(url, None)
 
     def get(self, *args, **kwargs) -> httpx.Response:
         return self.request("GET", *args, **kwargs)

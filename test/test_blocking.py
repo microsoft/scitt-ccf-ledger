@@ -74,6 +74,11 @@ def test_blocking_entries(
         sha256(signed_statement).digest(),
     )
 
+    # /node/receipt is answered by whichever node serves the request from its
+    # own state, so give the whole network a chance to apply the transaction
+    # before asking for it.
+    client.wait_for_confirmation_on_all_nodes(submission.tx)
+
     deadline = time.monotonic() + 3
     regular_receipt = client.session.get(
         "/node/receipt", params={"transaction_id": submission.tx}
