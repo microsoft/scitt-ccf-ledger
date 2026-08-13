@@ -4,6 +4,7 @@
 import argparse
 import json
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,8 +15,11 @@ import cbor2
 import certifi
 
 from .. import governance
-from ..client import Client
+from ..client import CLOCK, Client, ServiceError
 from .client_arguments import add_client_arguments, create_client
+
+# Number of times to nudge the governance clock forward before giving up.
+MAX_CLOCK_ADVANCES = 30
 
 
 @dataclass
@@ -223,6 +227,80 @@ def setup_local_development(client: Client, trust_store_dir: Optional[Path]):
         path.write_bytes(cbor2.dumps(scitt_keys))
 
 
+def trust_local_nodes(client: Client, node_count: int, timeout: float):
+    """
+    Trust the nodes which have joined a locally running SCITT CCF cluster.
+
+    Nodes which join an existing service start in the ``Pending`` state and only
+    take part in consensus once a governance proposal has transitioned them to
+    ``Trusted``. This waits for the expected number of nodes to appear, submits
+    a single proposal trusting all pending nodes, and then waits for them to
+    report as trusted.
+
+    Intended for local development clusters only, where a single member holds a
+    majority and proposals therefore pass immediately.
+    """
+
+    def get_nodes():
+        return client.get("node/network/nodes").json()["nodes"]
+
+    def wait_until(predicate, describe):
+        deadline = time.monotonic() + timeout
+        while True:
+            nodes = get_nodes()
+            if predicate(nodes):
+                return nodes
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"{describe(nodes)} after {timeout}s.")
+            time.sleep(0.5)
+
+    def propose(proposal: dict):
+        # Governance requests carry a `created_at` timestamp which CCF uses for
+        # replay protection, and pyscitt tracks it with a process-local clock.
+        # This may run in a different process to the one which set up the
+        # service, so its clock can lag behind the most recent timestamp the
+        # service has seen. Advance the clock and retry until it is accepted.
+        for _ in range(MAX_CLOCK_ADVANCES):
+            try:
+                client.governance.propose(proposal, must_pass=True)
+                return
+            except ServiceError as e:
+                if e.code != "ProposalCreatedTooLongAgo":
+                    raise
+                CLOCK.advance()
+
+        raise RuntimeError(
+            "Governance proposal was still rejected as too old after "
+            f"{MAX_CLOCK_ADVANCES} clock advances."
+        )
+
+    print(f"Waiting for {node_count} nodes to register with the service...")
+    nodes = wait_until(
+        lambda nodes: len(nodes) >= node_count,
+        lambda nodes: (
+            f"Only {len(nodes)} of {node_count} nodes registered with the service. "
+            "Check the logs of the joining nodes"
+        ),
+    )
+
+    pending = [n["node_id"] for n in nodes if n["status"] == "Pending"]
+    if not pending:
+        print("No pending nodes to trust.")
+    else:
+        print(f"Trusting {len(pending)} node(s): {', '.join(pending)}")
+        propose(governance.transition_nodes_to_trusted_proposal(pending))
+
+    print("Waiting for all nodes to become trusted...")
+    wait_until(
+        lambda nodes: len([n for n in nodes if n["status"] == "Trusted"]) >= node_count,
+        lambda nodes: (
+            f"Only {len([n for n in nodes if n['status'] == 'Trusted'])} of "
+            f"{node_count} nodes became Trusted"
+        ),
+    )
+    print(f"All {node_count} nodes are trusted.")
+
+
 def cli(fn):
     parser = fn(description="Execute governance actions")
     sub = parser.add_subparsers(help="Governance action to execute", required=True)
@@ -336,6 +414,29 @@ def cli(fn):
     p.set_defaults(
         func=lambda args: setup_local_development(
             create_client(args), args.service_trust_store
+        )
+    )
+
+    p = sub.add_parser(
+        "trust_local_nodes",
+        help="Transition the nodes of a local development cluster to Trusted.",
+    )
+    add_client_arguments(p, with_member_auth=True, development_only=True)
+    p.add_argument(
+        "--node-count",
+        type=int,
+        required=True,
+        help="Total number of nodes expected in the cluster, including the primary",
+    )
+    p.add_argument(
+        "--timeout",
+        type=float,
+        default=60.0,
+        help="Seconds to wait for nodes to join and become trusted",
+    )
+    p.set_defaults(
+        func=lambda args: trust_local_nodes(
+            create_client(args), args.node_count, args.timeout
         )
     )
 

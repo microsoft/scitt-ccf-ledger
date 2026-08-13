@@ -48,13 +48,16 @@ def test_async_registration_returns_303(
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
-    # Make a raw POST without the client's high-level submit logic,
-    # so we can inspect the actual HTTP response.
-    resp = scrapi_client.session.request(
+    # Bypasses the client's high-level submit logic so that the actual HTTP
+    # response can be inspected. Redirect following is disabled so that the 303
+    # is returned rather than followed, while a 307 sending the write from a
+    # backup to the primary is still followed transparently.
+    resp = scrapi_client.request(
         "POST",
         "/entries",
         headers={"Content-Type": CT_APPLICATION_COSE},
         content=signed_statement,
+        follow_redirects=False,
     )
 
     LOG.info(f"POST /entries status: {resp.status_code}")
