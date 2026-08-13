@@ -28,6 +28,7 @@ namespace scitt
     // Used by tracing.h
     std::optional<std::string> request_id;
     std::optional<std::string> client_request_id;
+    std::optional<std::string> error_code;
     timespec start_time;
   };
 

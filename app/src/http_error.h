@@ -7,10 +7,14 @@
 #include "tracing.h"
 
 #include <ccf/endpoint.h>
+#include <functional>
 #include <qcbor/qcbor_decode.h>
 #include <qcbor/qcbor_encode.h>
 #include <qcbor/qcbor_spiffy_decode.h>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace scitt
 {
@@ -104,22 +108,28 @@ namespace scitt
   };
 
   template <typename Fn, typename Ctx>
-  Fn generic_error_adapter(Fn fn)
+  Fn generic_error_adapter(
+    Fn fn, std::function<void(Ctx&, const std::string&)> record_error_code = {})
   {
-    return [fn](Ctx& ctx) {
+    return [fn, record_error_code](Ctx& ctx) {
       try
       {
         fn(ctx);
       }
       catch (const HTTPError& e)
       {
-        if (e.code == errors::InternalError)
+        if (e.code == errors::InternalError || e.code == errors::PolicyError)
         {
           SCITT_FAIL("Code={} {}", e.code, e.what());
         }
         else
         {
-          SCITT_INFO("Code={}", e.code);
+          SCITT_DEBUG("Code={} {}", e.code, e.what());
+        }
+
+        if (record_error_code)
+        {
+          record_error_code(ctx, e.code);
         }
 
         if (e.returns_cbor_error)
@@ -146,6 +156,10 @@ namespace scitt
           "Unhandled exception in endpoint: Code={} {}",
           uncaught_error.code,
           uncaught_error.what());
+        if (record_error_code)
+        {
+          record_error_code(ctx, uncaught_error.code);
+        }
         ctx.rpc_ctx->set_response_status(uncaught_error.status_code);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
@@ -163,6 +177,10 @@ namespace scitt
   {
     return generic_error_adapter<
       ccf::endpoints::EndpointFunction,
-      ccf::endpoints::EndpointContext>(fn);
+      ccf::endpoints::EndpointContext>(
+      fn,
+      [](ccf::endpoints::EndpointContext& ctx, const std::string& error_code) {
+        get_app_data(ctx.rpc_ctx).error_code = error_code;
+      });
   }
 }

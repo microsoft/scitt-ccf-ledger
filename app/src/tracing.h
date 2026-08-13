@@ -103,8 +103,10 @@ namespace scitt
     if (result != ccf::ApiResult::OK)
     {
       SCITT_FAIL(
-        "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 failed",
-        fn_stage_name);
+        "::END:: Stage={} Code=InternalError get_time failed "
+        "while recording end time: {}",
+        fn_stage_name,
+        ccf::api_result_to_str(result));
       rpc_ctx->set_response_status(500);
       rpc_ctx->set_response_header(
         ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
@@ -116,14 +118,18 @@ namespace scitt
     auto duration_ms = diff_timespec_ms(app_data.start_time, end);
     if (duration_ms < 0)
     {
-      SCITT_INFO(
-        "Computed request duration is negative: {} ms. Ignoring.", duration_ms);
+      SCITT_DEBUG(
+        "Untrusted host time produced negative request duration: {} ms.",
+        duration_ms);
     }
+    const auto error_context = app_data.error_code.has_value() ?
+      fmt::format(" Code={}", app_data.error_code.value()) :
+      std::string{};
 
     if (txid.has_value())
     {
       SCITT_INFO(
-        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TxId={} "
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={}{} TxId={} "
         "TimeMs={}",
         fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
@@ -131,19 +137,22 @@ namespace scitt
         rpc_ctx->get_request_query().c_str(),
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
+        error_context,
         txid->to_str(),
         std::to_string(duration_ms));
     }
     else
     {
       SCITT_INFO(
-        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={} TimeMs={}",
+        "::END:: Stage={} Verb={} Path={} Query={} URL={} Status={}{} "
+        "TimeMs={}",
         fn_stage_name,
         rpc_ctx->get_request_verb().c_str(),
         path,
         rpc_ctx->get_request_query().c_str(),
         rpc_ctx->get_request_url(),
         rpc_ctx->get_response_status(),
+        error_context,
         std::to_string(duration_ms));
     }
   }
@@ -191,9 +200,10 @@ namespace scitt
       if (result != ccf::ApiResult::OK)
       {
         SCITT_FAIL(
-          "::END:: Stage={} Code=InternalError get_untrusted_host_time_v1 "
-          "failed",
-          FN_STAGE_MAIN);
+          "::END:: Stage={} Code=InternalError get_time failed "
+          "while recording start time: {}",
+          FN_STAGE_MAIN,
+          ccf::api_result_to_str(result));
         ctx.rpc_ctx->set_response_status(500);
         ctx.rpc_ctx->set_response_header(
           ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE);
