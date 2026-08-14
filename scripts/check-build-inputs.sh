@@ -100,6 +100,28 @@ dockerfile_arg() {
     sed -n "s/^ARG $1=\"\{0,1\}\([^\"]*\)\"\{0,1\}[[:space:]]*$/\1/p" "${dockerfile}" | head -n1
 }
 
+# Resolves a tag to the digest the registry currently serves for it, by reading
+# the Docker-Content-Digest response header.
+registry_tag_digest() {
+    local registry="$1" path="$2" tag="$3"
+    curl \
+        --silent \
+        --show-error \
+        --location \
+        --head \
+        --max-time 60 \
+        --retry 3 \
+        --retry-delay 2 \
+        --header 'Accept: application/vnd.oci.image.index.v1+json' \
+        --header 'Accept: application/vnd.oci.image.manifest.v1+json' \
+        --header 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+        --header 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+        "https://${registry}/v2/${path}/manifests/${tag}" 2>/dev/null |
+        tr -d '\r' |
+        sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p' |
+        tail -n1
+}
+
 # A range request avoids downloading multi-hundred-megabyte artifacts just to
 # learn whether they still exist. Servers may answer 200 or 206.
 probe_url() {
@@ -130,6 +152,16 @@ base_digest="${base_ref##*@}"
 base_registry="${base_repo%%/*}"
 base_path="${base_repo#*/}"
 
+# The tag is only a label once a digest is present, but a tag that no longer
+# resolves to the pinned digest means the two disagree about which image the
+# build uses. Dependabot bumps the tag, so a merge that keeps a stale digest
+# would otherwise build the old base image under a new tag, undetected.
+base_tag=""
+base_name_tag="${base_ref%%@*}"
+case "${base_name_tag##*/}" in
+    *:*) base_tag="${base_name_tag##*:}" ;;
+esac
+
 echo
 echo "Base image"
 if [ "${base_ref}" = "${base_digest}" ]; then
@@ -148,6 +180,20 @@ else
         record ok "base image manifest ${base_digest}" "${base_ref}"
     else
         record failed "base image manifest ${base_digest}" "HTTP ${code}"
+    fi
+
+    if [ -z "${base_tag}" ]; then
+        record skipped "base image tag matches digest" "no tag in ${base_ref}"
+    else
+        tag_digest=$(registry_tag_digest "${base_registry}" "${base_path}" "${base_tag}")
+        if [ -z "${tag_digest}" ]; then
+            record failed "base image tag matches digest" "could not resolve tag ${base_tag}"
+        elif [ "${tag_digest}" = "${base_digest}" ]; then
+            record ok "base image tag ${base_tag} matches digest" "${base_digest}"
+        else
+            record failed "base image tag ${base_tag} matches digest" \
+                "tag resolves to ${tag_digest} but the pin says ${base_digest}"
+        fi
     fi
 fi
 
