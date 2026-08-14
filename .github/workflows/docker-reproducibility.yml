@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository with tags
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -33,7 +33,7 @@ jobs:
         run: ./scripts/reproduce-image.sh context "${PWD}/docker-context.tar"
 
       - name: Upload deterministic build context
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-build-context
           path: |
@@ -66,10 +66,10 @@ jobs:
             umask: "077"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download deterministic build context
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: docker-build-context
           path: repro-input
@@ -147,7 +147,7 @@ jobs:
             /var/lib/rpm/rpmdb.sqlite > repro-input/rpmdb-sha256.txt
 
       - name: Upload image ID
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-image-id-${{ matrix.build }}
           path: |
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download image IDs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: docker-image-id-*
           path: image-ids
@@ -219,7 +219,7 @@ jobs:
           cat "${first_layers}"
 
       - name: Upload reproduction manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-reproduce-manifest
           path: image-ids/docker-image-id-one/reproduce.json
@@ -239,7 +239,7 @@ jobs:
       # so the recorded layer digests outlive artifact retention and can be
       # checked by the scheduled re-verification and by third parties.
       - name: Download verified build outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: docker-image-id-one
           path: manifest
@@ -255,7 +255,7 @@ jobs:
           cat release-assets/reproduce.json
 
       - name: Attach manifest to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: |
             release-assets/reproduce.json
