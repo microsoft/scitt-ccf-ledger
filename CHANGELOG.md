@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - 6820111 Verify CCF RPM checksum before install (AB#38023378) (#429)
 - 8268ffb Adds dotnet sdk based load test (#428)
 
+## [0.18.2]
+### Changes
+- f797484 Bump azurelinux/base/core from 3.0.20260706 to 3.0.20260711 in /docker (#422)
+- c114a66 Fix Azure Linux CI bootstrap package installation (#423)
+- 668d188 Change Dependabot update interval from weekly to daily (#421)
+- 377f58b Update CCF to 7.0.10 (#419)
+- 0c00ba9 Update Azure.Security.CodeTransparency SDK to 1.0.0-beta.10 (#417)
+- ec8d4f5 Bump azurelinux/base/core from 3.0.20260616 to 3.0.20260706 in /docker (#416)
+- 8ae99bb Update CCF version to 7.0.9 (#415)
+
+## [0.18.1]
+### Changes
+- b6ebc05 Bump azurelinux/base/core from 3.0.20260602 to 3.0.20260616 in /docker (#412)
+- 055bb73 Convert kids to bstr and update to CCF 7.0.6 (#411)
+- f0fef49 Simplify did:x509 resolution to use resolve_jwk() (#409)
+- c83e83d Update README submit example to SCRAPI v09 redirect flow (#410)
+- b5a4b5c Sync CCF version to 7.0.5, update constitution, and clean up constants (#408)
+- 97f0b25 Suppressed CodeQL-SM04458 bug that is flagged in [SFI-PS3.1] (#406)
+- f283198 Bump azurelinux/base/core from 3.0.20260519 to 3.0.20260602 in /docker (#405)
+- 3425abe Bump azurelinux/base/core from 3.0.20260517 to 3.0.20260519 in /docker (#403)
+- 30352ca Bump azurelinux/base/core from 3.0.20260510 to 3.0.20260517 in /docker (#402)
+- 5eae0c0 Bump azurelinux/base/core from 3.0.20260506 to 3.0.20260510 in /docker (#401)
+- bb0ff02 Bump azurelinux/base/core from 3.0.20260401 to 3.0.20260506 in /docker (#400)
+- 5b75e08 Restrict permissions of token provided to bencher job (#399)
+
 ## [0.18.0]
 ### Changes
 - 09b5c99 Update CCF to v7 and align API with SCRAPI v09 (#390)
@@ -448,3 +473,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 [0.17.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.17.1
 [0.18.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.18.0
 [0.19.0]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.19.0
+[0.18.1]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.18.1
+[0.18.2]: https://github.com/microsoft/scitt-ccf-ledger/releases/tag/0.18.2

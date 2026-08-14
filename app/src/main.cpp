@@ -67,7 +67,7 @@ namespace scitt
   std::optional<T> get_query_value(
     const ccf::http::ParsedQuery& pq, std::string_view name)
   {
-    SCITT_DEBUG("Get parameter value from parsed query");
+    SCITT_TRACE("Get parameter value from parsed query");
     auto it = pq.find(name);
     if (it == pq.end())
     {
@@ -161,7 +161,7 @@ namespace scitt
 
     std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
     {
-      SCITT_DEBUG("Get transaction status");
+      SCITT_TRACE("Get transaction status");
 
       ccf::View view_of_seqno;
       ccf::ApiResult result = get_view_for_seqno_v1(seqno, view_of_seqno);
@@ -171,12 +171,10 @@ namespace scitt
         result = get_status_for_txid_v1(view_of_seqno, seqno, status);
         if (result == ccf::ApiResult::OK)
         {
-          SCITT_DEBUG("Transaction status: {}", ccf::tx_status_to_str(status));
+          SCITT_TRACE("Transaction status: {}", ccf::tx_status_to_str(status));
           return status;
         }
       }
-
-      SCITT_FAIL("Transaction status could not be retrieved");
 
       return std::nullopt;
     }
@@ -307,17 +305,16 @@ namespace scitt
         }
 
         const auto& body = ctx.rpc_ctx->get_request_body();
-        SCITT_DEBUG(
-          "Signed Statement Registration body size: {} bytes", body.size());
-
         auto cfg = ctx.tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE)
                      ->get()
                      .value_or(Configuration{});
 
         const auto max_entry_size =
           cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES_DEFAULT);
-        SCITT_DEBUG(
-          "Maximum allowed Signed Statement size: {} bytes", max_entry_size);
+        SCITT_TRACE(
+          "Signed statement size={} bytes, maximum allowed size={} bytes",
+          body.size(),
+          max_entry_size);
 
         if (body.size() > max_entry_size)
         {
@@ -343,13 +340,12 @@ namespace scitt
         std::optional<verifier::VerifiedSevSnpAttestationDetails> details;
         try
         {
-          SCITT_DEBUG("Verify submitted signed statement");
+          SCITT_TRACE("Verify submitted signed statement");
           std::tie(phdr, uhdr, payload, details) =
             verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
         {
-          SCITT_DEBUG("Signed statement verification failed: {}", e.what());
           throw BadRequestCborError(errors::InvalidInput, e.what());
         }
 
@@ -358,7 +354,7 @@ namespace scitt
         // CWT issuer is present.
         if (cfg.policy.policy_rego.has_value())
         {
-          SCITT_DEBUG("Using Rego Policy");
+          SCITT_TRACE("Using Rego Policy");
           auto start = std::chrono::steady_clock::now();
           const auto policy_violation_reason = check_for_policy_violations_rego(
             cfg.policy.policy_rego.value(),
@@ -370,8 +366,6 @@ namespace scitt
             cfg.policy.get_policy_rego_statement_limit());
           if (policy_violation_reason.has_value())
           {
-            SCITT_DEBUG(
-              "Policy check failed: {}", policy_violation_reason.value());
             throw BadRequestCborError(
               errors::PolicyFailed,
               fmt::format(
@@ -380,11 +374,11 @@ namespace scitt
           auto end = std::chrono::steady_clock::now();
           auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-          CCF_APP_DEBUG("Rego Policy check passed in {}us", elapsed.count());
+          SCITT_TRACE("Rego Policy check passed in {}us", elapsed.count());
         }
         else if (cfg.policy.policy_script.has_value())
         {
-          SCITT_DEBUG("Using JS Policy");
+          SCITT_TRACE("Using JS Policy");
           auto start = std::chrono::steady_clock::now();
           const auto policy_violation_reason = check_for_policy_violations(
             cfg.policy.policy_script.value(),
@@ -395,8 +389,6 @@ namespace scitt
             details);
           if (policy_violation_reason.has_value())
           {
-            SCITT_DEBUG(
-              "Policy check failed: {}", policy_violation_reason.value());
             throw BadRequestCborError(
               errors::PolicyFailed,
               fmt::format(
@@ -405,13 +397,12 @@ namespace scitt
           auto end = std::chrono::steady_clock::now();
           auto elapsed =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-          CCF_APP_DEBUG("JS Policy check passed in {}us", elapsed.count());
+          SCITT_TRACE("JS Policy check passed in {}us", elapsed.count());
         }
         else
         {
           if (verifier::contains_cwt_issuer(phdr))
           {
-            SCITT_DEBUG("No policy applied, but CWT issuer present");
             throw BadRequestCborError(
               errors::PolicyFailed,
               "Policy was not met: CWT issuer present but no policy "
@@ -419,7 +410,7 @@ namespace scitt
           }
           else
           {
-            SCITT_DEBUG("No policy applied");
+            SCITT_TRACE("No policy applied");
           }
         }
 
@@ -436,13 +427,9 @@ namespace scitt
         // Store the original COSE_Sign1 message in the KV, so we can retrieve
         // it later, inject the receipt in it, and serve a transparent
         // statement.
-        SCITT_DEBUG("Signed statement stored in the ledger");
         auto* entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
-
-        SCITT_INFO("SignedStatementSizeKb={}", body.size() / 1024);
-
-        SCITT_DEBUG("SignedStatement was submitted synchronously");
+        SCITT_TRACE("Signed statement stored in the ledger");
 
         record_synchronous_operation(host_time, ctx.tx);
       };
@@ -476,7 +463,7 @@ namespace scitt
         [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
-          SCITT_DEBUG("Get transaction historical state");
+          SCITT_TRACE("Get transaction historical state");
           auto historical_tx = historical_state->store->create_read_only_tx();
 
           auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
@@ -490,7 +477,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
-          SCITT_DEBUG("Get receipt from the ledger");
+          SCITT_TRACE("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           ctx.rpc_ctx->set_response_body(cose_receipt);
@@ -523,7 +510,7 @@ namespace scitt
         [](
           EndpointContext& ctx,
           const ccf::historical::StatePtr& historical_state) {
-          SCITT_DEBUG("Get transaction historical state");
+          SCITT_TRACE("Get transaction historical state");
           auto historical_tx = historical_state->store->create_read_only_tx();
 
           auto* entries = historical_tx.template ro<EntryTable>(ENTRY_TABLE);
@@ -537,7 +524,7 @@ namespace scitt
                 historical_state->transaction_id.to_str()));
           }
 
-          SCITT_DEBUG("Get receipt from the ledger");
+          SCITT_TRACE("Get receipt from the ledger");
           auto cose_receipt = get_cose_receipt(historical_state->receipt);
 
           // See https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
@@ -549,7 +536,7 @@ namespace scitt
           ccf::cose::edit::desc::Value receipts_desc{
             ccf::cose::edit::pos::InArray{}, receipts, cose_receipt};
 
-          SCITT_DEBUG("Embed receipt into transparent statement");
+          SCITT_TRACE("Embed receipt into transparent statement");
           auto statement =
             ccf::cose::edit::set_unprotected_header(*entry, receipts_desc);
 
@@ -583,7 +570,7 @@ namespace scitt
           const auto parsed_query =
             ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
 
-          SCITT_DEBUG("Parse input params and determine entries range");
+          SCITT_TRACE("Parse input params and determine entries range");
           ccf::SeqNo from_seqno =
             get_query_value<uint64_t>(parsed_query, "from").value_or(1);
           std::optional<ccf::SeqNo> to_seqno_opt =
@@ -658,7 +645,7 @@ namespace scitt
               "Index of requested range not available yet, retry later");
           }
 
-          SCITT_DEBUG("Get entries for the target range");
+          SCITT_TRACE("Get entries for the target range");
           std::vector<std::string> tx_ids;
           for (auto seqno : interesting_seqnos.value())
           {
@@ -681,7 +668,7 @@ namespace scitt
           // next page and tell the caller how to retrieve it
           if (range_end != to_seqno)
           {
-            SCITT_DEBUG("Add next link to retrieve the rest of entries");
+            SCITT_TRACE("Add next link to retrieve the rest of entries");
             const auto next_page_start = range_end + 1;
             const auto next_range_end =
               std::min(to_seqno, next_page_start + max_seqno_per_page);

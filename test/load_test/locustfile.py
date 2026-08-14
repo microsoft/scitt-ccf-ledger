@@ -3,12 +3,40 @@
 
 import random
 import time
+from http import HTTPStatus
 from pathlib import Path
 
 import cbor2
 from locust import FastHttpUser, events, task
 
 CT_COSE = "application/cose"
+
+# The api-version has to be sent for the service to answer a waitForCommit
+# submission with the COSE receipt, rather than with the legacy operation body.
+SCITT_API_VERSION = "2026-03-26"
+
+# Submitting with waitForCommit makes POST /entries return once the transaction
+# is committed, so the operation does not have to be polled afterwards.
+SUBMIT_PATH = f"/entries?waitForCommit=true&api-version={SCITT_API_VERSION}"
+SUBMIT_NAME = "POST /entries"
+
+# COSE_Sign1 unprotected header label carrying the CCF inclusion proofs, and
+# the label of the proof list within it.
+COSE_INCLUSION_PROOFS_LABEL = 396
+COSE_INCLUSION_PROOF_KEY = -1
+
+# Keys of the CCF inclusion proof: the leaf components, of which the second one
+# is the internal evidence holding the registration transaction ID.
+INCLUSION_PROOF_LEAF_KEY = 1
+
+# Attempt index from which a statement retry is made on a new connection.
+#
+# Reconnecting is only useful against a cluster behind an L4 load balancer, and
+# it is not free: a TLS handshake costs the service roughly an order of
+# magnitude more than serving the request itself. Most 503s are transient (the
+# transaction is simply not cached yet) and clear on the next attempt over the
+# same connection, so only persistent ones are worth moving to another node.
+RECONNECT_AFTER_ATTEMPTS = 4
 
 
 @events.init_command_line_parser.add_listener
@@ -35,6 +63,45 @@ class Submitter(FastHttpUser):
         for path in Path(claims_dir).glob("*.cose"):
             self._signed_statements.append(path.read_bytes())
 
+    def _reconnect(self):
+        """
+        Drop the pooled connection so the next request opens a new one.
+
+        When the service is a cluster behind an L4 load balancer, balancing
+        happens per connection: every request sent over a kept-alive connection
+        is served by the same node. Historical state is fetched and cached per
+        node, so a retry is only worth making against a different node. Closing
+        the connection lets the load balancer route the next attempt elsewhere,
+        which is what a client would do in production.
+        """
+        try:
+            self.client.client.close()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _extract_tx_id(receipt):
+        """
+        Get the registration transaction ID out of a COSE receipt.
+
+        The receipt is a COSE_Sign1 whose unprotected header holds the CCF
+        inclusion proof. The second component of the proof leaf is the internal
+        evidence, which is a colon separated string whose second field is the
+        registration transaction ID. This mirrors how pyscitt's
+        verify_transparent_statement extracts regtxid.
+        """
+        msg = cbor2.loads(receipt)
+        if isinstance(msg, cbor2.CBORTag):
+            msg = msg.value
+
+        uhdr = msg[1]
+        inclusion_proofs = uhdr[COSE_INCLUSION_PROOFS_LABEL][COSE_INCLUSION_PROOF_KEY]
+        proof = cbor2.loads(inclusion_proofs[0])
+        leaf = proof[INCLUSION_PROOF_LEAF_KEY]
+        internal_evidence = leaf[1]
+
+        return internal_evidence.split(":")[1]
+
     @task
     def submit_signed_statement(self):
         start = time.perf_counter()
@@ -42,25 +109,31 @@ class Submitter(FastHttpUser):
         signed_statement = random.choice(self._signed_statements)
 
         try:
+            # The submission is synchronous: the response is only sent once the
+            # transaction commits, and carries the receipt. A backup answers
+            # with a 307 pointing at the primary, which is followed
+            # transparently, in the same way pyscitt follows it.
             with self.client.post(
-                "/entries",
+                SUBMIT_PATH,
                 data=signed_statement,
                 headers={"Content-Type": CT_COSE},
-                name="POST /entries",
+                name=SUBMIT_NAME,
                 catch_response=True,
             ) as resp:
-                if resp.status_code not in (200, 202):
+                if resp.status_code != HTTPStatus.CREATED:
                     resp.failure(f"Unexpected status {resp.status_code}")
                     return
-                if self.skip_confirmation:
+
+                try:
+                    if not self.skip_confirmation:
+                        entry_id = self._extract_tx_id(resp.content)
+                    else:
+                        entry_id = None
+                except Exception as e:
+                    resp.failure(f"No transaction ID in the receipt: {e}")
                     return
 
-                # Poll for operation completion
-                operation = cbor2.loads(resp.content)
-                operation_id = operation["OperationId"]
-
-            entry_id = self._wait_for_operation(operation_id)
-            if entry_id is not None:
+            if not self.skip_confirmation:
                 self._wait_for_statement(entry_id)
         except Exception as e:
             exception = e
@@ -76,41 +149,12 @@ class Submitter(FastHttpUser):
                 context={},
             )
 
-    def _wait_for_operation(self, operation_id, max_retries=20):
-        import gevent
-
-        for _ in range(max_retries):
-            with self.client.get(
-                f"/operations/{operation_id}",
-                name="GET /operations/[id]",
-                catch_response=True,
-            ) as resp:
-                if resp.status_code == 200:
-                    operation = cbor2.loads(resp.content)
-                    status = operation.get("Status")
-                    if status == "succeeded":
-                        return operation.get("EntryId", operation_id)
-                    else:
-                        resp.failure(f"Operation failed with status: {status}")
-                        return None
-                elif resp.status_code == 202:
-                    # if it is the last retry, report failure instead of success to capture in stats
-                    if _ == max_retries - 1:
-                        resp.failure("Operation not completed after max retries")
-                    else:
-                        resp.success()
-                else:
-                    resp.failure(f"Operation poll failed: {resp.status_code}")
-                    return None
-            gevent.sleep(0.3 * (_ + 1))
-        return None
-
     def _wait_for_statement(self, entry_id, max_retries=20):
         import gevent
 
-        for _ in range(max_retries):
+        for attempt in range(max_retries):
             with self.client.get(
-                f"/entries/{entry_id}/statement",
+                f"/entries/{entry_id}/statement?api-version={SCITT_API_VERSION}",
                 name="GET /entries/[id]/statement",
                 catch_response=True,
             ) as resp:
@@ -118,11 +162,16 @@ class Submitter(FastHttpUser):
                     return
                 elif resp.status_code == 503:
                     # if it is the last retry, report failure instead of success to capture in stats
-                    if _ == max_retries - 1:
+                    if attempt == max_retries - 1:
                         resp.failure("Statement not available after max retries")
                     else:
                         resp.success()
                 else:
                     resp.failure(f"Statement poll failed: {resp.status_code}")
                     return
-            gevent.sleep(0.3 * (_ + 1))
+            # A retry on the same connection is served by the same node, and a
+            # new connection costs a TLS handshake, so only reconnect once the
+            # transaction has failed to appear for several attempts.
+            if attempt >= RECONNECT_AFTER_ATTEMPTS:
+                self._reconnect()
+            gevent.sleep(0.3 * (attempt + 1))

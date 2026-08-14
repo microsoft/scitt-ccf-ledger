@@ -119,7 +119,14 @@ def generate_charts(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     post_stats = next(s for s in stats if s["name"] == "POST /entries")
-    get_stats = next(s for s in stats if s["name"] == "GET /operations/[id]")
+    # Submissions wait for commit, so the operation is not polled any more.
+    # Reports produced by the previous, asynchronous flow still hold these
+    # stats and are rendered with the extra panels.
+    get_stats = next(
+        (s for s in stats if s["name"] == "GET /operations/[id]"),
+        None,
+    )
+    has_operations = get_stats is not None
     get_entries_stats = next(
         s for s in stats if s["name"] == "GET /entries/[id]/statement"
     )
@@ -135,25 +142,36 @@ def generate_charts(
     ramp_up_seconds = peak_users / spawn_rate
 
     global_start_time = min(
-        post_stats["start_time"],
-        get_stats["start_time"],
-        get_entries_stats["start_time"],
+        [post_stats["start_time"], get_entries_stats["start_time"]]
+        + ([get_stats["start_time"]] if has_operations else [])
     )
 
     df_post = build_rps_df(post_stats, "POST /entries", global_start_time)
-    df_get = build_rps_df(get_stats, "GET /operations/[id]", global_start_time)
+    df_get = (
+        build_rps_df(get_stats, "GET /operations/[id]", global_start_time)
+        if has_operations
+        else None
+    )
     df_get_entries = build_rps_df(
         get_entries_stats, "GET /entries/[id]/statement", global_start_time
     )
 
     df_post_fail = build_fail_df(post_stats, global_start_time, "POST /entries")
-    df_get_fail = build_fail_df(get_stats, global_start_time, "GET /operations/[id]")
+    df_get_fail = (
+        build_fail_df(get_stats, global_start_time, "GET /operations/[id]")
+        if has_operations
+        else None
+    )
     df_get_entries_fail = build_fail_df(
         get_entries_stats, global_start_time, "GET /entries/[id]/statement"
     )
 
     post_rt = expand_response_times(post_stats["response_times"])
-    get_rt = expand_response_times(get_stats["response_times"])
+    get_rt = (
+        expand_response_times(get_stats["response_times"])
+        if has_operations
+        else np.array([])
+    )
     get_entries_rt = expand_response_times(get_entries_stats["response_times"])
     submit_task_rt = (
         expand_response_times(submit_task_stats["response_times"])
@@ -164,15 +182,24 @@ def generate_charts(
     # Steady-state metrics (after ramp-up)
     post_steady = df_post[df_post["elapsed_seconds"] >= ramp_up_seconds]
     post_mean = post_steady["requests_per_sec"].mean()
-    get_steady = df_get[df_get["elapsed_seconds"] >= ramp_up_seconds]
-    get_mean = get_steady["requests_per_sec"].mean()
+    if has_operations:
+        get_steady = df_get[df_get["elapsed_seconds"] >= ramp_up_seconds]
+        get_mean = get_steady["requests_per_sec"].mean()
     get_entries_steady = df_get_entries[
         df_get_entries["elapsed_seconds"] >= ramp_up_seconds
     ]
     get_entries_mean = get_entries_steady["requests_per_sec"].mean()
 
     # --- Chart 1: Requests Per Second Over Time ---
-    fig, (ax_top, ax_mid, ax_bot) = plt.subplots(3, 1, figsize=(14, 13), sharex=True)
+    num_rows = 3 if has_operations else 2
+    fig, axes = plt.subplots(
+        num_rows, 1, figsize=(14, 13 if has_operations else 9), sharex=True
+    )
+    if has_operations:
+        ax_top, ax_mid, ax_bot = axes
+    else:
+        ax_top, ax_bot = axes
+        ax_mid = None
 
     ax_top.plot(
         df_post["elapsed_seconds"],
@@ -197,30 +224,31 @@ def generate_charts(
         label=f"Ramp-up ({ramp_up_seconds:.0f}s)",
     )
     ax_top.set_ylabel("Requests Per Second")
-    ax_top.set_title("POST /entries — Submission Throughput")
+    ax_top.set_title("POST /entries (waitForCommit) — Submission Throughput")
     ax_top.legend(loc="upper left")
     ax_top.grid(True, alpha=0.3)
 
-    ax_mid.plot(
-        df_get["elapsed_seconds"],
-        df_get["requests_per_sec"],
-        color="#FF9800",
-        linewidth=1,
-        alpha=0.7,
-        label="GET /operations RPS",
-    )
-    ax_mid.axhline(
-        y=get_mean,
-        color="#4CAF50",
-        linestyle="--",
-        linewidth=1.5,
-        label=f"Steady-state Mean ({get_mean:.0f} req/s)",
-    )
-    ax_mid.axvspan(0, ramp_up_seconds, alpha=0.08, color="orange")
-    ax_mid.set_ylabel("Requests Per Second")
-    ax_mid.set_title("GET /operations/[id] — Operation Polling Throughput")
-    ax_mid.legend(loc="upper left")
-    ax_mid.grid(True, alpha=0.3)
+    if ax_mid is not None:
+        ax_mid.plot(
+            df_get["elapsed_seconds"],
+            df_get["requests_per_sec"],
+            color="#FF9800",
+            linewidth=1,
+            alpha=0.7,
+            label="GET /operations RPS",
+        )
+        ax_mid.axhline(
+            y=get_mean,
+            color="#4CAF50",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"Steady-state Mean ({get_mean:.0f} req/s)",
+        )
+        ax_mid.axvspan(0, ramp_up_seconds, alpha=0.08, color="orange")
+        ax_mid.set_ylabel("Requests Per Second")
+        ax_mid.set_title("GET /operations/[id] — Operation Polling Throughput")
+        ax_mid.legend(loc="upper left")
+        ax_mid.grid(True, alpha=0.3)
 
     ax_bot.plot(
         df_get_entries["elapsed_seconds"],
@@ -251,27 +279,32 @@ def generate_charts(
     # --- Chart 2: Response Time Distribution ---
     rt_plots = [
         (
-            "POST /entries — Response Time Distribution",
+            "POST /entries (waitForCommit) — Response Time Distribution",
             post_rt,
             "#2196F3",
             "#FF9800",
             "#9C27B0",
         ),
-        (
-            "GET /operations/[id] — Response Time Distribution",
-            get_rt,
-            "#FF9800",
-            "#2196F3",
-            "#9C27B0",
-        ),
+    ]
+    if get_rt.size:
+        rt_plots.append(
+            (
+                "GET /operations/[id] — Response Time Distribution",
+                get_rt,
+                "#FF9800",
+                "#2196F3",
+                "#9C27B0",
+            )
+        )
+    rt_plots.append(
         (
             "GET /entries/[id]/statement — Response Time Distribution",
             get_entries_rt,
             "#9C27B0",
             "#2196F3",
             "#FF9800",
-        ),
-    ]
+        )
+    )
     if submit_task_rt.size:
         rt_plots.append(
             (
@@ -340,14 +373,19 @@ def generate_charts(
     )
 
     # Stacked RPS areas
-    rps_elapsed, rps_arrays = align_series(
-        [df_post, df_get, df_get_entries], "requests_per_sec"
+    rps_dfs = [df_post] + ([df_get] if has_operations else []) + [df_get_entries]
+    rps_labels = (
+        ["POST /entries"]
+        + (["GET /operations/[id]"] if has_operations else [])
+        + ["GET /entries/[id]/statement"]
     )
+    rps_colors = ["#2196F3"] + (["#FF9800"] if has_operations else []) + ["#9C27B0"]
+    rps_elapsed, rps_arrays = align_series(rps_dfs, "requests_per_sec")
     ax_rps.stackplot(
         rps_elapsed,
         rps_arrays,
-        labels=["POST /entries", "GET /operations/[id]", "GET /entries/[id]/statement"],
-        colors=["#2196F3", "#FF9800", "#9C27B0"],
+        labels=rps_labels,
+        colors=rps_colors,
         alpha=0.6,
     )
     ax_rps.set_ylabel("Requests Per Second")
@@ -374,14 +412,17 @@ def generate_charts(
     ax_rps.legend(lines_rps + lines_users, labels_rps + labels_users, loc="upper left")
 
     # Stacked failures area + individual lines
-    fail_elapsed, fail_arrays = align_series(
-        [df_post_fail, df_get_fail, df_get_entries_fail], "failures_per_sec"
+    fail_dfs = (
+        [df_post_fail]
+        + ([df_get_fail] if has_operations else [])
+        + [df_get_entries_fail]
     )
+    fail_elapsed, fail_arrays = align_series(fail_dfs, "failures_per_sec")
     ax_fail.stackplot(
         fail_elapsed,
         fail_arrays,
-        labels=["POST /entries", "GET /operations/[id]", "GET /entries/[id]/statement"],
-        colors=["#2196F3", "#FF9800", "#9C27B0"],
+        labels=rps_labels,
+        colors=rps_colors,
         alpha=0.5,
     )
     for df_fail, color, label in [
@@ -389,7 +430,7 @@ def generate_charts(
         (df_get_fail, "#E65100", "GET /operations failures"),
         (df_get_entries_fail, "#6A1B9A", "GET /entries failures"),
     ]:
-        if not df_fail.empty:
+        if df_fail is not None and not df_fail.empty:
             ax_fail.plot(
                 df_fail["elapsed_seconds"],
                 df_fail["failures_per_sec"],
@@ -409,7 +450,6 @@ def generate_charts(
     # --- Summary text file ---
     test_duration = post_stats["last_request_timestamp"] - post_stats["start_time"]
     post_avg_rt = post_stats["total_response_time"] / post_stats["num_requests"]
-    get_avg_rt = get_stats["total_response_time"] / get_stats["num_requests"]
     get_entries_avg_rt = (
         get_entries_stats["total_response_time"] / get_entries_stats["num_requests"]
     )
@@ -425,7 +465,7 @@ def generate_charts(
         f"  Spawn Rate:       {spawn_rate} users/sec",
         f"  Ramp-up Duration: {ramp_up_seconds:.0f}s",
         "",
-        "POST /entries (Submissions)",
+        "POST /entries (Submissions, waitForCommit)",
         "-" * 40,
         f"  Total Submissions:      {post_stats['num_requests']:,}",
         f"  Failures:               {post_stats['num_failures']:,}",
@@ -435,18 +475,26 @@ def generate_charts(
         f"  P95 Response Time:      {np.percentile(post_rt, 95):.0f}ms",
         f"  P99 Response Time:      {np.percentile(post_rt, 99):.0f}ms",
         f"  Max Response Time:      {post_stats['max_response_time']:.1f}ms",
-        "",
-        "GET /operations/[id] (Polling)",
-        "-" * 40,
-        f"  Total Polls:            {get_stats['num_requests']:,}",
-        f"  Failures:               {get_stats['num_failures']:,}",
-        f"  Steady-state Mean RPS:  {get_mean:.0f}",
-        f"  Avg Response Time:      {get_avg_rt:.1f}ms",
-        f"  Median Response Time:   {np.median(get_rt):.0f}ms",
-        f"  P95 Response Time:      {np.percentile(get_rt, 95):.0f}ms",
-        f"  P99 Response Time:      {np.percentile(get_rt, 99):.0f}ms",
-        f"  Max Response Time:      {get_stats['max_response_time']:.1f}ms",
-        f"  Polls per Submission:   {get_stats['num_requests']/post_stats['num_requests']:.1f}x",
+    ]
+
+    if has_operations:
+        get_avg_rt = get_stats["total_response_time"] / get_stats["num_requests"]
+        summary_lines += [
+            "",
+            "GET /operations/[id] (Polling)",
+            "-" * 40,
+            f"  Total Polls:            {get_stats['num_requests']:,}",
+            f"  Failures:               {get_stats['num_failures']:,}",
+            f"  Steady-state Mean RPS:  {get_mean:.0f}",
+            f"  Avg Response Time:      {get_avg_rt:.1f}ms",
+            f"  Median Response Time:   {np.median(get_rt):.0f}ms",
+            f"  P95 Response Time:      {np.percentile(get_rt, 95):.0f}ms",
+            f"  P99 Response Time:      {np.percentile(get_rt, 99):.0f}ms",
+            f"  Max Response Time:      {get_stats['max_response_time']:.1f}ms",
+            f"  Polls per Submission:   {get_stats['num_requests']/post_stats['num_requests']:.1f}x",
+        ]
+
+    summary_lines += [
         "",
         "GET /entries/[id]/statement (Entry Retrieval)",
         "-" * 40,
@@ -466,6 +514,25 @@ def generate_charts(
         samples = docker_stats["samples"]
         df_docker = pd.DataFrame(samples)
 
+        # A cluster is monitored as a whole: the plotted totals are the sum over
+        # every container, with each container also drawn individually.
+        container_names = docker_stats.get("containers") or []
+        if not container_names:
+            container_names = sorted(
+                {name for s in samples for name in s.get("per_container", {})}
+            )
+        is_cluster = len(container_names) > 1
+        cluster_label = (
+            f"{len(container_names)} containers"
+            if is_cluster
+            else (docker_stats.get("container") or "unknown")
+        )
+
+        def container_series(name, field):
+            return [
+                s.get("per_container", {}).get(name, {}).get(field) for s in samples
+            ]
+
         fig, (ax_cpu, ax_mem) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
 
         ax_cpu.plot(
@@ -474,7 +541,7 @@ def generate_charts(
             color="#E91E63",
             linewidth=1.2,
             alpha=0.8,
-            label="CPU %",
+            label="Total CPU %" if is_cluster else "CPU %",
         )
         cpu_mean = df_docker["cpu_percent"].mean()
         cpu_max = df_docker["cpu_percent"].max()
@@ -506,10 +573,17 @@ def generate_charts(
             alpha=0.15,
             color="#E91E63",
         )
+        if is_cluster:
+            for name in container_names:
+                ax_cpu.plot(
+                    df_docker["elapsed_seconds"],
+                    container_series(name, "cpu_percent"),
+                    linewidth=1,
+                    alpha=0.7,
+                    label=name.split("-")[-1],
+                )
         ax_cpu.set_ylabel("CPU Usage (%)")
-        ax_cpu.set_title(
-            f"Docker Container CPU Usage — {docker_stats.get('container', 'unknown')}"
-        )
+        ax_cpu.set_title(f"Docker Container CPU Usage — {cluster_label}")
         ax_cpu.legend(loc="upper left")
         ax_cpu.grid(True, alpha=0.3)
 
@@ -519,7 +593,7 @@ def generate_charts(
             color="#673AB7",
             linewidth=1.2,
             alpha=0.8,
-            label="Memory Used (MB)",
+            label="Total Memory Used (MB)" if is_cluster else "Memory Used (MB)",
         )
         mem_mean = df_docker["mem_used_mb"].mean()
         mem_max = df_docker["mem_used_mb"].max()
@@ -545,6 +619,15 @@ def generate_charts(
             alpha=0.15,
             color="#673AB7",
         )
+        if is_cluster:
+            for name in container_names:
+                ax_mem.plot(
+                    df_docker["elapsed_seconds"],
+                    container_series(name, "mem_used_mb"),
+                    linewidth=1,
+                    alpha=0.7,
+                    label=name.split("-")[-1],
+                )
         if df_docker["mem_limit_mb"].max() > 0:
             mem_limit = df_docker["mem_limit_mb"].iloc[0]
             ax_mem.axhline(
@@ -557,9 +640,7 @@ def generate_charts(
             )
         ax_mem.set_xlabel("Elapsed Time (seconds)")
         ax_mem.set_ylabel("Memory Usage (MB)")
-        ax_mem.set_title(
-            f"Docker Container Memory Usage — {docker_stats.get('container', 'unknown')}"
-        )
+        ax_mem.set_title(f"Docker Container Memory Usage — {cluster_label}")
         ax_mem.legend(loc="upper left")
         ax_mem.grid(True, alpha=0.3)
 
@@ -570,7 +651,7 @@ def generate_charts(
         # Append resource stats to summary
         summary_lines += [
             "",
-            f"Docker Resource Usage ({docker_stats.get('container', 'N/A')})",
+            f"Docker Resource Usage ({cluster_label})",
             "-" * 40,
             f"  Samples Collected:  {len(samples)}",
             f"  CPU Mean:           {cpu_mean:.1f}%",
@@ -579,6 +660,23 @@ def generate_charts(
             f"  Memory Max:         {mem_max:.0f} MB",
             f"  Memory Limit:       {df_docker['mem_limit_mb'].iloc[0]:.0f} MB",
         ]
+
+        if is_cluster:
+            summary_lines += ["", "  Per container:"]
+            for name in container_names:
+                cpu = [
+                    v for v in container_series(name, "cpu_percent") if v is not None
+                ]
+                mem = [
+                    v for v in container_series(name, "mem_used_mb") if v is not None
+                ]
+                if not cpu:
+                    continue
+                summary_lines.append(
+                    f"    {name}: CPU mean {sum(cpu)/len(cpu):.1f}% / "
+                    f"max {max(cpu):.1f}%, "
+                    f"memory mean {sum(mem)/len(mem):.0f} MB / max {max(mem):.0f} MB"
+                )
 
     summary_text = "\n".join(summary_lines)
     (output_dir / "summary.txt").write_text(summary_text)

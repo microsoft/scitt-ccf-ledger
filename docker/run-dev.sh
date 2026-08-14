@@ -4,6 +4,15 @@
 
 set -e
 
+# Multi-node clusters are handled by a dedicated script, which needs per-node
+# configuration and governance to trust the joining nodes.
+NODE_COUNT=${NODE_COUNT:-1}
+if [ "$NODE_COUNT" -gt 1 ]; then
+    exec "$(dirname "$0")/run-dev-cluster.sh" "$@"
+fi
+
+echo "Starting a single-node CCF network for development and functional testing."
+
 if ! command -v python &> /dev/null && ! command -v python3.12 &> /dev/null; then
     echo "Neither python nor python3.12 could be found."
     echo "On Azure Linux, run: tdnf install python3.12"
@@ -20,6 +29,14 @@ CONTAINER_NAME=${CONTAINER_NAME:-"scitt-dev-$(date +%s)"}
 WORKSPACE=${WORKSPACE:-"workspace/"}
 
 VOLUME_NAME="${CONTAINER_NAME}-vol"
+
+# Resources given to the node. The defaults are deliberately small so that a
+# development node leaves the rest of the machine free, but they are the main
+# limit on throughput: raise them when measuring performance.
+CPUS=${CPUS:-2}
+MEMORY=${MEMORY:-2g}
+
+LOG_LEVEL=${LOG_LEVEL:-"info"}
 
 # SNP attestation config
 SNP_ATTESTATION_CONFIG=${SNP_ATTESTATION_CONFIG:-}
@@ -61,12 +78,14 @@ echo "Create a volume to store the workspace"
 docker volume create "$VOLUME_NAME"
 
 echo "Copy the workspace to the volume"
-# Note that this requires running a temporary container
-# https://stackoverflow.com/a/56085040
-tar -C "$WORKSPACE" -c . | docker run --rm \
-    -v "$VOLUME_NAME":/host -i \
-    --entrypoint "" \
-    "$DOCKER_TAG" bash -c "tdnf install -y tar && tar -C /host -x"
+# Note that this requires a temporary container to mount the volume.
+# `docker cp` is used rather than piping a tar into the container, because the
+# image contains neither `tar` nor a usable package manager to install it with.
+# The container is only created, never started, which is enough for `docker cp`
+# to write through to the mounted volume.
+COPY_HELPER=$(docker create -v "$VOLUME_NAME":/host --entrypoint "" "$DOCKER_TAG" true)
+docker cp "$WORKSPACE"/. "$COPY_HELPER":/host
+docker rm "$COPY_HELPER" > /dev/null
 
 # Determine networking flags
 if [ "$DOCKER_IN_DOCKER" = "1" ]; then
@@ -81,15 +100,15 @@ else
     )
 fi
 
-echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, and tag $DOCKER_TAG"
+echo "Run CCF with name $CONTAINER_NAME, flags ${DOCKER_FLAGS[*]}, volume name $VOLUME_NAME, tag $DOCKER_TAG, cpus $CPUS, memory $MEMORY"
 docker run --name "$CONTAINER_NAME" \
     -d \
     "${DOCKER_FLAGS[@]}" \
-    --cpus=1 \
-    --memory=2g \
+    --cpus="$CPUS" \
+    --memory="$MEMORY" \
     -v "$VOLUME_NAME":/host \
     --entrypoint "cchost" \
-    "$DOCKER_TAG" --config /host/dev-config.json
+    "$DOCKER_TAG" --config /host/dev-config.json --log-level "$LOG_LEVEL"
 
 echo "Setting up python virtual environment."
 if [ ! -f "venv/bin/activate" ]; then
