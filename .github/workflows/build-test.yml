@@ -110,7 +110,7 @@ jobs:
             ca-certificates docker-buildx git hostname jq moby-cli openssl \
             python3-pip tar
       - name: Checkout repository with tags
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # docker/build.sh derives the image version with git describe.
           fetch-depth: 0
@@ -126,7 +126,7 @@ jobs:
       - name: Run functional tests against a ${{ env.NODE_COUNT }} node cluster
         run: ./run_functional_tests.sh
       - name: "Upload logs"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: success() || failure()
         with:
           name: logs-multi-node
