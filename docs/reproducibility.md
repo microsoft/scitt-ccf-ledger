@@ -14,8 +14,10 @@ are outside that comparison.
 Releases carry two assets that record what was built and verified:
 `reproduce.json`, listing the build inputs and the Docker and BuildKit versions
 used, and `image-layers.txt`, listing the verified filesystem layer digests.
-Start from those when reproducing a published release, and reproduce with the
-recorded tool versions if an exact match is required.
+The `context_sha256` field in `reproduce.json` is the digest of the build
+context, so you can confirm you are building from the same input before
+comparing layers. Start from those when reproducing a published release, and
+reproduce with the recorded tool versions if an exact match is required.
 
 You also need a couple pieces of information to begin with:
 

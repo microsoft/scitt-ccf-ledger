@@ -43,6 +43,9 @@ Environment:
   SOURCE_DATE_EPOCH        Defaults to the HEAD commit timestamp.
   SCITT_VERSION_OVERRIDE   Defaults to git describe --tags --long --always.
   SOURCE_COMMIT            Defaults to the HEAD commit hash.
+  CONTEXT_SHA256           Recorded in reproduce.json by the manifest command.
+                           Take it from build-metadata.json so the manifest
+                           names the context the image was built from.
   STRICT_TOOLCHAIN         Set to 1 to fail, rather than warn, when the
                            builder is newer than the highest verified version.
 
@@ -407,6 +410,11 @@ manifest = {
     "source_commit": os.environ["SOURCE_COMMIT"],
     "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
     "scitt_version": os.environ["SCITT_VERSION_OVERRIDE"],
+    # Identifies the exact bytes the build consumed. The recorded layers only
+    # show that two builds agreed on an output; this shows they started from
+    # the same input, which is what makes a comparison across build systems
+    # meaningful rather than coincidental.
+    "context_sha256": os.environ.get("CONTEXT_SHA256", ""),
     "base_image": os.environ["BASE_IMAGE"],
     "ccf_version": os.environ["CCF_VERSION_VALUE"],
     "ccf_rpm_sha256": os.environ["CCF_RPM_SHA256_VALUE"],
@@ -445,7 +453,8 @@ cmd_all() {
     SOURCE_COMMIT=$(cmd_metadata "${output}/build-metadata.json" source_commit)
     SOURCE_DATE_EPOCH=$(cmd_metadata "${output}/build-metadata.json" source_date_epoch)
     SCITT_VERSION_OVERRIDE=$(cmd_metadata "${output}/build-metadata.json" scitt_version)
-    export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
+    CONTEXT_SHA256=$(cmd_metadata "${output}/build-metadata.json" context_sha256)
+    export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE CONTEXT_SHA256
 
     cmd_build "${context}" "${tag}"
     cmd_manifest "${tag}" "${output}/reproduce.json" "${context}"

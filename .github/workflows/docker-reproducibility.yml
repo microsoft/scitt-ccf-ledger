@@ -108,7 +108,8 @@ jobs:
           SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_commit)
           SOURCE_DATE_EPOCH=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_date_epoch)
           SCITT_VERSION_OVERRIDE=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json scitt_version)
-          export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
+          CONTEXT_SHA256=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json context_sha256)
+          export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE CONTEXT_SHA256
 
           tag="scitt-reproducibility:${{ matrix.build }}"
           context="${RUNNER_TEMP}/${{ matrix.context_subdir }}"

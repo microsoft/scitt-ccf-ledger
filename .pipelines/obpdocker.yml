@@ -52,16 +52,28 @@ jobs:
 
           ./scripts/reproduce-image.sh context "${context_archive}"
 
+          # The GitHub gate checks this after transporting the archive between
+          # jobs. Checking it here too means both systems prove the archive is
+          # intact before extracting, rather than only one of them.
+          (cd "$(Agent.TempDirectory)" && sha256sum --check docker-context.tar.sha256)
+
           SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" source_commit)
           SOURCE_DATE_EPOCH=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" source_date_epoch)
           SCITT_VERSION_OVERRIDE=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" scitt_version)
+          CONTEXT_SHA256=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" context_sha256)
 
           echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
           echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
+          # Exported to the verification job so the published record names the
+          # context these images were built from.
+          echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
+
+          echo "Deterministic context ${CONTEXT_SHA256} for commit ${SOURCE_COMMIT}"
 
           rm -rf "${context_dir}"
           ./scripts/reproduce-image.sh extract "${context_archive}" "${context_dir}"
+        name: prepare_context
         displayName: Prepare deterministic Docker context
 
       # use custom docker task based on parameters in docker/build.sh
@@ -123,6 +135,7 @@ jobs:
     variables:
       ob_git_checkout: true
       ob_outputDirectory: $(Build.SourcesDirectory)/out
+      contextSha256: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.CONTEXT_SHA256'] ]
 
     steps:
       - checkout: SCITT
@@ -177,4 +190,21 @@ jobs:
           # record that shows whether they still agree.
           echo "Filesystem layers of the published image:"
           cat "$(Build.SourcesDirectory)/out/image-layers.txt"
+
+          # Comparing layers only proves the two systems agreed on an output.
+          # Recording the context digest alongside them shows they also started
+          # from the same input, so a future mismatch can be attributed to the
+          # build environment rather than to a differing source context.
+          context_sha256="$(contextSha256)"
+          if [ -z "${context_sha256}" ]; then
+            # An empty value means the cross-job variable stopped resolving,
+            # which would leave a published record that proves nothing about
+            # the input. Fail loudly rather than ship an empty attestation.
+            echo "Build context sha256 was not passed from the build job." >&2
+            exit 1
+          fi
+
+          echo "Build context sha256: ${context_sha256}"
+          printf '%s\n' "${context_sha256}" \
+            > "$(Build.SourcesDirectory)/out/context-sha256.txt"
         displayName: Verify OneBranch image reproducibility
