@@ -157,7 +157,7 @@ jobs:
               "${RUNNER_TEMP}/recorded-layers.txt" \
               "${RUNNER_TEMP}/rebuilt-layers.txt" || true
             echo "::error::${ref} no longer rebuilds to its published filesystem layers. Compare the recorded and current build inputs in reproduce.json."
-            for field in base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version docker_version buildx_version; do
+            for field in context_sha256 base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version docker_version buildx_version; do
               was=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${recorded}")
               now=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${rebuilt}")
               if [ "${was}" != "${now}" ]; then
