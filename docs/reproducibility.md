@@ -139,21 +139,14 @@ Now it is clear that the contents of the policy (image layers) can be trusted in
 
 ### 2. Build container and compare layers
 
-#### If you have access to the original image
+Download and build dmverity-vhd tool to convert the built image to dmverity hashes. Use a recent `dmverity-vhd` version that supports the OCI image layout emitted by current Docker versions:
 
-If the original image is accessible, compute its dmverity hashes and compare them with `expected-layers.txt`. This authenticates the deployed image independently of whether a historical rebuild is possible.
-
-Use a recent `dmverity-vhd` version that supports the OCI image layout emitted by current Docker versions. Record the exact `integrity-vhd` commit used:
 
 ```sh
 $ git clone --depth 1 https://github.com/microsoft/integrity-vhd.git
 $ git -C integrity-vhd checkout a63cb455d8cab7a3441d1c0cb10dac4d658e20ce
 $ git -C integrity-vhd rev-parse HEAD
 $ go build -C integrity-vhd -o ../dmverity-vhd ./cmd/dmverity-vhd
-$ docker pull <ORIGINAL-IMAGE>
-$ ./dmverity-vhd --docker roothash -i <ORIGINAL-IMAGE> > original-roothash.json
-$ jq -r '.layers[]' original-roothash.json > original-layers.txt
-$ diff -u expected-layers.txt original-layers.txt
 ```
 
 #### Rebuild the image from source
@@ -182,6 +175,8 @@ index), normalizes path order, ownership, modes and mtimes derived from
 `../reproduction/reproduce.json`. The output directory must be new so deleted
 source files cannot survive from an earlier build.
 
+**When checking against the published image**
+
 When reproducing a *published* image, do not let the version and timestamp be
 re-derived from git, because new tags and commits change them. Take them from the
 image itself and pass them explicitly:
@@ -195,24 +190,17 @@ $ export IMAGE="scitt-reproduction:${SCITT_VERSION_OVERRIDE}"
 $ (cd source && ./scripts/reproduce-image.sh all "${IMAGE}" ../reproduction)
 ```
 
-The individual steps (`context`, `extract`, `build`, `manifest`) can also be run
-separately; run `./scripts/reproduce-image.sh --help` for the details. The
-context command writes `build-metadata.json` and a SHA-256 file next to the
-archive. The build rejects repositories containing submodules until their
-contents can be normalized explicitly.
-
-Only `context` needs a git checkout, because it archives a commit. Given a
-context archive and the recorded `SOURCE_COMMIT`, `SOURCE_DATE_EPOCH` and
-`SCITT_VERSION_OVERRIDE`, the `extract`, `build` and `manifest` steps run
-without one, so an archived context can be rebuilt long after the repository
-that produced it is unavailable:
+**Compute and compare the rebuilt hashes**
 
 ```sh
-$ export SOURCE_COMMIT=... SOURCE_DATE_EPOCH=... SCITT_VERSION_OVERRIDE=...
-$ ./reproduce-image.sh extract docker-context.tar ./context
-$ ./reproduce-image.sh build ./context "${IMAGE}"
-$ ./reproduce-image.sh manifest "${IMAGE}" ./reproduce.json ./context
+$ ./dmverity-vhd --docker roothash -i "${IMAGE}" > rebuilt-roothash.json
+$ jq -r '.layers[]' rebuilt-roothash.json > rebuilt-layers.txt
+$ diff -u expected-layers.txt rebuilt-layers.txt
 ```
+
+**Troubleshooting**
+
+Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.
 
 Two files inside the image help diagnose a mismatch:
 
@@ -225,15 +213,16 @@ Two files inside the image help diagnose a mismatch:
   installation because its development-only static archives are not shipped in
   the runtime image.
 
-Compute and compare the rebuilt hashes:
+#### If you have access to the original image
+
+If the original image is accessible, compute its dmverity hashes and compare them with `expected-layers.txt`. This authenticates the deployed image independently of whether a historical rebuild is possible.
 
 ```sh
-$ ./dmverity-vhd --docker roothash -i "${IMAGE}" > rebuilt-roothash.json
-$ jq -r '.layers[]' rebuilt-roothash.json > rebuilt-layers.txt
-$ diff -u expected-layers.txt rebuilt-layers.txt
+$ docker pull <ORIGINAL-IMAGE>
+$ ./dmverity-vhd --docker roothash -i <ORIGINAL-IMAGE> > original-roothash.json
+$ jq -r '.layers[]' original-roothash.json > original-layers.txt
+$ diff -u expected-layers.txt original-layers.txt
 ```
-
-Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.
 
 #### Historical build limitations
 
@@ -259,101 +248,6 @@ weekly, rebuilds the most recent release tag, and compares the result with the
 changed when the layers no longer match. It can also be started manually
 against any tag or commit. A failure there means a published image can no
 longer be reproduced, which is the failure mode this guide exists to prevent.
-
-That workflow also probes the pinned build inputs on every run, independently
-of whether a release can be rebuilt yet. Because the probe does not need a
-build, it reports a withdrawn or silently changed input in the week it happens,
-while re-pinning is still straightforward.
-
-The runtime filesystem is copied below `/rootfs` in an intermediate stage before
-the final `FROM scratch` stage. This prevents BuildKit's runtime-injected
-`/etc/hosts`, `/etc/hostname` and `/etc/resolv.conf` mounts from changing parent
-directory timestamps after the Dockerfile's timestamp sweep. The canonicalizer
-sets every retained timestamp to `SOURCE_DATE_EPOCH` and restores hardlink
-groups that overlay copy-up would otherwise split. The final image therefore
-contains one canonical filesystem layer (plus any metadata-only empty layer)
-rather than retaining the Azure Linux base layer separately. Compare rebuilt
-and deployed images as ordered layer lists; do not assume a fixed layer count.
-
-The OneBranch pipeline builds the same normalized context twice with the governed
-`imagebuildinfo` task. The reference build disables pipeline metadata; the
-published build retains the required traceability labels. Their saved image
-archives are compared by reading the ordered `rootfs.diff_ids` from each image
-configuration. Complete image IDs are expected to differ because labels alter
-the image configuration, but matching filesystem layer digests establish the
-layer and dmverity reproducibility required by this guide. That job also writes
-the verified digests to `out/image-layers.txt`.
-
-#### Known limits of the automated checks
-
-These checks are deliberately scoped, and it is worth knowing what they do not
-prove:
-
-- **The two build systems are not compared with each other.** GitHub Actions and
-  OneBranch each verify that two of their own builds agree, but they run
-  different Docker and BuildKit versions. Nothing automatically asserts that the
-  image pushed to ACR has the same layers as the release GitHub verified.
-  Compare `out/image-layers.txt` from the pipeline with the `image-layers.txt`
-  attached to the release for the same commit when that matters.
-- **The build toolchain is not pinned to an exact version.** Layer
-  normalization is performed by the Dockerfile itself, because BuildKit does not
-  rewrite layer timestamps for `SOURCE_DATE_EPOCH`; it only uses it for the
-  image configuration. A future BuildKit that changes how layers are encoded
-  could therefore change the
-  digests. `docker/toolchain.env` declares the minimum builder versions, which
-  are enforced, and the highest versions the reproducibility gate has verified,
-  which are reported but allowed. `reproduce.json` records the `docker` and
-  `buildx` versions that produced a verified image, so reproduce with those
-  versions when an exact match is required. Set `STRICT_TOOLCHAIN=1` to turn
-  the report into an error:
-
-  ```sh
-  $ ./scripts/reproduce-image.sh toolchain
-  $ STRICT_TOOLCHAIN=1 ./scripts/reproduce-image.sh build context scitt:local
-  ```
-
-  When a newer builder is reported and the rebuilt layers still match, raise
-  `SCITT_MAX_VERIFIED_DOCKER_VERSION` and `SCITT_MAX_VERIFIED_BUILDX_VERSION`
-  in that file so the new version becomes the verified baseline.
-- **The dmverity conversion is not gated.** The checks compare Docker layer
-  diff IDs. Identical diff IDs mean identical uncompressed layer content, but
-  the conversion to dmverity root hashes also depends on the `dmverity-vhd`
-  version, so record the `integrity-vhd` commit used, as shown above.
-- **Build inputs are fetched from the network.** The base image digest, the CCF
-  release assets, the `tdnf` package snapshot and the pinned source
-  dependencies must all still be served for a rebuild to succeed. None of them
-  carries a retention guarantee, so their availability is probed weekly, and
-  the same probe can be run at any time:
-
-  ```sh
-  $ ./scripts/check-build-inputs.sh
-  $ ./scripts/check-build-inputs.sh --verify-checksums --json inputs.json
-  ```
-
-  It checks that the base image manifest still resolves by digest, that the CCF
-  release assets are still served and still hash to their pinned values, that
-  the package repositories backing the pinned `tdnf` snapshot time are still
-  published, and that every pinned source dependency commit is still reachable.
-  A failure means images depending on that input can no longer be rebuilt as
-  published, so it needs attention even though nothing in the current source
-  has changed.
-
-When investigating a suspected timestamp leak, BuildKit can clamp every layer
-timestamp to `SOURCE_DATE_EPOCH` on export. If a build only becomes
-reproducible with this enabled, something in the image is still carrying a
-build-time timestamp:
-
-```sh
-$ docker buildx build --provenance=false --no-cache \
-    --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
-    --build-arg SCITT_VERSION_OVERRIDE="${SCITT_VERSION_OVERRIDE}" \
-    --output type=docker,dest=image.tar,rewrite-timestamp=true \
-    -f context/docker/Dockerfile context
-```
-
-This is a diagnostic rather than part of the canonical build, which must stay
-identical across both pipelines. It requires BuildKit 0.13 or newer and cannot
-be combined with loading the image directly into the daemon.
 
 ### 3. Verify UVM
 
