@@ -16,8 +16,14 @@ Releases carry two assets that record what was built and verified:
 used, and `image-layers.txt`, listing the verified filesystem layer digests.
 The `context_sha256` field in `reproduce.json` is the digest of the build
 context, so you can confirm you are building from the same input before
-comparing layers. Start from those when reproducing a published release, and
+comparing layers. `scripts/reproduce-image.sh context` normalizes the archive
+headers that tar fills in at its own discretion, so this digest depends on the
+files being archived rather than on the version of tar you happen to have.
+Start from those when reproducing a published release, and
 reproduce with the recorded tool versions if an exact match is required.
+The `image_id` field records what the building Docker called the result and is
+informational: a containerd backed image store reports a different digest for
+the same image than the classic store does. Compare the layers.
 
 You also need a couple pieces of information to begin with:
 

@@ -121,6 +121,75 @@ resolve_inputs() {
 # Build a context archive from tracked content only, with every source of
 # filesystem nondeterminism (ordering, ownership, permissions, timestamps)
 # normalized away.
+# Rewrites the tar headers of a context archive into one fixed encoding.
+#
+# tar leaves some header fields to the implementation's discretion, and those
+# choices change: GNU tar 1.35 began writing the device fields of ordinary
+# files as empty rather than as octal zero. Two hosts with different tar
+# versions therefore archive identical files into different bytes, which would
+# give the same commit two different context_sha256 values and send a rebuilder
+# looking for a difference that does not exist. Normalizing the fields tar does
+# not let us set makes the digest depend on the archived content instead of on
+# the machine that ran tar.
+canonicalize_context_archive() {
+    python3 - "$1" <<'PY'
+import sys
+
+BLOCK = 512
+DEVICE_TYPES = (b'3', b'4')
+EXTENDED_TYPES = (b'x', b'g', b'X')
+
+path = sys.argv[1]
+
+
+def member_size(header):
+    field = header[124:136]
+    if field[0] & 0x80:
+        # Sizes above 8GiB are base 256 rather than octal. No context is
+        # anywhere near that, but skipping such a member incorrectly would
+        # silently corrupt the archive rather than fail.
+        return int.from_bytes(bytes(field[1:]), 'big')
+    text = bytes(field).rstrip(b'\0 ')
+    return int(text, 8) if text else 0
+
+
+with open(path, 'r+b') as archive:
+    data = bytearray(archive.read())
+
+offset = 0
+while offset + BLOCK <= len(data):
+    header = data[offset:offset + BLOCK]
+    if not any(header):
+        break
+
+    typeflag = bytes(header[156:157])
+    if typeflag in EXTENDED_TYPES:
+        # Extended headers carry free-form records whose ordering and contents
+        # are not normalized here, so refuse rather than record a digest that
+        # another tar could reproduce differently. tar writes them for paths
+        # longer than a ustar header holds, so a new deeply nested file is the
+        # likely cause, and shortening the path is the fix.
+        sys.exit(
+            f"{path} contains extended tar headers, so its digest would depend "
+            "on the local tar. This usually means a path is too long to fit a "
+            "ustar header."
+        )
+
+    if typeflag not in DEVICE_TYPES:
+        header[329:337] = bytes(8)
+        header[337:345] = bytes(8)
+
+    header[148:156] = b' ' * 8
+    header[148:156] = b'%06o\0 ' % sum(header)
+
+    data[offset:offset + BLOCK] = header
+    offset += BLOCK + (member_size(header) + BLOCK - 1) // BLOCK * BLOCK
+
+with open(path, 'wb') as archive:
+    archive.write(data)
+PY
+}
+
 cmd_context() {
     local archive="$1"
     local root staging metadata context_sha256 submodules
@@ -161,6 +230,8 @@ cmd_context() {
         --pax-option=delete=atime,delete=ctime \
         --directory="${staging}" \
         .
+
+    canonicalize_context_archive "${archive}"
 
     context_sha256=$(sha256sum "${archive}" | cut -d ' ' -f 1)
     printf '%s  %s\n' "${context_sha256}" "$(basename "${archive}")" \
