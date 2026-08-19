@@ -76,21 +76,14 @@ jobs:
         name: prepare_context
         displayName: Prepare deterministic Docker context
 
-      # GitHub Actions checks this too. Running it here as well means a builder
-      # upgrade on either side is visible, rather than only on the side that
-      # happens to have the check.
-      - script: |
-          set -euo pipefail
-
-          if ! output=$(./scripts/reproduce-image.sh toolchain "${PWD}" 2>&1); then
-            echo "${output}"
-            exit 1
-          fi
-          echo "${output}"
-          if printf '%s' "${output}" | grep -q "newer than the highest verified"; then
-            echo "##vso[task.logissue type=warning]The build ran on a builder newer than the highest verified version. Confirm the layers are unchanged and then raise the values in docker/toolchain.env."
-          fi
-        displayName: Check builder toolchain
+      # There is deliberately no builder version check here. The GitHub gate
+      # runs the docker build from the shell, so it can check the builder it is
+      # about to use. In this pipeline the build is performed by the
+      # imagebuildinfo task below, which selects its own builder, so a version
+      # read from this shell would describe a different binary than the one
+      # that produces the layers. What covers OneBranch instead is comparing
+      # the layers it produces with the layers GitHub published, which the
+      # verification job does directly.
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
