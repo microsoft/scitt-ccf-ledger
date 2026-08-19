@@ -158,6 +158,12 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /var/lib/rpm/.rpm.lock \
         /var/lib/rpm/rpmdb.sqlite-shm \
         /var/lib/rpm/rpmdb.sqlite-wal && \
+    # These directories hold build state whose contents differ between builds:
+    # tdnf's package database and download cache, ldconfig's aux-cache and the
+    # extracted Java keystore. Emptying the files removes that content while
+    # keeping the paths a normal install has, as with the rpm database above.
+    # canonicalize-rootfs.sh normalizes metadata rather than contents, so this
+    # has to happen here.
     for state_dir in \
         /etc/pki/ca-trust/extracted/java \
         /usr/lib/sysimage/tdnf \
