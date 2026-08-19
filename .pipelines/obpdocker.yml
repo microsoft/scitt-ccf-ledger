@@ -76,6 +76,22 @@ jobs:
         name: prepare_context
         displayName: Prepare deterministic Docker context
 
+      # GitHub Actions checks this too. Running it here as well means a builder
+      # upgrade on either side is visible, rather than only on the side that
+      # happens to have the check.
+      - script: |
+          set -euo pipefail
+
+          if ! output=$(./scripts/reproduce-image.sh toolchain "${PWD}" 2>&1); then
+            echo "${output}"
+            exit 1
+          fi
+          echo "${output}"
+          if printf '%s' "${output}" | grep -q "newer than the highest verified"; then
+            echo "##vso[task.logissue type=warning]The build ran on a builder newer than the highest verified version. Confirm the layers are unchanged and then raise the values in docker/toolchain.env."
+          fi
+        displayName: Check builder toolchain
+
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage
@@ -207,4 +223,28 @@ jobs:
           echo "Build context sha256: ${context_sha256}"
           printf '%s\n' "${context_sha256}" \
             > "$(Build.SourcesDirectory)/out/context-sha256.txt"
+
+          # Everything above only compares two OneBranch builds with each
+          # other, which cannot detect this pipeline drifting away from GitHub
+          # Actions. When the built commit is a released tag, the layers
+          # GitHub published for it are fetched and compared, which is the
+          # only check here that spans both build systems.
+          #
+          # Release assets are readable without credentials, unlike workflow
+          # artifacts, so this needs no secret. It also means the check only
+          # applies to tagged commits: pull request builds report that it was
+          # skipped rather than reporting a pass they did not earn.
+          git fetch --tags --quiet --depth=1 origin 2>/dev/null || true
+          if tag=$(git describe --tags --exact-match HEAD 2>/dev/null); then
+            echo "Commit is released as ${tag}; comparing with its published layers."
+            if ! ./scripts/compare-published-layers.sh \
+                "$(Build.SourcesDirectory)/out/image-layers.txt" "${tag}"; then
+              echo "##vso[task.logissue type=error]OneBranch no longer reproduces the layers published for ${tag}."
+              exit 1
+            fi
+          else
+            echo "This commit is not a released tag, so there is no published"
+            echo "record to compare with. The comparison against GitHub Actions"
+            echo "was NOT performed for this build."
+          fi
         displayName: Verify OneBranch image reproducibility

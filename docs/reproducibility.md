@@ -200,6 +200,21 @@ $ jq -r '.layers[]' rebuilt-roothash.json > rebuilt-layers.txt
 $ diff -u expected-layers.txt rebuilt-layers.txt
 ```
 
+**Check the rebuild against the layers the release published**
+
+The step above compares your rebuild with the image you extracted layers from.
+This instead compares it with the record published at release time, which does
+not depend on having the original image to hand:
+
+```sh
+$ jq -r '.layers[]' ../reproduction/reproduce.json > rebuilt-diff-ids.txt
+$ ./scripts/compare-published-layers.sh rebuilt-diff-ids.txt <RELEASE-TAG>
+```
+
+It fails when the layers differ, and reports that no comparison was possible
+when the release predates the published record. Set `SCITT_RELEASE_BASE_URL` if
+the releases are mirrored somewhere other than github.com.
+
 **Troubleshooting**
 
 Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.

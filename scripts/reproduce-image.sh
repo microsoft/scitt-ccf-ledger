@@ -218,7 +218,14 @@ cmd_extract() {
 }
 
 builder_docker_version() {
-    docker version --format '{{.Server.Version}}'
+    # A wrapper script or an unreachable daemon can print a message on stdout
+    # instead of a version, which would otherwise be compared against as if it
+    # were one. Only a version-shaped result is usable; anything else is
+    # reported as unknown so the caller fails with a clear message.
+    docker version --format '{{.Server.Version}}' 2>/dev/null |
+        grep -oE '^[0-9]+(\.[0-9]+)*' |
+        head -n1 ||
+        true
 }
 
 # github.com/docker/buildx v0.33.0-desktop.1 <commit> -> 0.33.0
@@ -226,7 +233,10 @@ builder_buildx_version() {
     docker buildx version 2>/dev/null |
         head -n1 |
         awk '{print $2}' |
-        sed 's/^v//; s/-.*$//'
+        sed 's/^v//; s/-.*$//' |
+        grep -oE '^[0-9]+(\.[0-9]+)*' |
+        head -n1 ||
+        true
 }
 
 # Compares dotted versions, tolerating the differing component counts that
