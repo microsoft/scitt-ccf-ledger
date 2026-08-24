@@ -33,7 +33,8 @@ set(BUILD_QCBOR_TEST OFF CACHE STRING "" FORCE)
 FetchContent_Declare(
   qcbor
   GIT_REPOSITORY https://github.com/laurencelundblade/QCBOR.git
-  GIT_TAG        v1.6.1
+  # https://github.com/laurencelundblade/QCBOR/releases/tag/v1.6.1
+  GIT_TAG        930708bb86481e88879eb1d87fd4d664f1d69503
 )
 FetchContent_MakeAvailable(qcbor)
 
@@ -111,7 +112,8 @@ if (BUILD_TESTS)
   FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG release-1.12.1
+    # https://github.com/google/googletest/releases/tag/release-1.12.1
+    GIT_TAG 58d77fa8070e8cec2dc1ed015d66b454c8d78850
   )
   FetchContent_MakeAvailable(googletest)
 
