@@ -27,15 +27,24 @@ if [ "$DOCKER" = "1" ]; then
     export CCF_PORT=${CCF_PORT:-8000}
     export CCF_URL="https://${CCF_HOST}:${CCF_PORT}"
 
+    # Number of nodes in the network under test. Above 1, run-dev.sh starts a
+    # cluster fronted by a round robin load balancer on CCF_PORT
+    export NODE_COUNT=${NODE_COUNT:-1}
+    if [ "$NODE_COUNT" -gt 1 ]; then
+        echo "Running functional tests against a $NODE_COUNT node cluster via $CCF_URL"
+    fi
+
     ./docker/run-dev.sh &
     CCF_NETWORK_PID=$!
     trap "kill $CCF_NETWORK_PID" EXIT
 
-    # wait until the network is ready
+    # wait until the network is ready. A cluster only publishes the load
+    # balancer once every node has joined and been trusted, so this also covers
+    # the cluster being fully formed.
     timeout=120
     while ! curl -s -f -k $CCF_URL/version > /dev/null; do
         echo "Waiting for service to be ready..."
-        sleep 1
+        sleep 3
         timeout=$((timeout - 1))
         if [ $timeout -eq 0 ]; then
             echo "Service failed to become ready, exiting"

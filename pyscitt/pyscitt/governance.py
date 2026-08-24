@@ -9,7 +9,10 @@ if TYPE_CHECKING:
 import base64
 import json
 from dataclasses import dataclass
-from typing import Optional, Union
+from datetime import datetime, timezone
+from typing import Iterable, Optional, Union
+
+import httpx
 
 from . import crypto
 
@@ -84,8 +87,31 @@ class GovernanceClient:
         result = SubmittedProposal(out["proposalId"], out["proposalState"])
         if vote and result.is_open:
             result = self.vote(result.id, must_pass=must_pass)
+        else:
+            self._wait_until_effective(response, result)
 
         return result
+
+    def _wait_until_effective(
+        self, response: httpx.Response, result: SubmittedProposal
+    ) -> None:
+        """
+        Wait for an accepted proposal to have been applied by the whole network.
+
+        The proposal only took effect on the node which executed it. Waiting for
+        the rest of the network to apply it too means a request made straight
+        afterwards observes the new state whichever node ends up serving it.
+        """
+        if not result.is_accepted:
+            return
+
+        # Imported here rather than at module scope, as client imports this
+        # module.
+        from .client import CCF_TX_ID_HEADER
+
+        tx = response.headers.get(CCF_TX_ID_HEADER)
+        if tx is not None:
+            self.client.wait_for_confirmation_on_all_nodes(tx)
 
     def vote(
         self, proposal_id: str, ballot: Optional[str] = None, must_pass: bool = False
@@ -112,6 +138,8 @@ class GovernanceClient:
             raise ProposalNotAccepted(
                 f"Proposal {result.id} was not accepted: {result.state}"
             )
+
+        self._wait_until_effective(response, result)
 
         return result
 
@@ -196,6 +224,25 @@ def transition_service_to_open_proposal(
                 "name": "transition_service_to_open",
                 "args": args,
             }
+        ]
+    }
+
+
+def transition_nodes_to_trusted_proposal(node_ids: Iterable[str]) -> dict:
+    """
+    Build a proposal transitioning each of the given nodes to Trusted.
+
+    A single proposal covering every node keeps the number of reconfigurations,
+    and therefore the number of elections, to a minimum.
+    """
+    valid_from = str(datetime.now(timezone.utc))
+    return {
+        "actions": [
+            {
+                "name": "transition_node_to_trusted",
+                "args": {"node_id": node_id, "valid_from": valid_from},
+            }
+            for node_id in node_ids
         ]
     }
 
