@@ -59,9 +59,10 @@ jobs:
       run: ./scripts/setup-env.sh
 
     # The Python extractor only needs an interpreter, not the CCF toolchain.
+    # 'which' is required by the extractor's autobuild.sh to locate python3.
     - name: Setup Python
       if: matrix.language == 'python'
-      run: tdnf install -y --disablerepo azurelinux-official-ms-non-oss python3 python3-pip
+      run: tdnf install -y --disablerepo azurelinux-official-ms-non-oss python3 python3-pip which
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
