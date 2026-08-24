@@ -74,6 +74,10 @@ jobs:
     # extract than to compile, for code we do not own and do not analyse.
     - name: Pre-build dependencies (untraced)
       if: matrix.language == 'cpp'
+      # Ninja defaults to cores+2 jobs; the trieste/rego-cpp translation units
+      # are heavy enough that this exhausts the agent and the build crawls.
+      env:
+        CMAKE_BUILD_PARALLEL_LEVEL: 3
       run: |
         cd app
         cmake --preset codeql --fresh
