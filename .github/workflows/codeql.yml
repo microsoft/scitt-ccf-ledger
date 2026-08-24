@@ -19,7 +19,11 @@ concurrency:
 jobs:
   analyze:
     name: Analyze
-    
+
+    # The traced build plus analysis should take well under this; a stalled
+    # extractor otherwise occupies a pool agent for the 6h default.
+    timeout-minutes: 60
+
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
@@ -64,6 +68,17 @@ jobs:
       if: matrix.language == 'python'
       run: tdnf install -y --disablerepo azurelinux-official-ms-non-oss python3 python3-pip which
 
+    # Configure and build the third-party dependencies *before* CodeQL starts
+    # tracing. The extractor runs inline with every traced compiler call, and
+    # the template-heavy trieste/rego-cpp translation units take far longer to
+    # extract than to compile, for code we do not own and do not analyse.
+    - name: Pre-build dependencies (untraced)
+      if: matrix.language == 'cpp'
+      run: |
+        cd app
+        cmake --preset codeql --fresh
+        cmake --build --preset codeql --target rego qcbor
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
@@ -89,16 +104,15 @@ jobs:
 
     #   If the Autobuild fails above, remove it and uncomment the following three lines.
     #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
-    
+
+    # Only the application target is built here, and its dependencies are
+    # already up to date, so the traced build covers our sources alone. The
+    # 'codeql' preset also has BUILD_TESTS=OFF: unit tests are not shipped code.
     - if: matrix.language == 'cpp'
       name: Build C++
-      # The 'codeql' preset builds the application only: unit tests (and their
-      # googletest/rapidcheck dependencies) are not part of the shipped code, so
-      # building and running them here only adds time and failure modes.
-      env:
-        PRESET: codeql
       run: |
-        ./build.sh
+        cd app
+        cmake --build --preset codeql --target scitt
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6

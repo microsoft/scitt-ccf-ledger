@@ -96,19 +96,6 @@
       ]
     },
     {
-      "name": "codeql",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "codeql"
-        },
-        {
-          "type": "build",
-          "name": "codeql"
-        }
-      ]
-    },
-    {
       "name": "bench",
       "steps": [
         {
