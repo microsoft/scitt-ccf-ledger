@@ -12,10 +12,18 @@ on:
     # The branches below must be a subset of the branches above
     branches: [ "main" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze
-    
+
+    # The traced build plus analysis should take well under this; a stalled
+    # extractor otherwise occupies a pool agent for the 6h default.
+    timeout-minutes: 60
+
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
@@ -51,7 +59,29 @@ jobs:
       run: chown -R $(id -u):$(id -g) $PWD
 
     - name: Setup dependencies
+      if: matrix.language == 'cpp'
       run: ./scripts/setup-env.sh
+
+    # The Python extractor only needs an interpreter, not the CCF toolchain.
+    # 'which' is required by the extractor's autobuild.sh to locate python3.
+    - name: Setup Python
+      if: matrix.language == 'python'
+      run: tdnf install -y --disablerepo azurelinux-official-ms-non-oss python3 python3-pip which
+
+    # Configure and build the third-party dependencies *before* CodeQL starts
+    # tracing. The extractor runs inline with every traced compiler call, and
+    # the template-heavy trieste/rego-cpp translation units take far longer to
+    # extract than to compile, for code we do not own and do not analyse.
+    - name: Pre-build dependencies (untraced)
+      if: matrix.language == 'cpp'
+      # Ninja defaults to cores+2 jobs; the trieste/rego-cpp translation units
+      # are heavy enough that this exhausts the agent and the build crawls.
+      env:
+        CMAKE_BUILD_PARALLEL_LEVEL: 3
+      run: |
+        cd app
+        cmake --preset codeql --fresh
+        cmake --build --preset codeql --target rego qcbor
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -78,11 +108,15 @@ jobs:
 
     #   If the Autobuild fails above, remove it and uncomment the following three lines.
     #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
-    
+
+    # Only the application target is built here, and its dependencies are
+    # already up to date, so the traced build covers our sources alone. The
+    # 'codeql' preset also has BUILD_TESTS=OFF: unit tests are not shipped code.
     - if: matrix.language == 'cpp'
       name: Build C++
       run: |
-        ./build.sh
+        cd app
+        cmake --build --preset codeql --target scitt
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6

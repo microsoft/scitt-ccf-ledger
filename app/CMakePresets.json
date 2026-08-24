@@ -25,6 +25,17 @@
       }
     },
     {
+      "name": "codeql",
+      "inherits": "dev",
+      "displayName": "CodeQL",
+      "description": "Static analysis build: application only, no unit tests, no debug info",
+      "cacheVariables": {
+        "BUILD_TESTS": "OFF",
+        "CMAKE_C_FLAGS_DEBUG": "-O0 -g0",
+        "CMAKE_CXX_FLAGS_DEBUG": "-O0 -g0"
+      }
+    },
+    {
       "name": "bench",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/app",
@@ -49,6 +60,10 @@
     {
       "name": "dev",
       "configurePreset": "dev"
+    },
+    {
+      "name": "codeql",
+      "configurePreset": "codeql"
     },
     {
       "name": "bench",
