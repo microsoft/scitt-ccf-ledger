@@ -12,6 +12,10 @@ on:
     # The branches below must be a subset of the branches above
     branches: [ "main" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze
@@ -51,7 +55,13 @@ jobs:
       run: chown -R $(id -u):$(id -g) $PWD
 
     - name: Setup dependencies
+      if: matrix.language == 'cpp'
       run: ./scripts/setup-env.sh
+
+    # The Python extractor only needs an interpreter, not the CCF toolchain.
+    - name: Setup Python
+      if: matrix.language == 'python'
+      run: tdnf install -y --disablerepo azurelinux-official-ms-non-oss python3 python3-pip
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -81,6 +91,11 @@ jobs:
     
     - if: matrix.language == 'cpp'
       name: Build C++
+      # The 'codeql' preset builds the application only: unit tests (and their
+      # googletest/rapidcheck dependencies) are not part of the shipped code, so
+      # building and running them here only adds time and failure modes.
+      env:
+        PRESET: codeql
       run: |
         ./build.sh
 

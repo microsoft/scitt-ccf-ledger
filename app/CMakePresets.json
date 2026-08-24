@@ -25,6 +25,15 @@
       }
     },
     {
+      "name": "codeql",
+      "inherits": "dev",
+      "displayName": "CodeQL",
+      "description": "Static analysis build: application only, no unit tests",
+      "cacheVariables": {
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
       "name": "bench",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/app",
@@ -49,6 +58,10 @@
     {
       "name": "dev",
       "configurePreset": "dev"
+    },
+    {
+      "name": "codeql",
+      "configurePreset": "codeql"
     },
     {
       "name": "bench",
@@ -79,6 +92,19 @@
         {
           "type": "test",
           "name": "dev"
+        }
+      ]
+    },
+    {
+      "name": "codeql",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "codeql"
+        },
+        {
+          "type": "build",
+          "name": "codeql"
         }
       ]
     },
