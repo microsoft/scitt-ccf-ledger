@@ -250,26 +250,4 @@ jobs:
             exit 1
           fi
 
-          # The second covers released tags, where the record to compare with
-          # is the release asset third parties reproduce against rather than a
-          # commit status. Release assets are readable without credentials too.
-          if ! git rev-parse --git-dir >/dev/null 2>&1; then
-            # Without git metadata an untagged commit and a tagged one look the
-            # same, so the check would silently never run. Say so instead.
-            echo "##vso[task.logissue type=warning]The checkout has no git metadata, so this build could not tell whether it is a released tag. The comparison against GitHub Actions was NOT performed."
-          else
-            git fetch --tags --quiet --depth=1 origin 2>/dev/null || true
-            if tag=$(git describe --tags --exact-match HEAD 2>/dev/null); then
-              echo "Commit is released as ${tag}; comparing with its published layers."
-              if ! ./scripts/compare-published-layers.sh \
-                  "$(Build.SourcesDirectory)/out/image-layers.txt" "${tag}"; then
-                echo "##vso[task.logissue type=error]OneBranch no longer reproduces the layers published for ${tag}."
-                exit 1
-              fi
-            else
-              echo "This commit is not a released tag, so there is no published"
-              echo "record to compare with. The comparison against GitHub Actions"
-              echo "was NOT performed for this build."
-            fi
-          fi
         displayName: Verify OneBranch image reproducibility

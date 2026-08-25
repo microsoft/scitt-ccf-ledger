@@ -38,8 +38,6 @@ Environment:
   SCITT_RELEASE_BASE_URL  Host serving the release assets. Defaults to
                           https://github.com. Point this at a mirror when
                           the releases are republished elsewhere.
-  GITHUB_TOKEN            Sent as a bearer token when set. Not required for
-                          public releases.
 EOF
 }
 
@@ -81,11 +79,6 @@ trap 'rm -f "${published}" "${headers}"' EXIT
 url="${release_base_url}/${release_repo}/releases/download/${tag}/image-layers.txt"
 echo "Comparing with ${url}"
 
-auth_args=()
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-    auth_args=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
-fi
-
 status=$(
     curl \
         --silent \
@@ -97,7 +90,6 @@ status=$(
         --dump-header "${headers}" \
         --write-out '%{http_code}' \
         --output "${published}" \
-        "${auth_args[@]}" \
         "${url}" || true
 )
 

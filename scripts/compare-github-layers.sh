@@ -5,14 +5,6 @@
 # Compare locally built filesystem layers with the layers GitHub Actions built
 # for the same commit.
 #
-# The per-commit gates in GitHub Actions and OneBranch each build twice and
-# compare the two results, which proves a build system is internally
-# deterministic but says nothing about the two agreeing with each other.
-# compare-published-layers.sh closes that gap for released tags by reading a
-# release asset. This closes it for every other commit by reading the record
-# GitHub Actions posts as a commit status, which is readable without
-# credentials and outlives workflow artifacts.
-#
 # The comparison is keyed on the commit that was built rather than on the pull
 # request head. GitHub builds refs/pull/N/merge, a commit it regenerates
 # whenever the head or the target branch moves, and the build inputs derive
@@ -49,10 +41,6 @@ Environment:
   SCITT_STATUS_TIMEOUT   Seconds to wait for GitHub to publish its record.
                          Defaults to 1200. Set to 0 to check once.
   SCITT_STATUS_INTERVAL  Seconds between polls. Defaults to 30.
-  GITHUB_TOKEN           Sent as a bearer token when set. Not required: the
-                         status of a public repository is readable anonymously,
-                         which is why this needs no secret in a pull request
-                         pipeline.
 EOF
 }
 
@@ -113,11 +101,6 @@ layers_digest=$(grep -E '^sha256:[0-9a-f]{64}$' "${layers_file}" |
 response=$(mktemp)
 trap 'rm -f "${response}"' EXIT
 
-auth_args=()
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-    auth_args=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
-fi
-
 url="${status_api}/repos/${status_repo}/commits/${commit}/status"
 echo "Looking for the ${status_context} record GitHub published for ${commit}."
 
@@ -135,7 +118,6 @@ while true; do
             --write-out '%{http_code}' \
             --output "${response}" \
             --header "Accept: application/vnd.github+json" \
-            "${auth_args[@]}" \
             "${url}" 2>/dev/null || true
     )
 

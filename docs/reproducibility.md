@@ -217,10 +217,6 @@ $ jq -r '.layers[]' ../reproduction/reproduce.json > rebuilt-diff-ids.txt
 $ ./scripts/compare-published-layers.sh rebuilt-diff-ids.txt <RELEASE-TAG>
 ```
 
-It fails when the layers differ, and reports that no comparison was possible
-when the release predates the published record. Set `SCITT_RELEASE_BASE_URL` if
-the releases are mirrored somewhere other than github.com.
-
 **Check a rebuild against the layers GitHub Actions built for any commit**
 
 Releases carry a published record, but most commits do not. For those, the
