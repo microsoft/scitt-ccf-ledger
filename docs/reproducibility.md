@@ -221,6 +221,26 @@ It fails when the layers differ, and reports that no comparison was possible
 when the release predates the published record. Set `SCITT_RELEASE_BASE_URL` if
 the releases are mirrored somewhere other than github.com.
 
+**Check a rebuild against the layers GitHub Actions built for any commit**
+
+Releases carry a published record, but most commits do not. For those, the
+reproducibility workflow records the verified layer digest as a commit status
+on the commit it built, which is readable without credentials:
+
+```sh
+$ ./scripts/compare-github-layers.sh rebuilt-diff-ids.txt <BUILT-COMMIT> [CONTEXT-SHA256]
+```
+
+Pass the commit that was built, which for a pull request is the
+`refs/pull/N/merge` commit named by `source_commit` in `reproduce.json` rather
+than the branch head. GitHub rebuilds that merge commit whenever the head or
+the target branch moves, so comparing anything else would compare two builds of
+different sources. The script waits for the record to appear, reports that no
+comparison was possible when it does not, and fails only when the records
+genuinely differ. This is the same check the OneBranch pipeline runs against
+every commit it builds, which is what keeps the two build systems from drifting
+apart between releases.
+
 **Troubleshooting**
 
 Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.

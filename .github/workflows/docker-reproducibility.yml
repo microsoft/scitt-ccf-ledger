@@ -164,6 +164,11 @@ jobs:
     name: Compare filesystem layers
     needs: build-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed to record the verified layer digest against the built commit so
+      # that the OneBranch pipeline can compare its own build with it.
+      statuses: write
     steps:
       - name: Download image IDs
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -226,6 +231,89 @@ jobs:
           path: image-ids/docker-image-id-one/reproduce.json
           if-no-files-found: error
           retention-days: 90
+
+      # Recorded where another build system can read it without credentials.
+      # Workflow artifacts need a token and expire; release assets only exist
+      # for tags. A commit status is public, permanent, and keyed on a commit,
+      # which is what lets the OneBranch pipeline check that it produced the
+      # same layers for the same source without holding a secret.
+      #
+      # The status is attached to the commit that was built. For a pull request
+      # that is the refs/pull/N/merge commit rather than the head, so a reader
+      # comparing against its own build is only ever matched with a build of
+      # the same source.
+      - name: Record the verified layers for cross-system comparison
+        # A pull request from a fork gets a read-only token, so recording the
+        # status is impossible there rather than merely undesirable. Skipping
+        # leaves the other build system with no record to compare against,
+        # which it reports as "not compared"; attempting it would fail this
+        # workflow for every fork contributor instead.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          layers=image-ids/docker-image-id-one/layer-digests.txt
+          manifest=image-ids/docker-image-id-one/reproduce.json
+
+          built_commit=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"])' "${manifest}")
+          context_sha256=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["context_sha256"])' "${manifest}")
+
+          # Hashed rather than listed because a status description holds 140
+          # characters and two full digests plus labels do not fit. Readers
+          # derive the same value with this same pipeline.
+          layers_digest=$(grep -E '^sha256:[0-9a-f]{64}$' "${layers}" |
+            sha256sum |
+            cut -d ' ' -f 1)
+
+          description="L:${layers_digest} C:${context_sha256}"
+          echo "Recording for ${built_commit}: ${description}"
+
+          STATUS_DESCRIPTION="${description}" python3 - /tmp/status-request.json <<'PY'
+          import json
+          import os
+          import sys
+
+          with open(sys.argv[1], "w", encoding="utf-8") as handle:
+              json.dump({
+                  "state": "success",
+                  "context": "reproducibility/layers",
+                  "description": os.environ["STATUS_DESCRIPTION"],
+                  "target_url": "{}/{}/actions/runs/{}".format(
+                      os.environ["GITHUB_SERVER_URL"],
+                      os.environ["GITHUB_REPOSITORY"],
+                      os.environ["GITHUB_RUN_ID"],
+                  ),
+              }, handle)
+          PY
+
+          status=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --retry 3 \
+            --retry-delay 2 \
+            --max-time 60 \
+            --write-out '%{http_code}' \
+            --output /tmp/status-response.json \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --data @/tmp/status-request.json \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${built_commit}")
+
+          if [ "${status}" != "201" ]; then
+            # A silent failure here would leave the other build system waiting
+            # for a record that never arrives, and reporting that as "not
+            # compared" rather than as a fault would hide it indefinitely.
+            echo "::error::Could not record the verified layers (HTTP ${status}). The cross-system comparison has nothing to read for ${built_commit}."
+            cat /tmp/status-response.json
+            exit 1
+          fi
+
+          echo "Recorded ${description} for ${built_commit}."
 
   publish-manifest:
     name: Publish reproduction manifest

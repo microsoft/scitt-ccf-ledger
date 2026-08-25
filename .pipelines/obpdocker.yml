@@ -68,6 +68,12 @@ jobs:
           # Exported to the verification job so the published record names the
           # context these images were built from.
           echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
+          # Exported for the same reason. The verification job checks out
+          # $(Build.SourceBranch) again, and for a pull request that ref is a
+          # merge commit GitHub regenerates whenever the head or the target
+          # branch moves, so re-reading it there could name a different commit
+          # than the one these images were built from.
+          echo "##vso[task.setvariable variable=SOURCE_COMMIT;isOutput=true]${SOURCE_COMMIT}"
 
           echo "Deterministic context ${CONTEXT_SHA256} for commit ${SOURCE_COMMIT}"
 
@@ -145,6 +151,7 @@ jobs:
       ob_git_checkout: true
       ob_outputDirectory: $(Build.SourcesDirectory)/out
       contextSha256: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.CONTEXT_SHA256'] ]
+      sourceCommit: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.SOURCE_COMMIT'] ]
 
     steps:
       - checkout: SCITT
@@ -219,14 +226,33 @@ jobs:
 
           # Everything above only compares two OneBranch builds with each
           # other, which cannot detect this pipeline drifting away from GitHub
-          # Actions. When the built commit is a released tag, the layers
-          # GitHub published for it are fetched and compared, which is the
-          # only check here that spans both build systems.
+          # Actions. The two checks below are the only ones that span both
+          # build systems.
           #
-          # Release assets are readable without credentials, unlike workflow
-          # artifacts, so this needs no secret. It also means the check only
-          # applies to tagged commits: pull request builds report that it was
-          # skipped rather than reporting a pass they did not earn.
+          # The first compares against the record GitHub Actions posted for the
+          # exact commit this build used. That record is a commit status, which
+          # is readable without credentials, so this pipeline needs no GitHub
+          # secret. Keying on the built commit rather than on the pull request
+          # head matters: GitHub builds refs/pull/N/merge and regenerates it
+          # whenever the head or the target branch moves, so anything else
+          # would compare two builds of different sources.
+          source_commit="$(sourceCommit)"
+          if [ -z "${source_commit}" ]; then
+            echo "The built commit was not passed from the build job." >&2
+            exit 1
+          fi
+
+          if ! ./scripts/compare-github-layers.sh \
+              "$(Build.SourcesDirectory)/out/image-layers.txt" \
+              "${source_commit}" \
+              "${context_sha256}"; then
+            echo "##vso[task.logissue type=error]OneBranch and GitHub Actions built different filesystem layers for ${source_commit}."
+            exit 1
+          fi
+
+          # The second covers released tags, where the record to compare with
+          # is the release asset third parties reproduce against rather than a
+          # commit status. Release assets are readable without credentials too.
           if ! git rev-parse --git-dir >/dev/null 2>&1; then
             # Without git metadata an untagged commit and a tagged one look the
             # same, so the check would silently never run. Say so instead.
