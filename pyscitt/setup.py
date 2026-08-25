@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.14.1"
+PACKAGE_VERSION = "0.14.2"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -25,10 +25,10 @@ setup(
     },
     python_requires=">=3.12",
     install_requires=[
-        "ccf>=7.0.6,<8",
-        "cryptography>=48.0.1,<50",  # needs to match ccf
+        "ccf>=7.0.12,<8",
+        "cryptography>=48.0.1,<51",
         "httpx",
-        "cbor2==5.8.*",
+        "cbor2>=5.8,<7",
         "pycose==1.1.0",
         "pyjwt",
         "loguru",

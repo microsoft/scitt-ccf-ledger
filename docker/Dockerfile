@@ -8,7 +8,7 @@ ARG TDNF_SNAPSHOTTIME="1784205407"
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
-FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260809@sha256:8bb51342bd5eba915990ab608f91060d502bb7891a2d3d909e0419b932533029 AS base
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260820@sha256:76325dbdd581f039ac2edffca3ff40aef88951da7aa24cf0c07b40992e6d6bd2 AS base
 
 # Initial stage to verify the pinned tdnf snapshot time against the CCF release
 FROM base AS snapshot-extractor
