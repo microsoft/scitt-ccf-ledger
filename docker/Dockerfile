@@ -86,6 +86,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
     --mount=type=bind,source=docker/canonicalize-rpmdb.sh,target=/tmp/canonicalize-rpmdb.sh \
+    --mount=type=bind,source=docker/canonicalize-tdnf-history.sh,target=/tmp/canonicalize-tdnf-history.sh \
     --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
     set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
@@ -149,16 +150,33 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         /var/lib/rpm/.rpm.lock \
         /var/lib/rpm/rpmdb.sqlite-shm \
         /var/lib/rpm/rpmdb.sqlite-wal && \
-    # These directories hold build state whose contents differ between builds:
-    # tdnf's package database and download cache, ldconfig's aux-cache and the
-    # extracted Java keystore. Emptying the files removes that content while
-    # keeping the paths a normal install has, as with the rpm database above.
-    # canonicalize-rootfs.sh normalizes metadata rather than contents, so this
-    # has to happen here.
+    # tdnf stamps every transaction it ran with the wall clock, so its history
+    # database differs between builds. Emptying the file removes that, but a
+    # zero-length database has no schema either: `tdnf history` then fails with
+    # "no such table" instead of reporting an empty history. `tdnf history init`
+    # rebuilds it from the packages that are actually installed, which leaves
+    # the timestamp of that one synthetic transaction as the only varying
+    # value, and canonicalize-tdnf-history.sh dates it to SOURCE_DATE_EPOCH.
+    # init only writes when the schema is missing, so the truncation has to
+    # come first.
+    : > /usr/lib/sysimage/tdnf/history.db && \
+    tdnf history init && \
+    /tmp/canonicalize-tdnf-history.sh /tmp/sqlite3 \
+        /usr/lib/sysimage/tdnf/history.db "${SOURCE_DATE_EPOCH}" && \
+    tdnf history list > /dev/null && \
+    # What is left is build state with no other reader: ldconfig's cache, tdnf's
+    # download cache, and the extracted Java keystore, whose JKS entries record
+    # when they were written. Emptying the files removes that content while
+    # keeping the paths a normal install has. canonicalize-rootfs.sh normalizes
+    # metadata rather than contents, so this has to happen here.
+    for state_file in \
+        /etc/pki/ca-trust/extracted/java/cacerts \
+        /var/cache/ldconfig/aux-cache; do \
+        if [ -f "${state_file}" ]; then \
+            : > "${state_file}"; \
+        fi; \
+    done && \
     for state_dir in \
-        /etc/pki/ca-trust/extracted/java \
-        /usr/lib/sysimage/tdnf \
-        /var/cache/ldconfig \
         /var/cache/tdnf \
         /var/lib/tdnf; do \
         if [ -d "${state_dir}" ]; then \
@@ -184,6 +202,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /tmp/app-build \
         ! -path '/tmp/app-build/*' \
         ! -path /tmp/canonicalize-rpmdb.sh \
+        ! -path /tmp/canonicalize-tdnf-history.sh \
         ! -path /tmp/sqlite3 \
         ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \
