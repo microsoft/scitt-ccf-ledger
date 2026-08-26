@@ -49,24 +49,20 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 The CCF release is named in five files: `docker/Dockerfile`,
 `.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh` and this
-document. Nothing else has to be updated — the image build reads the tdnf
-snapshot time out of the release's own `reproduce.json` rather than repeating
-it. Move all five together with:
+document. Change all five together. Nothing else has to be updated — the image
+build reads the tdnf snapshot time out of the release's own `reproduce.json`
+rather than repeating it.
+
+Then confirm they agree, and that the new release publishes what the build
+fetches:
 
 ```sh
-./scripts/bump-ccf-version.sh <version>
+./scripts/check-ccf-version.sh   # the five files name the same release
+./scripts/check-build-inputs.sh  # that release serves reproduce.json and the RPM
 ```
 
-Before writing anything the script confirms the release actually publishes a
-`reproduce.json` with a usable snapshot time and that the CCF devel RPM is
-available, so a version the build could not use is rejected up front rather
-than failing inside a Docker stage. It also refuses to write if a file no
-longer looks the way it expects, so a silent partial update is not possible.
-Afterwards, run `./scripts/check-build-inputs.sh` to confirm the new inputs
-resolve.
-
-`./scripts/bump-ccf-version.sh --check` verifies that every file still agrees on
-the same version. It needs no network and runs as part of `scripts/ci-checks.sh`.
+The first only reads files, so it needs no network and runs as part of
+`scripts/ci-checks.sh`.
 
 ## Compiling
 

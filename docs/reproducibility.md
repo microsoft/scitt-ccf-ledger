@@ -313,8 +313,8 @@ the fact rather than **prevented** at build time.
 
 `scripts/check-build-inputs.sh` reports the same values on a schedule, so a CCF
 asset that moves or disappears shows up within the week rather than years later.
-`scripts/bump-ccf-version.sh` moves the version across all five files that name
-it; see [DEVELOPMENT.md](../DEVELOPMENT.md).
+`scripts/check-ccf-version.sh` confirms that all five files naming the release
+agree on it; see [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 ### 3. Verify UVM
 

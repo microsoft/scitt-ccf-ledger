@@ -16,7 +16,7 @@ ROOT_DIR=$( dirname "$SCRIPT_DIR" )
 pushd "$ROOT_DIR" > /dev/null
 
 echo "-- CCF version pins"
-"$SCRIPT_DIR"/bump-ccf-version.sh --check
+"$SCRIPT_DIR"/check-ccf-version.sh
 
 echo "-- C/C++ format"
 if [ $FIX -ne 0 ]; then
