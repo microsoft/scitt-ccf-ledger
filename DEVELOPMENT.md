@@ -45,6 +45,27 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
     ./setup-dev.sh
     ```
 
+## Updating the CCF version
+
+A CCF release is pinned in eight places across five files: the version itself in
+`docker/Dockerfile`, `.devcontainer/Dockerfile`, `scripts/setup-env.sh`,
+`build.sh` and this document, plus three checksums in `docker/Dockerfile` that
+nobody can work out by hand. Move all of them together with:
+
+```sh
+./scripts/bump-ccf-version.sh <version>
+```
+
+The script reads the release, records the checksum of `reproduce.json`, takes
+the tdnf snapshot time from inside it, and hashes the CCF devel RPM to confirm
+it matches the checksum GitHub publishes for that asset. It refuses to write
+anything if a file no longer looks the way it expects, so a silent partial
+update is not possible. Afterwards, run `./scripts/check-build-inputs.sh` to
+confirm the new pins resolve.
+
+`./scripts/bump-ccf-version.sh --check` verifies that every file still agrees on
+the same version. It needs no network and runs as part of `scripts/ci-checks.sh`.
+
 ## Compiling
 
 ### Using Docker build container

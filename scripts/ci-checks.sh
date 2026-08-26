@@ -15,6 +15,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 ROOT_DIR=$( dirname "$SCRIPT_DIR" )
 pushd "$ROOT_DIR" > /dev/null
 
+echo "-- CCF version pins"
+"$SCRIPT_DIR"/bump-ccf-version.sh --check
+
 echo "-- C/C++ format"
 if [ $FIX -ne 0 ]; then
   "$SCRIPT_DIR"/check-format.sh -f app

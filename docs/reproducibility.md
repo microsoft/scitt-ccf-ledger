@@ -288,6 +288,30 @@ changed when the layers no longer match. It can also be started manually
 against any tag or commit. A failure there means a published image can no
 longer be reproduced, which is the failure mode this guide exists to prevent.
 
+#### Updating pinned inputs
+
+The Dockerfile pins the CCF release by version and by three checksums: the
+SHA-256 of the release `reproduce.json`, the SHA-256 of the CCF devel RPM, and
+the tdnf snapshot time that selects every Azure Linux package version. Only the
+snapshot time is published by CCF in a form that could be read during a build;
+the RPM checksum is not part of `reproduce.json` at all.
+
+Resolving those checksums at build time instead of pinning them would not be
+equivalent. A checksum fetched from the same host that serves the file, at the
+moment the file is served, only shows that the transfer was not corrupted. If a
+release asset were ever replaced, the resolved checksum would change with it and
+the build would carry on, producing a different image without complaint. A pin
+is worth something precisely because it records the bytes that were seen when
+the commit was made and cannot move afterwards, so the build fails instead of
+drifting. That is the failure this guide exists to catch, so the checksums stay
+written down.
+
+Keeping them written down by hand is a different problem, and
+`scripts/bump-ccf-version.sh` solves that one: it moves every pinned value to a
+new CCF release in a single step and confirms the RPM's bytes hash to the
+checksum GitHub publishes for it. See [DEVELOPMENT.md](../DEVELOPMENT.md) for
+usage.
+
 ### 3. Verify UVM
 
 The details of how to reproduce the UVM (to compare it to a `measurement` in the report) are not ready yet.
