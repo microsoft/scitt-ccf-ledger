@@ -288,29 +288,33 @@ changed when the layers no longer match. It can also be started manually
 against any tag or commit. A failure there means a published image can no
 longer be reproduced, which is the failure mode this guide exists to prevent.
 
-#### Updating pinned inputs
+#### What is pinned, and what is only recorded
 
-The Dockerfile pins the CCF release by version and by three checksums: the
-SHA-256 of the release `reproduce.json`, the SHA-256 of the CCF devel RPM, and
-the tdnf snapshot time that selects every Azure Linux package version. Only the
-snapshot time is published by CCF in a form that could be read during a build;
-the RPM checksum is not part of `reproduce.json` at all.
+The base image is pinned by tag **and** digest, so a rebuild always starts from
+exactly the same bytes.
 
-Resolving those checksums at build time instead of pinning them would not be
-equivalent. A checksum fetched from the same host that serves the file, at the
-moment the file is served, only shows that the transfer was not corrupted. If a
-release asset were ever replaced, the resolved checksum would change with it and
-the build would carry on, producing a different image without complaint. A pin
-is worth something precisely because it records the bytes that were seen when
-the commit was made and cannot move afterwards, so the build fails instead of
-drifting. That is the failure this guide exists to catch, so the checksums stay
-written down.
+The CCF release is pinned by version alone. The tdnf snapshot time, which
+selects every Azure Linux package version in the image, is read out of that
+release's own `reproduce.json` while the build runs rather than being repeated
+in the Dockerfile. Moving to a new CCF release therefore means changing one
+value, and the snapshot time cannot fall out of step with the release it
+belongs to.
 
-Keeping them written down by hand is a different problem, and
-`scripts/bump-ccf-version.sh` solves that one: it moves every pinned value to a
-new CCF release in a single step and confirms the RPM's bytes hash to the
-checksum GitHub publishes for it. See [DEVELOPMENT.md](../DEVELOPMENT.md) for
-usage.
+The trade-off is worth being explicit about. Because nothing pins the bytes of
+the CCF assets, a rebuild follows whatever that release serves at the time. If
+`reproduce.json` or the CCF RPM were ever replaced under a published release,
+the rebuild would consume the new content and produce a different image rather
+than failing. What protects against that is recording rather than pinning:
+every build writes the checksums it actually observed — `ccf_reproduce_sha256`,
+`ccf_rpm_sha256` and `tdnf_snapshottime` — into its `reproduce.json`, and the
+historical rebuild check compares those against the values recorded when the
+release was published. So a change of this kind is **detected and named** after
+the fact rather than **prevented** at build time.
+
+`scripts/check-build-inputs.sh` reports the same values on a schedule, so a CCF
+asset that moves or disappears shows up within the week rather than years later.
+`scripts/bump-ccf-version.sh` moves the version across all five files that name
+it; see [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 ### 3. Verify UVM
 

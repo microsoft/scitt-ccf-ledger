@@ -3,14 +3,18 @@
 # Licensed under the MIT License.
 
 # Check that every network input a reproducible rebuild depends on is still
-# available, and still has the content it was pinned to.
+# available, and report what it currently serves.
+#
+# The base image is pinned by digest and is checked against that pin. The CCF
+# release is pinned by version alone, so its checksums are reported rather than
+# enforced: what this catches there is an input that has been withdrawn or
+# moved, not one that was replaced with different bytes.
 #
 # The per-commit and historical reproducibility gates only run when a build
 # runs. This probe is deliberately cheap so it can run on a schedule and fail
-# in the week an input is withdrawn or silently mutated, while updating the pin
-# is still straightforward. Losing any of these inputs makes published images
-# impossible to rebuild, which is the failure mode that is hardest to recover
-# from years later.
+# in the week an input disappears, while recovering is still straightforward.
+# Losing any of these inputs makes published images impossible to rebuild,
+# which is the failure mode that is hardest to recover from years later.
 
 set -euo pipefail
 
@@ -133,12 +137,9 @@ probe_url() {
     esac
 }
 
-echo "Pinned inputs from ${dockerfile#"${root}"/} and ${cmakelists#"${root}"/}"
+echo "Build inputs from ${dockerfile#"${root}"/} and ${cmakelists#"${root}"/}"
 
 ccf_version=$(dockerfile_arg CCF_VERSION)
-ccf_rpm_sha256=$(dockerfile_arg CCF_RPM_SHA256)
-ccf_reproduce_sha256=$(dockerfile_arg CCF_REPRODUCE_SHA256)
-tdnf_snapshottime=$(dockerfile_arg TDNF_SNAPSHOTTIME)
 base_ref=$(sed -n 's/^FROM \([^ ]*\) AS base[[:space:]]*$/\1/p' "${dockerfile}" | head -n1)
 
 if [ -z "${ccf_version}" ] || [ -z "${base_ref}" ]; then
@@ -202,43 +203,57 @@ echo "CCF ${ccf_version} release assets"
 ccf_base="https://github.com/microsoft/CCF/releases/download/ccf-${ccf_version}"
 ccf_rpm="ccf_devel_${ccf_version//-/_}_x86_64.rpm"
 
-# reproduce.json is small, so its checksum is always verified. It is also the
-# file the Dockerfile derives the package snapshot from, so a silent change
-# here would change every installed package version.
+# The Dockerfile takes the package snapshot from this file rather than
+# repeating it, so whatever it says here is what a build today would install.
+# There is no pinned checksum left to compare it against; the value is read and
+# reported so a change is at least visible, and so the snapshot probes below
+# describe the snapshot a build would actually use.
+tdnf_snapshottime=""
 reproduce_json=$(mktemp)
 trap 'rm -f "${reproduce_json}"' EXIT
 if curl --silent --show-error --location --max-time 60 --retry 3 \
         --output "${reproduce_json}" "${ccf_base}/reproduce.json"; then
     actual=$(sha256sum "${reproduce_json}" | cut -d ' ' -f 1)
-    if [ "${actual}" = "${ccf_reproduce_sha256}" ]; then
-        record ok "CCF reproduce.json checksum" "${actual}"
-    else
-        record failed "CCF reproduce.json checksum" \
-            "pinned ${ccf_reproduce_sha256}, found ${actual}"
-    fi
+    record ok "CCF reproduce.json" "sha256 ${actual}"
 
-    published=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tdnf_snapshottime"])' \
-        "${reproduce_json}" 2>/dev/null || echo "unreadable")
-    if [ "${published}" = "${tdnf_snapshottime}" ]; then
-        record ok "CCF tdnf snapshot time" "${published}"
+    tdnf_snapshottime=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tdnf_snapshottime"])' \
+        "${reproduce_json}" 2>/dev/null || echo "")
+    if [ -n "${tdnf_snapshottime}" ]; then
+        record ok "CCF tdnf snapshot time" "${tdnf_snapshottime}"
     else
         record failed "CCF tdnf snapshot time" \
-            "pinned ${tdnf_snapshottime}, published ${published}"
+            "reproduce.json has no readable tdnf_snapshottime, so a build cannot select packages"
     fi
 else
     record failed "CCF reproduce.json" "download failed from ${ccf_base}"
 fi
 
+# Nothing pins the RPM any more, so the strongest statement available is that
+# the bytes on offer still match the checksum GitHub publishes for that asset.
 if [ "${VERIFY_CHECKSUMS}" = "1" ]; then
     rpm_file=$(mktemp)
     if curl --silent --show-error --location --max-time 900 --retry 3 \
             --output "${rpm_file}" "${ccf_base}/${ccf_rpm}"; then
         actual=$(sha256sum "${rpm_file}" | cut -d ' ' -f 1)
-        if [ "${actual}" = "${ccf_rpm_sha256}" ]; then
+        published=$(curl --silent --show-error --location --max-time 60 --retry 3 \
+            "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${ccf_version}" |
+            RPM_NAME="${ccf_rpm}" python3 -c '
+import json, os, sys
+release = json.load(sys.stdin)
+want = os.environ["RPM_NAME"]
+for asset in release.get("assets", []):
+    if asset.get("name") == want:
+        print((asset.get("digest") or "").removeprefix("sha256:"))
+        break
+' 2>/dev/null || echo "")
+        if [ -z "${published}" ]; then
+            record skipped "CCF devel RPM checksum" \
+                "GitHub published no checksum to compare with; downloaded ${actual}"
+        elif [ "${actual}" = "${published}" ]; then
             record ok "CCF devel RPM checksum" "${actual}"
         else
             record failed "CCF devel RPM checksum" \
-                "pinned ${ccf_rpm_sha256}, found ${actual}"
+                "GitHub publishes ${published}, the asset served ${actual}"
         fi
     else
         record failed "CCF devel RPM" "download failed"
@@ -249,7 +264,7 @@ else
 fi
 
 echo
-echo "Azure Linux package snapshot ${tdnf_snapshottime}"
+echo "Azure Linux package snapshot ${tdnf_snapshottime:-unknown}"
 # The snapshot time selects package versions from these repositories. It can
 # only be honoured while the repositories still serve the metadata.
 for repo in base ms-oss ms-non-oss extended; do
@@ -314,4 +329,4 @@ if [ "${FAILURES}" -gt 0 ]; then
     exit 1
 fi
 
-echo "All pinned build inputs are still available and unchanged."
+echo "All build inputs are still available."

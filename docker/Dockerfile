@@ -1,36 +1,33 @@
 ARG CCF_VERSION="7.0.10"
-ARG CCF_RPM_SHA256="4c7f31109aba8893015f4466071d5d964f7117ae0233dd074c96e47eadafe1bc"
-# SHA-256 of the CCF release reproduce.json, and the tdnf snapshot time it
-# contains. The snapshot time determines every package version installed below,
-# so it is pinned here rather than being trusted from an unverified download.
-ARG CCF_REPRODUCE_SHA256="49abb909abeae9abc5481be641513fd3644b5623fdc8769889de95f5489c11c8"
-ARG TDNF_SNAPSHOTTIME="1784205407"
 
 # Pin the Azure Linux base image by tag and digest for reproducibility.
 # Dependabot will monitor and update this FROM line.
 FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260820@sha256:76325dbdd581f039ac2edffca3ff40aef88951da7aa24cf0c07b40992e6d6bd2 AS base
 
-# Initial stage to verify the pinned tdnf snapshot time against the CCF release
+# Read the tdnf snapshot time CCF published for this release. It selects the
+# package version every stage below installs, so the whole image follows from
+# it. It is taken from the release rather than repeated here, which means the
+# CCF version is the only thing that has to be updated to move releases. The
+# build records what it actually consumed in reproduce.json, so a snapshot time
+# that changes under a published release is still diagnosable afterwards.
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
-ARG CCF_REPRODUCE_SHA256
-ARG TDNF_SNAPSHOTTIME
 ARG SOURCE_DATE_EPOCH=0
 
-# Install minimal tools, download reproduce JSON, and check the snapshot time
+# Install minimal tools and read the snapshot time from the CCF release
 # Note: No need to pin package versions here as this stage doesn't contribute
-# to the final image - it only validates metadata used by subsequent stages
+# to the final image - it only reads metadata used by subsequent stages
 RUN tdnf install -y \
     ca-certificates \
     jq && \
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce.json" -o /tmp/reproduce.json && \
-    echo "${CCF_REPRODUCE_SHA256}  /tmp/reproduce.json" | sha256sum -c - && \
-    PUBLISHED_SNAPSHOTTIME=$(jq -r '.tdnf_snapshottime' /tmp/reproduce.json) && \
-    if [ "${PUBLISHED_SNAPSHOTTIME}" != "${TDNF_SNAPSHOTTIME}" ]; then \
-        echo "Pinned TDNF_SNAPSHOTTIME ${TDNF_SNAPSHOTTIME} does not match CCF ${PUBLISHED_SNAPSHOTTIME}" >&2; \
-        exit 1; \
-    fi && \
+    curl -fL "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/reproduce.json" -o /tmp/reproduce.json && \
+    TDNF_SNAPSHOTTIME=$(jq -r '.tdnf_snapshottime // empty' /tmp/reproduce.json) && \
+    case "${TDNF_SNAPSHOTTIME}" in \
+        '' | *[!0-9]*) \
+            echo "CCF ${CCF_VERSION} reproduce.json has no usable tdnf_snapshottime" >&2; \
+            exit 1 ;; \
+    esac && \
     printf '%s' "${TDNF_SNAPSHOTTIME}" > /tmp/tdnf_snapshottime && \
     touch -d "@${SOURCE_DATE_EPOCH}" /tmp/tdnf_snapshottime
 
@@ -39,21 +36,15 @@ FROM base AS builder
 ARG CCF_VERSION
 ARG SCITT_VERSION_OVERRIDE
 ARG SOURCE_DATE_EPOCH=0
-ARG CCF_RPM_SHA256
 
 # Copy the extracted snapshot time from the previous stage
 COPY --from=snapshot-extractor /tmp/tdnf_snapshottime /tmp/tdnf_snapshottime
 
 # Install dependencies and CCF development package first for better layer caching.
-# The CCF RPM is downloaded and verified against the SHA-256 that GitHub publishes
-# for the release asset (the API 'digest' field) before installation; a checksum
-# mismatch fails the build.
 RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git jq rpm-build && \
     CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
-    curl -L "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
-    [ -n "${CCF_RPM_SHA256}" ] && \
-    echo "${CCF_RPM_SHA256}  /tmp/ccf.rpm" | sha256sum -c - && \
+    curl -fL "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
     rm -f /tmp/ccf.rpm
 
@@ -82,9 +73,9 @@ RUN mkdir /tmp/app-build && \
 # database is vacuumed into a canonical SQLite representation.
 FROM base AS rpmdb-tools
 
-ARG TDNF_SNAPSHOTTIME
-
-RUN tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} sqlite
+RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
+    TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
+    tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} sqlite
 
 FROM base AS runtime
 

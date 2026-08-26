@@ -2,20 +2,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Move every pinned CCF input to a new release in one step.
+# Move the pinned CCF release in one step.
 #
-# A CCF bump touches eight values across five files. Three of them are
-# checksums nobody can compute by hand, and the version itself is repeated in
-# the devcontainer, the build script and the docs. Updating those by hand is
-# how the devcontainer ends up on a different CCF release than the image, and
-# how a checksum ends up pinned to a release it never came from.
+# The version is repeated in the Dockerfile, the devcontainer, the environment
+# setup script, the build script and the docs. Updating those by hand is how
+# the devcontainer ends up on a different CCF release than the image, which
+# then reproduces differently for no visible reason.
 #
-# The checksums stay written out in the Dockerfile on purpose. A pin is only
-# worth something because it records the bytes we saw at bump time and cannot
-# change afterwards; resolving it from the network at build time would verify
-# the download against a hash served by the same host at the same moment, which
-# catches a corrupted transfer and nothing else. This script removes the manual
-# work of producing the pins without giving up what pinning buys.
+# The Dockerfile derives everything else from the version: it reads the tdnf
+# snapshot time out of the release's reproduce.json rather than repeating it.
+# So this only has to keep one value consistent, and confirm the release it
+# points at actually carries what a build needs.
 
 set -euo pipefail
 
@@ -39,17 +36,12 @@ trap cleanup EXIT
 usage() {
     cat <<'EOF'
 Usage:
-  scripts/bump-ccf-version.sh <version> [--no-verify-rpm]
+  scripts/bump-ccf-version.sh <version>
   scripts/bump-ccf-version.sh --check
 
-  <version>         CCF release to move to, without the 'ccf-' prefix
-                    (e.g. 7.0.12).
-  --no-verify-rpm   Record the checksum GitHub publishes for the CCF devel RPM
-                    instead of hashing the asset itself. Skips a download of
-                    roughly 13 MiB, at the cost of pinning a value that was
-                    never compared against the bytes it describes.
-  --check           Verify every file agrees on the pinned CCF version. Needs
-                    no network, so it is safe to run on every CI job.
+  <version>   CCF release to move to, without the 'ccf-' prefix (e.g. 7.0.12).
+  --check     Verify every file agrees on the pinned CCF version. Needs no
+              network, so it is safe to run on every CI job.
 EOF
 }
 
@@ -190,14 +182,13 @@ escape_for_sed() {
 }
 
 main() {
-    local version="" skip_download=0
+    local version=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --check)
                 check_consistency
                 exit $?
                 ;;
-            --no-verify-rpm) skip_download=1 ;;
             -h | --help)
                 usage
                 exit 0
@@ -229,8 +220,11 @@ main() {
     local rpm_name="ccf_devel_${version//-/_}_x86_64.rpm"
     work=$(mktemp -d)
 
-    echo "Resolving CCF ${version}"
+    echo "Checking CCF ${version}"
 
+    # The build reads the package snapshot straight out of this file, so a
+    # release that does not publish a usable one cannot be built from at all.
+    # Finding that out here beats finding it out inside a Docker stage.
     if ! curl --silent --show-error --fail --location --max-time 60 --retry 3 \
             --output "${work}/reproduce.json" "${base}/reproduce.json"; then
         echo "Could not download reproduce.json for ccf-${version}." >&2
@@ -238,75 +232,33 @@ main() {
         exit 1
     fi
 
-    local reproduce_sha snapshottime
-    reproduce_sha=$(sha256sum "${work}/reproduce.json" | cut -d ' ' -f 1)
-    # The snapshot time is read from the file the checksum above covers, so it
-    # is pinned by that checksum rather than trusted on its own.
-    if ! snapshottime=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tdnf_snapshottime"])' \
-            "${work}/reproduce.json" 2>/dev/null); then
-        echo "reproduce.json for ccf-${version} has no tdnf_snapshottime field." >&2
+    local snapshottime
+    snapshottime=$(python3 -c \
+        'import json,sys; print(json.load(open(sys.argv[1])).get("tdnf_snapshottime", ""))' \
+        "${work}/reproduce.json" 2>/dev/null || echo "")
+    if ! printf '%s' "${snapshottime}" | grep -Eq '^[0-9]+$'; then
+        echo "reproduce.json for ccf-${version} has no usable tdnf_snapshottime," >&2
+        echo "so the build could not select package versions from it." >&2
         exit 1
     fi
 
-    # GitHub reports a checksum for each release asset, but a pin copied from
-    # that field has only ever been compared against itself. The asset is small
-    # enough to fetch in about a second, so by default the recorded checksum is
-    # the hash of bytes actually served, cross-checked against what GitHub
-    # claims. Older releases predate the digest field, and then the download is
-    # the only source.
-    local rpm_sha=""
-    if curl --silent --show-error --fail --location --max-time 60 --retry 3 \
-            --output "${work}/release.json" \
-            "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${version}"; then
-        rpm_sha=$(RPM_NAME="${rpm_name}" python3 -c '
-import json, os, sys
-release = json.load(open(sys.argv[1]))
-want = os.environ["RPM_NAME"]
-for asset in release.get("assets", []):
-    if asset.get("name") == want:
-        print((asset.get("digest") or "").removeprefix("sha256:"))
-        break
-' "${work}/release.json" 2>/dev/null || true)
-    fi
-
-    if [ "${skip_download}" = "1" ]; then
-        if [ -z "${rpm_sha}" ]; then
-            echo "The release API reported no checksum for ${rpm_name}, so it" >&2
-            echo "cannot be pinned without downloading it. Drop --no-verify-rpm." >&2
+    # The other asset the build fetches. A range request is enough to show it
+    # is there without pulling it down.
+    local code
+    code=$(curl --silent --show-error --location --max-time 60 --retry 3 \
+        --range 0-0 --output /dev/null --write-out '%{http_code}' \
+        "${base}/${rpm_name}" || echo "000")
+    case "${code}" in
+        200 | 206) ;;
+        *)
+            echo "${rpm_name} is not available from ccf-${version} (HTTP ${code})." >&2
             exit 1
-        fi
-        echo "Recording the checksum GitHub publishes for ${rpm_name} without downloading it."
-    else
-        if ! curl --silent --show-error --fail --location --max-time 1800 --retry 3 \
-                --output "${work}/ccf.rpm" "${base}/${rpm_name}"; then
-            echo "Could not download ${rpm_name} from ${base}." >&2
-            exit 1
-        fi
-        local hashed
-        hashed=$(sha256sum "${work}/ccf.rpm" | cut -d ' ' -f 1)
-        if [ -n "${rpm_sha}" ] && [ "${hashed}" != "${rpm_sha}" ]; then
-            echo "${rpm_name} does not match the checksum GitHub publishes for it." >&2
-            echo "  published ${rpm_sha}" >&2
-            echo "  actual    ${hashed}" >&2
-            exit 1
-        fi
-        if [ -n "${rpm_sha}" ]; then
-            echo "RPM checksum agrees with the one GitHub publishes."
-        else
-            echo "The release API reported no checksum; using the downloaded bytes."
-        fi
-        rpm_sha="${hashed}"
-    fi
+            ;;
+    esac
 
-    require_format CCF_RPM_SHA256 "${rpm_sha}" '^[0-9a-f]{64}$'
-    require_format CCF_REPRODUCE_SHA256 "${reproduce_sha}" '^[0-9a-f]{64}$'
-    require_format TDNF_SNAPSHOTTIME "${snapshottime}" '^[0-9]+$'
-
-    echo
-    echo "  CCF_VERSION           ${version}"
-    echo "  CCF_RPM_SHA256        ${rpm_sha}"
-    echo "  CCF_REPRODUCE_SHA256  ${reproduce_sha}"
-    echo "  TDNF_SNAPSHOTTIME     ${snapshottime}"
+    echo "  reproduce.json     sha256 $(sha256sum "${work}/reproduce.json" | cut -d ' ' -f 1)"
+    echo "  tdnf_snapshottime  ${snapshottime}"
+    echo "  ${rpm_name} is available"
     echo
 
     local old_version version_lines
@@ -314,9 +266,6 @@ for asset in release.get("assets", []):
     version_lines=$(lines_to_change "${old_version}" "${version}")
 
     set_arg "${dockerfile}" CCF_VERSION "${version}"
-    set_arg "${dockerfile}" CCF_RPM_SHA256 "${rpm_sha}"
-    set_arg "${dockerfile}" CCF_REPRODUCE_SHA256 "${reproduce_sha}"
-    set_arg "${dockerfile}" TDNF_SNAPSHOTTIME "${snapshottime}"
     set_arg "${devcontainer}" CCF_VERSION "${version}"
 
     replace_exactly "${setup_env}" "${version_lines}" \

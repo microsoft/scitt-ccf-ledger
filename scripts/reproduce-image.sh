@@ -449,13 +449,63 @@ print(value)
 PY
 }
 
+# The Dockerfile pins the CCF release by version alone, so the checksums that
+# describe what that release actually served are observed here rather than read
+# back out of the build. Recording them is what lets the historical rebuild
+# check say which input moved when an old image stops reproducing, instead of
+# only reporting that the layers differ.
+observed_ccf_reproduce_sha256=""
+observed_ccf_rpm_sha256=""
+observed_tdnf_snapshottime=""
+
+observe_ccf_inputs() {
+    local version="$1"
+    local base="https://github.com/microsoft/CCF/releases/download/ccf-${version}"
+    local rpm_name="ccf_devel_${version//-/_}_x86_64.rpm"
+    local scratch
+    scratch=$(mktemp -d)
+
+    if ! curl --silent --show-error --fail --location --max-time 60 --retry 3 \
+            --output "${scratch}/reproduce.json" "${base}/reproduce.json"; then
+        rm -rf "${scratch}"
+        echo "Could not read reproduce.json for ccf-${version}." >&2
+        echo "The manifest records what the build consumed, so it cannot be written" >&2
+        echo "without it. Check network access to github.com and retry." >&2
+        exit 1
+    fi
+
+    observed_ccf_reproduce_sha256=$(sha256sum "${scratch}/reproduce.json" | cut -d ' ' -f 1)
+    observed_tdnf_snapshottime=$(python3 -c \
+        'import json,sys; print(json.load(open(sys.argv[1]))["tdnf_snapshottime"])' \
+        "${scratch}/reproduce.json")
+
+    # GitHub reports a checksum per release asset. It is recorded, not enforced,
+    # so an unreachable API leaves the field empty rather than failing a build
+    # that has already succeeded.
+    if curl --silent --show-error --fail --location --max-time 60 --retry 3 \
+            --output "${scratch}/release.json" \
+            "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${version}"; then
+        observed_ccf_rpm_sha256=$(RPM_NAME="${rpm_name}" python3 -c '
+import json, os, sys
+release = json.load(open(sys.argv[1]))
+want = os.environ["RPM_NAME"]
+for asset in release.get("assets", []):
+    if asset.get("name") == want:
+        print((asset.get("digest") or "").removeprefix("sha256:"))
+        break
+' "${scratch}/release.json" 2>/dev/null || true)
+    fi
+
+    rm -rf "${scratch}"
+}
+
 # Record everything a third party needs to rebuild this exact image, following
 # the same idea as the reproduce.json that CCF publishes with its releases.
 cmd_manifest() {
     local tag="$1"
     local output="$2"
     local context="${3:-$(repo_root)}"
-    local dockerfile base_image image_id layers docker_version buildx_version
+    local dockerfile base_image image_id layers docker_version buildx_version ccf_version
 
     if [ -z "${context}" ]; then
         echo "A context directory is required outside a git checkout." >&2
@@ -471,12 +521,15 @@ cmd_manifest() {
     docker_version=$(docker version --format '{{.Server.Version}}')
     buildx_version=$(docker buildx version 2>/dev/null | head -n1 || echo "unknown")
 
+    ccf_version="$(dockerfile_arg "${dockerfile}" CCF_VERSION)"
+    observe_ccf_inputs "${ccf_version}"
+
     mkdir -p "$(dirname "${output}")"
     BASE_IMAGE="${base_image}" \
-    CCF_VERSION_VALUE="$(dockerfile_arg "${dockerfile}" CCF_VERSION)" \
-    CCF_RPM_SHA256_VALUE="$(dockerfile_arg "${dockerfile}" CCF_RPM_SHA256)" \
-    CCF_REPRODUCE_SHA256_VALUE="$(dockerfile_arg "${dockerfile}" CCF_REPRODUCE_SHA256)" \
-    TDNF_SNAPSHOTTIME_VALUE="$(dockerfile_arg "${dockerfile}" TDNF_SNAPSHOTTIME)" \
+    CCF_VERSION_VALUE="${ccf_version}" \
+    CCF_RPM_SHA256_VALUE="${observed_ccf_rpm_sha256}" \
+    CCF_REPRODUCE_SHA256_VALUE="${observed_ccf_reproduce_sha256}" \
+    TDNF_SNAPSHOTTIME_VALUE="${observed_tdnf_snapshottime}" \
     DOCKER_VERSION_VALUE="${docker_version}" \
     BUILDX_VERSION_VALUE="${buildx_version}" \
     IMAGE_ID="${image_id}" \
