@@ -121,6 +121,12 @@ record_installed_packages() {
 # The RPM database is a SQLite file whose row order follows the order packages
 # were installed in, and whose primary keys are assigned as they arrive.
 # Renumber the packages by content and rewrite every index in a fixed order.
+#
+# `rpm --rebuilddb` is not a substitute. It reindexes but keeps the existing
+# ordering, so two installs of the same packages in a different order stay just
+# as divergent afterwards as before, and its output is not ordered by content.
+# It also fails outright here, unable to replace the old database with the new
+# one, and it would not drop the scitt record or reset the SQLite counters.
 canonicalize_rpm_database() {
     local sql result
     sql="${workdir}/rpmdb.sql"
