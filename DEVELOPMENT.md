@@ -45,6 +45,25 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
     ./setup-dev.sh
     ```
 
+## Updating the CCF version
+
+The CCF release is named in five files: `docker/Dockerfile`,
+`.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh` and this
+document. Change all five together. Nothing else has to be updated — the image
+build reads the tdnf snapshot time out of the release's own `reproduce.json`
+rather than repeating it.
+
+Then confirm they agree, and that the new release publishes what the build
+fetches:
+
+```sh
+./scripts/check-ccf-version.sh   # the five files name the same release
+./scripts/check-build-inputs.sh  # that release serves reproduce.json and the RPM
+```
+
+The first only reads files, so it needs no network and runs as part of
+`scripts/ci-checks.sh`.
+
 ## Compiling
 
 ### Using Docker build container

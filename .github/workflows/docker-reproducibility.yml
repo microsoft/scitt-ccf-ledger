@@ -1,0 +1,351 @@
+name: "Docker reproducibility"
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*.*.*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-context:
+    name: Prepare deterministic build context
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Create deterministic build context
+        shell: bash
+        run: ./scripts/reproduce-image.sh context "${PWD}/docker-context.tar"
+
+      - name: Upload deterministic build context
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-build-context
+          path: |
+            docker-context.tar
+            docker-context.tar.sha256
+            build-metadata.json
+          if-no-files-found: error
+          retention-days: 1
+
+  build-image:
+    name: Build image (${{ matrix.build }})
+    needs: prepare-context
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The second build deliberately differs in every way that must not
+        # affect the image, so that sensitivity to the build environment is
+        # caught here rather than years later when an image has to be rebuilt.
+        include:
+          - build: one
+            context_subdir: ctx
+            timezone: UTC
+            locale: C.UTF-8
+            umask: "022"
+          - build: two
+            context_subdir: nested/much/deeper/workspace/ctx
+            timezone: Pacific/Kiritimati
+            locale: C
+            umask: "077"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download deterministic build context
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-build-context
+          path: repro-input
+
+      # Both builds in this job run on the same runner image, so a builder
+      # upgrade affects them equally and they still agree with each other.
+      # Reporting it as a warning keeps that visible without blocking unrelated
+      # work; the scheduled historical rebuild is where a builder change is
+      # compared against digests recorded years earlier.
+      - name: Check builder toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! output=$(./scripts/reproduce-image.sh toolchain "${PWD}" 2>&1); then
+            echo "${output}"
+            exit 1
+          fi
+          echo "${output}"
+          if printf '%s' "${output}" | grep -q "newer than the highest verified"; then
+            echo "::warning::The build ran on a builder newer than the highest verified version. Confirm the layers are unchanged and then raise the values in docker/toolchain.env."
+          fi
+
+      - name: Build image
+        shell: bash
+        env:
+          TZ: ${{ matrix.timezone }}
+          LC_ALL: ${{ matrix.locale }}
+        run: |
+          set -euo pipefail
+
+          umask ${{ matrix.umask }}
+
+          (cd repro-input && sha256sum --check docker-context.tar.sha256)
+
+          SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_commit)
+          SOURCE_DATE_EPOCH=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json source_date_epoch)
+          SCITT_VERSION_OVERRIDE=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json scitt_version)
+          CONTEXT_SHA256=$(./scripts/reproduce-image.sh metadata repro-input/build-metadata.json context_sha256)
+          export SOURCE_COMMIT SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE CONTEXT_SHA256
+
+          tag="scitt-reproducibility:${{ matrix.build }}"
+          context="${RUNNER_TEMP}/${{ matrix.context_subdir }}"
+
+          ./scripts/reproduce-image.sh extract repro-input/docker-context.tar "${context}"
+          ./scripts/reproduce-image.sh build "${context}" "${tag}"
+          ./scripts/reproduce-image.sh manifest "${tag}" repro-input/reproduce.json "${context}"
+
+          printf '%s' "$(docker image inspect --format '{{.Id}}' "${tag}")" > repro-input/image-id.txt
+          docker image inspect \
+            --format '{{range .RootFS.Layers}}{{println .}}{{end}}' \
+            "${tag}" > repro-input/layer-digests.txt
+          docker run \
+            --rm \
+            --entrypoint /bin/bash \
+            "${tag}" \
+            -c '
+              set -euo pipefail
+              find / -xdev \
+                ! -path /etc/hostname \
+                ! -path /etc/hosts \
+                ! -path /etc/resolv.conf \
+                -printf "%y|%m|%U|%G|%T@|%s|%p|%l\n" |
+                LC_ALL=C sort
+              find / -xdev -type f \
+                ! -path /etc/hostname \
+                ! -path /etc/hosts \
+                ! -path /etc/resolv.conf \
+                -exec sha256sum {} + |
+                LC_ALL=C sort -k2
+            ' > repro-input/filesystem-manifest.txt
+          docker run \
+            --rm \
+            --entrypoint sha256sum \
+            "${tag}" \
+            /var/lib/rpm/rpmdb.sqlite > repro-input/rpmdb-sha256.txt
+
+      - name: Upload image ID
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-image-id-${{ matrix.build }}
+          path: |
+            repro-input/image-id.txt
+            repro-input/layer-digests.txt
+            repro-input/filesystem-manifest.txt
+            repro-input/rpmdb-sha256.txt
+            repro-input/reproduce.json
+          if-no-files-found: error
+          retention-days: 1
+
+  compare-images:
+    name: Compare filesystem layers
+    needs: build-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed to record the verified layer digest against the built commit so
+      # that the OneBranch pipeline can compare its own build with it.
+      statuses: write
+    steps:
+      - name: Download image IDs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: docker-image-id-*
+          path: image-ids
+
+      - name: Compare filesystem layers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          first_id=image-ids/docker-image-id-one/image-id.txt
+          second_id=image-ids/docker-image-id-two/image-id.txt
+          first_layers=image-ids/docker-image-id-one/layer-digests.txt
+          second_layers=image-ids/docker-image-id-two/layer-digests.txt
+          first_rpmdb=image-ids/docker-image-id-one/rpmdb-sha256.txt
+          second_rpmdb=image-ids/docker-image-id-two/rpmdb-sha256.txt
+
+          echo "Build one image ID: $(cat "${first_id}")"
+          echo "Build two image ID: $(cat "${second_id}")"
+
+          if ! cmp --silent "${first_layers}" "${second_layers}"; then
+            echo "Filesystem layer digest differences:"
+            diff -u "${first_layers}" "${second_layers}" || true
+            echo "Build one RPM database: $(cat "${first_rpmdb}")"
+            echo "Build two RPM database: $(cat "${second_rpmdb}")"
+            if ! cmp --silent "${first_rpmdb}" "${second_rpmdb}"; then
+              echo "::error::RPM database content differs: build one $(cut -d ' ' -f 1 "${first_rpmdb}"), build two $(cut -d ' ' -f 1 "${second_rpmdb}")"
+            fi
+            echo "Filesystem differences:"
+            filesystem_diff=$(diff -u \
+              image-ids/docker-image-id-one/filesystem-manifest.txt \
+              image-ids/docker-image-id-two/filesystem-manifest.txt || true)
+            substantive_diff=$(printf '%s\n' "${filesystem_diff}" |
+              grep -Ev '^([-+]{3}|@@|[-+]d\|555\|0\|0\|[^|]+\|0\|/(proc|sys)\|)' || true)
+            if [ -n "${substantive_diff}" ]; then
+              echo "${substantive_diff}"
+              while IFS= read -r line; do
+                echo "::error::Filesystem difference: ${line}"
+              done < <(printf '%s\n' "${substantive_diff}" | head -n 30)
+            else
+              echo "::error::Image filesystem manifests match after excluding runtime /proc and /sys mountpoint timestamps; the layer archive differs in metadata not captured by the manifest, such as extended attributes or entry encoding."
+            fi
+            echo "::error::The Docker image filesystem layers are not reproducible. Build one: $(paste -sd, "${first_layers}"); build two: $(paste -sd, "${second_layers}")"
+            exit 1
+          fi
+
+          if ! cmp --silent "${first_id}" "${second_id}"; then
+            echo "::warning::Filesystem layers match, but image configuration IDs differ. Pipeline labels and builder metadata are outside this gate's scope."
+          fi
+
+          echo "Docker image filesystem layers are reproducible:"
+          cat "${first_layers}"
+
+      - name: Upload reproduction manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-reproduce-manifest
+          path: image-ids/docker-image-id-one/reproduce.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # Recorded where another build system can read it without credentials.
+      # Workflow artifacts need a token and expire; release assets only exist
+      # for tags. A commit status is public, permanent, and keyed on a commit,
+      # which is what lets the OneBranch pipeline check that it produced the
+      # same layers for the same source without holding a secret.
+      #
+      # The status is attached to the commit that was built. For a pull request
+      # that is the refs/pull/N/merge commit rather than the head, so a reader
+      # comparing against its own build is only ever matched with a build of
+      # the same source.
+      - name: Record the verified layers for cross-system comparison
+        # A pull request from a fork gets a read-only token, so recording the
+        # status is impossible there rather than merely undesirable. Skipping
+        # leaves the other build system with no record to compare against,
+        # which it reports as "not compared"; attempting it would fail this
+        # workflow for every fork contributor instead.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          layers=image-ids/docker-image-id-one/layer-digests.txt
+          manifest=image-ids/docker-image-id-one/reproduce.json
+
+          built_commit=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"])' "${manifest}")
+          context_sha256=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["context_sha256"])' "${manifest}")
+
+          # Hashed rather than listed because a status description holds 140
+          # characters and two full digests plus labels do not fit. Readers
+          # derive the same value with this same pipeline.
+          layers_digest=$(grep -E '^sha256:[0-9a-f]{64}$' "${layers}" |
+            sha256sum |
+            cut -d ' ' -f 1)
+
+          description="L:${layers_digest} C:${context_sha256}"
+          echo "Recording for ${built_commit}: ${description}"
+
+          STATUS_DESCRIPTION="${description}" python3 - /tmp/status-request.json <<'PY'
+          import json
+          import os
+          import sys
+
+          with open(sys.argv[1], "w", encoding="utf-8") as handle:
+              json.dump({
+                  "state": "success",
+                  "context": "reproducibility/layers",
+                  "description": os.environ["STATUS_DESCRIPTION"],
+                  "target_url": "{}/{}/actions/runs/{}".format(
+                      os.environ["GITHUB_SERVER_URL"],
+                      os.environ["GITHUB_REPOSITORY"],
+                      os.environ["GITHUB_RUN_ID"],
+                  ),
+              }, handle)
+          PY
+
+          status=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --retry 3 \
+            --retry-delay 2 \
+            --max-time 60 \
+            --write-out '%{http_code}' \
+            --output /tmp/status-response.json \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --data @/tmp/status-request.json \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${built_commit}")
+
+          if [ "${status}" != "201" ]; then
+            # A silent failure here would leave the other build system waiting
+            # for a record that never arrives, and reporting that as "not
+            # compared" rather than as a fault would hide it indefinitely.
+            echo "::error::Could not record the verified layers (HTTP ${status}). The cross-system comparison has nothing to read for ${built_commit}."
+            cat /tmp/status-response.json
+            exit 1
+          fi
+
+          echo "Recorded ${description} for ${built_commit}."
+
+  publish-manifest:
+    name: Publish reproduction manifest
+    needs: compare-images
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Workflow artifacts expire, but reproducing a release years from now
+      # requires the exact inputs this build used. Attach them to the release
+      # so the recorded layer digests outlive artifact retention and can be
+      # checked by the scheduled re-verification and by third parties.
+      - name: Download verified build outputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docker-image-id-one
+          path: manifest
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp manifest/reproduce.json release-assets/reproduce.json
+          cp manifest/layer-digests.txt release-assets/image-layers.txt
+          echo "Publishing reproduction manifest:"
+          cat release-assets/reproduce.json
+
+      - name: Attach manifest to the release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          files: |
+            release-assets/reproduce.json
+            release-assets/image-layers.txt

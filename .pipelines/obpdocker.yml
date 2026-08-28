@@ -21,7 +21,7 @@ jobs:
     variables:
       ob_outputDirectory: $(Build.SourcesDirectory)/out
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage#examples
-      ob_git_checkout: true 
+      ob_git_checkout: true
       OB_build_container: true
 
     steps:
@@ -41,15 +41,55 @@ jobs:
         fetchDepth: 0
         lfs: false
 
-      # copy sources to the output dir and it will be then used by the docker build task
-      - task: CopyFiles@2
-        displayName: Prepare sources for docker build
-        inputs:
-          SourceFolder: $(Build.SourcesDirectory)
-          Contents: |
-              **/*
-              !env/**/*
-          TargetFolder: '$(Build.SourcesDirectory)/out'
+      # The context is produced by scripts/reproduce-image.sh so that this
+      # pipeline, the GitHub reproducibility gate and the documented manual
+      # steps all build from byte-identical inputs.
+      - script: |
+          set -euo pipefail
+
+          context_dir="$(Build.SourcesDirectory)/out"
+          context_archive="$(Agent.TempDirectory)/docker-context.tar"
+
+          ./scripts/reproduce-image.sh context "${context_archive}"
+
+          # The GitHub gate checks this after transporting the archive between
+          # jobs. Checking it here too means both systems prove the archive is
+          # intact before extracting, rather than only one of them.
+          (cd "$(Agent.TempDirectory)" && sha256sum --check docker-context.tar.sha256)
+
+          SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" source_commit)
+          SOURCE_DATE_EPOCH=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" source_date_epoch)
+          SCITT_VERSION_OVERRIDE=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" scitt_version)
+          CONTEXT_SHA256=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" context_sha256)
+
+          echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
+          echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
+          echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
+          # Exported to the verification job so the published record names the
+          # context these images were built from.
+          echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
+          # Exported for the same reason. The verification job checks out
+          # $(Build.SourceBranch) again, and for a pull request that ref is a
+          # merge commit GitHub regenerates whenever the head or the target
+          # branch moves, so re-reading it there could name a different commit
+          # than the one these images were built from.
+          echo "##vso[task.setvariable variable=SOURCE_COMMIT;isOutput=true]${SOURCE_COMMIT}"
+
+          echo "Deterministic context ${CONTEXT_SHA256} for commit ${SOURCE_COMMIT}"
+
+          rm -rf "${context_dir}"
+          ./scripts/reproduce-image.sh extract "${context_archive}" "${context_dir}"
+        name: prepare_context
+        displayName: Prepare deterministic Docker context
+
+      # There is deliberately no builder version check here. The GitHub gate
+      # runs the docker build from the shell, so it can check the builder it is
+      # about to use. In this pipeline the build is performed by the
+      # imagebuildinfo task below, which selects its own builder, so a version
+      # read from this shell would describe a different binary than the one
+      # that produces the layers. What covers OneBranch instead is comparing
+      # the layers it produces with the layers GitHub published, which the
+      # verification job does directly.
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
@@ -60,6 +100,26 @@ jobs:
             command: login
             acr_name: ${{ parameters.AcrName }}
             endpoint: ${{ parameters.AcrEndpoint }}
+      - task: onebranch.pipeline.imagebuildinfo@1
+        displayName: 'Build reproducibility reference image'
+        retryCountOnTaskFailure: 1
+        inputs:
+          repositoryName: scitt
+          dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
+          dockerFileContextPath: artifacts
+          registry: ${{ parameters.AcrName }}.azurecr.io
+          saveImageToPath: ${{ parameters.Name }}-reference.tar
+          buildkit: 1
+          build_tag: ${{ parameters.DockerTag }}-reference
+          addPipelineData: false
+          enable_network: true
+          enable_cache: false
+          enable_pull: true
+          enable_acr_push: false
+          enable_service_tree_acr_path: false
+          arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
+          endpoint: ${{ parameters.AcrEndpoint }}
+
       - task: onebranch.pipeline.imagebuildinfo@1
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
         retryCountOnTaskFailure: 1 
@@ -73,8 +133,121 @@ jobs:
           build_tag: ${{ parameters.DockerTag }}
           enable_network: true
           enable_cache: false
-          enable_acr_push: true 
+          enable_pull: true
+          enable_acr_push: true
           enable_service_tree_acr_path: false
-          arguments: --build-arg SCITT_VERSION_OVERRIDE="${{ parameters.DockerTag }}"
+          arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
-          
+
+  # OneBranch materializes saveImageToPath during governed post-processing,
+  # after all user steps in the build job. Compare the published job artifact
+  # from a dependent job so both saved image archives are available.
+  - job: ${{ parameters.Name }}_verify_reproducibility
+    displayName: Verify Docker image reproducibility
+    dependsOn: ${{ parameters.Name }}
+    pool:
+      type: linux
+    variables:
+      ob_git_checkout: true
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
+      contextSha256: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.CONTEXT_SHA256'] ]
+      sourceCommit: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.SOURCE_COMMIT'] ]
+
+    steps:
+      - checkout: SCITT
+        path: s/
+        fetchDepth: 1
+        lfs: false
+
+      - task: DownloadPipelineArtifact@2
+        displayName: Download Docker image archives
+        inputs:
+          buildType: current
+          artifact: drop_docker_${{ parameters.Name }}
+          targetPath: $(Build.SourcesDirectory)/dst/docker
+
+      - script: |
+          set -euo pipefail
+
+          reference_image="$(Build.SourcesDirectory)/dst/docker/${{ parameters.Name }}-reference.tar"
+          published_image="$(Build.SourcesDirectory)/dst/docker/${{ parameters.Name }}.tar"
+
+          for image in "${reference_image}" "${published_image}"; do
+            if [ ! -s "${image}" ]; then
+              echo "##vso[task.logissue type=error]Expected OneBranch image archive was not created: ${image}"
+              echo "Image-related files in the downloaded Docker artifact:" >&2
+              find "$(Build.SourcesDirectory)/dst/docker" \
+                -maxdepth 4 \
+                -type f \
+                \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' -o -name '*-metadata.json' \) \
+                -printf '%p (%s bytes)\n' 2>/dev/null || true
+              exit 1
+            fi
+          done
+
+          comparison_output="$(Build.SourcesDirectory)/out/reproducibility.txt"
+          mkdir -p "$(dirname "${comparison_output}")"
+          if ! ./scripts/compare-image-layers.py \
+              --output-layers "$(Build.SourcesDirectory)/out/image-layers.txt" \
+              "${reference_image}" \
+              "${published_image}" > "${comparison_output}" 2>&1; then
+            cat "${comparison_output}"
+            while IFS= read -r line; do
+              echo "##vso[task.logissue type=error]${line}"
+            done < "${comparison_output}"
+            exit 1
+          fi
+
+          cat "${comparison_output}"
+
+          # Published for cross-checking against the image-layers.txt that the
+          # GitHub release carries for the same commit. The two build systems
+          # use different Docker and BuildKit versions, so this is the only
+          # record that shows whether they still agree.
+          echo "Filesystem layers of the published image:"
+          cat "$(Build.SourcesDirectory)/out/image-layers.txt"
+
+          # Comparing layers only proves the two systems agreed on an output.
+          # Recording the context digest alongside them shows they also started
+          # from the same input, so a future mismatch can be attributed to the
+          # build environment rather than to a differing source context.
+          context_sha256="$(contextSha256)"
+          if [ -z "${context_sha256}" ]; then
+            # An empty value means the cross-job variable stopped resolving,
+            # which would leave a published record that proves nothing about
+            # the input. Fail loudly rather than ship an empty attestation.
+            echo "Build context sha256 was not passed from the build job." >&2
+            exit 1
+          fi
+
+          echo "Build context sha256: ${context_sha256}"
+          printf '%s\n' "${context_sha256}" \
+            > "$(Build.SourcesDirectory)/out/context-sha256.txt"
+
+          # Everything above only compares two OneBranch builds with each
+          # other, which cannot detect this pipeline drifting away from GitHub
+          # Actions. The two checks below are the only ones that span both
+          # build systems.
+          #
+          # The first compares against the record GitHub Actions posted for the
+          # exact commit this build used. That record is a commit status, which
+          # is readable without credentials, so this pipeline needs no GitHub
+          # secret. Keying on the built commit rather than on the pull request
+          # head matters: GitHub builds refs/pull/N/merge and regenerates it
+          # whenever the head or the target branch moves, so anything else
+          # would compare two builds of different sources.
+          source_commit="$(sourceCommit)"
+          if [ -z "${source_commit}" ]; then
+            echo "The built commit was not passed from the build job." >&2
+            exit 1
+          fi
+
+          if ! ./scripts/compare-github-layers.sh \
+              "$(Build.SourcesDirectory)/out/image-layers.txt" \
+              "${source_commit}" \
+              "${context_sha256}"; then
+            echo "##vso[task.logissue type=error]OneBranch and GitHub Actions built different filesystem layers for ${source_commit}."
+            exit 1
+          fi
+
+        displayName: Verify OneBranch image reproducibility

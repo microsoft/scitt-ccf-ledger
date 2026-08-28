@@ -2,11 +2,30 @@
 
 The ledger application is running in a trusted execution environment and has a measurement associated with it which does not change. The goal is to reproduce the same measured value from the source code to ensure the code can be trusted, transparent and auditable.
 
-The assumption here is that the original build was done using a Docker.
-
 ## Prerequisites
 
-You need a couple pieces of information to begin with:
+The rebuild requires Linux on `x86_64`, Git, Python 3, GNU tar, `jq`, Docker
+with BuildKit 0.11 or newer, and enough disk space for two uncached image
+builds. The reproducibility checks in this guide compare the ordered,
+uncompressed filesystem layers used to derive dmverity measurements. Registry
+manifests, compression, signatures, attestations and pipeline-added image labels
+are outside that comparison.
+
+Releases carry two assets that record what was built and verified:
+`reproduce.json`, listing the build inputs and the Docker and BuildKit versions
+used, and `image-layers.txt`, listing the verified filesystem layer digests.
+The `context_sha256` field in `reproduce.json` is the digest of the build
+context, so you can confirm you are building from the same input before
+comparing layers. `scripts/reproduce-image.sh context` normalizes the archive
+headers that tar fills in at its own discretion, so this digest depends on the
+files being archived rather than on the version of tar you happen to have.
+Start from those when reproducing a published release, and
+reproduce with the recorded tool versions if an exact match is required.
+The `image_id` field records what the building Docker called the result and is
+informational: a containerd backed image store reports a different digest for
+the same image than the classic store does. Compare the layers.
+
+You also need a couple pieces of information to begin with:
 
 - The ledger certificate. It might be distributed in a variety of ways by the ledger operator, please follow their guidance. Otherwise it is accessible at `https://<LEDGER-URL>/node/network`, e.g.:
 
@@ -20,12 +39,14 @@ You need a couple pieces of information to begin with:
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/node/quotes > node-quotes.json
     ```
 
-- Source code version which was used to build the application, usually found in `https://<LEDGER-URL>/app/version`. If `app/version` is ambiguous then check the build logs of the Docker image to understand which commit produced the candidate value. e.g., `fb2c496416fbab20837fedda0ba6db58d819fa5f5c1b3916062eb2fb9d889966` was built from `fd77c0c69ee890bdc2fcf6ef0c9dddb7b211e164`.
+- Image version, usually found in `https://<LEDGER-URL>/app/version`.
 
     ```sh
     $ curl -s --cacert cacert.pem https://<LEDGER-URL>/app/version | jq ".version"
-    "0.12.3-0-gaaaaaaa"
+    "0.18.2_1.0.034842-3730a2c7"
     ```
+  
+  Treat this value as the image version, not necessarily as an unambiguous source revision. Official image labels may identify the operator repository rather than the SCITT source repository. In this example the tag `0.18.2` points to this repository.
 
 - Security policy used to verify the container image ([ccf docs](https://microsoft.github.io/CCF/main/governance/gov_api_schemas/2024-07-01.html#get--gov-service-join-policy)), it will contain image layers, e.g.:
 
@@ -63,6 +84,9 @@ The quote contains the attestation report that has the necessary measurements. `
     e2 4e 29 c4 ac 41 9c 50 50 1d 20 c8 69 bb ba 65
     <...>
     ```
+  
+  - You will need host data digest to extract the correct join policy from the `service-join-policy.json` file.
+
 
 - You could also verify the provided report with services such as Microsoft Azure Attestation Service, this step is excluded for brevity reasons
 
@@ -85,11 +109,23 @@ $ curl -s -LO https://openpolicyagent.org/downloads/v1.1.0/opa_linux_amd64_stati
 $ chmod 755 opa_linux_amd64_static
 $ ./opa_linux_amd64_static parse ccepolicy.rego -f json > ccepolicy.json
 
-# jq find the containers rule and extract layers of each container
-$ cat ccepolicy.json | jq '[ .rules[] | select(.head.name == "containers") | .head.value.value[].value[] | select(.[].value == "layers") | .[1].value | map(.value) ]' > containerlayers.json
+# Preserve container names while extracting their layers.
+$ jq '[ .rules[] |
+    select(.head.name == "containers") |
+    .head.value.value[] |
+    (.value | map({key: .[0].value, value: .[1]}) | from_entries) |
+    {name: .name.value, layers: [.layers.value[].value]}
+  ]' ccepolicy.json > containerlayers.json
 ```
 
-`containerlayers.json` should contain layers of all containers, our application and a `pause` container with a single layer.
+`containerlayers.json` should contain the names and layers of all containers, including the SCITT application, `pause` container and other operator containers, e.g. used for collecting logs. Inspect it, identify the application container name for the deployment, and select it rather than assuming it is the first entry:
+
+```sh
+$ jq . containerlayers.json
+$ jq -r '.[] | select(.name == "<APPLICATION-CONTAINER-NAME>") | .layers[]' containerlayers.json > expected-layers.txt
+```
+
+The `name` field is policy-generator and deployment dependent. Older policies may omit it or use a different identifier. If it is absent, inspect the policy and select the application entry using the available identity fields or its position; verify that `expected-layers.txt` is not empty before continuing.
 
 **Note:** image layers in the security policy use [dmverity hashes](https://www.kernel.org/doc/html/latest/admin-guide/device-mapper/verity.html), hence you will need to convert the built container image before comparison, see [`microsoft/integrity-vhd` CLI](https://github.com/microsoft/integrity-vhd/tree/main/cmd/dmverity-vhd).
 
@@ -107,47 +143,178 @@ $ sha256sum ccepolicy.rego
 5ae7b14ee0c9c4fe267d191f25b20fffe24e29c4ac419c50501d20c869bbba65  ccepolicy.rego
 ```
 
-Now it is clear that the contents of the policy (image layers) can be trusted in the next step.
+Now it is clear that the contents of the policy (image layers) can be trusted in the next step. This is because the policy was evaluated in the UVM and it's measurement was included in the report. The report could only be generated and signed in a valid TEE.
 
 ### 2. Build container and compare layers
 
-- Using the source code version that was obtained above, i.e. `"0.12.3-0-gaaaaaaa"`, clone the repository locally. The version is a long format [git describe output](https://git-scm.com/docs/git-describe):
+Download and build dmverity-vhd tool to convert the built image to dmverity hashes. Use a recent `dmverity-vhd` version that supports the OCI image layout emitted by current Docker versions:
 
-    ```sh
-    $ git clone --depth 1 --branch 0.12.3 git@github.com:microsoft/scitt-ccf-ledger.git toreproduce
-    $ cd toreproduce
-    ```
-- Identify the expected CCF build image version and base image by inspecting the Dockerfile used for building the binary:
 
-    ```sh
-    $ cat docker/Dockerfile | grep CCF_VERSION=
-    ARG CCF_VERSION=7.0.10
+```sh
+$ git clone --depth 1 https://github.com/microsoft/integrity-vhd.git
+$ git -C integrity-vhd checkout a63cb455d8cab7a3441d1c0cb10dac4d658e20ce
+$ git -C integrity-vhd rev-parse HEAD
+$ go build -C integrity-vhd -o ../dmverity-vhd ./cmd/dmverity-vhd
+```
 
-    $ cat docker/Dockerfile | grep BASE_IMAGE=
-    ARG BASE_IMAGE=mcr.microsoft.com/azurelinux/base/core:3.0.20250402
-    ```
-- Run a build inside of the CCF docker image and make sure to use a specific path (`__w/1/s`) to the sources as this is where our Azure build server copies the sources before building. If the build was done somewhere else, make sure to obtain the required path value:
+#### Rebuild the image from source
 
-    ```sh
-    $ export CCF_VERSION="7.0.10"
-    $ export BASE_IMAGE="mcr.microsoft.com/azurelinux/base/core:3.0.20250402"
-    $ docker run -it --rm \
-        -w /__w/1/s -v $(pwd):/__w/1/s \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        ${BASE_IMAGE} git config --global --add safe.directory "*" && SAVE_IMAGE_PATH=image.tar ./docker/build.sh
-    ```
-- Convert saved image layers with dmverity cli
+To rebuild, check out the resolved SCITT version using the application version tag:
 
-    ```sh
-    $ curl -LO https://github.com/microsoft/integrity-vhd/releases/download/v1.4/dmverity-vhd
-    $ chmod +x dmverity-vhd
-    $ ./dmverity-vhd --tarball ./image.tar roothash -i ignore
-    Layer 0 root hash: 3f61e43c03c18bda3c34c47a15d4025f4d4f2166e6db4c70218c39e8da8ef8da
-    Layer 1 root hash: 444465dedcbb724d19ec6ffcb642ba830ea98137e26b7d39eb7fd65b1b9a5223
-    Layer 2 root hash: f4132181247193a0a6c34c15ba625518dffefb639eb4017bb32450e0c6951094
-    ...
-    ```
-- Check if the layers from `containerlayers.json` and the output above match.
+```sh
+$ git clone https://github.com/microsoft/scitt-ccf-ledger.git source
+$ git -C source checkout --detach <TAG or COMMIT>
+```
+
+Manual builds and the GitHub Actions gate go through
+`scripts/reproduce-image.sh`. The OneBranch pipeline uses the same normalized
+context and build arguments with its governed `imagebuildinfo` task, because
+OneBranch does not permit custom Docker commands in that job:
+
+```sh
+$ cd source
+$ export IMAGE="scitt-reproduction:<APP-VERSION>"
+$ ./scripts/reproduce-image.sh all "${IMAGE}" ../reproduction
+```
+
+This archives the selected source commit (not the mutable working tree or git
+index), normalizes path order, ownership, modes and mtimes derived from
+`SOURCE_DATE_EPOCH`, builds the image with the canonical arguments, and writes
+`../reproduction/reproduce.json`. The output directory must be new so deleted
+source files cannot survive from an earlier build.
+
+**When checking against the published image**
+
+When reproducing a *published* image, do not let the version and timestamp be
+re-derived from git, because new tags and commits change them. Take them from the
+image itself and pass them explicitly:
+
+```sh
+$ docker run --rm --entrypoint cat <ORIGINAL-IMAGE> /opt/scitt/share/VERSION
+$ export SCITT_VERSION_OVERRIDE="<value printed above>"
+$ export SOURCE_DATE_EPOCH="$(git -C source show -s --format=%ct <COMMIT>)"
+$ export SOURCE_COMMIT="$(git -C source rev-parse <COMMIT>)"
+$ export IMAGE="scitt-reproduction:${SCITT_VERSION_OVERRIDE}"
+$ (cd source && ./scripts/reproduce-image.sh all "${IMAGE}" ../reproduction)
+```
+
+**Compute and compare the rebuilt hashes**
+
+```sh
+$ ./dmverity-vhd --docker roothash -i "${IMAGE}" > rebuilt-roothash.json
+$ jq -r '.layers[]' rebuilt-roothash.json > rebuilt-layers.txt
+$ diff -u expected-layers.txt rebuilt-layers.txt
+```
+
+**Check the rebuild against the layers the release published**
+
+The step above compares your rebuild with the image you extracted layers from.
+This instead compares it with the record published at release time, which does
+not depend on having the original image to hand:
+
+```sh
+$ jq -r '.layers[]' ../reproduction/reproduce.json > rebuilt-diff-ids.txt
+$ ./scripts/compare-published-layers.sh rebuilt-diff-ids.txt <RELEASE-TAG>
+```
+
+**Check a rebuild against the layers GitHub Actions built for any commit**
+
+Releases carry a published record, but most commits do not. For those, the
+reproducibility workflow records the verified layer digest as a commit status
+on the commit it built, which is readable without credentials:
+
+```sh
+$ ./scripts/compare-github-layers.sh rebuilt-diff-ids.txt <BUILT-COMMIT> [CONTEXT-SHA256]
+```
+
+Pass the commit that was built, which for a pull request is the
+`refs/pull/N/merge` commit named by `source_commit` in `reproduce.json` rather
+than the branch head. GitHub rebuilds that merge commit whenever the head or
+the target branch moves, so comparing anything else would compare two builds of
+different sources. The script waits for the record to appear, reports that no
+comparison was possible when it does not, and fails only when the records
+genuinely differ. This is the same check the OneBranch pipeline runs against
+every commit it builds, which is what keeps the two build systems from drifting
+apart between releases.
+
+**Troubleshooting**
+
+Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.
+
+Two files inside the image help diagnose a mismatch:
+
+- `/opt/scitt/share/VERSION` - the version the image was built with.
+- `/opt/scitt/share/packages.txt` - the sorted name, epoch, version, release and
+  architecture of every RPM installed at build time. A valid, canonical RPM
+  database is retained for the operating-system packages so package inspection,
+  later `tdnf` operations and vulnerability scanning continue to work. The
+  SCITT entry is recorded in `packages.txt` and removed from the database after
+  installation because its development-only static archives are not shipped in
+  the runtime image.
+
+#### If you have access to the original image
+
+If the original image is accessible, compute its dmverity hashes and compare them with `expected-layers.txt`. This authenticates the deployed image independently of whether a historical rebuild is possible.
+
+```sh
+$ docker pull <ORIGINAL-IMAGE>
+$ ./dmverity-vhd --docker roothash -i <ORIGINAL-IMAGE> > original-roothash.json
+$ jq -r '.layers[]' original-roothash.json > original-layers.txt
+$ diff -u expected-layers.txt original-layers.txt
+```
+
+#### Historical build limitations
+
+Some historical images cannot be reproduced bit-for-bit from the source revision and Docker command alone as the environment changed over time introducing values that change on each build. To mitigate against these issues, an automated reproducibility check is run on every commit.
+
+The GitHub Actions check builds the same normalized source context twice on
+independent runners and requires the ordered filesystem layer digests to match
+exactly. Complete image IDs are printed for diagnostics but are not gated,
+because image configuration metadata is outside the dmverity layer comparison
+scope. The second build deliberately runs in a different environment (different
+context path depth, time zone, locale and umask) so that filesystem sensitivity
+fails the gate immediately instead of surfacing years later. It also runs for
+release tags, and for those it attaches `reproduce.json` and `image-layers.txt`
+to the GitHub release. Workflow artifacts expire, so the release assets are the
+durable record of what a release was built from and which layers it produced.
+
+Because that check builds twice at the same moment, it detects sensitivity to
+the build environment but cannot detect an input that changes or disappears as
+time passes: both builds would consume the same changed input and still agree.
+The `Historical docker reproducibility` workflow covers that case. It runs
+weekly, rebuilds the most recent release tag, and compares the result with the
+`reproduce.json` published for that release, reporting which recorded input
+changed when the layers no longer match. It can also be started manually
+against any tag or commit. A failure there means a published image can no
+longer be reproduced, which is the failure mode this guide exists to prevent.
+
+#### What is pinned, and what is only recorded
+
+The base image is pinned by tag **and** digest, so a rebuild always starts from
+exactly the same bytes.
+
+The CCF release is pinned by version alone. The tdnf snapshot time, which
+selects every Azure Linux package version in the image, is read out of that
+release's own `reproduce.json` while the build runs rather than being repeated
+in the Dockerfile. Moving to a new CCF release therefore means changing one
+value, and the snapshot time cannot fall out of step with the release it
+belongs to.
+
+The trade-off is worth being explicit about. Because nothing pins the bytes of
+the CCF assets, a rebuild follows whatever that release serves at the time. If
+`reproduce.json` or the CCF RPM were ever replaced under a published release,
+the rebuild would consume the new content and produce a different image rather
+than failing. What protects against that is recording rather than pinning:
+every build writes the checksums it actually observed — `ccf_reproduce_sha256`,
+`ccf_rpm_sha256` and `tdnf_snapshottime` — into its `reproduce.json`, and the
+historical rebuild check compares those against the values recorded when the
+release was published. So a change of this kind is **detected and named** after
+the fact rather than **prevented** at build time.
+
+`scripts/check-build-inputs.sh` reports the same values on a schedule, so a CCF
+asset that moves or disappears shows up within the week rather than years later.
+`scripts/check-ccf-version.sh` confirms that all five files naming the release
+agree on it; see [DEVELOPMENT.md](../DEVELOPMENT.md).
 
 ### 3. Verify UVM
 
