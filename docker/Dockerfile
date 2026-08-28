@@ -85,8 +85,7 @@ ARG SOURCE_DATE_EPOCH=0
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
-    --mount=type=bind,source=docker/canonicalize-rpmdb.sh,target=/tmp/canonicalize-rpmdb.sh \
-    --mount=type=bind,source=docker/canonicalize-tdnf-history.sh,target=/tmp/canonicalize-tdnf-history.sh \
+    --mount=type=bind,source=docker/canonicalize-image.sh,target=/tmp/canonicalize-image.sh \
     --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
     set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
@@ -102,95 +101,18 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     \
     tdnf autoremove -y && \
     tdnf clean all && \
-    canonicalize_pem_bundle() { \
-        bundle="$1"; \
-        marker="$2"; \
-        cert_dir=$(mktemp -d); \
-        before=$(grep -c -- "-----BEGIN ${marker}-----" "${bundle}" || true); \
-        sed -n \
-            "/-----BEGIN ${marker}-----/,/-----END ${marker}-----/p" \
-            "${bundle}" > "${cert_dir}/certificates.pem"; \
-        csplit -s -z \
-            -f "${cert_dir}/certificate-" \
-            -b '%04d.pem' \
-            "${cert_dir}/certificates.pem" \
-            "/-----BEGIN ${marker}-----/" \
-            '{*}'; \
-        rm "${cert_dir}/certificates.pem"; \
-        find "${cert_dir}" -type f -print0 | \
-            xargs -0 sha256sum | \
-            LC_ALL=C sort | \
-            while read -r digest cert; do \
-                cat "${cert}"; \
-            done > "${bundle}.sorted"; \
-        cat "${bundle}.sorted" > "${bundle}"; \
-        rm -rf "${cert_dir}" "${bundle}.sorted"; \
-        after=$(grep -c -- "-----BEGIN ${marker}-----" "${bundle}" || true); \
-        if [ "${before}" -lt 1 ] || [ "${before}" != "${after}" ]; then \
-            echo "Trust bundle ${bundle} changed from ${before} to ${after} certificates" >&2; \
-            exit 1; \
-        fi; \
-    } && \
-    canonicalize_pem_bundle \
-        /etc/pki/ca-trust/extracted/pem/email-ca-bundle.pem \
-        CERTIFICATE && \
-    canonicalize_pem_bundle \
-        /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
-        CERTIFICATE && \
-    canonicalize_pem_bundle \
-        /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
-        "TRUSTED CERTIFICATE" && \
-    mkdir -p /opt/scitt/share && \
-    rpm -qa --qf '%{NAME}-%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n' | \
-        LC_ALL=C sort > /opt/scitt/share/packages.txt && \
-    rpm -e --justdb --nodeps --noscripts scitt && \
-    /tmp/canonicalize-rpmdb.sh /tmp/sqlite3 /var/lib/rpm/rpmdb.sqlite && \
-    rpm -qa > /dev/null && \
-    rm -f \
-        /var/lib/rpm/.rpm.lock \
-        /var/lib/rpm/rpmdb.sqlite-shm \
-        /var/lib/rpm/rpmdb.sqlite-wal && \
-    # tdnf stamps every transaction it ran with the wall clock, so its history
-    # database differs between builds. Emptying the file removes that, but a
-    # zero-length database has no schema either: `tdnf history` then fails with
-    # "no such table" instead of reporting an empty history. `tdnf history init`
-    # rebuilds it from the packages that are actually installed, which leaves
-    # the timestamp of that one synthetic transaction as the only varying
-    # value, and canonicalize-tdnf-history.sh dates it to SOURCE_DATE_EPOCH.
-    # init only writes when the schema is missing, so the truncation has to
-    # come first.
-    : > /usr/lib/sysimage/tdnf/history.db && \
-    tdnf history init && \
-    /tmp/canonicalize-tdnf-history.sh /tmp/sqlite3 \
-        /usr/lib/sysimage/tdnf/history.db "${SOURCE_DATE_EPOCH}" && \
-    tdnf history list > /dev/null && \
-    # What is left is build state with no other reader: ldconfig's cache, tdnf's
-    # download cache, and the extracted Java keystore, whose JKS entries record
-    # when they were written. Emptying the files removes that content while
-    # keeping the paths a normal install has. canonicalize-rootfs.sh normalizes
-    # metadata rather than contents, so this has to happen here.
-    for state_file in \
-        /etc/pki/ca-trust/extracted/java/cacerts \
-        /var/cache/ldconfig/aux-cache; do \
-        if [ -f "${state_file}" ]; then \
-            : > "${state_file}"; \
-        fi; \
-    done && \
-    for state_dir in \
-        /var/cache/tdnf \
-        /var/lib/tdnf; do \
-        if [ -d "${state_dir}" ]; then \
-            find "${state_dir}" -type f \
-                -exec sh -c 'for file do : > "${file}"; done' sh {} +; \
-        fi; \
-    done && \
-    rm -rf \
-        /opt/scitt/include \
-        /opt/scitt/lib64/*.a \
-        /opt/scitt/lib64/cmake \
-        /opt/scitt/share/regocpp/cmake && \
+    \
+    # Rewrite everything package installation leaves behind that would differ
+    # between two builds of the same sources. Nothing below may install or
+    # remove packages, or the state it just canonicalized is rewritten.
+    /bin/bash /tmp/canonicalize-image.sh /tmp/sqlite3 "${SOURCE_DATE_EPOCH}" && \
+    \
     mkdir -p /usr/src/app /host/node && \
     install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
+    \
+    # Last, because installing start-app.sh above stamps it with the wall
+    # clock. Only entries newer than SOURCE_DATE_EPOCH are touched, so files
+    # already carrying a fixed timestamp keep it.
     find / \
         -xdev \
         ! -path /dev \
@@ -201,8 +123,7 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /etc/resolv.conf \
         ! -path /tmp/app-build \
         ! -path '/tmp/app-build/*' \
-        ! -path /tmp/canonicalize-rpmdb.sh \
-        ! -path /tmp/canonicalize-tdnf-history.sh \
+        ! -path /tmp/canonicalize-image.sh \
         ! -path /tmp/sqlite3 \
         ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \
