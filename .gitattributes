@@ -1,0 +1,2 @@
+test/test_vectors/scitt-cose/**/*.cose binary
+test/test_vectors/scitt-cose/**/*.pub -text
