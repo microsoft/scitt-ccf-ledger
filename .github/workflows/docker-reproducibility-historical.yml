@@ -105,11 +105,97 @@ jobs:
         shell: bash
         run: git checkout --detach "${{ steps.resolve.outputs.ref }}"
 
+      # Fetched before the rebuild rather than after it, because the manifest
+      # carries the version and timestamp the published image was built with.
+      # reproduce-image.sh re-derives both from git when they are not supplied,
+      # and its own usage text says they must be supplied explicitly when
+      # reproducing a published image. Downloading first is what lets the
+      # rebuild consume the recorded values instead of today's git state.
+      - name: Fetch the manifest recorded at release time
+        id: recorded
+        if: steps.resolve.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+          ref='${{ steps.resolve.outputs.ref }}'
+
+          if gh release download "${ref}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --pattern reproduce.json \
+              --output "${recorded}" 2> "${RUNNER_TEMP}/download.log"; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Recorded manifest:"
+            cat "${recorded}"
+            exit 0
+          fi
+
+          cat "${RUNNER_TEMP}/download.log"
+
+          # A release that has no such asset, or no release at all, is expected
+          # for tags cut before this manifest was published and for a dispatch
+          # against a plain commit. Anything else - a network failure, a
+          # throttled or unauthorized API - would otherwise be silently
+          # indistinguishable from that, and would downgrade a real error into
+          # a run that looks like it verified something. These are the exact
+          # messages the CLI uses for a genuine absence; matching anything
+          # broader would start swallowing real errors again.
+          if grep -qF -e 'release not found' \
+              -e 'no assets match the file pattern' \
+              -e 'no assets to download' \
+              "${RUNNER_TEMP}/download.log"; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${ref} has no published reproduce.json, so only the rebuild itself can be verified."
+            exit 0
+          fi
+
+          echo "::error::Could not read the manifest published for ${ref}. This is not the same as ${ref} having none, so the rebuild was not started."
+          exit 1
+
       - name: Rebuild the released image
         if: steps.resolve.outputs.skip == 'false'
         shell: bash
         run: |
           set -euo pipefail
+
+          # When the release recorded its build inputs, rebuild with those
+          # rather than with values derived from today's git state, so that a
+          # mismatch means the image changed rather than the inputs being
+          # described differently.
+          if [ '${{ steps.recorded.outputs.found }}' = 'true' ]; then
+            recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+            SOURCE_DATE_EPOCH=$(jq -r '.source_date_epoch // empty' "${recorded}")
+            SCITT_VERSION_OVERRIDE=$(jq -r '.scitt_version // empty' "${recorded}")
+            recorded_commit=$(jq -r '.source_commit // empty' "${recorded}")
+
+            for pair in \
+                "source_date_epoch:${SOURCE_DATE_EPOCH}" \
+                "scitt_version:${SCITT_VERSION_OVERRIDE}" \
+                "source_commit:${recorded_commit}"; do
+              if [ -z "${pair#*:}" ]; then
+                echo "::error::The manifest published for ${{ steps.resolve.outputs.ref }} has no ${pair%%:*}, so the recorded build inputs cannot be reused."
+                exit 1
+              fi
+            done
+
+            # The recorded commit is compared rather than used, so that a tag
+            # which no longer points at the commit it was released from is
+            # reported as such instead of being silently rebuilt from the old
+            # commit and reported as reproducing.
+            head_commit=$(git rev-parse HEAD)
+            if [ "${recorded_commit}" != "${head_commit}" ]; then
+              echo "::error::${{ steps.resolve.outputs.ref }} was released from ${recorded_commit} but now points at ${head_commit}. The tag has moved, so this is not the source the published image was built from."
+              exit 1
+            fi
+
+            export SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
+            echo "Rebuilding with the recorded inputs: ${SCITT_VERSION_OVERRIDE} at ${SOURCE_DATE_EPOCH} from ${recorded_commit}"
+          else
+            echo "Rebuilding with inputs derived from the checked out revision."
+          fi
 
           # A failure here usually means an input the release depends on is no
           # longer available, which is the drift this workflow exists to catch.
@@ -122,8 +208,6 @@ jobs:
 
       - name: Compare with the digests recorded at release time
         if: steps.resolve.outputs.skip == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,11 +219,7 @@ jobs:
           echo "Rebuilt manifest:"
           cat "${rebuilt}"
 
-          if ! gh release download "${ref}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --pattern reproduce.json \
-              --output "${recorded}" 2> "${RUNNER_TEMP}/download.log"; then
-            cat "${RUNNER_TEMP}/download.log"
+          if [ '${{ steps.recorded.outputs.found }}' != 'true' ]; then
             echo "::notice::${ref} has no published reproduce.json, so only the rebuild itself was verified."
             exit 0
           fi

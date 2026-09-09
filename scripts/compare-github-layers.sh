@@ -28,9 +28,15 @@ Arguments:
                   systems built different sources" from "the two systems built
                   the same source differently".
 
+This check reads the record over the network and cannot run without it.
+Being unable to reach the API is reported as a failure rather than a pass,
+because a check that verified nothing has not agreed with anything.
+
 Exit status:
-  0  The records match, or GitHub published no record to compare with.
-  1  The records differ, or the local layer file is unusable.
+  0  The records match, or GitHub built this commit but published no usable
+     record to compare with.
+  1  The records differ, the local layer file is unusable, or the record
+     could not be read at all.
 
 Environment:
   SCITT_STATUS_REPO      Repository to read the commit status from. Defaults
@@ -153,20 +159,25 @@ done
 
 if [ -z "${published}" ]; then
     if [ "${reached_api}" -eq 0 ]; then
-        # Distinguished from "not published yet" because the two need opposite
-        # responses: waiting longer fixes one and never fixes the other. A
-        # build agent on an isolated network reaches this branch, and saying so
-        # is what stops the check from looking like it passed.
+        # Never reaching the API is a different failure from GitHub not having
+        # published yet, and the two need opposite responses: waiting longer
+        # fixes one and never fixes the other. Passing here would report
+        # agreement between two builds that were never compared, which is the
+        # one outcome this check exists to rule out, so it fails instead.
         echo "Could not reach ${status_api} (last HTTP status '${status}')." >&2
-        echo "The comparison against GitHub Actions was NOT performed. If this" >&2
-        echo "persists, the agent cannot reach the API and this check is not" >&2
-        echo "verifying anything." >&2
-    else
-        echo "GitHub published no ${status_context} record for ${commit} within" >&2
-        echo "${status_timeout}s. Its build may still be running, may have been" >&2
-        echo "superseded, or may never have built this commit." >&2
-        echo "The comparison against GitHub Actions was NOT performed." >&2
+        echo "The comparison against GitHub Actions was NOT performed, so this" >&2
+        echo "build has not been verified against GitHub. Check that the agent" >&2
+        echo "is allowed to reach ${status_api}." >&2
+        exit 1
     fi
+
+    # GitHub answered, so the network is fine and this commit simply has no
+    # record. It may still be building, may have been superseded, or may never
+    # have been built there at all. None of those are this pipeline's failure.
+    echo "GitHub published no ${status_context} record for ${commit} within" >&2
+    echo "${status_timeout}s. Its build may still be running, may have been" >&2
+    echo "superseded, or may never have built this commit." >&2
+    echo "The comparison against GitHub Actions was NOT performed." >&2
     exit 0
 fi
 

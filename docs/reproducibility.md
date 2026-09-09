@@ -231,11 +231,16 @@ Pass the commit that was built, which for a pull request is the
 `refs/pull/N/merge` commit named by `source_commit` in `reproduce.json` rather
 than the branch head. GitHub rebuilds that merge commit whenever the head or
 the target branch moves, so comparing anything else would compare two builds of
-different sources. The script waits for the record to appear, reports that no
-comparison was possible when it does not, and fails only when the records
-genuinely differ. This is the same check the OneBranch pipeline runs against
-every commit it builds, which is what keeps the two build systems from drifting
-apart between releases.
+different sources. The script waits for the record to appear and reports that
+no comparison was possible when GitHub has not published one for that commit.
+
+It reads the record over the network, so it needs to reach
+`https://api.github.com`. If it cannot, it fails rather than passing: a check
+that read nothing has not shown the two builds to agree. It therefore fails
+both when the records differ and when they could not be compared at all, and
+succeeds only on a match or on GitHub having no record for that commit. This is
+the same check the OneBranch pipeline runs against every commit it builds,
+which is what keeps the two build systems from drifting apart between releases.
 
 **Troubleshooting**
 
