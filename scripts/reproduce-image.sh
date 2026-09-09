@@ -499,13 +499,13 @@ path = sys.argv[1]
 try:
     record = json.load(open(path))
 except ValueError as error:
-    sys.exit(f"{path} is not readable JSON: {error}")
+    sys.exit(f"The record is not readable JSON: {error}")
 
 for field in ("ccf_version", "ccf_reproduce_sha256",
               "ccf_rpm_sha256", "tdnf_snapshottime"):
     value = record.get(field) or ""
     if not value:
-        sys.exit(f"{path} records no {field}")
+        sys.exit(f"The record has no {field}")
     print(value)
 PY
     ); then
