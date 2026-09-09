@@ -63,11 +63,18 @@ errors := "unreachable" if { false }
     scitt::cose::UnprotectedHeader uhdr;
     std::vector<uint8_t> payload_bytes = {1, 2, 3};
     std::span<uint8_t> payload(payload_bytes);
+    constexpr size_t statement_limit = 10000;
 
     try
     {
       scitt::check_for_policy_violations_rego(
-        rego_policy, "test_policy", phdr, uhdr, payload, std::nullopt, 10000);
+        rego_policy,
+        "test_policy",
+        phdr,
+        uhdr,
+        payload,
+        std::nullopt,
+        statement_limit);
       FAIL() << "Expected a BadRequestCborError to be thrown";
     }
     catch (const scitt::HTTPError& e)
