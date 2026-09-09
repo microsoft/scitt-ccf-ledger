@@ -44,11 +44,14 @@ namespace
 
   // Regression test for a rego policy whose `policy/errors` rule is
   // undefined for a given input (e.g. a complete rule guarded by `if` with
-  // no matching branch and no `default`). Previously, extracting the
-  // violation message in this case threw an uncaught std::out_of_range
-  // ("Index out of range") from rego-cpp's Output::expressions(), which
-  // escaped as an HTTP 500 InternalError instead of a clean 400
-  // PolicyError response.
+  // no matching branch and no `default`). In that case rego-cpp's
+  // run_entrypoint() returns the bare Undefined node instead of a Results
+  // node. Previously this was passed straight into rego::Output, whose
+  // constructor only expects Results: in release builds this silently led
+  // to an uncaught std::out_of_range ("Index out of range") from
+  // Output::expressions(), escaping as an HTTP 500 InternalError; in debug
+  // builds it instead tripped an assertion, aborting the process. Either
+  // way, this should now be reported as a clean 400 PolicyError.
   TEST(PolicyEngineTest, RegoPolicyUndefinedErrorsIsReportedGracefully)
   {
     const std::string rego_policy = R"(
