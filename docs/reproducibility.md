@@ -293,6 +293,22 @@ longer be reproduced, which is the failure mode this guide exists to prevent.
 The base image is pinned by tag **and** digest, so a rebuild always starts from
 exactly the same bytes.
 
+Both halves have to move together. Dependabot rewrites the tag and the digest
+as a pair, so an ordinary bump needs no manual work. A digest that is missing,
+or that no longer matches what the registry serves for the tag, means the two
+disagree about which image the build uses, and `scripts/check-build-inputs.sh`
+fails naming both values. That happens when the `FROM` line is hand-edited or a
+merge takes a tag from one side and a digest from the other. Re-resolve the
+digest for the tag that should win, rather than deleting either half:
+
+```sh
+curl -sSI --location \
+  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+  -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  https://mcr.microsoft.com/v2/azurelinux/base/core/manifests/<tag> |
+  grep -i '^docker-content-digest'
+```
+
 The CCF release is pinned by version alone. The tdnf snapshot time, which
 selects every Azure Linux package version in the image, is read out of that
 release's own `reproduce.json` while the build runs rather than being repeated
