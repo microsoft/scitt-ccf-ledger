@@ -242,12 +242,27 @@ jobs:
             exit 1
           fi
 
-          if ! ./scripts/compare-github-layers.sh \
+          # Every outcome other than a match fails this pipeline. GitHub builds
+          # the same commit, so a missing record means the comparison did not
+          # happen rather than that there was nothing to compare, and passing
+          # would report agreement this pipeline never established.
+          comparison_status=0
+          ./scripts/compare-github-layers.sh \
               "$(Build.SourcesDirectory)/out/image-layers.txt" \
               "${source_commit}" \
-              "${context_sha256}"; then
-            echo "##vso[task.logissue type=error]OneBranch and GitHub Actions built different filesystem layers for ${source_commit}."
-            exit 1
-          fi
+              "${context_sha256}" || comparison_status=$?
+
+          case "${comparison_status}" in
+            0)
+              ;;
+            2)
+              echo "##vso[task.logissue type=error]GitHub Actions published no verified layer record for ${source_commit}, so this build was not compared against it. Check whether its reproducibility workflow ran for that commit."
+              exit 1
+              ;;
+            *)
+              echo "##vso[task.logissue type=error]OneBranch and GitHub Actions built different filesystem layers for ${source_commit}, or the record could not be read."
+              exit 1
+              ;;
+          esac
 
         displayName: Verify OneBranch image reproducibility

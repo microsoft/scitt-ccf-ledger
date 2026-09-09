@@ -450,53 +450,86 @@ PY
 }
 
 # The Dockerfile pins the CCF release by version alone, so the checksums that
-# describe what that release actually served are observed here rather than read
-# back out of the build. Recording them is what lets the historical rebuild
-# check say which input moved when an old image stops reproducing, instead of
-# only reporting that the layers differ.
+# describe what that release actually served are computed by the build, at the
+# moment it downloads each file, and written into the image. They are read back
+# out of the finished image here.
+#
+# Downloading the same URLs again from this script would describe what they
+# serve now rather than what the build consumed, which is precisely the
+# difference a rebuild years later exists to detect. It would also report a
+# checksum for bytes that never entered the image. Recording them is what lets
+# the historical rebuild check say which input moved when an old image stops
+# reproducing, instead of only reporting that the layers differ.
 observed_ccf_reproduce_sha256=""
 observed_ccf_rpm_sha256=""
 observed_tdnf_snapshottime=""
 
-observe_ccf_inputs() {
-    local version="$1"
-    local base="https://github.com/microsoft/CCF/releases/download/ccf-${version}"
-    local rpm_name="ccf_devel_${version//-/_}_x86_64.rpm"
-    local scratch
+read_build_inputs() {
+    local tag="$1"
+    local expected_version="$2"
+    local record="/opt/scitt/share/build-inputs.json"
+    local scratch container parsed observed_ccf_version
+
     scratch=$(mktemp -d)
 
-    if ! curl --silent --show-error --fail --location --max-time 60 --retry 3 \
-            --output "${scratch}/reproduce.json" "${base}/reproduce.json"; then
+    # The image is built FROM scratch and has no shell, so the file is copied
+    # out of a container that is created but never started.
+    if ! container=$(docker create "${tag}" 2>&1); then
+        echo "Could not create a container from ${tag} to read ${record}:" >&2
+        echo "${container}" >&2
         rm -rf "${scratch}"
-        echo "Could not read reproduce.json for ccf-${version}." >&2
-        echo "The manifest records what the build consumed, so it cannot be written" >&2
-        echo "without it. Check network access to github.com and retry." >&2
         exit 1
     fi
 
-    observed_ccf_reproduce_sha256=$(sha256sum "${scratch}/reproduce.json" | cut -d ' ' -f 1)
-    observed_tdnf_snapshottime=$(python3 -c \
-        'import json,sys; print(json.load(open(sys.argv[1]))["tdnf_snapshottime"])' \
-        "${scratch}/reproduce.json")
-
-    # GitHub reports a checksum per release asset. It is recorded, not enforced,
-    # so an unreachable API leaves the field empty rather than failing a build
-    # that has already succeeded.
-    if curl --silent --show-error --fail --location --max-time 60 --retry 3 \
-            --output "${scratch}/release.json" \
-            "https://api.github.com/repos/microsoft/CCF/releases/tags/ccf-${version}"; then
-        observed_ccf_rpm_sha256=$(RPM_NAME="${rpm_name}" python3 -c '
-import json, os, sys
-release = json.load(open(sys.argv[1]))
-want = os.environ["RPM_NAME"]
-for asset in release.get("assets", []):
-    if asset.get("name") == want:
-        print((asset.get("digest") or "").removeprefix("sha256:"))
-        break
-' "${scratch}/release.json" 2>/dev/null || true)
+    if ! docker cp "${container}:${record}" "${scratch}/build-inputs.json" >/dev/null 2>&1; then
+        docker rm --force "${container}" >/dev/null 2>&1 || true
+        rm -rf "${scratch}"
+        echo "${tag} does not contain ${record}." >&2
+        echo "Images built before that record was added cannot be described by a" >&2
+        echo "manifest. Rebuild with the current Dockerfile." >&2
+        exit 1
     fi
+    docker rm --force "${container}" >/dev/null 2>&1 || true
 
+    if ! parsed=$(python3 - "${scratch}/build-inputs.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    record = json.load(open(path))
+except ValueError as error:
+    sys.exit(f"{path} is not readable JSON: {error}")
+
+for field in ("ccf_version", "ccf_reproduce_sha256",
+              "ccf_rpm_sha256", "tdnf_snapshottime"):
+    value = record.get(field) or ""
+    if not value:
+        sys.exit(f"{path} records no {field}")
+    print(value)
+PY
+    ); then
+        rm -rf "${scratch}"
+        echo "The build input record in ${tag} could not be read." >&2
+        exit 1
+    fi
     rm -rf "${scratch}"
+
+    {
+        IFS= read -r observed_ccf_version
+        IFS= read -r observed_ccf_reproduce_sha256
+        IFS= read -r observed_ccf_rpm_sha256
+        IFS= read -r observed_tdnf_snapshottime
+    } <<< "${parsed}"
+
+    # The image names the CCF release it was built from. A manifest describing
+    # a different one would misreport the image it is published beside.
+    if [ "${observed_ccf_version}" != "${expected_version}" ]; then
+        echo "${tag} was built from CCF ${observed_ccf_version}, but the" >&2
+        echo "Dockerfile in this checkout specifies ${expected_version}." >&2
+        echo "The image and the sources being described do not match." >&2
+        exit 1
+    fi
 }
 
 # Record everything a third party needs to rebuild this exact image, following
@@ -522,7 +555,7 @@ cmd_manifest() {
     buildx_version=$(docker buildx version 2>/dev/null | head -n1 || echo "unknown")
 
     ccf_version="$(dockerfile_arg "${dockerfile}" CCF_VERSION)"
-    observe_ccf_inputs "${ccf_version}"
+    read_build_inputs "${tag}" "${ccf_version}"
 
     mkdir -p "$(dirname "${output}")"
     BASE_IMAGE="${base_image}" \

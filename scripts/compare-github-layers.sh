@@ -33,10 +33,14 @@ Being unable to reach the API is reported as a failure rather than a pass,
 because a check that verified nothing has not agreed with anything.
 
 Exit status:
-  0  The records match, or GitHub built this commit but published no usable
-     record to compare with.
-  1  The records differ, the local layer file is unusable, or the record
-     could not be read at all.
+  0  The records match, or GitHub built this commit and reported a state that
+     leaves no layer list to compare with.
+  1  The records differ, the local layer file is unusable, or the record could
+     not be read at all.
+  2  GitHub published no record for this commit within the timeout, so nothing
+     was compared. Separated from 1 so that a caller which expects GitHub to
+     have built the same commit can treat it as a failure, while the standalone
+     check can report it without failing.
 
 Environment:
   SCITT_STATUS_REPO      Repository to read the commit status from. Defaults
@@ -173,12 +177,14 @@ if [ -z "${published}" ]; then
 
     # GitHub answered, so the network is fine and this commit simply has no
     # record. It may still be building, may have been superseded, or may never
-    # have been built there at all. None of those are this pipeline's failure.
+    # have been built there at all. Reported with its own status because a
+    # pipeline building a commit GitHub also builds should treat a missing
+    # record as a failure, while the standalone check has no such expectation.
     echo "GitHub published no ${status_context} record for ${commit} within" >&2
     echo "${status_timeout}s. Its build may still be running, may have been" >&2
     echo "superseded, or may never have built this commit." >&2
     echo "The comparison against GitHub Actions was NOT performed." >&2
-    exit 0
+    exit 2
 fi
 
 published_state=${published%%$'\t'*}

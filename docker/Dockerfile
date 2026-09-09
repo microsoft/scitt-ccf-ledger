@@ -29,7 +29,8 @@ RUN tdnf install -y \
             exit 1 ;; \
     esac && \
     printf '%s' "${TDNF_SNAPSHOTTIME}" > /tmp/tdnf_snapshottime && \
-    touch -d "@${SOURCE_DATE_EPOCH}" /tmp/tdnf_snapshottime
+    sha256sum /tmp/reproduce.json | cut -d' ' -f1 | tr -d '\n' > /tmp/ccf_reproduce_sha256 && \
+    touch -d "@${SOURCE_DATE_EPOCH}" /tmp/tdnf_snapshottime /tmp/ccf_reproduce_sha256
 
 FROM base AS builder
 
@@ -45,8 +46,10 @@ RUN TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} ca-certificates git jq rpm-build && \
     CCF_RPM="ccf_devel_${CCF_VERSION//-/_}_x86_64.rpm" && \
     curl -fL "https://github.com/microsoft/CCF/releases/download/ccf-${CCF_VERSION}/${CCF_RPM}" -o /tmp/ccf.rpm && \
+    sha256sum /tmp/ccf.rpm | cut -d' ' -f1 | tr -d '\n' > /tmp/ccf_rpm_sha256 && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} /tmp/ccf.rpm && \
-    rm -f /tmp/ccf.rpm
+    rm -f /tmp/ccf.rpm && \
+    touch -d "@${SOURCE_DATE_EPOCH}" /tmp/ccf_rpm_sha256
 
 # Copy the app source code after installing dependencies so that
 # changes to app/ don't invalidate the dependency layer above.
@@ -83,6 +86,8 @@ ARG CCF_VERSION
 ARG SOURCE_DATE_EPOCH=0
 
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
+    --mount=type=bind,from=snapshot-extractor,source=/tmp/ccf_reproduce_sha256,target=/tmp/ccf_reproduce_sha256 \
+    --mount=type=bind,from=builder,source=/tmp/ccf_rpm_sha256,target=/tmp/ccf_rpm_sha256 \
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
     --mount=type=bind,source=docker/canonicalize-image.sh,target=/tmp/canonicalize-image.sh \
@@ -101,6 +106,19 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     \
     tdnf autoremove -y && \
     tdnf clean all && \
+    \
+    # Record the external inputs this build consumed, hashed as they were
+    # downloaded. Keeping them in the image is what makes them evidence:
+    # fetching the same URLs again afterwards reports what is being served
+    # now, which is the very thing a rebuild years later needs to detect
+    # having changed.
+    mkdir -p /opt/scitt/share && \
+    printf '{\n  "ccf_version": "%s",\n  "ccf_reproduce_sha256": "%s",\n  "ccf_rpm_sha256": "%s",\n  "tdnf_snapshottime": "%s"\n}\n' \
+        "${CCF_VERSION}" \
+        "$(cat /tmp/ccf_reproduce_sha256)" \
+        "$(cat /tmp/ccf_rpm_sha256)" \
+        "${TDNF_SNAPSHOTTIME}" > /opt/scitt/share/build-inputs.json && \
+    chmod 0644 /opt/scitt/share/build-inputs.json && \
     \
     # Rewrite everything package installation leaves behind that would differ
     # between two builds of the same sources. Nothing below may install or
@@ -124,6 +142,8 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /tmp/app-build \
         ! -path '/tmp/app-build/*' \
         ! -path /tmp/canonicalize-image.sh \
+        ! -path /tmp/ccf_reproduce_sha256 \
+        ! -path /tmp/ccf_rpm_sha256 \
         ! -path /tmp/sqlite3 \
         ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \

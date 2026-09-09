@@ -231,24 +231,35 @@ Pass the commit that was built, which for a pull request is the
 `refs/pull/N/merge` commit named by `source_commit` in `reproduce.json` rather
 than the branch head. GitHub rebuilds that merge commit whenever the head or
 the target branch moves, so comparing anything else would compare two builds of
-different sources. The script waits for the record to appear and reports that
-no comparison was possible when GitHub has not published one for that commit.
+different sources.
 
 It reads the record over the network, so it needs to reach
 `https://api.github.com`. If it cannot, it fails rather than passing: a check
-that read nothing has not shown the two builds to agree. It therefore fails
-both when the records differ and when they could not be compared at all, and
-succeeds only on a match or on GitHub having no record for that commit. This is
-the same check the OneBranch pipeline runs against every commit it builds,
-which is what keeps the two build systems from drifting apart between releases.
+that read nothing has not shown the two builds to agree. It exits 0 on a match,
+1 when the records differ or could not be read, and 2 when GitHub has published
+no record for that commit.
+
+That last case is separated because the right response depends on the caller. A
+third party checking an arbitrary commit may simply not have one to compare
+with. The OneBranch pipeline runs this against every commit it builds, where
+GitHub builds the same commit, so it treats a missing record as a failure — the
+comparison did not happen, which is not the same as there being nothing to
+compare. That is what keeps the two build systems from drifting apart between
+releases.
 
 **Troubleshooting**
 
 Docker labels affect the image configuration and full image digest, but not the filesystem dmverity layer hashes. Include the labels from the build log when reproducing the complete image digest.
 
-Two files inside the image help diagnose a mismatch:
+Three files inside the image help diagnose a mismatch:
 
 - `/opt/scitt/share/VERSION` - the version the image was built with.
+- `/opt/scitt/share/build-inputs.json` - the CCF release the image was built
+  from, and the SHA-256 of the CCF `reproduce.json` and the CCF RPM as they
+  were downloaded, together with the tdnf snapshot time those selected. Each
+  hash is computed by the build stage that downloads the file, so it describes
+  the bytes that entered this image rather than whatever those URLs serve when
+  the question is asked. `reproduce.json` is written from this file.
 - `/opt/scitt/share/packages.txt` - the sorted name, epoch, version, release and
   architecture of every RPM installed at build time. A valid, canonical RPM
   database is retained for the operating-system packages so package inspection,
@@ -256,6 +267,15 @@ Two files inside the image help diagnose a mismatch:
   SCITT entry is recorded in `packages.txt` and removed from the database after
   installation because its development-only static archives are not shipped in
   the runtime image.
+
+The image has no shell, so read them by creating a container without starting
+it:
+
+```sh
+$ container=$(docker create <IMAGE>)
+$ docker cp "${container}:/opt/scitt/share/build-inputs.json" -
+$ docker rm "${container}"
+```
 
 #### If you have access to the original image
 
@@ -325,12 +345,18 @@ The trade-off is worth being explicit about. Because nothing pins the bytes of
 the CCF assets, a rebuild follows whatever that release serves at the time. If
 `reproduce.json` or the CCF RPM were ever replaced under a published release,
 the rebuild would consume the new content and produce a different image rather
-than failing. What protects against that is recording rather than pinning:
-every build writes the checksums it actually observed — `ccf_reproduce_sha256`,
-`ccf_rpm_sha256` and `tdnf_snapshottime` — into its `reproduce.json`, and the
-historical rebuild check compares those against the values recorded when the
-release was published. So a change of this kind is **detected and named** after
-the fact rather than **prevented** at build time.
+than failing. What protects against that is recording rather than pinning: each
+build stage hashes the CCF asset it downloads at the moment it downloads it and
+writes the result into the image, where `scripts/reproduce-image.sh` reads it
+back out into `reproduce.json` as `ccf_reproduce_sha256`, `ccf_rpm_sha256` and
+`tdnf_snapshottime`. The historical rebuild check compares those against the
+values recorded when the release was published. So a change of this kind is
+**detected and named** after the fact rather than **prevented** at build time.
+
+Hashing inside the build is what makes those fields evidence. A checksum
+fetched afterwards would describe what the CCF release serves at that moment,
+which is the very thing that may have changed, and could name bytes that the
+image was never built from.
 
 `scripts/check-build-inputs.sh` reports the same values on a schedule, so a CCF
 asset that moves or disappears shows up within the week rather than years later.
