@@ -713,8 +713,15 @@ namespace scitt
 
       return buf.str();
     }
-    catch (const std::domain_error& e)
+    catch (const std::exception& e)
     {
+      // error_output.expressions() (i.e. Output::expressions_at(0)) throws
+      // std::out_of_range, not std::domain_error, when the policy/errors
+      // rule produced no result for this input (e.g. the policy only
+      // defines specific violation messages and this denial reason isn't
+      // one of them). Catching std::exception here - rather than only
+      // std::domain_error - ensures any such policy authoring gap is
+      // reported as a 400 PolicyError instead of an uncaught 500.
       throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format("Could not interpret policy errors: {}", e.what()));
