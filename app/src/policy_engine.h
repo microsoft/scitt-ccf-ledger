@@ -686,8 +686,26 @@ namespace scitt
         fmt::format("Could not interpret policy result: {}", e.what()));
     }
 
-    auto error_output =
-      rego::Output(interpreter.query_bundle(bundle, "policy/errors"));
+    auto error_node = interpreter.query_bundle(bundle, "policy/errors");
+
+    // A policy whose "errors" rule produces no result for this input (e.g.
+    // the policy only defines specific violation messages and this denial
+    // reason isn't one of them) makes run_entrypoint() return the bare
+    // Undefined node rather than a Results node. rego::Output's constructor
+    // only expects Results (or an error), so passing it an Undefined node
+    // trips an assertion in debug builds, and in release builds silently
+    // leaves it wrapping a zero-length node whose first expression later
+    // throws std::out_of_range. Detect this policy-authoring gap
+    // explicitly, before constructing the Output, and report it as a clean
+    // 400 PolicyError instead.
+    if (error_node != nullptr && error_node->type() == rego::Undefined)
+    {
+      throw BadRequestCborError(
+        scitt::errors::PolicyError,
+        "Policy denied the request but did not provide a specific reason");
+    }
+
+    auto error_output = rego::Output(error_node);
 
     if (!error_output.ok())
     {
@@ -713,8 +731,11 @@ namespace scitt
 
       return buf.str();
     }
-    catch (const std::domain_error& e)
+    catch (const std::exception& e)
     {
+      // Defense in depth for any other unexpected shape of the
+      // policy/errors result (e.g. a defined but non-set value), distinct
+      // from the fully-undefined case already handled above.
       throw BadRequestCborError(
         scitt::errors::PolicyError,
         fmt::format("Could not interpret policy errors: {}", e.what()));
