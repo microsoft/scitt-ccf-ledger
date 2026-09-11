@@ -3,13 +3,10 @@
 # Licensed under the MIT License.
 
 # Check that every network input a reproducible rebuild depends on is still
-# available and report what it currently serves: the base image against its
-# digest pin, and the CCF release by version alone, so what this catches there
-# is an input withdrawn or moved rather than one replaced with different bytes.
-#
-# The reproducibility gates only run when a build runs, so this probe is
-# deliberately cheap enough to run on a schedule and fail in the week an input
-# disappears, while recovering is still straightforward.
+# available and report what it currently serves - the base image against its
+# digest pin, the CCF release by version alone - cheaply enough to run on a
+# schedule and fail in the week an input disappears, while recovering is still
+# straightforward.
 
 set -euo pipefail
 
@@ -146,10 +143,10 @@ base_digest="${base_ref##*@}"
 base_registry="${base_repo%%/*}"
 base_path="${base_repo#*/}"
 
-# The tag is only a label once a digest is present, but a tag that no longer
-# resolves to the pinned digest means the two disagree about which image the
-# build uses. Dependabot bumps the tag, so a merge that keeps a stale digest
-# would otherwise build the old base image under a new tag, undetected.
+# A tag that no longer resolves to the pinned digest means the two disagree
+# about which image the build uses, which matters because Dependabot bumps the
+# tag and a merge keeping a stale digest would build the old base image under a
+# new tag, undetected.
 base_tag=""
 base_name_tag="${base_ref%%@*}"
 case "${base_name_tag##*/}" in
@@ -197,10 +194,9 @@ ccf_base="https://github.com/microsoft/CCF/releases/download/ccf-${ccf_version}"
 ccf_rpm="ccf_devel_${ccf_version//-/_}_x86_64.rpm"
 
 # The Dockerfile takes the package snapshot from this file rather than
-# repeating it, so whatever it says here is what a build today would install.
-# There is no pinned checksum left to compare it against; the value is read and
-# reported so a change is at least visible, and so the snapshot probes below
-# describe the snapshot a build would actually use.
+# repeating it, so with no pinned checksum left to compare against the value is
+# read and reported to make a change visible and to let the snapshot probes
+# below describe the snapshot a build would actually use.
 tdnf_snapshottime=""
 reproduce_json=$(mktemp)
 trap 'rm -f "${reproduce_json}"' EXIT

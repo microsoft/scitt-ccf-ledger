@@ -3,12 +3,9 @@
 # Licensed under the MIT License.
 
 # Compare locally built filesystem layers with the layers GitHub Actions built
-# for the same commit, keyed on the commit that was built rather than on the
-# pull request head.
-#
-# GitHub builds refs/pull/N/merge and regenerates it whenever the head or the
-# target branch moves, so looking up the status for the commit this build used
-# means the two systems are only ever compared when they built the same source.
+# for the same commit, keyed on the built refs/pull/N/merge commit rather than
+# the pull request head so the two systems are only ever compared when they
+# built the same source.
 
 set -euo pipefail
 
@@ -73,10 +70,9 @@ status_context="${SCITT_STATUS_CONTEXT:-reproducibility/layers}"
 status_timeout="${SCITT_STATUS_TIMEOUT:-1200}"
 status_interval="${SCITT_STATUS_INTERVAL:-30}"
 
-# Without curl this check cannot run at all. Reporting that as a skip would
-# leave a pipeline that looks like it verifies something and never does, so
-# fail on it: a missing tool is a deterministic environment defect, unlike the
-# genuinely transient conditions handled further down.
+# A missing tool is a deterministic environment defect rather than one of the
+# transient conditions handled further down, so this fails instead of reporting
+# a skip that would leave a pipeline looking like it verifies something.
 if ! command -v curl >/dev/null 2>&1; then
     echo "curl is required to read the record GitHub published." >&2
     exit 1
@@ -99,9 +95,9 @@ if ! printf '%s' "${commit}" | grep -qE '^[0-9a-f]{40}$'; then
 fi
 
 # Hash the digests rather than the file so that trailing whitespace or a
-# missing final newline cannot make two identical layer lists disagree. Both
-# systems must derive this the same way; the workflow that publishes the
-# status uses this same pipeline.
+# missing final newline cannot make two identical layer lists disagree,
+# deriving the value through the same pipeline the workflow that publishes the
+# status uses.
 layers_digest=$(grep -E '^sha256:[0-9a-f]{64}$' "${layers_file}" |
     sha256sum |
     cut -d ' ' -f 1)
@@ -161,11 +157,10 @@ done
 
 if [ -z "${published}" ]; then
     if [ "${reached_api}" -eq 0 ]; then
-        # Never reaching the API is a different failure from GitHub not having
-        # published yet, and the two need opposite responses: waiting longer
-        # fixes one and never fixes the other. Passing here would report
-        # agreement between two builds that were never compared, which is the
-        # one outcome this check exists to rule out, so it fails instead.
+        # Never reaching the API needs the opposite response to GitHub not
+        # having published yet - waiting longer fixes one and never fixes the
+        # other - so this fails rather than report agreement between two builds
+        # that were never compared.
         echo "Could not reach ${status_api} (last HTTP status '${status}')." >&2
         echo "The comparison against GitHub Actions was NOT performed, so this" >&2
         echo "build has not been verified against GitHub. Check that the agent" >&2
@@ -173,11 +168,10 @@ if [ -z "${published}" ]; then
         exit 1
     fi
 
-    # GitHub answered, so the network is fine and this commit simply has no
-    # record: it may still be building, may have been superseded, or may never
-    # have been built there. Reported with its own status because a pipeline
-    # building a commit GitHub also builds should treat that as a failure,
-    # while the standalone check has no such expectation.
+    # GitHub answered and simply has no record for this commit, reported with
+    # its own status because a pipeline building a commit GitHub also builds
+    # should treat that as a failure while the standalone check has no such
+    # expectation.
     echo "GitHub published no ${status_context} record for ${commit} within" >&2
     echo "${status_timeout}s. Its build may still be running, may have been" >&2
     echo "superseded, or may never have built this commit." >&2

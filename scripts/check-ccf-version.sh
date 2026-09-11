@@ -2,14 +2,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Check that every file naming the pinned CCF release agrees on the version,
-# which is repeated in the Dockerfile, the devcontainer, the environment setup
-# script, the build script and the docs: letting those drift is how the
-# devcontainer ends up on a different CCF release than the image, which then
-# reproduces differently for no visible reason.
-#
-# This only reads files, so it is safe to run on every CI job;
-# scripts/check-build-inputs.sh covers the checks that reach the network.
+# Check that the Dockerfile, devcontainer, environment setup script, build
+# script and docs all name the same pinned CCF release, because letting them
+# drift is how the devcontainer ends up on a different release than the image
+# and reproduces differently for no visible reason; it only reads files, so it
+# is safe to run on every CI job.
 
 set -euo pipefail
 

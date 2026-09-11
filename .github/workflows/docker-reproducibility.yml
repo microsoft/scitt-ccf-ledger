@@ -74,11 +74,10 @@ jobs:
           name: docker-build-context
           path: repro-input
 
-      # Both builds in this job run on the same runner image, so a builder
-      # upgrade affects them equally and they still agree with each other.
-      # Reporting it as a warning keeps that visible without blocking unrelated
-      # work; the scheduled historical rebuild is where a builder change is
-      # compared against digests recorded years earlier.
+      # Both builds here run on the same runner image, so a builder upgrade
+      # affects them equally and warning keeps it visible without blocking,
+      # while the scheduled historical rebuild is where a builder change meets
+      # digests recorded years earlier.
       - name: Check builder toolchain
         shell: bash
         run: |
@@ -232,21 +231,15 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      # Recorded where another build system can read it without credentials: a
-      # commit status is public, permanent and keyed on a commit, whereas
-      # workflow artifacts need a token and expire, and release assets only
-      # exist for tags.
-      #
-      # It is attached to the commit that was built, which for a pull request
-      # is the refs/pull/N/merge commit rather than the head, so a reader
-      # comparing against its own build is only ever matched with a build of
-      # the same source.
+      # A commit status is public, permanent and keyed on the commit that was
+      # built - refs/pull/N/merge for a pull request - so another build system
+      # can read it without a credential and is only ever matched with a build
+      # of the same source.
       - name: Record the verified layers for cross-system comparison
-        # A pull request from a fork gets a read-only token, so recording the
-        # status is impossible there rather than merely undesirable. Skipping
-        # leaves the other build system with no record to compare against,
-        # which it reports as "not compared"; attempting it would fail this
-        # workflow for every fork contributor instead.
+        # A fork's pull request gets a read-only token, so recording is
+        # impossible rather than merely undesirable, and skipping leaves the
+        # other system reporting "not compared" instead of failing this
+        # workflow for every fork contributor.
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         env:
@@ -322,10 +315,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Workflow artifacts expire, but reproducing a release years from now
-      # requires the exact inputs this build used. Attach them to the release
-      # so the recorded layer digests outlive artifact retention and can be
-      # checked by the scheduled re-verification and by third parties.
+      # Attached to the release because workflow artifacts expire, while
+      # reproducing it years from now needs the exact inputs this build used.
       - name: Download verified build outputs
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

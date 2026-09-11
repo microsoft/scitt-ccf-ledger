@@ -79,11 +79,9 @@ jobs:
         name: prepare_context
         displayName: Prepare deterministic Docker context
 
-      # There is deliberately no builder version check here: the build is
-      # performed by the imagebuildinfo task below, which selects its own
-      # builder, so a version read from this shell would describe a different
-      # binary than the one that produces the layers. What covers OneBranch
-      # instead is comparing its layers with the layers GitHub published.
+      # No builder version check here, because the imagebuildinfo task below
+      # selects its own builder and a version read from this shell would
+      # describe a different binary than the one that produces the layers.
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
@@ -133,9 +131,9 @@ jobs:
           arguments: --platform linux/amd64 --provenance=false --build-arg SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" --build-arg SCITT_VERSION_OVERRIDE="$(SCITT_VERSION_OVERRIDE)"
           endpoint: ${{ parameters.AcrEndpoint }}
 
-  # OneBranch materializes saveImageToPath during governed post-processing,
-  # after all user steps in the build job. Compare the published job artifact
-  # from a dependent job so both saved image archives are available.
+  # OneBranch materializes saveImageToPath during governed post-processing
+  # after all user steps, so the comparison runs from a dependent job where
+  # both saved image archives are available.
   - job: ${{ parameters.Name }}_verify_reproducibility
     displayName: Verify Docker image reproducibility
     dependsOn: ${{ parameters.Name }}
@@ -194,22 +192,22 @@ jobs:
 
           cat "${comparison_output}"
 
-          # Published for cross-checking against the image-layers.txt that the
-          # GitHub release carries for the same commit. The two build systems
-          # use different Docker and BuildKit versions, so this is the only
-          # record that shows whether they still agree.
+          # Published for cross-checking against the image-layers.txt the
+          # GitHub release carries for the same commit, which is the only
+          # record showing whether two build systems on different Docker and
+          # BuildKit versions still agree.
           echo "Filesystem layers of the published image:"
           cat "$(Build.SourcesDirectory)/out/image-layers.txt"
 
-          # Comparing layers only proves the two systems agreed on an output.
-          # Recording the context digest alongside them shows they also started
-          # from the same input, so a future mismatch can be attributed to the
-          # build environment rather than to a differing source context.
+          # Recording the context digest beside the layers shows the two
+          # systems also started from the same input, so a future mismatch can
+          # be attributed to the build environment rather than to a differing
+          # source context.
           context_sha256="$(contextSha256)"
           if [ -z "${context_sha256}" ]; then
-            # An empty value means the cross-job variable stopped resolving,
-            # which would leave a published record that proves nothing about
-            # the input. Fail loudly rather than ship an empty attestation.
+            # An empty value means the cross-job variable stopped resolving, so
+            # fail loudly rather than publish a record that proves nothing
+            # about the input.
             echo "Build context sha256 was not passed from the build job." >&2
             exit 1
           fi
@@ -218,24 +216,22 @@ jobs:
           printf '%s\n' "${context_sha256}" \
             > "$(Build.SourcesDirectory)/out/context-sha256.txt"
 
-          # Everything above only compares two OneBranch builds with each
-          # other, so the checks below are the only ones spanning both build
-          # systems.
-          #
-          # The first reads the commit status GitHub Actions posted for the
-          # exact commit this build used, which needs no credential and, by
-          # keying on the built refs/pull/N/merge commit rather than the pull
-          # request head, never compares builds of different sources.
+          # Everything above compares two OneBranch builds with each other, so
+          # this is the only check spanning both build systems: it reads the
+          # commit status GitHub Actions posted for the exact commit built
+          # here, needing no credential and, by keying on the built
+          # refs/pull/N/merge commit rather than the pull request head, never
+          # comparing builds of different sources.
           source_commit="$(sourceCommit)"
           if [ -z "${source_commit}" ]; then
             echo "The built commit was not passed from the build job." >&2
             exit 1
           fi
 
-          # Every outcome other than a match fails this pipeline. GitHub builds
-          # the same commit, so a missing record means the comparison did not
-          # happen rather than that there was nothing to compare, and passing
-          # would report agreement this pipeline never established.
+          # Every outcome other than a match fails this pipeline, because
+          # GitHub builds this same commit and a missing record means the
+          # comparison did not happen rather than that there was nothing to
+          # compare.
           comparison_status=0
           ./scripts/compare-github-layers.sh \
               "$(Build.SourcesDirectory)/out/image-layers.txt" \

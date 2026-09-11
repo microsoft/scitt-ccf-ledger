@@ -1,10 +1,8 @@
 name: "Historical docker reproducibility"
 
-# The per-commit gate builds the same source twice at the same moment, so both
-# builds consume the same changed input and agree with each other, which
-# detects only sensitivity to the build environment. Rebuilding an already
-# released commit long after publication and comparing it with the layer
-# digests recorded at release time is what catches drift over time.
+# The per-commit gate builds the same source twice at one moment, so only
+# rebuilding an already released commit long after publication and comparing it
+# with the layer digests recorded then catches drift over time.
 
 on:
   schedule:
@@ -130,12 +128,10 @@ jobs:
 
           cat "${RUNNER_TEMP}/download.log"
 
-          # A missing asset or release is expected for tags cut before this
-          # manifest was published and for a dispatch against a plain commit,
-          # but a network failure or a throttled API is not, and would
-          # otherwise downgrade a real error into a run that looks verified.
-          # These are the exact messages the CLI uses for a genuine absence, so
-          # matching anything broader would start swallowing real errors again.
+          # Matches the exact messages the CLI uses for a genuine absence,
+          # which is expected for tags predating this manifest, so that a
+          # network or authorization failure is not silently reported as a
+          # run that verified something.
           if grep -qF -e 'release not found' \
               -e 'no assets match the file pattern' \
               -e 'no assets to download' \

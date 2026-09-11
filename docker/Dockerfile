@@ -1,14 +1,12 @@
 ARG CCF_VERSION="7.0.10"
 
-# Pin the Azure Linux base image by tag and digest for reproducibility.
-# Dependabot will monitor and update this FROM line.
+# Pin the Azure Linux base image by tag and digest for reproducibility;
+# Dependabot monitors and updates this FROM line.
 FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260825@sha256:daa1142fc6b44e27c8112ec6b4c2d579ddb9bc6b3747504e666010a45a51faa4 AS base
 
 # The tdnf snapshot time CCF published for this release selects the package
 # version every stage below installs, and is read from the release rather than
-# repeated here, so the CCF version is the only value that moves releases.
-# The build records what it consumed in reproduce.json, so a snapshot time that
-# changes under a published release stays diagnosable afterwards.
+# repeated here so the CCF version is the only value that moves releases.
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
@@ -69,10 +67,10 @@ RUN mkdir /tmp/app-build && \
     SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} cpack -G RPM && \
     touch -d "@${SOURCE_DATE_EPOCH}" /tmp/app-build/*.rpm
 
-# The SCITT RPM contains static development archives that are removed from the
-# runtime image. Their package-header digests are not reproducible, so the
-# transient SCITT database record is removed and the remaining OS package
-# database is vacuumed into a canonical SQLite representation.
+# The SCITT RPM's static development archives are removed from the runtime
+# image and their package-header digests are not reproducible, so its database
+# record is dropped and the remaining OS package database is vacuumed into a
+# canonical SQLite representation.
 FROM base AS rpmdb-tools
 
 RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,target=/tmp/tdnf_snapshottime \
@@ -106,11 +104,9 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     tdnf autoremove -y && \
     tdnf clean all && \
     \
-    # Record the external inputs this build consumed, hashed as they were
-    # downloaded. Keeping them in the image is what makes them evidence:
-    # fetching the same URLs again afterwards reports what is being served
-    # now, which is the very thing a rebuild years later needs to detect
-    # having changed.
+    # The external inputs are hashed as they are downloaded and kept in the
+    # image, because fetching the same URLs again afterwards reports what is
+    # served now rather than what this build consumed.
     mkdir -p /opt/scitt/share && \
     printf '{\n  "ccf_version": "%s",\n  "ccf_reproduce_sha256": "%s",\n  "ccf_rpm_sha256": "%s",\n  "tdnf_snapshottime": "%s"\n}\n' \
         "${CCF_VERSION}" \
@@ -119,17 +115,15 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         "${TDNF_SNAPSHOTTIME}" > /opt/scitt/share/build-inputs.json && \
     chmod 0644 /opt/scitt/share/build-inputs.json && \
     \
-    # Rewrite everything package installation leaves behind that would differ
-    # between two builds of the same sources. Nothing below may install or
-    # remove packages, or the state it just canonicalized is rewritten.
+    # Rewrites everything package installation leaves behind that would differ
+    # between two builds, so nothing below may install or remove packages.
     /bin/bash /tmp/canonicalize-image.sh /tmp/sqlite3 "${SOURCE_DATE_EPOCH}" && \
     \
     mkdir -p /usr/src/app /host/node && \
     install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
     \
     # Last, because installing start-app.sh above stamps it with the wall
-    # clock. Only entries newer than SOURCE_DATE_EPOCH are touched, so files
-    # already carrying a fixed timestamp keep it.
+    # clock, and only entries newer than SOURCE_DATE_EPOCH are touched.
     find / \
         -xdev \
         ! -path /dev \
@@ -151,9 +145,8 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     touch -d "@${SOURCE_DATE_EPOCH}" /
 
 # BuildKit injects /etc/hosts, /etc/hostname and /etc/resolv.conf while RUN
-# executes, and their parent-directory timestamps can leak host timing into the
-# layer after the sweep above. Copying the completed filesystem below a
-# non-special path lets every entry be normalized before the final copy.
+# executes, so the completed filesystem is copied below a non-special path
+# where their parent-directory timestamps can be normalized too.
 FROM base AS rootfs-normalizer
 
 ARG SOURCE_DATE_EPOCH=0

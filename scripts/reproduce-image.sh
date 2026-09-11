@@ -2,11 +2,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Canonical entry point for reproducible container image builds: every
-# automated build and every third party reproduction attempt goes through this
-# script so they all use byte-identical inputs and identical Docker arguments.
-# Keeping the logic here rather than duplicating it in pipeline definitions and
-# documentation is what stops them drifting apart over time.
+# Canonical entry point for reproducible container image builds, used by every
+# automated build and every third party reproduction attempt so they all share
+# byte-identical inputs and identical Docker arguments rather than drifting
+# apart across pipeline definitions and documentation.
 
 set -euo pipefail
 
@@ -115,14 +114,11 @@ resolve_inputs() {
     export SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE SOURCE_COMMIT
 }
 
-# Rewrites the tar headers of a context archive into one fixed encoding, because
+# Rewrites the tar headers of a context archive into one fixed encoding because
 # tar leaves some fields to the implementation's discretion and those choices
-# change: GNU tar 1.35 began writing the device fields of ordinary files as
-# empty rather than as octal zero.
-#
-# Two hosts with different tar versions would otherwise archive identical files
-# into different bytes, giving the same commit two context_sha256 values and
-# sending a rebuilder after a difference that does not exist.
+# change - GNU tar 1.35 began writing the device fields of ordinary files as
+# empty rather than as octal zero - which would otherwise give the same commit
+# two context_sha256 values on hosts with different tar versions.
 canonicalize_context_archive() {
     python3 - "$1" <<'PY'
 import sys
@@ -137,7 +133,7 @@ path = sys.argv[1]
 def member_size(header):
     field = header[124:136]
     if field[0] & 0x80:
-        # Sizes above 8GiB are base 256 rather than octal. No context is
+        # Sizes above 8GiB are base 256 rather than octal, and no context is
         # anywhere near that, but skipping such a member incorrectly would
         # silently corrupt the archive rather than fail.
         return int.from_bytes(bytes(field[1:]), 'big')
@@ -282,9 +278,9 @@ cmd_extract() {
 
 builder_docker_version() {
     # A wrapper script or an unreachable daemon can print a message on stdout
-    # instead of a version, which would otherwise be compared against as if it
-    # were one. Only a version-shaped result is usable; anything else is
-    # reported as unknown so the caller fails with a clear message.
+    # instead of a version, so only a version-shaped result is treated as
+    # usable and anything else is reported as unknown for the caller to fail on
+    # with a clear message.
     docker version --format '{{.Server.Version}}' 2>/dev/null |
         grep -oE '^[0-9]+(\.[0-9]+)*' |
         head -n1 ||
@@ -437,13 +433,10 @@ PY
 }
 
 # The Dockerfile pins the CCF release by version alone, so the checksums
-# describing what it served are computed by the build as it downloads each
-# file, written into the image, and read back out here.
-#
-# Downloading the same URLs again from this script would describe what they
-# serve now rather than what the build consumed - precisely the difference a
-# rebuild years later exists to detect - and could report a checksum for bytes
-# that never entered the image.
+# describing what it served are computed by the build as it downloads each file
+# and read back out of the image here, because downloading the same URLs again
+# would describe what they serve now rather than what the build consumed -
+# precisely the difference a rebuild years later exists to detect.
 observed_ccf_reproduce_sha256=""
 observed_ccf_rpm_sha256=""
 observed_tdnf_snapshottime=""
@@ -559,10 +552,9 @@ manifest = {
     "source_commit": os.environ["SOURCE_COMMIT"],
     "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
     "scitt_version": os.environ["SCITT_VERSION_OVERRIDE"],
-    # Identifies the exact bytes the build consumed. The recorded layers only
-    # show that two builds agreed on an output; this shows they started from
-    # the same input, which is what makes a comparison across build systems
-    # meaningful rather than coincidental.
+    # Identifies the exact bytes the build consumed, which is what makes a
+    # comparison across build systems meaningful rather than coincidental,
+    # since the recorded layers only show that two builds agreed on an output.
     "context_sha256": os.environ.get("CONTEXT_SHA256", ""),
     "base_image": os.environ["BASE_IMAGE"],
     "ccf_version": os.environ["CCF_VERSION_VALUE"],

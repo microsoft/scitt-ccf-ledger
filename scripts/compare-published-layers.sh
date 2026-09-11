@@ -3,13 +3,10 @@
 # Licensed under the MIT License.
 
 # Compare locally built filesystem layers with the layers a release published,
-# which the per-commit gates cannot do: each builds twice on one system, which
-# proves that system is internally deterministic but never that the two build
-# systems agree with each other.
-#
-# A mismatch against the release's image-layers.txt is a hard failure, while a
-# release with no published record is reported without failing, because that is
-# an ordering or age difference rather than a reproducibility problem.
+# which the per-commit gates cannot do because each builds twice on one system
+# and so proves that system internally deterministic but never that the two
+# build systems agree; a mismatch is a hard failure, while a release with no
+# published record is reported without failing.
 
 set -euo pipefail
 
