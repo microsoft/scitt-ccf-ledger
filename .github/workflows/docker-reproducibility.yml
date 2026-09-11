@@ -166,8 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Needed to record the verified layer digest against the built commit so
-      # that the OneBranch pipeline can compare its own build with it.
+      # Needed so the OneBranch pipeline can compare its own build against the
+      # digest recorded here.
       statuses: write
     steps:
       - name: Download image IDs

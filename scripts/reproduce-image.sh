@@ -54,7 +54,6 @@ than the original build used. Both are recorded in the image itself
 EOF
 }
 
-# Prints the repository root, or nothing when this is not a git checkout.
 # Reproducing a published image only needs the recorded build inputs, so the
 # absence of a repository is not by itself an error.
 repo_root() {
@@ -303,14 +302,12 @@ builder_buildx_version() {
         true
 }
 
-# Compares dotted versions, tolerating the differing component counts that
-# builders report.
 version_at_least() {
     [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
 }
 
-# Truncates a version to the component count of a reference, so that a maximum
-# expressed as a major version does not reject every patch release of it.
+# Truncated to the reference's component count so that a maximum expressed as a
+# major version does not reject every patch release of it.
 version_prefix() {
     local version="$1" reference="$2" components
     components=$(printf '%s' "${reference}" | awk -F. '{print NF}')
@@ -321,9 +318,8 @@ version_prefix() {
     printf '%s' "${version}" | cut -d. -f"1-${components}"
 }
 
-# Fails when the builder is older than a required minimum. An absent
-# expectation is not an error, so that contexts archived before a given
-# expectation existed can still be rebuilt.
+# An absent expectation is not an error, so that contexts archived before a
+# given expectation existed can still be rebuilt.
 require_min_version() {
     local name="$1" actual="$2" minimum="$3"
 
@@ -334,8 +330,6 @@ require_min_version() {
     fi
 }
 
-# Reports, without failing, that the builder is newer than anything this
-# expectation has been verified against.
 report_if_newer() {
     local name="$1" actual="$2" maximum="$3"
 
@@ -522,8 +516,6 @@ PY
     fi
 }
 
-# Record everything a third party needs to rebuild this exact image, following
-# the same idea as the reproduce.json that CCF publishes with its releases.
 cmd_manifest() {
     local tag="$1"
     local output="$2"

@@ -177,9 +177,8 @@ canonicalize_rpm_database() {
 
     reset_sqlite_counters "${rpm_database}"
 
-    # Proves rpm can still read the rewritten database. It runs after the
-    # counters are set because opening the database is itself a write on some
-    # paths, and the lock and journal files it may leave are removed below.
+    # Proves rpm can still read the rewritten database, after the counters are
+    # set because opening the database is itself a write on some paths.
     rpm -qa > /dev/null
 
     rm -f \

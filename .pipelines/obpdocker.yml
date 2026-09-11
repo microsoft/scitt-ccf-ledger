@@ -64,14 +64,12 @@ jobs:
           echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
           echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
-          # Exported to the verification job so the published record names the
-          # context these images were built from.
+          # Exported to the verification job, which checks out
+          # $(Build.SourceBranch) again; for a pull request that ref is a merge
+          # commit GitHub regenerates whenever the head or the target branch
+          # moves, so re-reading it there could name a different commit than the
+          # one these images were built from.
           echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
-          # Exported for the same reason. The verification job checks out
-          # $(Build.SourceBranch) again, and for a pull request that ref is a
-          # merge commit GitHub regenerates whenever the head or the target
-          # branch moves, so re-reading it there could name a different commit
-          # than the one these images were built from.
           echo "##vso[task.setvariable variable=SOURCE_COMMIT;isOutput=true]${SOURCE_COMMIT}"
 
           echo "Deterministic context ${CONTEXT_SHA256} for commit ${SOURCE_COMMIT}"

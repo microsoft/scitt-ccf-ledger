@@ -67,8 +67,8 @@ cmakelists="${root}/app/CMakeLists.txt"
 RESULTS=()
 FAILURES=0
 
-# Records one probe result. Status is ok, failed or skipped; only failed
-# affects the exit status, so informational probes cannot break the build.
+# Only a failed status affects the exit status, so informational probes cannot
+# break the build.
 record() {
     local status="$1" name="$2" detail="$3"
     RESULTS+=("${status}|${name}|${detail}")
@@ -99,8 +99,6 @@ dockerfile_arg() {
     sed -n "s/^ARG $1=\"\{0,1\}\([^\"]*\)\"\{0,1\}[[:space:]]*$/\1/p" "${dockerfile}" | head -n1
 }
 
-# Resolves a tag to the digest the registry currently serves for it, by reading
-# the Docker-Content-Digest response header.
 registry_tag_digest() {
     local registry="$1" path="$2" tag="$3"
     curl \

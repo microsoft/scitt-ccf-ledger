@@ -190,8 +190,6 @@ jobs:
             echo "Rebuilding with inputs derived from the checked out revision."
           fi
 
-          # A failure here usually means an input the release depends on is no
-          # longer available, which is the drift this workflow exists to catch.
           if ! ./scripts/reproduce-image.sh all \
               "scitt-historical:${{ steps.resolve.outputs.ref }}" \
               "${RUNNER_TEMP}/reproduction"; then
