@@ -13,8 +13,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 ROOT_DIR=$( dirname "$SCRIPT_DIR" )
 
 # Reproducible builds must use the canonical build context and arguments, which
-# only include committed content. Ordinary development builds keep using the
-# working tree so that uncommitted changes are picked up.
+# only include committed content, while ordinary development builds keep using
+# the working tree so that uncommitted changes are picked up.
 if [ "$REPRODUCIBLE" != "0" ]; then
     echo "Building reproducibly via scripts/reproduce-image.sh"
     "$ROOT_DIR/scripts/reproduce-image.sh" all "$DOCKER_TAG"

@@ -2,13 +2,11 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Canonical entry point for reproducible container image builds.
-#
-# Every automated build (GitHub Actions, Azure DevOps) and every third party
-# reproduction attempt should go through this script so that they all use
-# byte-identical inputs and identical Docker arguments. Keeping the logic here
-# rather than duplicating it in pipeline definitions and documentation is what
-# stops the three from drifting apart over time.
+# Canonical entry point for reproducible container image builds: every
+# automated build and every third party reproduction attempt goes through this
+# script so they all use byte-identical inputs and identical Docker arguments.
+# Keeping the logic here rather than duplicating it in pipeline definitions and
+# documentation is what stops them drifting apart over time.
 
 set -euo pipefail
 
@@ -118,19 +116,14 @@ resolve_inputs() {
     export SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE SOURCE_COMMIT
 }
 
-# Build a context archive from tracked content only, with every source of
-# filesystem nondeterminism (ordering, ownership, permissions, timestamps)
-# normalized away.
-# Rewrites the tar headers of a context archive into one fixed encoding.
+# Rewrites the tar headers of a context archive into one fixed encoding, because
+# tar leaves some fields to the implementation's discretion and those choices
+# change: GNU tar 1.35 began writing the device fields of ordinary files as
+# empty rather than as octal zero.
 #
-# tar leaves some header fields to the implementation's discretion, and those
-# choices change: GNU tar 1.35 began writing the device fields of ordinary
-# files as empty rather than as octal zero. Two hosts with different tar
-# versions therefore archive identical files into different bytes, which would
-# give the same commit two different context_sha256 values and send a rebuilder
-# looking for a difference that does not exist. Normalizing the fields tar does
-# not let us set makes the digest depend on the archived content instead of on
-# the machine that ran tar.
+# Two hosts with different tar versions would otherwise archive identical files
+# into different bytes, giving the same commit two context_sha256 values and
+# sending a rebuilder after a difference that does not exist.
 canonicalize_context_archive() {
     python3 - "$1" <<'PY'
 import sys
@@ -260,8 +253,8 @@ PY
     cat "${metadata}"
 }
 
-# Extract into a temporary sibling and rename it into place. Refusing an
-# existing destination prevents deleted source files from surviving a rebuild.
+# Extract into a temporary sibling and rename it into place, refusing an
+# existing destination so deleted source files cannot survive a rebuild.
 cmd_extract() {
     local archive="$1"
     local directory="$2"
@@ -354,7 +347,7 @@ report_if_newer() {
 
 # The Dockerfile, not BuildKit, is what normalizes layer timestamps, so the
 # builder version is part of the reproducibility contract rather than an
-# incidental detail. See docker/toolchain.env.
+# incidental detail (see docker/toolchain.env).
 check_toolchain() {
     local context="${1:-}" env_file docker_actual buildx_actual drift=""
 
@@ -449,17 +442,14 @@ print(value)
 PY
 }
 
-# The Dockerfile pins the CCF release by version alone, so the checksums that
-# describe what that release actually served are computed by the build, at the
-# moment it downloads each file, and written into the image. They are read back
-# out of the finished image here.
+# The Dockerfile pins the CCF release by version alone, so the checksums
+# describing what it served are computed by the build as it downloads each
+# file, written into the image, and read back out here.
 #
 # Downloading the same URLs again from this script would describe what they
-# serve now rather than what the build consumed, which is precisely the
-# difference a rebuild years later exists to detect. It would also report a
-# checksum for bytes that never entered the image. Recording them is what lets
-# the historical rebuild check say which input moved when an old image stops
-# reproducing, instead of only reporting that the layers differ.
+# serve now rather than what the build consumed - precisely the difference a
+# rebuild years later exists to detect - and could report a checksum for bytes
+# that never entered the image.
 observed_ccf_reproduce_sha256=""
 observed_ccf_rpm_sha256=""
 observed_tdnf_snapshottime=""
@@ -522,8 +512,8 @@ PY
         IFS= read -r observed_tdnf_snapshottime
     } <<< "${parsed}"
 
-    # The image names the CCF release it was built from. A manifest describing
-    # a different one would misreport the image it is published beside.
+    # The image names the CCF release it was built from, and a manifest
+    # describing a different one would misreport the image it sits beside.
     if [ "${observed_ccf_version}" != "${expected_version}" ]; then
         echo "${tag} was built from CCF ${observed_ccf_version}, but the" >&2
         echo "Dockerfile in this checkout specifies ${expected_version}." >&2

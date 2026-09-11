@@ -2,20 +2,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Check that every file naming the pinned CCF release agrees on the version.
+# Check that every file naming the pinned CCF release agrees on the version,
+# which is repeated in the Dockerfile, the devcontainer, the environment setup
+# script, the build script and the docs: letting those drift is how the
+# devcontainer ends up on a different CCF release than the image, which then
+# reproduces differently for no visible reason.
 #
-# The version is repeated in the Dockerfile, the devcontainer, the environment
-# setup script, the build script and the docs. Letting those drift apart is how
-# the devcontainer ends up on a different CCF release than the image, which
-# then reproduces differently for no visible reason.
-#
-# That one value is the whole contract. The Dockerfile derives everything else
-# from it, reading the tdnf snapshot time out of the release's own
-# reproduce.json rather than repeating it, so there is nothing else to keep in
-# step.
-#
-# This only reads files: no network, no writes. It is safe to run on every CI
-# job. scripts/check-build-inputs.sh covers the checks that do reach out.
+# This only reads files, so it is safe to run on every CI job;
+# scripts/check-build-inputs.sh covers the checks that reach the network.
 
 set -euo pipefail
 

@@ -3,18 +3,13 @@
 # Licensed under the MIT License.
 
 # Check that every network input a reproducible rebuild depends on is still
-# available, and report what it currently serves.
+# available and report what it currently serves: the base image against its
+# digest pin, and the CCF release by version alone, so what this catches there
+# is an input withdrawn or moved rather than one replaced with different bytes.
 #
-# The base image is pinned by digest and is checked against that pin. The CCF
-# release is pinned by version alone, so its checksums are reported rather than
-# enforced: what this catches there is an input that has been withdrawn or
-# moved, not one that was replaced with different bytes.
-#
-# The per-commit and historical reproducibility gates only run when a build
-# runs. This probe is deliberately cheap so it can run on a schedule and fail
-# in the week an input disappears, while recovering is still straightforward.
-# Losing any of these inputs makes published images impossible to rebuild,
-# which is the failure mode that is hardest to recover from years later.
+# The reproducibility gates only run when a build runs, so this probe is
+# deliberately cheap enough to run on a schedule and fail in the week an input
+# disappears, while recovering is still straightforward.
 
 set -euo pipefail
 
@@ -127,7 +122,7 @@ registry_tag_digest() {
 }
 
 # A range request avoids downloading multi-hundred-megabyte artifacts just to
-# learn whether they still exist. Servers may answer 200 or 206.
+# learn whether they still exist, and servers may answer either 200 or 206.
 probe_url() {
     local name="$1" url="$2" code
     code=$(http_status --range 0-0 "${url}")
@@ -265,8 +260,8 @@ fi
 
 echo
 echo "Azure Linux package snapshot ${tdnf_snapshottime:-unknown}"
-# The snapshot time selects package versions from these repositories. It can
-# only be honoured while the repositories still serve the metadata.
+# The snapshot time selects package versions from these repositories, and can
+# only be honoured while they still serve the metadata.
 for repo in base ms-oss ms-non-oss extended; do
     probe_url "packages.microsoft.com azurelinux 3.0 ${repo}" \
         "https://packages.microsoft.com/azurelinux/3.0/prod/${repo}/x86_64/repodata/repomd.xml"
@@ -279,7 +274,7 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
     gh_auth=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
 fi
 
-# CMake FetchContent pins each dependency to a commit. A commit stays fetchable
+# CMake FetchContent pins each dependency to a commit, which stays fetchable
 # only while the repository exists and has not been rewritten.
 while IFS='|' read -r repo_url commit; do
     [ -n "${repo_url}" ] || continue

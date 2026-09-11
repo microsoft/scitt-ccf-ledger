@@ -3,14 +3,12 @@
 # Licensed under the MIT License.
 
 # Compare locally built filesystem layers with the layers GitHub Actions built
-# for the same commit.
+# for the same commit, keyed on the commit that was built rather than on the
+# pull request head.
 #
-# The comparison is keyed on the commit that was built rather than on the pull
-# request head. GitHub builds refs/pull/N/merge, a commit it regenerates
-# whenever the head or the target branch moves, and the build inputs derive
-# from it. Looking up the status for the commit this build used means the two
-# systems are only ever compared when they built the same source, so a moving
-# target branch reports "no record" instead of a spurious difference.
+# GitHub builds refs/pull/N/merge and regenerates it whenever the head or the
+# target branch moves, so looking up the status for the commit this build used
+# means the two systems are only ever compared when they built the same source.
 
 set -euo pipefail
 
@@ -176,10 +174,10 @@ if [ -z "${published}" ]; then
     fi
 
     # GitHub answered, so the network is fine and this commit simply has no
-    # record. It may still be building, may have been superseded, or may never
-    # have been built there at all. Reported with its own status because a
-    # pipeline building a commit GitHub also builds should treat a missing
-    # record as a failure, while the standalone check has no such expectation.
+    # record: it may still be building, may have been superseded, or may never
+    # have been built there. Reported with its own status because a pipeline
+    # building a commit GitHub also builds should treat that as a failure,
+    # while the standalone check has no such expectation.
     echo "GitHub published no ${status_context} record for ${commit} within" >&2
     echo "${status_timeout}s. Its build may still be running, may have been" >&2
     echo "superseded, or may never have built this commit." >&2

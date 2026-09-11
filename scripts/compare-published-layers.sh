@@ -2,19 +2,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Compare locally built filesystem layers with the layers a release published.
+# Compare locally built filesystem layers with the layers a release published,
+# which the per-commit gates cannot do: each builds twice on one system, which
+# proves that system is internally deterministic but never that the two build
+# systems agree with each other.
 #
-# The per-commit gates in GitHub Actions and OneBranch each build twice and
-# compare the two results, which proves that a build system is internally
-# deterministic. Neither of them proves that the two build systems agree with
-# each other: they run different builders on different agents, so the same
-# source can produce different layers without either gate noticing.
-#
-# This compares a locally produced layer list against the image-layers.txt that
-# the GitHub release published for the same tag, which is the record third
-# parties reproduce against. A mismatch is a hard failure. A release that has
-# no published record is reported and does not fail, because that is an
-# ordering or age difference rather than a reproducibility problem.
+# A mismatch against the release's image-layers.txt is a hard failure, while a
+# release with no published record is reported without failing, because that is
+# an ordering or age difference rather than a reproducibility problem.
 
 set -euo pipefail
 

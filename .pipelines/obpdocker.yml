@@ -52,9 +52,8 @@ jobs:
 
           ./scripts/reproduce-image.sh context "${context_archive}"
 
-          # The GitHub gate checks this after transporting the archive between
-          # jobs. Checking it here too means both systems prove the archive is
-          # intact before extracting, rather than only one of them.
+          # Checked here as well as in the GitHub gate, so both systems prove
+          # the archive is intact before extracting rather than only one.
           (cd "$(Agent.TempDirectory)" && sha256sum --check docker-context.tar.sha256)
 
           SOURCE_COMMIT=$(./scripts/reproduce-image.sh metadata "$(Agent.TempDirectory)/build-metadata.json" source_commit)
@@ -82,14 +81,11 @@ jobs:
         name: prepare_context
         displayName: Prepare deterministic Docker context
 
-      # There is deliberately no builder version check here. The GitHub gate
-      # runs the docker build from the shell, so it can check the builder it is
-      # about to use. In this pipeline the build is performed by the
-      # imagebuildinfo task below, which selects its own builder, so a version
-      # read from this shell would describe a different binary than the one
-      # that produces the layers. What covers OneBranch instead is comparing
-      # the layers it produces with the layers GitHub published, which the
-      # verification job does directly.
+      # There is deliberately no builder version check here: the build is
+      # performed by the imagebuildinfo task below, which selects its own
+      # builder, so a version read from this shell would describe a different
+      # binary than the one that produces the layers. What covers OneBranch
+      # instead is comparing its layers with the layers GitHub published.
 
       # use custom docker task based on parameters in docker/build.sh
       # save image to scitt.tar and use it in the Ev2 release pipeline
@@ -225,17 +221,13 @@ jobs:
             > "$(Build.SourcesDirectory)/out/context-sha256.txt"
 
           # Everything above only compares two OneBranch builds with each
-          # other, which cannot detect this pipeline drifting away from GitHub
-          # Actions. The two checks below are the only ones that span both
-          # build systems.
+          # other, so the checks below are the only ones spanning both build
+          # systems.
           #
-          # The first compares against the record GitHub Actions posted for the
-          # exact commit this build used. That record is a commit status, which
-          # is readable without credentials, so this pipeline needs no GitHub
-          # secret. Keying on the built commit rather than on the pull request
-          # head matters: GitHub builds refs/pull/N/merge and regenerates it
-          # whenever the head or the target branch moves, so anything else
-          # would compare two builds of different sources.
+          # The first reads the commit status GitHub Actions posted for the
+          # exact commit this build used, which needs no credential and, by
+          # keying on the built refs/pull/N/merge commit rather than the pull
+          # request head, never compares builds of different sources.
           source_commit="$(sourceCommit)"
           if [ -z "${source_commit}" ]; then
             echo "The built commit was not passed from the build job." >&2

@@ -16,7 +16,7 @@ hardlinks=$(mktemp)
 trap 'rm -f "${hardlinks}"' EXIT
 
 # Touching files copied from a previous layer triggers overlay copy-up, which
-# splits hardlinks. Record their groups first, then restore them after all
+# splits hardlinks, so record their groups first and restore them after all
 # regular-file timestamps have been normalized.
 find "${rootfs}" \
     -xdev \

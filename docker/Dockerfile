@@ -4,12 +4,11 @@ ARG CCF_VERSION="7.0.10"
 # Dependabot will monitor and update this FROM line.
 FROM mcr.microsoft.com/azurelinux/base/core:3.0.20260825@sha256:daa1142fc6b44e27c8112ec6b4c2d579ddb9bc6b3747504e666010a45a51faa4 AS base
 
-# Read the tdnf snapshot time CCF published for this release. It selects the
-# package version every stage below installs, so the whole image follows from
-# it. It is taken from the release rather than repeated here, which means the
-# CCF version is the only thing that has to be updated to move releases. The
-# build records what it actually consumed in reproduce.json, so a snapshot time
-# that changes under a published release is still diagnosable afterwards.
+# The tdnf snapshot time CCF published for this release selects the package
+# version every stage below installs, and is read from the release rather than
+# repeated here, so the CCF version is the only value that moves releases.
+# The build records what it consumed in reproduce.json, so a snapshot time that
+# changes under a published release stays diagnosable afterwards.
 FROM base AS snapshot-extractor
 
 ARG CCF_VERSION
@@ -151,10 +150,10 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + && \
     touch -d "@${SOURCE_DATE_EPOCH}" /
 
-# BuildKit injects /etc/hosts, /etc/hostname, and /etc/resolv.conf while RUN
-# executes. Their parent-directory timestamps can leak host timing into the
-# layer after the timestamp sweep above. Copy the completed filesystem below a
-# non-special path, where every entry can be normalized before the final copy.
+# BuildKit injects /etc/hosts, /etc/hostname and /etc/resolv.conf while RUN
+# executes, and their parent-directory timestamps can leak host timing into the
+# layer after the sweep above. Copying the completed filesystem below a
+# non-special path lets every entry be normalized before the final copy.
 FROM base AS rootfs-normalizer
 
 ARG SOURCE_DATE_EPOCH=0

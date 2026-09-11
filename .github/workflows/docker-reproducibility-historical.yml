@@ -1,12 +1,10 @@
 name: "Historical docker reproducibility"
 
-# The per-commit gate builds the same source twice at the same moment, so it
-# only detects sensitivity to the build environment. It cannot detect an input
-# that changes or disappears as time passes: both builds would consume the same
-# changed input and agree with each other. This workflow rebuilds an already
-# released commit long after it was published and compares the result with the
-# layer digests recorded at release time, which is what actually keeps the
-# published images reproducible over the years.
+# The per-commit gate builds the same source twice at the same moment, so both
+# builds consume the same changed input and agree with each other, which
+# detects only sensitivity to the build environment. Rebuilding an already
+# released commit long after publication and comparing it with the layer
+# digests recorded at release time is what catches drift over time.
 
 on:
   schedule:
@@ -105,12 +103,9 @@ jobs:
         shell: bash
         run: git checkout --detach "${{ steps.resolve.outputs.ref }}"
 
-      # Fetched before the rebuild rather than after it, because the manifest
-      # carries the version and timestamp the published image was built with.
-      # reproduce-image.sh re-derives both from git when they are not supplied,
-      # and its own usage text says they must be supplied explicitly when
-      # reproducing a published image. Downloading first is what lets the
-      # rebuild consume the recorded values instead of today's git state.
+      # Fetched before the rebuild because the manifest carries the version and
+      # timestamp the published image was built with, which reproduce-image.sh
+      # would otherwise re-derive from today's git state.
       - name: Fetch the manifest recorded at release time
         id: recorded
         if: steps.resolve.outputs.skip == 'false'
@@ -135,14 +130,12 @@ jobs:
 
           cat "${RUNNER_TEMP}/download.log"
 
-          # A release that has no such asset, or no release at all, is expected
-          # for tags cut before this manifest was published and for a dispatch
-          # against a plain commit. Anything else - a network failure, a
-          # throttled or unauthorized API - would otherwise be silently
-          # indistinguishable from that, and would downgrade a real error into
-          # a run that looks like it verified something. These are the exact
-          # messages the CLI uses for a genuine absence; matching anything
-          # broader would start swallowing real errors again.
+          # A missing asset or release is expected for tags cut before this
+          # manifest was published and for a dispatch against a plain commit,
+          # but a network failure or a throttled API is not, and would
+          # otherwise downgrade a real error into a run that looks verified.
+          # These are the exact messages the CLI uses for a genuine absence, so
+          # matching anything broader would start swallowing real errors again.
           if grep -qF -e 'release not found' \
               -e 'no assets match the file pattern' \
               -e 'no assets to download' \
