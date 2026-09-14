@@ -131,9 +131,7 @@ extends:
     - stage: docker
       dependsOn:
       - setup
-      - build
       jobs:
-      
       - template: .pipelines/obpdocker.yml@self
         parameters:
           Name: scitt

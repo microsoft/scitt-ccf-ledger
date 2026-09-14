@@ -1,0 +1,246 @@
+name: "Historical docker reproducibility"
+
+# The per-commit gate builds the same source twice at one moment, so only
+# rebuilding an already released commit long after publication and comparing it
+# with the layer digests recorded then catches drift over time.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Release tag or commit to re-verify. Defaults to the latest release tag."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.ref || 'latest' }}
+  cancel-in-progress: false
+
+jobs:
+  check-build-inputs:
+    name: Check pinned build inputs are still available
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # This runs even when no release can be rebuilt yet, because it is the
+      # earliest warning that an input a future rebuild depends on has been
+      # withdrawn or changed underneath its pin.
+      - name: Probe pinned build inputs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! ./scripts/check-build-inputs.sh --json "${RUNNER_TEMP}/build-inputs.json"; then
+            echo "::error::A pinned build input is no longer available or has changed. Published images that depend on it can no longer be rebuilt as published."
+            exit 1
+          fi
+
+      - name: Upload the input availability report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-input-availability
+          path: ${{ runner.temp }}/build-inputs.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  rebuild-released-image:
+    name: Rebuild a released image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the revision to re-verify
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested="${{ inputs.ref }}"
+          if [ -z "${requested}" ]; then
+            requested=$(git tag --list --sort=-v:refname | head -n1)
+          fi
+          if [ -z "${requested}" ]; then
+            echo "::notice::No release tag exists yet, so there is nothing to re-verify."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify --quiet "${requested}^{commit}" > /dev/null; then
+            echo "::error::Revision ${requested} does not exist in this repository."
+            exit 1
+          fi
+
+          # Releases published before the reproducible build entry point exists
+          # cannot be rebuilt by this workflow, and that is expected rather than
+          # a reproducibility failure.
+          if ! git cat-file -e "${requested}:scripts/reproduce-image.sh" 2>/dev/null; then
+            echo "::notice::${requested} predates scripts/reproduce-image.sh, so it cannot be re-verified."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ref=${requested}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Re-verifying ${requested}"
+
+      - name: Check out the released revision
+        if: steps.resolve.outputs.skip == 'false'
+        shell: bash
+        run: git checkout --detach "${{ steps.resolve.outputs.ref }}"
+
+      # Fetched before the rebuild because the manifest carries the version and
+      # timestamp the published image was built with, which reproduce-image.sh
+      # would otherwise re-derive from today's git state.
+      - name: Fetch the manifest recorded at release time
+        id: recorded
+        if: steps.resolve.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+          ref='${{ steps.resolve.outputs.ref }}'
+
+          if gh release download "${ref}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --pattern reproduce.json \
+              --output "${recorded}" 2> "${RUNNER_TEMP}/download.log"; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Recorded manifest:"
+            cat "${recorded}"
+            exit 0
+          fi
+
+          cat "${RUNNER_TEMP}/download.log"
+
+          # Matches the exact messages the CLI uses for a genuine absence,
+          # which is expected for tags predating this manifest, so that a
+          # network or authorization failure is not silently reported as a
+          # run that verified something.
+          if grep -qF -e 'release not found' \
+              -e 'no assets match the file pattern' \
+              -e 'no assets to download' \
+              "${RUNNER_TEMP}/download.log"; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${ref} has no published reproduce.json, so only the rebuild itself can be verified."
+            exit 0
+          fi
+
+          echo "::error::Could not read the manifest published for ${ref}. This is not the same as ${ref} having none, so the rebuild was not started."
+          exit 1
+
+      - name: Rebuild the released image
+        if: steps.resolve.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # When the release recorded its build inputs, rebuild with those
+          # rather than with values derived from today's git state, so that a
+          # mismatch means the image changed rather than the inputs being
+          # described differently.
+          if [ '${{ steps.recorded.outputs.found }}' = 'true' ]; then
+            recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+            SOURCE_DATE_EPOCH=$(jq -r '.source_date_epoch // empty' "${recorded}")
+            SCITT_VERSION_OVERRIDE=$(jq -r '.scitt_version // empty' "${recorded}")
+            recorded_commit=$(jq -r '.source_commit // empty' "${recorded}")
+
+            for pair in \
+                "source_date_epoch:${SOURCE_DATE_EPOCH}" \
+                "scitt_version:${SCITT_VERSION_OVERRIDE}" \
+                "source_commit:${recorded_commit}"; do
+              if [ -z "${pair#*:}" ]; then
+                echo "::error::The manifest published for ${{ steps.resolve.outputs.ref }} has no ${pair%%:*}, so the recorded build inputs cannot be reused."
+                exit 1
+              fi
+            done
+
+            # The recorded commit is compared rather than used, so that a tag
+            # which no longer points at the commit it was released from is
+            # reported as such instead of being silently rebuilt from the old
+            # commit and reported as reproducing.
+            head_commit=$(git rev-parse HEAD)
+            if [ "${recorded_commit}" != "${head_commit}" ]; then
+              echo "::error::${{ steps.resolve.outputs.ref }} was released from ${recorded_commit} but now points at ${head_commit}. The tag has moved, so this is not the source the published image was built from."
+              exit 1
+            fi
+
+            export SOURCE_DATE_EPOCH SCITT_VERSION_OVERRIDE
+            echo "Rebuilding with the recorded inputs: ${SCITT_VERSION_OVERRIDE} at ${SOURCE_DATE_EPOCH} from ${recorded_commit}"
+          else
+            echo "Rebuilding with inputs derived from the checked out revision."
+          fi
+
+          if ! ./scripts/reproduce-image.sh all \
+              "scitt-historical:${{ steps.resolve.outputs.ref }}" \
+              "${RUNNER_TEMP}/reproduction"; then
+            echo "::error::Rebuilding ${{ steps.resolve.outputs.ref }} failed. An input it depends on may have changed or been withdrawn."
+            exit 1
+          fi
+
+      - name: Compare with the digests recorded at release time
+        if: steps.resolve.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rebuilt="${RUNNER_TEMP}/reproduction/reproduce.json"
+          recorded="${RUNNER_TEMP}/recorded-reproduce.json"
+          ref='${{ steps.resolve.outputs.ref }}'
+
+          echo "Rebuilt manifest:"
+          cat "${rebuilt}"
+
+          if [ '${{ steps.recorded.outputs.found }}' != 'true' ]; then
+            echo "::notice::${ref} has no published reproduce.json, so only the rebuild itself was verified."
+            exit 0
+          fi
+
+          jq -r '.layers[]' "${recorded}" > "${RUNNER_TEMP}/recorded-layers.txt"
+          jq -r '.layers[]' "${rebuilt}" > "${RUNNER_TEMP}/rebuilt-layers.txt"
+
+          echo "Layers recorded at release time:"
+          cat "${RUNNER_TEMP}/recorded-layers.txt"
+          echo "Layers produced by this rebuild:"
+          cat "${RUNNER_TEMP}/rebuilt-layers.txt"
+
+          if ! cmp --silent "${RUNNER_TEMP}/recorded-layers.txt" "${RUNNER_TEMP}/rebuilt-layers.txt"; then
+            diff -u \
+              "${RUNNER_TEMP}/recorded-layers.txt" \
+              "${RUNNER_TEMP}/rebuilt-layers.txt" || true
+            echo "::error::${ref} no longer rebuilds to its published filesystem layers. Compare the recorded and current build inputs in reproduce.json."
+            for field in context_sha256 base_image ccf_version ccf_rpm_sha256 tdnf_snapshottime source_date_epoch scitt_version docker_version buildx_version; do
+              was=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${recorded}")
+              now=$(jq -r --arg f "${field}" '.[$f] // "absent"' "${rebuilt}")
+              if [ "${was}" != "${now}" ]; then
+                echo "::error::Input ${field} changed since release: ${was} -> ${now}"
+              fi
+            done
+            exit 1
+          fi
+
+          echo "${ref} still rebuilds to its published filesystem layers."
+
+      - name: Upload the rebuild manifest
+        if: steps.resolve.outputs.skip == 'false'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: historical-reproduce-manifest
+          path: ${{ runner.temp }}/reproduction/reproduce.json
+          if-no-files-found: error
+          retention-days: 90

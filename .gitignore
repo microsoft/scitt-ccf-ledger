@@ -5,6 +5,7 @@ ccf-source/
 build/
 CMakeFiles/
 tmp/
+tmp.*
 out/
 venv/
 boofuzz-results/
