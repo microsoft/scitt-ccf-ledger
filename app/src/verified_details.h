@@ -11,9 +11,6 @@ namespace scitt::verifier
 {
   constexpr size_t HOST_DATA_SIZE = 32;
   using HostData = std::array<uint8_t, HOST_DATA_SIZE>;
-  static_assert(
-    sizeof(ccf::pal::snp::Attestation::host_data) == HOST_DATA_SIZE,
-    "HostData size must match Attestation host_data size");
 
   class VerifiedSevSnpAttestationDetails
   {

@@ -297,10 +297,11 @@ namespace scitt::verifier
       ccf::pal::PlatformAttestationMeasurement measurement = {};
       ccf::pal::PlatformAttestationReportData report_data = {};
       std::optional<ccf::pal::UVMEndorsements> parsed_uvm_endorsements;
+      ccf::pal::snp::AttestationReport snp_attestation;
 
       try
       {
-        ccf::pal::verify_snp_attestation_report(
+        snp_attestation = ccf::pal::verify_snp_attestation_report_and_get(
           quote_info, measurement, report_data);
       }
       catch (const std::exception& e)
@@ -324,20 +325,34 @@ namespace scitt::verifier
         }
       }
 
-      const auto* snp_attestation =
-        reinterpret_cast<const ccf::pal::snp::Attestation*>(
-          quote_info.quote.data());
-
-      auto reported_tcb = snp_attestation->reported_tcb;
+      const uint8_t* reported_tcb_data = nullptr;
+      size_t reported_tcb_size = 0;
+      tav_snp_attestation_report_reported_tcb(
+        snp_attestation.get(), &reported_tcb_data, &reported_tcb_size);
+      auto reported_tcb = ccf::pal::snp::TcbVersionRaw(
+        std::span<const uint8_t>{reported_tcb_data, reported_tcb_size});
       auto product_name = ccf::pal::snp::get_sev_snp_product(
-        snp_attestation->cpuid_fam_id, snp_attestation->cpuid_mod_id);
+        tav_snp_attestation_report_cpuid_fam_id(snp_attestation.get()),
+        tav_snp_attestation_report_cpuid_mod_id(snp_attestation.get()));
       auto tcb_policy = reported_tcb.to_policy(product_name);
+
+      const uint8_t* host_data = nullptr;
+      size_t host_data_size = 0;
+      tav_snp_attestation_report_host_data(
+        snp_attestation.get(), &host_data, &host_data_size);
+      if (host_data_size != HOST_DATA_SIZE)
+      {
+        throw VerificationError(fmt::format(
+          "Invalid SNP host data size: {}, expected {}",
+          host_data_size,
+          HOST_DATA_SIZE));
+      }
 
       VerifiedSevSnpAttestationDetails details(
         measurement,
         report_data,
         parsed_uvm_endorsements,
-        snp_attestation->host_data,
+        host_data,
         product_name,
         std::move(tcb_policy));
 
