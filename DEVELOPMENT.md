@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.10.tar.gz
-    tar xvzf ccf-7.0.10.tar.gz
-    cd CCF-ccf-7.0.10/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.16.tar.gz
+    tar xvzf ccf-7.0.16.tar.gz
+    cd CCF-ccf-7.0.16/scripts/
     ./setup-dev.sh
     ```
 
@@ -49,9 +49,10 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 The CCF release is named in five files: `docker/Dockerfile`,
 `.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh` and this
-document. Change all five together. Nothing else has to be updated — the image
-build reads the tdnf snapshot time out of the release's own `reproduce.json`
-rather than repeating it.
+document. Change all five together. Also update the CCF minimum version in
+`pyscitt/setup.py` and `test/requirements.txt`, preserving the `<8` upper bound.
+The image build reads the tdnf snapshot time out of the release's own
+`reproduce.json` rather than repeating it.
 
 Then confirm they agree, and that the new release publishes what the build
 fetches:
@@ -317,4 +318,3 @@ To run the SCITT functional tests on SNP, you would run:
 ```sh
 SNP_ATTESTATION_CONFIG=/path/to/snp-attestation-config.json ./run_functional_tests.sh
 ```
-
