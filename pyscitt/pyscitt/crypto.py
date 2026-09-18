@@ -15,6 +15,8 @@ from uuid import uuid4
 warnings.filterwarnings("ignore", category=Warning)
 
 import cbor2
+import cbor2._decoder
+from cbor2._types import CBORDecodeEOF, CBORDecodeError, break_marker
 import jwt
 import pycose.headers
 from cryptography import x509
@@ -72,27 +74,27 @@ class RawCbor:
             raise TypeError("RawCbor value must be bytes")
 
         stream = BytesIO(self.value)
+        # The C decoder reads ahead, so use the Python decoder to identify a
+        # truncated second data item reliably.
+        decoder = cbor2._decoder.CBORDecoder(stream)
         try:
-            decoder = cbor2.CBORDecoder(stream)
             decoded = decoder.decode()
-        except cbor2.CBORDecodeError as exc:
+        except CBORDecodeError as exc:
             raise ValueError(
                 "RawCbor value must contain one well-formed CBOR item"
             ) from exc
 
-        if decoded is cbor2.break_marker:
-            raise ValueError(
-                "RawCbor value must contain one well-formed CBOR item"
-            )
+        if decoded is break_marker:
+            raise ValueError("RawCbor value must contain one well-formed CBOR item")
 
-        trailing_start = stream.tell()
+        position = stream.tell()
         try:
             decoder.decode()
-        except cbor2.CBORDecodeEOF as exc:
-            if trailing_start < len(self.value):
-                raise ValueError("RawCbor value must not contain trailing bytes") from exc
-            return
-        except cbor2.CBORDecodeError as exc:
+        except CBORDecodeEOF:
+            if stream.tell() == position:
+                return
+            raise ValueError("RawCbor value must not contain trailing bytes")
+        except CBORDecodeError as exc:
             raise ValueError("RawCbor value must not contain trailing bytes") from exc
         else:
             raise ValueError("RawCbor value must not contain trailing bytes")
@@ -101,7 +103,11 @@ class RawCbor:
 class _RawCborSign1Message(Sign1Message):
     def _custom_cbor_encoder(self, encoder, value):
         if isinstance(value, RawCbor):
-            encoder._fp_write(value.value)
+            write = getattr(encoder, "write", None)
+            if write is not None:
+                write(value.value)
+            else:
+                encoder._fp_write(value.value)
             return
         super()._custom_cbor_encoder(encoder, value)
 

@@ -272,7 +272,7 @@ class TestRawCborHeader:
             "signature": b"signature"
         }
 
-    @pytest.mark.parametrize("value", [b"", b"\xff", b"\x01\x02"])
+    @pytest.mark.parametrize("value", [b"", b"\xff", b"\x01\x02", b"\x01\x18"])
     def test_rejects_invalid_or_trailing_cbor(self, value):
         with pytest.raises(ValueError):
             crypto.RawCbor(value)
