@@ -16,9 +16,9 @@ warnings.filterwarnings("ignore", category=Warning)
 
 import cbor2
 import cbor2._decoder
-from cbor2._types import CBORDecodeEOF, CBORDecodeError, break_marker
 import jwt
 import pycose.headers
+from cbor2._types import CBORDecodeEOF, CBORDecodeError, break_marker
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
