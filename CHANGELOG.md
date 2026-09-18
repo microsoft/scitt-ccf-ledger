@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changes
+- Update CCF to 7.0.16 and align the Python CCF minimum version.
+- Use C++23, remove the retired `evercbor` link dependency, and use CCF's owning
+  SNP attestation report API while preserving the verified policy details.
+
 ## [0.19.0]
 ### Changes
 - 9b81478 Read Endpoints JWT policy enforcement configurable with allowUnauthenticatedReads flag (#420)
@@ -426,6 +432,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
+[Unreleased]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.19.0...HEAD
 [0.4.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.0...0.2.1

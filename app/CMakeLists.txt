@@ -17,7 +17,7 @@ endif()
 project(scitt
   LANGUAGES C CXX
 )
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
@@ -160,7 +160,6 @@ if (BUILD_TESTS)
     ccfcrypto
     ccf_kv
     ccf_endpoints
-    evercbor
     http_parser
     ccf
   )
