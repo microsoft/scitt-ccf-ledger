@@ -85,9 +85,12 @@ class RawCbor:
                 "RawCbor value must contain one well-formed CBOR item"
             )
 
+        trailing_start = stream.tell()
         try:
             decoder.decode()
-        except cbor2.CBORDecodeEOF:
+        except cbor2.CBORDecodeEOF as exc:
+            if trailing_start < len(self.value):
+                raise ValueError("RawCbor value must not contain trailing bytes") from exc
             return
         except cbor2.CBORDecodeError as exc:
             raise ValueError("RawCbor value must not contain trailing bytes") from exc
