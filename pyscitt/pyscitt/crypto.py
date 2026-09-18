@@ -7,6 +7,7 @@ import hashlib
 import json
 import warnings
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 from uuid import uuid4
@@ -53,6 +54,53 @@ RECOMMENDED_RSA_PUBLIC_EXPONENT = 65537
 Pem = str
 CoseCurveTypes = Union[Type[P256], Type[P384]]
 CoseCurveType = Tuple[str, CoseCurveTypes]
+
+
+@dataclass(frozen=True)
+class RawCbor:
+    """
+    A pre-encoded CBOR data item to inject verbatim into a COSE header.
+
+    Plain ``bytes`` header values are encoded as CBOR byte strings. Use this
+    type only when the bytes already encode the intended CBOR value.
+    """
+
+    value: bytes
+
+    def __post_init__(self):
+        if not isinstance(self.value, bytes):
+            raise TypeError("RawCbor value must be bytes")
+
+        stream = BytesIO(self.value)
+        try:
+            decoder = cbor2.CBORDecoder(stream)
+            decoded = decoder.decode()
+        except cbor2.CBORDecodeError as exc:
+            raise ValueError(
+                "RawCbor value must contain one well-formed CBOR item"
+            ) from exc
+
+        if decoded is cbor2.break_marker:
+            raise ValueError(
+                "RawCbor value must contain one well-formed CBOR item"
+            )
+
+        try:
+            decoder.decode()
+        except cbor2.CBORDecodeEOF:
+            return
+        except cbor2.CBORDecodeError as exc:
+            raise ValueError("RawCbor value must not contain trailing bytes") from exc
+        else:
+            raise ValueError("RawCbor value must not contain trailing bytes")
+
+
+class _RawCborSign1Message(Sign1Message):
+    def _custom_cbor_encoder(self, encoder, value):
+        if isinstance(value, RawCbor):
+            encoder.write(value.value)
+            return
+        super()._custom_cbor_encoder(encoder, value)
 
 
 # Include SCITT-specific COSE header attributes to be recognized by pycose
@@ -602,7 +650,7 @@ def sign_statement(
         if svn is not None:
             headers["svn"] = svn
 
-    msg = Sign1Message(phdr=headers, payload=statement, uhdr=(uhdr or {}))
+    msg = _RawCborSign1Message(phdr=headers, payload=statement, uhdr=(uhdr or {}))
     msg.key = CoseKey.from_pem_private_key(signer.private_key)
     return msg.encode(tag=True)
 

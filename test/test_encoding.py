@@ -246,3 +246,37 @@ class TestHeaderParameters:
                 {X5chain: [cert_pem_to_der(signer.x5c[0]), b"Garbage root"]},
                 signer=signer,
             )
+
+
+class TestRawCborHeader:
+    @pytest.fixture
+    def signer(self):
+        private_key, _ = crypto.generate_ec_keypair("P-256")
+        return crypto.Signer(private_key)
+
+    def test_embeds_preencoded_value_verbatim(self, signer):
+        raw_value = cbor_encode({"signature": b"signature"}, canonical=False)
+        signed_statement = crypto.sign_statement(
+            signer,
+            b"payload",
+            content_type="text/plain",
+            additional_phdr={
+                "com.example.signature": crypto.RawCbor(raw_value),
+            },
+        )
+
+        cose_sign1 = cbor2.loads(signed_statement)
+        protected_header = cose_sign1.value[0]
+        assert raw_value in protected_header
+        assert cbor2.loads(protected_header)["com.example.signature"] == {
+            "signature": b"signature"
+        }
+
+    @pytest.mark.parametrize("value", [b"", b"\xff", b"\x01\x02"])
+    def test_rejects_invalid_or_trailing_cbor(self, value):
+        with pytest.raises(ValueError):
+            crypto.RawCbor(value)
+
+    def test_rejects_non_bytes_value(self):
+        with pytest.raises(TypeError):
+            crypto.RawCbor(bytearray(b"\x01"))  # type: ignore[arg-type]
