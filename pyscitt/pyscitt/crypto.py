@@ -101,7 +101,7 @@ class RawCbor:
 class _RawCborSign1Message(Sign1Message):
     def _custom_cbor_encoder(self, encoder, value):
         if isinstance(value, RawCbor):
-            encoder.write(value.value)
+            encoder._fp_write(value.value)
             return
         super()._custom_cbor_encoder(encoder, value)
 
