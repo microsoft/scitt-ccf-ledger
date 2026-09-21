@@ -90,12 +90,14 @@ def validate_transparent_statement(
     )
     result = build_validation_result(statement, receipt_details)
 
-    key_sources = getattr(service_trust_store, "key_sources", None)
-    if key_sources is None:
+    verification_key_sources = getattr(
+        service_trust_store, "verification_key_sources", None
+    )
+    if verification_key_sources is None:
         default_source = "trust-store" if offline else "downloaded"
-        key_sources = [default_source] * len(result["receipts"])
-    for receipt, source in zip(result["receipts"], key_sources):
-        receipt["key_source"] = source
+        verification_key_sources = [default_source] * len(result["receipts"])
+    for receipt, source in zip(result["receipts"], verification_key_sources):
+        receipt["verification_key_source"] = source
 
     return result
 
@@ -119,7 +121,9 @@ def format_validation_result(result: dict, output: str) -> str:
         lines.append(
             f"  Transparent statement URL: {receipt['urls']['transparent_statement']}"
         )
-        lines.append(f"  Verification key: {receipt.get('key_source')}")
+        lines.append(
+            f"  Verification key source: {receipt.get('verification_key_source')}"
+        )
     lines.append(f"Statement is transparent: {result['statement']}")
     return "\n".join(lines)
 

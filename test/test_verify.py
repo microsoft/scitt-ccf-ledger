@@ -147,7 +147,7 @@ class TestFallbackTrustStore:
         store = FallbackTrustStore(local, remote)
 
         assert store.get_key(self._receipt()) == "local_key"
-        assert store.key_sources == ["trust-store"]
+        assert store.verification_key_sources == ["trust-store"]
         remote.get_key.assert_not_called()
 
     def test_downloads_key_when_missing_locally(self):
@@ -159,7 +159,7 @@ class TestFallbackTrustStore:
         receipt = self._receipt()
 
         assert store.get_key(receipt) == "downloaded_key"
-        assert store.key_sources == ["downloaded"]
+        assert store.verification_key_sources == ["downloaded"]
         remote.get_key.assert_called_once_with(receipt)
 
     def test_reports_both_failures(self):
@@ -171,7 +171,7 @@ class TestFallbackTrustStore:
 
         with pytest.raises(ValueError, match="could not be downloaded"):
             store.get_key(self._receipt())
-        assert store.key_sources == []
+        assert store.verification_key_sources == []
 
 
 class TestBuildTrustStore:
@@ -549,7 +549,7 @@ class TestVerifyTransparentStatement:
                     "receipt": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
                     "transparent_statement": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
                 },
-                "key_source": "trust-store",
+                "verification_key_source": "trust-store",
             }
         ]
 
@@ -562,6 +562,6 @@ class TestVerifyTransparentStatement:
             "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00)",
             "  Receipt URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
             "  Transparent statement URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
-            "  Verification key: trust-store",
+            "  Verification key source: trust-store",
             f"Statement is transparent: {golden_file}",
         ]

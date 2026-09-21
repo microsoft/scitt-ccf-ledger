@@ -405,14 +405,14 @@ class FallbackTrustStore(TrustStore):
     retrieved online, such as *.confidential-ledger.azure.com, while still
     preferring keys that were provisioned offline.
 
-    The source used for each successive lookup is recorded in `key_sources`,
+    The source used for each successive lookup is recorded in `verification_key_sources`,
     in the order the keys were requested.
     """
 
     def __init__(self, local: TrustStore, remote: DynamicTrustStore):
         self.local = local
         self.remote = remote
-        self.key_sources: List[str] = []
+        self.verification_key_sources: List[str] = []
 
     @property
     def services(self):
@@ -421,7 +421,7 @@ class FallbackTrustStore(TrustStore):
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         try:
             key = self.local.get_key(receipt)
-            self.key_sources.append("trust-store")
+            self.verification_key_sources.append("trust-store")
             return key
         except Exception as local_error:
             try:
@@ -431,5 +431,5 @@ class FallbackTrustStore(TrustStore):
                     f"Key not found in the local trust store ({local_error}) "
                     f"and could not be downloaded ({remote_error})"
                 ) from remote_error
-            self.key_sources.append("downloaded")
+            self.verification_key_sources.append("downloaded")
             return key
