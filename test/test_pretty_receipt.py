@@ -39,7 +39,8 @@ def standalone_receipt(tmp_path: Path) -> Path:
 def test_transparent_statement_summarises_receipts():
     output = json.loads(prettyprint_receipt(GOLDEN_STATEMENT))
 
-    assert output["receipts"] == [EXPECTED_SUMMARY]
+    assert output["extracted_metadata"]["kind"] == "transparent statement"
+    assert output["extracted_metadata"]["receipts"] == [EXPECTED_SUMMARY]
 
     # The inclusion proof of the embedded receipt must be decoded rather than
     # printed as an opaque byte string, so the registration txid is visible.
@@ -51,7 +52,8 @@ def test_transparent_statement_summarises_receipts():
 def test_standalone_receipt_summarises_itself(standalone_receipt: Path):
     output = json.loads(prettyprint_receipt(standalone_receipt))
 
-    assert output["receipts"] == [EXPECTED_SUMMARY]
+    assert output["extracted_metadata"]["kind"] == "receipt"
+    assert output["extracted_metadata"]["receipts"] == [EXPECTED_SUMMARY]
     leaf = output["unprotected"]["396"]["-1"]["-1_0"]["1"]
     assert leaf["1_1"].startswith("ce:458.12440:")
 
@@ -64,7 +66,7 @@ def test_signed_statement_has_no_receipts():
 
     output = json.loads(prettyprint_receipt(signed_statement))
 
-    assert "receipts" not in output
+    assert output["extracted_metadata"] == {"kind": "signed statement"}
     assert "396" not in output["unprotected"]
     # The headers of the statement itself are still printed.
     assert output["protected"]["CWTClaims"]["sub"] == "unknown.intent"
@@ -76,7 +78,7 @@ def test_legacy_ccf_receipt_is_summarised():
 
     output = json.loads(prettyprint_receipt(statement))
 
-    assert output["receipts"] == [
+    assert output["extracted_metadata"]["receipts"] == [
         {
             "issuer": "did:web:cts-poc.confidential-ledger.azure.com",
             "registration_txid": "225.3563",

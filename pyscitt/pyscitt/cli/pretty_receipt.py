@@ -36,6 +36,29 @@ def receipt_summaries(parsed: Sign1Message) -> list:
     ]
 
 
+def cose_kind(parsed: Sign1Message) -> str:
+    """
+    What the COSE message is, as far as SCITT is concerned.
+    """
+    if parsed.uhdr.get(crypto.SCITTReceipts):
+        return "transparent statement"
+    if is_receipt(parsed):
+        return "receipt"
+    return "signed statement"
+
+
+def extract_metadata(parsed: Sign1Message) -> dict:
+    """
+    Metadata derived from a COSE message, as opposed to the headers which are
+    present in the file itself. Receipts are only reported when there are any.
+    """
+    metadata: dict = {"kind": cose_kind(parsed)}
+    summaries = receipt_summaries(parsed)
+    if summaries:
+        metadata["receipts"] = summaries
+    return metadata
+
+
 def prettyprint_receipt(receipt_path: Path):
     """
     Pretty-print a receipt which could be a standalone cose file or a transparent statement.
@@ -44,22 +67,16 @@ def prettyprint_receipt(receipt_path: Path):
         buffer = f.read()
 
     parsed = Sign1Message.decode(buffer)
-    summaries = receipt_summaries(parsed)
+    metadata = extract_metadata(parsed)
     unprotected = decode_inclusion_proofs(parsed.uhdr)
-    output_dict: dict = {}
-    if summaries:
-        output_dict["receipts"] = summaries
-    output_dict.update(
-        {
-            "protected": cbor_to_printable(parsed.phdr),
-            "unprotected": cbor_to_printable(unprotected),
-            "payload": (
-                base64.b64encode(parsed.payload).decode("ascii")
-                if parsed.payload
-                else None
-            ),
-        }
-    )
+    output_dict: dict = {
+        "extracted_metadata": metadata,
+        "protected": cbor_to_printable(parsed.phdr),
+        "unprotected": cbor_to_printable(unprotected),
+        "payload": (
+            base64.b64encode(parsed.payload).decode("ascii") if parsed.payload else None
+        ),
+    }
 
     fallback_serialization = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     return json.dumps(output_dict, default=fallback_serialization, indent=2)
