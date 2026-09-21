@@ -140,6 +140,167 @@ def sign(signer: crypto.Signer, payload: bytes, parameters: dict, *, canonical=T
     )
 
 
+def protected_header(message: bytes) -> bytes:
+    """Extract the encoded protected header bucket of a COSE Sign1 message."""
+    envelope = cbor2.loads(message)
+    assert envelope.tag == Sign1Message.cbor_tag
+    return envelope.value[0]
+
+
+class TestAdditionalProtectedHeaders:
+    """
+    `crypto.sign_statement` merges `additional_phdr` verbatim into the protected
+    header, so arbitrarily nested maps are supported and are encoded as nested
+    CBOR maps.
+    """
+
+    @pytest.fixture(scope="class")
+    def signer(self):
+        private_key, _ = crypto.generate_ec_keypair("P-256")
+        return crypto.Signer(private_key, algorithm="ES256")
+
+    @pytest.fixture(scope="class")
+    def signer_with_issuer(self):
+        private_key, _ = crypto.generate_ec_keypair("P-256")
+        return crypto.Signer(private_key, algorithm="ES256", issuer="did:x509:test")
+
+    def test_nested_map_is_encoded_verbatim(self, signer):
+        message = crypto.sign_statement(
+            signer,
+            b"Hello",
+            content_type="text/plain",
+            additional_phdr={"foo": {"bar": "baz"}},
+        )
+
+        # a3                        map(3)
+        #   63 666f6f               "foo"
+        #   a1                      map(1)
+        #     63 626172             "bar"
+        #     63 62617a             "baz"
+        #   01                      1 (alg)
+        #   26                      -7 (ES256)
+        #   03                      3 (content type)
+        #   6a 746578742f706c61696e "text/plain"
+        #
+        # Note that the entries are emitted in insertion order rather than in
+        # canonical order, so the caller-supplied "foo" comes first.
+        assert (
+            protected_header(message).hex()
+            == "a363666f6fa1636261726362617a0126036a746578742f706c61696e"
+        )
+
+    def test_nested_map_embedded_as_byte_string(self, signer):
+        """
+        A nested map can also be embedded as an opaque CBOR byte string, by
+        encoding it with `cbor2.dumps` before handing it to `sign_statement`.
+        Doing so pins the exact bytes of the nested map, so they survive any
+        re-encoding of the surrounding header.
+        """
+        message = crypto.sign_statement(
+            signer,
+            b"Hello",
+            content_type="text/plain",
+            additional_phdr={"foo": cbor2.dumps({"bar": "baz"})},
+        )
+
+        # Identical to the nested-map case above, except that the value of
+        # "foo" is now a 9 byte bstr (49) wrapping the same encoding:
+        # a3                        map(3)
+        #   63 666f6f               "foo"
+        #   49                      bytes(9)
+        #     a1636261726362617a    h'a1636261726362617a' ({"bar": "baz"})
+        #   01 26                   alg: ES256
+        #   03 6a 746578742f706c61696e  content type: "text/plain"
+        assert (
+            protected_header(message).hex()
+            == "a363666f6f49a1636261726362617a0126036a746578742f706c61696e"
+        )
+
+        # The service and any other consumer sees a bstr, and has to decode it
+        # explicitly to get at the map.
+        embedded = Sign1Message.decode(message).phdr["foo"]
+        assert isinstance(embedded, bytes)
+        assert cbor2.loads(embedded) == {"bar": "baz"}
+
+    def test_nested_map_roundtrips_and_is_signed(self, signer):
+        message = crypto.sign_statement(
+            signer,
+            b"Hello",
+            content_type="text/plain",
+            additional_phdr={"foo": {"bar": "baz"}},
+        )
+
+        decoded = Sign1Message.decode(message)
+        assert decoded.phdr["foo"] == {"bar": "baz"}
+
+        decoded.key = CoseKey.from_pem_private_key(signer.private_key)
+        assert decoded.verify_signature()
+
+    def test_nested_map_with_mixed_key_and_value_types(self, signer):
+        message = crypto.sign_statement(
+            signer,
+            b"Hello",
+            content_type="text/plain",
+            additional_phdr={"foo": {1: b"\x01\x02", -3: [42, "qux"]}},
+        )
+
+        # a3                        map(3)
+        #   63 666f6f               "foo"
+        #   a2                      map(2)
+        #     01                    1
+        #     42 0102               h'0102'
+        #     22                    -3
+        #     82                    array(2)
+        #       18 2a               42
+        #       63 717578           "qux"
+        #   01 26                   alg: ES256
+        #   03 6a 746578742f706c61696e  content type: "text/plain"
+        assert (
+            protected_header(message).hex()
+            == "a363666f6fa2014201022282182a637175780126036a746578742f706c61696e"
+        )
+
+        assert Sign1Message.decode(message).phdr["foo"] == {
+            1: b"\x01\x02",
+            -3: [42, "qux"],
+        }
+
+    def test_nested_map_coexists_with_cwt_claims(self, signer_with_issuer):
+        message = crypto.sign_statement(
+            signer_with_issuer,
+            b"Hello",
+            content_type="text/plain",
+            cwt=True,
+            additional_phdr={"foo": {"bar": "baz"}},
+        )
+
+        # Same as above, plus the CWT claims map appended at the end:
+        #   0f                      15 (CWT_CLAIMS)
+        #   a1                      map(1)
+        #     01                    1 (iss)
+        #     6d 6469643a783530393a74657374  "did:x509:test"
+        assert protected_header(message).hex() == (
+            "a463666f6fa1636261726362617a0126036a746578742f706c61696e"
+            "0fa1016d6469643a783530393a74657374"
+        )
+
+        decoded = Sign1Message.decode(message)
+        assert decoded.phdr["foo"] == {"bar": "baz"}
+        assert decoded.phdr[CWTClaims] == {CWT_ISS: "did:x509:test"}
+
+    def test_sign_json_statement_forwards_nested_map(self, signer):
+        message = crypto.sign_json_statement(
+            signer,
+            {"x": 1},
+            content_type="application/json",
+            additional_phdr={"foo": {"bar": "baz"}},
+        )
+
+        assert protected_header(message).hex() == (
+            "a363666f6fa1636261726362617a012603706170706c69636174696f6e2f6a736f6e"
+        )
+
+
 class TestNonCanonicalEncoding:
     @pytest.fixture
     def signed_statement(self, cert_authority):
