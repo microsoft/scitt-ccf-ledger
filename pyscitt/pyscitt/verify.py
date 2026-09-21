@@ -30,7 +30,7 @@ from pycose.messages import Sign1Message
 
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims
-from .receipt import extract_receipt_details
+from .receipt import extract_receipt_details, is_hostname
 
 CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX = ".confidential-ledger.azure.com"
 
@@ -66,8 +66,13 @@ def verify_transparent_statement(
     input_signed_statement: bytes,
 ) -> list:
     st = Sign1Message.decode(transparent_statement)
+    receipts = st.uhdr.get(crypto.SCITTReceipts)
+    if not receipts:
+        raise ValueError(
+            "The statement carries no receipt, so it is not a transparent statement"
+        )
     receipt_details = []
-    for receipt in st.uhdr[crypto.SCITTReceipts]:
+    for receipt in receipts:
         service_key = service_trust_store.get_key(receipt)
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
@@ -365,6 +370,12 @@ class DynamicTrustStore(TrustStore):
         raise NotImplementedError()
 
     def is_authorized_issuer(self, issuer: str) -> bool:
+        # The issuer is unverified input which is used to address the service
+        # the keys are downloaded from, so anything that is not a bare hostname
+        # is rejected before matching: "evil.com/x.example.com" would otherwise
+        # match "*.example.com" while addressing evil.com.
+        if not is_hostname(issuer):
+            return False
         if self.authorized_domains is None:
             return True
         return any(
@@ -421,9 +432,9 @@ class FallbackTrustStore(TrustStore):
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         try:
             key = self.local.get_key(receipt)
-            self.verification_key_sources.append("trust-store")
+            self.verification_key_sources.append("trust_store")
             return key
-        except Exception as local_error:
+        except (KeyError, ValueError) as local_error:
             try:
                 key = self.remote.get_key(receipt)
             except Exception as remote_error:

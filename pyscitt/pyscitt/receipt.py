@@ -4,6 +4,7 @@
 import base64
 import datetime
 import hashlib
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Optional, Union
@@ -131,10 +132,32 @@ def extract_registration_txid(uhdr: dict) -> Optional[str]:
     return parse_internal_evidence(leaf[1])
 
 
+HOSTNAME_PATTERN = re.compile(
+    r"^(?=.{1,253}(:[0-9]{1,5})?$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+)
+TXID_PATTERN = re.compile(r"^[0-9]+\.[0-9]+$")
+
+
+def is_hostname(value: Optional[str]) -> bool:
+    """
+    Whether a string is a bare hostname, and so can safely be used as the
+    authority of a URL.
+
+    Issuers come from unverified input, so anything carrying a scheme, port,
+    userinfo, path, query or fragment must be rejected: such a string would
+    otherwise address a host other than the one it appears to name.
+    """
+    if not value:
+        return False
+    return HOSTNAME_PATTERN.match(value) is not None
+
+
 def issuer_host(issuer: Optional[str]) -> Optional[str]:
     """
     The hostname of the service identified by a receipt issuer, or None when
-    the issuer does not address a service, as is the case for did:x509.
+    the issuer does not address a service, as is the case for did:x509, or
+    does not name a host on its own.
 
     Issuers are usually already a hostname, but legacy CCF receipts identify
     the service with a did:web, whose method-specific identifier is the host
@@ -143,10 +166,12 @@ def issuer_host(issuer: Optional[str]) -> Optional[str]:
     if not issuer:
         return None
     if issuer.startswith("did:web:"):
-        return unquote(issuer[len("did:web:") :].replace(":", "/"))
-    if issuer.startswith("did:"):
+        # Only the first segment of a did:web is the host, the rest is a path
+        # which the SCRAPI endpoints below do not use.
+        issuer = unquote(issuer[len("did:web:") :].split(":")[0])
+    elif issuer.startswith("did:"):
         return None
-    return issuer
+    return issuer if is_hostname(issuer) else None
 
 
 def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
@@ -159,7 +184,7 @@ def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
     statement, so it can be used to address that service.
     """
     host = issuer_host(issuer)
-    if not host or not regtxid:
+    if not host or not regtxid or not TXID_PATTERN.match(regtxid):
         return {"receipt": None, "transparent_statement": None}
 
     entry = f"https://{host}/entries/{regtxid}"

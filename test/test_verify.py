@@ -107,6 +107,16 @@ class TestDynamicTrustStore:
                 ["ledger.confidential-ledger.azure.com"],
                 False,
             ),
+            # An issuer which is not a bare hostname can never be authorized:
+            # it would address a host other than the one it appears to name.
+            (
+                "evil.com/x.confidential-ledger.azure.com",
+                DEFAULT_AUTHORIZED_DOMAINS,
+                False,
+            ),
+            ("evil.com#.confidential-ledger.azure.com", ["*"], False),
+            ("user@evil.com.confidential-ledger.azure.com", ["*"], False),
+            ("evil.com/x.confidential-ledger.azure.com", None, False),
         ],
     )
     def test_is_authorized_issuer(self, issuer, authorized, expected):
@@ -147,7 +157,7 @@ class TestFallbackTrustStore:
         store = FallbackTrustStore(local, remote)
 
         assert store.get_key(self._receipt()) == "local_key"
-        assert store.verification_key_sources == ["trust-store"]
+        assert store.verification_key_sources == ["trust_store"]
         remote.get_key.assert_not_called()
 
     def test_downloads_key_when_missing_locally(self):
@@ -172,6 +182,16 @@ class TestFallbackTrustStore:
         with pytest.raises(ValueError, match="could not be downloaded"):
             store.get_key(self._receipt())
         assert store.verification_key_sources == []
+
+    def test_does_not_download_on_unexpected_local_failure(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = OSError("trust store is unreadable")
+
+        store = FallbackTrustStore(local, remote)
+
+        with pytest.raises(OSError):
+            store.get_key(self._receipt())
+        remote.get_key.assert_not_called()
 
 
 class TestBuildTrustStore:
@@ -549,7 +569,7 @@ class TestVerifyTransparentStatement:
                     "receipt": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
                     "transparent_statement": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
                 },
-                "verification_key_source": "trust-store",
+                "verification_key_source": "trust_store",
             }
         ]
 
@@ -562,6 +582,35 @@ class TestVerifyTransparentStatement:
             "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00)",
             "  Receipt URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
             "  Transparent statement URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
-            "  Verification key source: trust-store",
+            "  Verification key source: trust_store",
             f"Statement is transparent: {golden_file}",
         ]
+
+    def test_error_is_reported_in_the_same_shape(self):
+        """A statement which is not transparent is reported, not raised."""
+        from pyscitt.cli.validate import build_error_result, format_validation_result
+
+        statement = Path("some.cose")
+        result = build_error_result(statement, ValueError("no receipt here"))
+
+        assert result == {
+            "statement": "some.cose",
+            "transparent": False,
+            "error": "no receipt here",
+            "receipts": [],
+        }
+        assert json.loads(format_validation_result(result, "json")) == result
+        assert format_validation_result(result, "text").splitlines() == [
+            "Statement is not transparent: some.cose",
+            "no receipt here",
+        ]
+
+    def test_signed_statement_is_not_transparent(self):
+        """A statement with no receipt fails with a readable message."""
+        signed_statement = (
+            Path(__file__).parent / "payloads" / "cosesign1tool-scitt-a3be7e5.cose"
+        )
+        with pytest.raises(ValueError, match="carries no receipt"):
+            verify_transparent_statement(
+                signed_statement.read_bytes(), Mock(), b"signed_statement"
+            )

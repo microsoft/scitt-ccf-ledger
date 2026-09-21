@@ -39,7 +39,7 @@ def standalone_receipt(tmp_path: Path) -> Path:
 def test_transparent_statement_summarises_receipts():
     output = json.loads(prettyprint_receipt(GOLDEN_STATEMENT))
 
-    assert output["extracted_metadata"]["kind"] == "transparent statement"
+    assert output["extracted_metadata"]["kind"] == "transparent_statement"
     assert output["extracted_metadata"]["receipts"] == [EXPECTED_SUMMARY]
 
     # The inclusion proof of the embedded receipt must be decoded rather than
@@ -66,7 +66,7 @@ def test_signed_statement_has_no_receipts():
 
     output = json.loads(prettyprint_receipt(signed_statement))
 
-    assert output["extracted_metadata"] == {"kind": "signed statement"}
+    assert output["extracted_metadata"] == {"kind": "signed_statement"}
     assert "396" not in output["unprotected"]
     # The headers of the statement itself are still printed.
     assert output["protected"]["CWTClaims"]["sub"] == "unknown.intent"
@@ -109,7 +109,7 @@ def test_legacy_ccf_receipt_is_summarised():
             "did:web:cts-poc.confidential-ledger.azure.com",
             "cts-poc.confidential-ledger.azure.com",
         ),
-        ("did:web:example.com:path:to:service", "example.com/path/to/service"),
+        ("did:web:example.com:path:to:service", "example.com"),
         ("did:web:example.com%3A8443", "example.com:8443"),
         # did:x509 does not address a service, so no URL can be built.
         ("did:x509:0:sha256:abc::subject:CN:test", None),
@@ -120,3 +120,27 @@ def test_issuer_host(issuer, expected):
     assert issuer_host(issuer) == expected
     urls = entry_urls(issuer, "1.2")
     assert urls["receipt"] == (f"https://{expected}/entries/1.2" if expected else None)
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "evil.com/x.confidential-ledger.azure.com",
+        "evil.com#.confidential-ledger.azure.com",
+        "user@evil.com",
+        "https://example.com",
+        "did:web:evil.com%2Fpath",
+    ],
+)
+def test_no_url_for_issuers_which_are_not_hostnames(issuer):
+    """A URL is never built from an issuer which could address another host."""
+    assert issuer_host(issuer) is None
+    assert entry_urls(issuer, "1.2") == {"receipt": None, "transparent_statement": None}
+
+
+@pytest.mark.parametrize("regtxid", ["", None, "1.2/../../evil", "not-a-txid"])
+def test_no_url_for_invalid_registration_txid(regtxid):
+    assert entry_urls("ledger.example.com", regtxid) == {
+        "receipt": None,
+        "transparent_statement": None,
+    }

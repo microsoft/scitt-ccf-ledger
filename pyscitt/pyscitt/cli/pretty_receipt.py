@@ -41,16 +41,19 @@ def cose_kind(parsed: Sign1Message) -> str:
     What the COSE message is, as far as SCITT is concerned.
     """
     if parsed.uhdr.get(crypto.SCITTReceipts):
-        return "transparent statement"
+        return "transparent_statement"
     if is_receipt(parsed):
         return "receipt"
-    return "signed statement"
+    return "signed_statement"
 
 
 def extract_metadata(parsed: Sign1Message) -> dict:
     """
     Metadata derived from a COSE message, as opposed to the headers which are
     present in the file itself. Receipts are only reported when there are any.
+
+    Nothing here is verified, so the issuers and the URLs derived from them are
+    only as trustworthy as the file itself; use `scitt validate` to check them.
     """
     metadata: dict = {"kind": cose_kind(parsed)}
     summaries = receipt_summaries(parsed)

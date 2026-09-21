@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -35,6 +36,19 @@ def build_validation_result(statement: Path, receipt_details: list) -> dict:
         "statement": str(statement),
         "transparent": True,
         "receipts": [summarise_receipt_details(detail) for detail in receipt_details],
+    }
+
+
+def build_error_result(statement: Path, error: Exception) -> dict:
+    """
+    Report a statement which could not be shown to be transparent in the same
+    shape as a successful validation.
+    """
+    return {
+        "statement": str(statement),
+        "transparent": False,
+        "error": str(error) or error.__class__.__name__,
+        "receipts": [],
     }
 
 
@@ -94,7 +108,7 @@ def validate_transparent_statement(
         service_trust_store, "verification_key_sources", None
     )
     if verification_key_sources is None:
-        default_source = "trust-store" if offline else "downloaded"
+        default_source = "trust_store" if offline else "downloaded"
         verification_key_sources = [default_source] * len(result["receipts"])
     for receipt, source in zip(result["receipts"], verification_key_sources):
         receipt["verification_key_source"] = source
@@ -106,11 +120,12 @@ def format_validation_result(result: dict, output: str) -> str:
     if output == "json":
         return json.dumps(result, indent=2)
 
+    if not result["transparent"]:
+        return f"Statement is not transparent: {result['statement']}\n{result['error']}"
+
     lines = []
     for receipt in result["receipts"]:
-        issuer = receipt["issuer"]
-        if not issuer:
-            continue
+        issuer = receipt["issuer"] or "unknown issuer"
         timestamp = receipt["issued_at_utc"] or "unknown time"
         lines.append(
             f"Verified receipt from issuer {issuer}, "
@@ -144,7 +159,8 @@ def cli(fn):
         help=f"""Issuer whose keys may be downloaded during verification, e.g.
         myledger.confidential-ledger.azure.com. Wildcards are supported and the
         option may be repeated. Defaults to
-        {" ".join(DEFAULT_AUTHORIZED_DOMAINS)}. Pass '*' to allow any issuer.""",
+        {" ".join(DEFAULT_AUTHORIZED_DOMAINS)}. Pass '*' to allow any issuer,
+        which downloads keys from whichever host a receipt names.""",
     )
     parser.add_argument(
         "--offline",
@@ -159,13 +175,32 @@ def cli(fn):
     )
 
     def cmd(args):
-        result = validate_transparent_statement(
-            args.statement,
-            args.service_trust_store,
-            args.authorized_domains,
-            args.offline,
-        )
+        if args.offline and args.service_trust_store is None:
+            parser.error("--offline requires --service-trust-store")
+
+        try:
+            result = validate_transparent_statement(
+                args.statement,
+                args.service_trust_store,
+                args.authorized_domains,
+                args.offline,
+            )
+        except Exception as error:
+            result = build_error_result(args.statement, error)
+
+        if args.service_trust_store is not None and any(
+            receipt.get("verification_key_source") == "downloaded"
+            for receipt in result["receipts"]
+        ):
+            print(
+                "Warning: a verification key was downloaded because it was not "
+                "in the trust store; pass --offline to require local keys.",
+                file=sys.stderr,
+            )
+
         print(format_validation_result(result, args.output))
+        if not result["transparent"]:
+            raise SystemExit(1)
 
     parser.set_defaults(func=cmd)
 
