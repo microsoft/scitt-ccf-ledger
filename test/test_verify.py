@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import json
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -401,21 +402,44 @@ class TestVerifyTransparentStatement:
         assert len(details) == 1
         assert details[0]["iss"] is None
 
-    def test_validate_print_issuers(self, capsys):
+    def test_validate_structured_output(self):
         """Validate CLI output against a checked-in golden transparent statement."""
-        from pyscitt.cli.validate import validate_transparent_statement
+        from pyscitt.cli.validate import (
+            format_validation_result,
+            validate_transparent_statement,
+        )
 
         golden_dir = Path(__file__).parent / "transparent_statements"
         golden_file = golden_dir / "uvm_0.2.10.cose"
 
-        validate_transparent_statement(golden_file, service_trust_store_path=golden_dir)
-
-        captured = capsys.readouterr()
-        lines = captured.out.strip().splitlines()
-        assert len(lines) == 2
-        assert lines[0] == (
-            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
-            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00): "
-            "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440"
+        result = validate_transparent_statement(
+            golden_file, service_trust_store_path=golden_dir
         )
-        assert lines[1] == f"Statement is transparent: {golden_file}"
+
+        assert result["transparent"] is True
+        assert result["statement"] == str(golden_file)
+        assert result["receipts"] == [
+            {
+                "issuer": "esrp-cts-db.confidential-ledger.azure.com",
+                "registration_txid": "458.12440",
+                "signature_txid": "458.12441",
+                "issued_at": 1766437888,
+                "issued_at_utc": "2025-12-22T21:11:28+00:00",
+                "urls": {
+                    "receipt": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
+                    "transparent_statement": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
+                },
+            }
+        ]
+
+        # The JSON rendering is the default and must round-trip.
+        assert json.loads(format_validation_result(result, "json")) == result
+
+        lines = format_validation_result(result, "text").splitlines()
+        assert lines == [
+            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
+            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00)",
+            "  Receipt URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
+            "  Transparent statement URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
+            f"Statement is transparent: {golden_file}",
+        ]

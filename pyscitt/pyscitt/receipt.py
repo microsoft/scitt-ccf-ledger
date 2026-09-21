@@ -6,7 +6,7 @@ import datetime
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import cbor2
 import ccf.receipt
@@ -77,6 +77,113 @@ def decode_inclusion_proofs(uhdr: dict) -> dict:
             decoded.append(vdp)
     proofs[COSE_INCLUSION_PROOF_VDP_LABEL] = decoded
     return uhdr
+
+
+def extract_registration_txid(uhdr: dict) -> Optional[str]:
+    """
+    Extract the registration transaction id from the internal-evidence of the
+    inclusion proof leaf, which has the form "ce:<txid>:<digest>".
+
+    Accepts a header whose proofs are still CBOR-encoded, or one already
+    decoded by decode_inclusion_proofs().
+    """
+    proofs = uhdr.get(COSE_INCLUSION_PROOFS_LABEL)
+    if not isinstance(proofs, dict):
+        return None
+
+    vdps = proofs.get(COSE_INCLUSION_PROOF_VDP_LABEL) or []
+    if not vdps:
+        return None
+
+    proof = vdps[0]
+    if isinstance(proof, bytes):
+        try:
+            proof = cbor2.loads(proof)
+        except CBORError:
+            return None
+    if not isinstance(proof, dict):
+        return None
+
+    leaf = proof.get(1)
+    if not leaf or len(leaf) < 2:
+        return None
+
+    internal_evidence = leaf[1]
+    parts = internal_evidence.split(":") if isinstance(internal_evidence, str) else []
+    return parts[1] if len(parts) >= 2 else None
+
+
+def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
+    """
+    Build the URLs at which the receipt and the transparent statement for a
+    registered entry can be retrieved, following SCRAPI's /entries/{txid} and
+    /entries/{txid}/statement endpoints.
+
+    The issuer of a receipt is the hostname of the service that registered the
+    statement, so it can be used to address that service.
+    """
+    if not issuer or not regtxid:
+        return {"receipt": None, "transparent_statement": None}
+
+    entry = f"https://{issuer}/entries/{regtxid}"
+    return {"receipt": entry, "transparent_statement": f"{entry}/statement"}
+
+
+def extract_receipt_details(parsed: Sign1Message) -> dict:
+    """
+    Extract the identifying details of a receipt: its issuer and issuance time
+    from the CWT claims, the transaction id in which it was signed from the
+    ccf.v1 protected header, and the transaction id in which the statement was
+    registered from the inclusion proof.
+    """
+    issuer = None
+    iat = None
+    cwt = parsed.phdr.get(crypto.CWTClaims)
+    if isinstance(cwt, dict):
+        issuer = cwt.get(crypto.CWT_ISS)
+        iat = cwt.get(crypto.CWT_IAT)
+
+    sigtxid = None
+    ccf_v1 = parsed.phdr.get("ccf.v1")
+    if isinstance(ccf_v1, dict):
+        sigtxid = ccf_v1.get("txid")
+
+    return {
+        "iss": issuer,
+        "iat": iat,
+        "sigtxid": sigtxid,
+        "regtxid": extract_registration_txid(parsed.uhdr),
+    }
+
+
+def summarise_receipt_details(detail: dict) -> dict:
+    """
+    Turn the raw details of a receipt into a structured, printable summary,
+    including the URLs at which the receipt and the transparent statement can
+    be retrieved.
+    """
+    issuer = detail.get("iss")
+    iat = detail.get("iat")
+    regtxid = detail.get("regtxid")
+    return {
+        "issuer": issuer,
+        "registration_txid": regtxid,
+        "signature_txid": detail.get("sigtxid"),
+        "issued_at": iat,
+        "issued_at_utc": (
+            datetime.datetime.fromtimestamp(iat, tz=datetime.timezone.utc).isoformat()
+            if iat
+            else None
+        ),
+        "urls": entry_urls(issuer, regtxid),
+    }
+
+
+def receipt_summary(parsed: Sign1Message) -> dict:
+    """
+    Structured summary of a decoded receipt.
+    """
+    return summarise_receipt_details(extract_receipt_details(parsed))
 
 
 def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:

@@ -8,7 +8,33 @@ from typing import Union
 
 from pycose.messages import Sign1Message
 
-from ..receipt import Receipt, cbor_to_printable, decode_inclusion_proofs
+from .. import crypto
+from ..receipt import (
+    Receipt,
+    cbor_to_printable,
+    decode_inclusion_proofs,
+    receipt_summary,
+)
+
+
+def receipt_summaries(parsed: Sign1Message) -> list:
+    """
+    Summarise every receipt carried by a COSE message: the message itself when
+    it is a standalone receipt, or each embedded receipt when it is a
+    transparent statement.
+    """
+    embedded = parsed.uhdr.get(crypto.SCITTReceipts)
+    if not embedded:
+        return [receipt_summary(parsed)]
+
+    summaries = []
+    for item in embedded:
+        if isinstance(item, bytes):
+            try:
+                summaries.append(receipt_summary(Sign1Message.decode(item)))
+            except Exception:
+                summaries.append({"error": "Failed to parse receipt"})
+    return summaries
 
 
 def prettyprint_receipt(receipt_path: Path):
@@ -19,8 +45,10 @@ def prettyprint_receipt(receipt_path: Path):
         buffer = f.read()
 
     parsed = Sign1Message.decode(buffer)
+    summaries = receipt_summaries(parsed)
     unprotected = decode_inclusion_proofs(parsed.uhdr)
     output_dict = {
+        "receipts": summaries,
         "protected": cbor_to_printable(parsed.phdr),
         "unprotected": cbor_to_printable(unprotected),
         "payload": (
