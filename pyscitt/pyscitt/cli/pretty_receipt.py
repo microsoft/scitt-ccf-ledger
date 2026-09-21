@@ -6,10 +6,9 @@ import json
 from pathlib import Path
 from typing import Union
 
-import cbor2
 from pycose.messages import Sign1Message
 
-from ..receipt import Receipt, cbor_to_printable
+from ..receipt import Receipt, cbor_to_printable, decode_inclusion_proofs
 
 
 def prettyprint_receipt(receipt_path: Path):
@@ -20,10 +19,7 @@ def prettyprint_receipt(receipt_path: Path):
         buffer = f.read()
 
     parsed = Sign1Message.decode(buffer)
-    unprotected = parsed.uhdr
-    if 396 in unprotected:
-        inclusion_vdps = unprotected[396][-1]
-        unprotected[396][-1] = [cbor2.loads(vdp) for vdp in inclusion_vdps]
+    unprotected = decode_inclusion_proofs(parsed.uhdr)
     output_dict = {
         "protected": cbor_to_printable(parsed.phdr),
         "unprotected": cbor_to_printable(unprotected),

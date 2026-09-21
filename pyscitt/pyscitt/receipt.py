@@ -21,6 +21,8 @@ from . import crypto
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
+COSE_INCLUSION_PROOFS_LABEL = 396
+COSE_INCLUSION_PROOF_VDP_LABEL = -1
 COMMON_CWT_KEYS_MAP = {
     1: "iss",
     2: "sub",
@@ -50,6 +52,33 @@ def display_cbor_val(item: Any) -> str:
     return out
 
 
+def decode_inclusion_proofs(uhdr: dict) -> dict:
+    """
+    Decode the CBOR-encoded verifiable data proofs found in the unprotected
+    header of a receipt, so that their contents (including the leaf's
+    internal-evidence, which carries the registration transaction id) can be
+    displayed rather than shown as an opaque byte string.
+
+    Returns the header, modified in place where decoding was possible.
+    """
+    proofs = uhdr.get(COSE_INCLUSION_PROOFS_LABEL)
+    if not isinstance(proofs, dict):
+        return uhdr
+
+    vdps = proofs.get(COSE_INCLUSION_PROOF_VDP_LABEL)
+    if not isinstance(vdps, list):
+        return uhdr
+
+    decoded = []
+    for vdp in vdps:
+        try:
+            decoded.append(cbor2.loads(vdp) if isinstance(vdp, bytes) else vdp)
+        except CBORError:
+            decoded.append(vdp)
+    proofs[COSE_INCLUSION_PROOF_VDP_LABEL] = decoded
+    return uhdr
+
+
 def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     """
     Return a printable representation of a CBOR object.
@@ -65,7 +94,9 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                         parsed = Sign1Message.decode(item)
                         receipt_as_dict = {
                             "protected": cbor_to_printable(parsed.phdr),
-                            "unprotected": cbor_to_printable(parsed.uhdr),
+                            "unprotected": cbor_to_printable(
+                                decode_inclusion_proofs(parsed.uhdr)
+                            ),
                             "payload": (
                                 base64.b64encode(parsed.payload).decode("ascii")
                                 if parsed.payload
