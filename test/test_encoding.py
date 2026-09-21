@@ -255,7 +255,7 @@ class TestRawCborHeader:
         return crypto.Signer(private_key)
 
     def test_embeds_preencoded_value_verbatim(self, signer):
-        raw_value = cbor_encode({"signature": b"signature"}, canonical=False)
+        raw_value = cbor2.dumps({"signature": b"signature"})
         signed_statement = crypto.sign_statement(
             signer,
             b"payload",
@@ -267,7 +267,11 @@ class TestRawCborHeader:
 
         cose_sign1 = cbor2.loads(signed_statement)
         protected_header = cose_sign1.value[0]
-        assert raw_value in protected_header
+        assert protected_header.hex() == (
+            "a375636f6d2e6578616d706c652e7369676e6174757265"
+            "a1697369676e6174757265497369676e6174757265"
+            "0126036a746578742f706c61696e"
+        )
         assert cbor2.loads(protected_header)["com.example.signature"] == {
             "signature": b"signature"
         }
