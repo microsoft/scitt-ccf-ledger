@@ -156,6 +156,14 @@ def extract_receipt_details(parsed: Sign1Message) -> dict:
     }
 
 
+def is_receipt(parsed: Sign1Message) -> bool:
+    """
+    Whether a decoded COSE message is a receipt, that is whether it carries an
+    inclusion proof. A signed statement which has not been registered is not.
+    """
+    return isinstance(parsed.uhdr.get(COSE_INCLUSION_PROOFS_LABEL), dict)
+
+
 def summarise_receipt_details(detail: dict) -> dict:
     """
     Turn the raw details of a receipt into a structured, printable summary,

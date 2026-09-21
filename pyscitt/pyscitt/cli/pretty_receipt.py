@@ -13,19 +13,22 @@ from ..receipt import (
     Receipt,
     cbor_to_printable,
     decode_inclusion_proofs,
+    is_receipt,
     receipt_summary,
 )
 
 
 def receipt_summaries(parsed: Sign1Message) -> list:
     """
-    Summarise every receipt carried by a COSE message: the message itself when
-    it is a standalone receipt, or each embedded receipt when it is a
-    transparent statement.
+    Summarise every receipt carried by a COSE message: each embedded receipt
+    when it is a transparent statement, or the message itself when it is a
+    standalone receipt.
+
+    A signed statement which carries no receipt yields nothing.
     """
     embedded = parsed.uhdr.get(crypto.SCITTReceipts)
     if not embedded:
-        return [receipt_summary(parsed)]
+        return [receipt_summary(parsed)] if is_receipt(parsed) else []
 
     summaries = []
     for item in embedded:
@@ -47,14 +50,20 @@ def prettyprint_receipt(receipt_path: Path):
     parsed = Sign1Message.decode(buffer)
     summaries = receipt_summaries(parsed)
     unprotected = decode_inclusion_proofs(parsed.uhdr)
-    output_dict = {
-        "receipts": summaries,
-        "protected": cbor_to_printable(parsed.phdr),
-        "unprotected": cbor_to_printable(unprotected),
-        "payload": (
-            base64.b64encode(parsed.payload).decode("ascii") if parsed.payload else None
-        ),
-    }
+    output_dict: dict = {}
+    if summaries:
+        output_dict["receipts"] = summaries
+    output_dict.update(
+        {
+            "protected": cbor_to_printable(parsed.phdr),
+            "unprotected": cbor_to_printable(unprotected),
+            "payload": (
+                base64.b64encode(parsed.payload).decode("ascii")
+                if parsed.payload
+                else None
+            ),
+        }
+    )
 
     fallback_serialization = lambda o: f"<<non-serializable: {type(o).__qualname__}>>"
     return json.dumps(output_dict, default=fallback_serialization, indent=2)

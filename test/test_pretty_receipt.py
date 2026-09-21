@@ -53,3 +53,17 @@ def test_standalone_receipt_summarises_itself(standalone_receipt: Path):
     assert output["receipts"] == [EXPECTED_SUMMARY]
     leaf = output["unprotected"]["396"]["-1"]["-1_0"]["1"]
     assert leaf["1_1"].startswith("ce:458.12440:")
+
+
+def test_signed_statement_has_no_receipts():
+    """A statement which was never registered carries no receipt to report."""
+    signed_statement = (
+        Path(__file__).parent / "payloads" / "cosesign1tool-scitt-a3be7e5.cose"
+    )
+
+    output = json.loads(prettyprint_receipt(signed_statement))
+
+    assert "receipts" not in output
+    assert "396" not in output["unprotected"]
+    # The headers of the statement itself are still printed.
+    assert output["protected"]["CWTClaims"]["sub"] == "unknown.intent"
