@@ -19,10 +19,14 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
+from pyscitt.cli.validate import build_trust_store
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
+    DEFAULT_AUTHORIZED_DOMAINS,
     DynamicTrustStore,
     DynamicTrustStoreClient,
+    FallbackTrustStore,
+    StaticTrustStore,
     verify_transparent_statement,
 )
 
@@ -77,6 +81,122 @@ class TestDynamicTrustStore:
             pytest.importorskip("cryptography.hazmat.backends").default_backend(),
         )
         assert result == mock_return_key
+
+    @pytest.mark.parametrize(
+        "issuer,authorized,expected",
+        [
+            ("ledger.confidential-ledger.azure.com", None, True),
+            ("evil.example.com", None, True),
+            ("ledger.confidential-ledger.azure.com", DEFAULT_AUTHORIZED_DOMAINS, True),
+            ("Ledger.Confidential-Ledger.Azure.Com", DEFAULT_AUTHORIZED_DOMAINS, True),
+            ("evil.example.com", DEFAULT_AUTHORIZED_DOMAINS, False),
+            # A wildcard only covers one label boundary upwards, as in TLS.
+            (
+                "confidential-ledger.azure.com",
+                DEFAULT_AUTHORIZED_DOMAINS,
+                False,
+            ),
+            ("ledger.confidential-ledger.azure.com", ["*"], True),
+            (
+                "ledger.confidential-ledger.azure.com",
+                ["ledger.confidential-ledger.azure.com"],
+                True,
+            ),
+            (
+                "other.confidential-ledger.azure.com",
+                ["ledger.confidential-ledger.azure.com"],
+                False,
+            ),
+        ],
+    )
+    def test_is_authorized_issuer(self, issuer, authorized, expected):
+        trust_store = DynamicTrustStore(Mock(), authorized_domains=authorized)
+        assert trust_store.is_authorized_issuer(issuer) is expected
+
+    def test_get_key_refuses_unauthorized_issuer(self):
+        receipt = Sign1Message()
+        receipt.phdr = {CWTClaims: {CWT_ISS: "evil.example.com"}, KID: b"kid"}
+        receipt.payload = b""
+        receipt._signature = b"sig"
+        client = Mock()
+
+        trust_store = DynamicTrustStore(
+            client, authorized_domains=DEFAULT_AUTHORIZED_DOMAINS
+        )
+        with pytest.raises(ValueError, match="not an authorized domain"):
+            trust_store.get_key(receipt.encode(tag=True, sign=False))
+
+        client.get_jwks.assert_not_called()
+
+
+class TestFallbackTrustStore:
+    def _receipt(self) -> bytes:
+        receipt = Sign1Message()
+        receipt.phdr = {
+            CWTClaims: {CWT_ISS: "ledger.confidential-ledger.azure.com"},
+            KID: b"kid",
+        }
+        receipt.payload = b""
+        receipt._signature = b"sig"
+        return receipt.encode(tag=True, sign=False)
+
+    def test_prefers_local_key(self):
+        local, remote = Mock(), Mock()
+        local.get_key.return_value = "local_key"
+
+        store = FallbackTrustStore(local, remote)
+
+        assert store.get_key(self._receipt()) == "local_key"
+        assert store.key_sources == ["trust-store"]
+        remote.get_key.assert_not_called()
+
+    def test_downloads_key_when_missing_locally(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = KeyError(b"kid")
+        remote.get_key.return_value = "downloaded_key"
+
+        store = FallbackTrustStore(local, remote)
+        receipt = self._receipt()
+
+        assert store.get_key(receipt) == "downloaded_key"
+        assert store.key_sources == ["downloaded"]
+        remote.get_key.assert_called_once_with(receipt)
+
+    def test_reports_both_failures(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = KeyError("missing locally")
+        remote.get_key.side_effect = ValueError("not an authorized domain")
+
+        store = FallbackTrustStore(local, remote)
+
+        with pytest.raises(ValueError, match="could not be downloaded"):
+            store.get_key(self._receipt())
+        assert store.key_sources == []
+
+
+class TestBuildTrustStore:
+    def test_downloads_by_default_without_trust_store(self):
+        store = build_trust_store()
+        assert isinstance(store, DynamicTrustStore)
+        assert store.authorized_domains == DEFAULT_AUTHORIZED_DOMAINS
+
+    def test_falls_back_to_download_with_trust_store(self, tmp_path):
+        store = build_trust_store(tmp_path)
+        assert isinstance(store, FallbackTrustStore)
+        assert isinstance(store.local, StaticTrustStore)
+        assert store.remote.authorized_domains == DEFAULT_AUTHORIZED_DOMAINS
+
+    def test_custom_authorized_domains(self, tmp_path):
+        store = build_trust_store(tmp_path, ["my.example.com"])
+        assert store.remote.authorized_domains == ["my.example.com"]
+
+    def test_offline_never_downloads(self, tmp_path):
+        store = build_trust_store(tmp_path, offline=True)
+        assert isinstance(store, StaticTrustStore)
+
+    def test_offline_requires_trust_store(self):
+        with pytest.raises(ValueError, match="--offline requires"):
+            build_trust_store(offline=True)
 
 
 class TestDynamicTrustStoreClient:
@@ -429,6 +549,7 @@ class TestVerifyTransparentStatement:
                     "receipt": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
                     "transparent_statement": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
                 },
+                "key_source": "trust-store",
             }
         ]
 
@@ -441,5 +562,6 @@ class TestVerifyTransparentStatement:
             "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00)",
             "  Receipt URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
             "  Transparent statement URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
+            "  Verification key: trust-store",
             f"Statement is transparent: {golden_file}",
         ]

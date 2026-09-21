@@ -2,12 +2,13 @@
 # Licensed under the MIT License.
 
 import base64
+import fnmatch
 import json
 import ssl
 from abc import ABC, abstractmethod
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import cbor2
 import ccf.cose
@@ -30,6 +31,11 @@ from pycose.messages import Sign1Message
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims
 from .receipt import extract_receipt_details
+
+CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX = ".confidential-ledger.azure.com"
+
+# Issuers whose keys may be downloaded automatically during verification.
+DEFAULT_AUTHORIZED_DOMAINS = [f"*{CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX}"]
 
 
 class TrustStore(ABC):
@@ -194,6 +200,12 @@ class StaticTrustStore(TrustStore):
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         kid = parsed.phdr[KID]
+        if kid not in self.trust_store_keys:
+            try:
+                kid_str = kid.decode("ascii")
+            except UnicodeDecodeError:
+                kid_str = kid.hex()
+            raise ValueError(f"Key ID {kid_str} not found in the trust store")
         return self.trust_store_keys[kid]
 
 
@@ -311,7 +323,7 @@ class DynamicTrustStoreClient:
         )
 
     def is_confidential_ledger_issuer(self, issuer: str) -> bool:
-        return issuer.endswith(".confidential-ledger.azure.com")
+        return issuer.endswith(CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX)
 
     def get_confidential_ledger_tls_pem(self, issuer: str):
         """
@@ -331,16 +343,34 @@ class DynamicTrustStore(TrustStore):
     """
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
+
+    When `authorized_domains` is set, only issuers matching one of those
+    patterns are resolved; any other issuer is rejected rather than implicitly
+    trusted. Patterns are hostnames, optionally with a leading wildcard, e.g.
+    "*.confidential-ledger.azure.com".
     """
 
-    def __init__(self, client: Optional[DynamicTrustStoreClient] = None):
+    def __init__(
+        self,
+        client: Optional[DynamicTrustStoreClient] = None,
+        authorized_domains: Optional[List[str]] = None,
+    ):
         if client is None:
             client = DynamicTrustStoreClient()
         self.client = client
+        self.authorized_domains = authorized_domains
 
     @property
     def services(self):
         raise NotImplementedError()
+
+    def is_authorized_issuer(self, issuer: str) -> bool:
+        if self.authorized_domains is None:
+            return True
+        return any(
+            fnmatch.fnmatch(issuer.lower(), pattern.lower())
+            for pattern in self.authorized_domains
+        )
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
@@ -350,6 +380,11 @@ class DynamicTrustStore(TrustStore):
         cwt = parsed.phdr[CWTClaims]
         key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]
+        if not self.is_authorized_issuer(issuer):
+            raise ValueError(
+                f"Issuer {issuer} is not an authorized domain; "
+                f"refusing to download its keys"
+            )
         jwk_set = self.client.get_jwks(issuer)
         jwks = jwk_set["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
@@ -359,3 +394,42 @@ class DynamicTrustStore(TrustStore):
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
         key = load_pem_public_key(pem_key, default_backend())
         return key  # type: ignore
+
+
+class FallbackTrustStore(TrustStore):
+    """
+    A trust store which resolves keys from a local trust store first and, when
+    the key is not held locally, downloads it from the issuing service.
+
+    This makes verification work out of the box for services whose keys can be
+    retrieved online, such as *.confidential-ledger.azure.com, while still
+    preferring keys that were provisioned offline.
+
+    The source used for each successive lookup is recorded in `key_sources`,
+    in the order the keys were requested.
+    """
+
+    def __init__(self, local: TrustStore, remote: DynamicTrustStore):
+        self.local = local
+        self.remote = remote
+        self.key_sources: List[str] = []
+
+    @property
+    def services(self):
+        return self.local.services
+
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        try:
+            key = self.local.get_key(receipt)
+            self.key_sources.append("trust-store")
+            return key
+        except Exception as local_error:
+            try:
+                key = self.remote.get_key(receipt)
+            except Exception as remote_error:
+                raise ValueError(
+                    f"Key not found in the local trust store ({local_error}) "
+                    f"and could not be downloaded ({remote_error})"
+                ) from remote_error
+            self.key_sources.append("downloaded")
+            return key
