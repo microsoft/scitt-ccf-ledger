@@ -15,6 +15,7 @@ from ..receipt import (
     decode_inclusion_proofs,
     is_receipt,
     receipt_summary,
+    summarise_encoded_receipt,
 )
 
 
@@ -30,14 +31,9 @@ def receipt_summaries(parsed: Sign1Message) -> list:
     if not embedded:
         return [receipt_summary(parsed)] if is_receipt(parsed) else []
 
-    summaries = []
-    for item in embedded:
-        if isinstance(item, bytes):
-            try:
-                summaries.append(receipt_summary(Sign1Message.decode(item)))
-            except Exception:
-                summaries.append({"error": "Failed to parse receipt"})
-    return summaries
+    return [
+        summarise_encoded_receipt(item) for item in embedded if isinstance(item, bytes)
+    ]
 
 
 def prettyprint_receipt(receipt_path: Path):

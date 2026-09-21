@@ -7,6 +7,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Optional, Union
+from urllib.parse import unquote
 
 import cbor2
 import ccf.receipt
@@ -79,6 +80,25 @@ def decode_inclusion_proofs(uhdr: dict) -> dict:
     return uhdr
 
 
+def parse_internal_evidence(
+    internal_evidence: Union[str, bytes, None],
+) -> Optional[str]:
+    """
+    Extract the registration transaction id from a leaf's internal-evidence,
+    which has the form "ce:<txid>:<digest>".
+    """
+    if isinstance(internal_evidence, bytes):
+        try:
+            internal_evidence = internal_evidence.decode("ascii")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(internal_evidence, str):
+        return None
+
+    parts = internal_evidence.split(":")
+    return parts[1] if len(parts) >= 2 else None
+
+
 def extract_registration_txid(uhdr: dict) -> Optional[str]:
     """
     Extract the registration transaction id from the internal-evidence of the
@@ -108,9 +128,25 @@ def extract_registration_txid(uhdr: dict) -> Optional[str]:
     if not leaf or len(leaf) < 2:
         return None
 
-    internal_evidence = leaf[1]
-    parts = internal_evidence.split(":") if isinstance(internal_evidence, str) else []
-    return parts[1] if len(parts) >= 2 else None
+    return parse_internal_evidence(leaf[1])
+
+
+def issuer_host(issuer: Optional[str]) -> Optional[str]:
+    """
+    The hostname of the service identified by a receipt issuer, or None when
+    the issuer does not address a service, as is the case for did:x509.
+
+    Issuers are usually already a hostname, but legacy CCF receipts identify
+    the service with a did:web, whose method-specific identifier is the host
+    with its path segments separated by colons.
+    """
+    if not issuer:
+        return None
+    if issuer.startswith("did:web:"):
+        return unquote(issuer[len("did:web:") :].replace(":", "/"))
+    if issuer.startswith("did:"):
+        return None
+    return issuer
 
 
 def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
@@ -119,13 +155,14 @@ def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
     registered entry can be retrieved, following SCRAPI's /entries/{txid} and
     /entries/{txid}/statement endpoints.
 
-    The issuer of a receipt is the hostname of the service that registered the
+    The issuer of a receipt identifies the service that registered the
     statement, so it can be used to address that service.
     """
-    if not issuer or not regtxid:
+    host = issuer_host(issuer)
+    if not host or not regtxid:
         return {"receipt": None, "transparent_statement": None}
 
-    entry = f"https://{issuer}/entries/{regtxid}"
+    entry = f"https://{host}/entries/{regtxid}"
     return {"receipt": entry, "transparent_statement": f"{entry}/statement"}
 
 
@@ -194,6 +231,40 @@ def receipt_summary(parsed: Sign1Message) -> dict:
     return summarise_receipt_details(extract_receipt_details(parsed))
 
 
+def legacy_receipt_details(receipt: "Receipt") -> dict:
+    """
+    Extract the identifying details of a legacy CCF receipt, which is an
+    untagged COSE_Sign1 whose service identity, registration time and
+    inclusion proof are carried outside of the CWT claims.
+    """
+    regtxid = None
+    leaf_info = getattr(receipt.contents, "leaf_info", None)
+    if leaf_info is not None:
+        regtxid = parse_internal_evidence(leaf_info.internal_data)
+
+    return {
+        "iss": receipt.phdr.get(crypto.SCITTIssuer),
+        "iat": receipt.phdr.get("registration_time"),
+        "sigtxid": None,
+        "regtxid": regtxid,
+    }
+
+
+def summarise_encoded_receipt(item: bytes) -> dict:
+    """
+    Structured summary of an encoded receipt, in either the current COSE
+    format or the legacy CCF one.
+    """
+    try:
+        return receipt_summary(Sign1Message.decode(item))
+    except Exception:
+        pass
+    try:
+        return summarise_receipt_details(legacy_receipt_details(Receipt.decode(item)))
+    except Exception:
+        return {"error": "Failed to parse receipt"}
+
+
 def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     """
     Return a printable representation of a CBOR object.
@@ -219,10 +290,14 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                             ),
                         }
                     except Exception:
-                        receipt_as_dict = {
-                            "error": "Failed to parse receipt",
-                            "cbor": item.hex(),
-                        }
+                        # Legacy CCF receipts are untagged and are not COSE_Sign1.
+                        try:
+                            receipt_as_dict = Receipt.decode(item).as_dict()
+                        except Exception:
+                            receipt_as_dict = {
+                                "error": "Failed to parse receipt",
+                                "cbor": item.hex(),
+                            }
                 else:
                     try:
                         receipt_as_dict = Receipt.from_cose_obj(item).as_dict()

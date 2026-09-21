@@ -9,6 +9,7 @@ from pycose.messages import Sign1Message
 
 from pyscitt import crypto
 from pyscitt.cli.pretty_receipt import prettyprint_receipt
+from pyscitt.receipt import entry_urls, issuer_host
 
 GOLDEN_STATEMENT = Path(__file__).parent / "transparent_statements" / "uvm_0.2.10.cose"
 
@@ -67,3 +68,53 @@ def test_signed_statement_has_no_receipts():
     assert "396" not in output["unprotected"]
     # The headers of the statement itself are still printed.
     assert output["protected"]["CWTClaims"]["sub"] == "unknown.intent"
+
+
+def test_legacy_ccf_receipt_is_summarised():
+    """Legacy receipts are untagged and are not COSE_Sign1, but still parse."""
+    statement = Path(__file__).parent / "payloads" / "cts-hashv-cwtclaims-b64url.cose"
+
+    output = json.loads(prettyprint_receipt(statement))
+
+    assert output["receipts"] == [
+        {
+            "issuer": "did:web:cts-poc.confidential-ledger.azure.com",
+            "registration_txid": "225.3563",
+            "signature_txid": None,
+            "issued_at": 1724186281,
+            "issued_at_utc": "2024-08-20T20:38:01+00:00",
+            "urls": {
+                "receipt": "https://cts-poc.confidential-ledger.azure.com/entries/225.3563",
+                "transparent_statement": "https://cts-poc.confidential-ledger.azure.com/entries/225.3563/statement",
+            },
+        }
+    ]
+
+    # The receipt contents are printed rather than reported as unparseable.
+    receipt = output["unprotected"]["SCITTReceipts"][0]
+    assert "error" not in receipt
+    assert receipt["protected"]["tree_alg"] == "CCF"
+
+
+@pytest.mark.parametrize(
+    "issuer,expected",
+    [
+        (
+            "ledger.confidential-ledger.azure.com",
+            "ledger.confidential-ledger.azure.com",
+        ),
+        (
+            "did:web:cts-poc.confidential-ledger.azure.com",
+            "cts-poc.confidential-ledger.azure.com",
+        ),
+        ("did:web:example.com:path:to:service", "example.com/path/to/service"),
+        ("did:web:example.com%3A8443", "example.com:8443"),
+        # did:x509 does not address a service, so no URL can be built.
+        ("did:x509:0:sha256:abc::subject:CN:test", None),
+        (None, None),
+    ],
+)
+def test_issuer_host(issuer, expected):
+    assert issuer_host(issuer) == expected
+    urls = entry_urls(issuer, "1.2")
+    assert urls["receipt"] == (f"https://{expected}/entries/1.2" if expected else None)
