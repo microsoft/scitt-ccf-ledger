@@ -2,12 +2,13 @@
 # Licensed under the MIT License.
 
 import base64
+import fnmatch
 import json
 import ssl
 from abc import ABC, abstractmethod
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import cbor2
 import ccf.cose
@@ -28,7 +29,13 @@ from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
 from . import crypto
-from .crypto import CWT_IAT, CWT_ISS, CWTClaims
+from .crypto import CWT_ISS, CWTClaims
+from .receipt import extract_receipt_details, is_hostname
+
+CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX = ".confidential-ledger.azure.com"
+
+# Issuers whose keys may be downloaded automatically during verification.
+DEFAULT_AUTHORIZED_DOMAINS = [f"*{CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX}"]
 
 
 class TrustStore(ABC):
@@ -59,8 +66,13 @@ def verify_transparent_statement(
     input_signed_statement: bytes,
 ) -> list:
     st = Sign1Message.decode(transparent_statement)
+    receipts = st.uhdr.get(crypto.SCITTReceipts)
+    if not receipts:
+        raise ValueError(
+            "The statement carries no receipt, so it is not a transparent statement"
+        )
     receipt_details = []
-    for receipt in st.uhdr[crypto.SCITTReceipts]:
+    for receipt in receipts:
         service_key = service_trust_store.get_key(receipt)
         ccf.cose.verify_receipt(
             receipt, service_key, sha256(input_signed_statement).digest()
@@ -68,42 +80,8 @@ def verify_transparent_statement(
 
         # ccf.cose.verify_receipt should be improved to return full detail from the receipt
         # at which point the following parsing can be removed and the details can be returned directly from the verify_receipt function.
-        parsed = Sign1Message.decode(receipt)
-        issuer = None
-        iat = None
-        if CWTClaims in parsed.phdr:
-            cwt = parsed.phdr[CWTClaims]
-            issuer = cwt.get(CWT_ISS)
-            iat = cwt.get(CWT_IAT)
+        receipt_details.append(extract_receipt_details(Sign1Message.decode(receipt)))
 
-        # Extract txid from ccf.v1 protected header
-        sigtxid = None
-        ccf_v1 = parsed.phdr.get("ccf.v1")
-        if isinstance(ccf_v1, dict):
-            sigtxid = ccf_v1.get("txid")
-
-        # Extract registration txid from internal-evidence in inclusion proof leaf
-        regtxid = None
-        uhdr = parsed.uhdr
-        if 396 in uhdr:
-            inclusion_proofs = uhdr[396].get(-1, [])
-            if inclusion_proofs:
-                proof = cbor2.loads(inclusion_proofs[0])
-                leaf = proof.get(1)
-                if leaf and len(leaf) > 1:
-                    ce = leaf[1]
-                    parts = ce.split(":") if isinstance(ce, str) else []
-                    if len(parts) >= 2:
-                        regtxid = parts[1]
-
-        receipt_details.append(
-            {
-                "iss": issuer,
-                "iat": iat,
-                "sigtxid": sigtxid,
-                "regtxid": regtxid,
-            }
-        )
     return receipt_details
 
 
@@ -227,6 +205,12 @@ class StaticTrustStore(TrustStore):
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         parsed = Sign1Message.decode(receipt)
         kid = parsed.phdr[KID]
+        if kid not in self.trust_store_keys:
+            try:
+                kid_str = kid.decode("ascii")
+            except UnicodeDecodeError:
+                kid_str = kid.hex()
+            raise ValueError(f"Key ID {kid_str} not found in the trust store")
         return self.trust_store_keys[kid]
 
 
@@ -344,7 +328,7 @@ class DynamicTrustStoreClient:
         )
 
     def is_confidential_ledger_issuer(self, issuer: str) -> bool:
-        return issuer.endswith(".confidential-ledger.azure.com")
+        return issuer.endswith(CONFIDENTIAL_LEDGER_DOMAIN_SUFFIX)
 
     def get_confidential_ledger_tls_pem(self, issuer: str):
         """
@@ -364,16 +348,40 @@ class DynamicTrustStore(TrustStore):
     """
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
+
+    When `authorized_domains` is set, only issuers matching one of those
+    patterns are resolved; any other issuer is rejected rather than implicitly
+    trusted. Patterns are hostnames, optionally with a leading wildcard, e.g.
+    "*.confidential-ledger.azure.com".
     """
 
-    def __init__(self, client: Optional[DynamicTrustStoreClient] = None):
+    def __init__(
+        self,
+        client: Optional[DynamicTrustStoreClient] = None,
+        authorized_domains: Optional[List[str]] = None,
+    ):
         if client is None:
             client = DynamicTrustStoreClient()
         self.client = client
+        self.authorized_domains = authorized_domains
 
     @property
     def services(self):
         raise NotImplementedError()
+
+    def is_authorized_issuer(self, issuer: str) -> bool:
+        # The issuer is unverified input which is used to address the service
+        # the keys are downloaded from, so anything that is not a bare hostname
+        # is rejected before matching: "evil.com/x.example.com" would otherwise
+        # match "*.example.com" while addressing evil.com.
+        if not is_hostname(issuer):
+            return False
+        if self.authorized_domains is None:
+            return True
+        return any(
+            fnmatch.fnmatch(issuer.lower(), pattern.lower())
+            for pattern in self.authorized_domains
+        )
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
         """
@@ -383,6 +391,11 @@ class DynamicTrustStore(TrustStore):
         cwt = parsed.phdr[CWTClaims]
         key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]
+        if not self.is_authorized_issuer(issuer):
+            raise ValueError(
+                f"Issuer {issuer} is not an authorized domain; "
+                f"refusing to download its keys"
+            )
         jwk_set = self.client.get_jwks(issuer)
         jwks = jwk_set["keys"]
         keys = {key["kid"].encode(): key for key in jwks}
@@ -392,3 +405,42 @@ class DynamicTrustStore(TrustStore):
         pem_key = jwk.JWK.from_json(json.dumps(key)).export_to_pem()
         key = load_pem_public_key(pem_key, default_backend())
         return key  # type: ignore
+
+
+class FallbackTrustStore(TrustStore):
+    """
+    A trust store which resolves keys from a local trust store first and, when
+    the key is not held locally, downloads it from the issuing service.
+
+    This makes verification work out of the box for services whose keys can be
+    retrieved online, such as *.confidential-ledger.azure.com, while still
+    preferring keys that were provisioned offline.
+
+    The source used for each successive lookup is recorded in `verification_key_sources`,
+    in the order the keys were requested.
+    """
+
+    def __init__(self, local: TrustStore, remote: DynamicTrustStore):
+        self.local = local
+        self.remote = remote
+        self.verification_key_sources: List[str] = []
+
+    @property
+    def services(self):
+        return self.local.services
+
+    def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
+        try:
+            key = self.local.get_key(receipt)
+            self.verification_key_sources.append("trust_store")
+            return key
+        except (KeyError, ValueError) as local_error:
+            try:
+                key = self.remote.get_key(receipt)
+            except Exception as remote_error:
+                raise ValueError(
+                    f"Key not found in the local trust store ({local_error}) "
+                    f"and could not be downloaded ({remote_error})"
+                ) from remote_error
+            self.verification_key_sources.append("downloaded")
+            return key

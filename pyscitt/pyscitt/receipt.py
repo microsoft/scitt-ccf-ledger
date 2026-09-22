@@ -4,9 +4,11 @@
 import base64
 import datetime
 import hashlib
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any, Optional, Union
+from urllib.parse import unquote
 
 import cbor2
 import ccf.receipt
@@ -21,6 +23,8 @@ from . import crypto
 
 HEADER_PARAM_TREE_ALGORITHM = "tree_alg"
 TREE_ALGORITHM_CCF = "CCF"
+COSE_INCLUSION_PROOFS_LABEL = 396
+COSE_INCLUSION_PROOF_VDP_LABEL = -1
 COMMON_CWT_KEYS_MAP = {
     1: "iss",
     2: "sub",
@@ -50,6 +54,242 @@ def display_cbor_val(item: Any) -> str:
     return out
 
 
+def decode_inclusion_proofs(uhdr: dict) -> dict:
+    """
+    Decode the CBOR-encoded verifiable data proofs found in the unprotected
+    header of a receipt, so that their contents (including the leaf's
+    internal-evidence, which carries the registration transaction id) can be
+    displayed rather than shown as an opaque byte string.
+
+    Returns the header, modified in place where decoding was possible.
+    """
+    proofs = uhdr.get(COSE_INCLUSION_PROOFS_LABEL)
+    if not isinstance(proofs, dict):
+        return uhdr
+
+    vdps = proofs.get(COSE_INCLUSION_PROOF_VDP_LABEL)
+    if not isinstance(vdps, list):
+        return uhdr
+
+    decoded = []
+    for vdp in vdps:
+        try:
+            decoded.append(cbor2.loads(vdp) if isinstance(vdp, bytes) else vdp)
+        except CBORError:
+            decoded.append(vdp)
+    proofs[COSE_INCLUSION_PROOF_VDP_LABEL] = decoded
+    return uhdr
+
+
+def parse_internal_evidence(
+    internal_evidence: Union[str, bytes, None],
+) -> Optional[str]:
+    """
+    Extract the registration transaction id from a leaf's internal-evidence,
+    which has the form "ce:<txid>:<digest>".
+    """
+    if isinstance(internal_evidence, bytes):
+        try:
+            internal_evidence = internal_evidence.decode("ascii")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(internal_evidence, str):
+        return None
+
+    parts = internal_evidence.split(":")
+    return parts[1] if len(parts) >= 2 else None
+
+
+def extract_registration_txid(uhdr: dict) -> Optional[str]:
+    """
+    Extract the registration transaction id from the internal-evidence of the
+    inclusion proof leaf, which has the form "ce:<txid>:<digest>".
+
+    Accepts a header whose proofs are still CBOR-encoded, or one already
+    decoded by decode_inclusion_proofs().
+    """
+    proofs = uhdr.get(COSE_INCLUSION_PROOFS_LABEL)
+    if not isinstance(proofs, dict):
+        return None
+
+    vdps = proofs.get(COSE_INCLUSION_PROOF_VDP_LABEL) or []
+    if not vdps:
+        return None
+
+    proof = vdps[0]
+    if isinstance(proof, bytes):
+        try:
+            proof = cbor2.loads(proof)
+        except CBORError:
+            return None
+    if not isinstance(proof, dict):
+        return None
+
+    leaf = proof.get(1)
+    if not leaf or len(leaf) < 2:
+        return None
+
+    return parse_internal_evidence(leaf[1])
+
+
+HOSTNAME_PATTERN = re.compile(
+    r"^(?=.{1,253}(:[0-9]{1,5})?$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(:[0-9]{1,5})?$"
+)
+TXID_PATTERN = re.compile(r"^[0-9]+\.[0-9]+$")
+
+
+def is_hostname(value: Optional[str]) -> bool:
+    """
+    Whether a string is a bare hostname, and so can safely be used as the
+    authority of a URL.
+
+    Issuers come from unverified input, so anything carrying a scheme, port,
+    userinfo, path, query or fragment must be rejected: such a string would
+    otherwise address a host other than the one it appears to name.
+    """
+    if not value:
+        return False
+    return HOSTNAME_PATTERN.match(value) is not None
+
+
+def issuer_host(issuer: Optional[str]) -> Optional[str]:
+    """
+    The hostname of the service identified by a receipt issuer, or None when
+    the issuer does not address a service, as is the case for did:x509, or
+    does not name a host on its own.
+
+    Issuers are usually already a hostname, but legacy CCF receipts identify
+    the service with a did:web, whose method-specific identifier is the host
+    with its path segments separated by colons.
+    """
+    if not issuer:
+        return None
+    if issuer.startswith("did:web:"):
+        # Only the first segment of a did:web is the host, the rest is a path
+        # which the SCRAPI endpoints below do not use.
+        issuer = unquote(issuer[len("did:web:") :].split(":")[0])
+    elif issuer.startswith("did:"):
+        return None
+    return issuer if is_hostname(issuer) else None
+
+
+def entry_urls(issuer: Optional[str], regtxid: Optional[str]) -> dict:
+    """
+    Build the URLs at which the receipt and the transparent statement for a
+    registered entry can be retrieved, following SCRAPI's /entries/{txid} and
+    /entries/{txid}/statement endpoints.
+
+    The issuer of a receipt identifies the service that registered the
+    statement, so it can be used to address that service.
+    """
+    host = issuer_host(issuer)
+    if not host or not regtxid or not TXID_PATTERN.match(regtxid):
+        return {"receipt": None, "transparent_statement": None}
+
+    entry = f"https://{host}/entries/{regtxid}"
+    return {"receipt": entry, "transparent_statement": f"{entry}/statement"}
+
+
+def extract_receipt_details(parsed: Sign1Message) -> dict:
+    """
+    Extract the identifying details of a receipt: its issuer and issuance time
+    from the CWT claims, the transaction id in which it was signed from the
+    ccf.v1 protected header, and the transaction id in which the statement was
+    registered from the inclusion proof.
+    """
+    issuer = None
+    iat = None
+    cwt = parsed.phdr.get(crypto.CWTClaims)
+    if isinstance(cwt, dict):
+        issuer = cwt.get(crypto.CWT_ISS)
+        iat = cwt.get(crypto.CWT_IAT)
+
+    sigtxid = None
+    ccf_v1 = parsed.phdr.get("ccf.v1")
+    if isinstance(ccf_v1, dict):
+        sigtxid = ccf_v1.get("txid")
+
+    return {
+        "iss": issuer,
+        "iat": iat,
+        "sigtxid": sigtxid,
+        "regtxid": extract_registration_txid(parsed.uhdr),
+    }
+
+
+def is_receipt(parsed: Sign1Message) -> bool:
+    """
+    Whether a decoded COSE message is a receipt, that is whether it carries an
+    inclusion proof. A signed statement which has not been registered is not.
+    """
+    return isinstance(parsed.uhdr.get(COSE_INCLUSION_PROOFS_LABEL), dict)
+
+
+def summarise_receipt_details(detail: dict) -> dict:
+    """
+    Turn the raw details of a receipt into a structured, printable summary,
+    including the URLs at which the receipt and the transparent statement can
+    be retrieved.
+    """
+    issuer = detail.get("iss")
+    iat = detail.get("iat")
+    regtxid = detail.get("regtxid")
+    return {
+        "issuer": issuer,
+        "registration_txid": regtxid,
+        "signature_txid": detail.get("sigtxid"),
+        "issued_at": iat,
+        "issued_at_utc": (
+            datetime.datetime.fromtimestamp(iat, tz=datetime.timezone.utc).isoformat()
+            if iat
+            else None
+        ),
+        "urls": entry_urls(issuer, regtxid),
+    }
+
+
+def receipt_summary(parsed: Sign1Message) -> dict:
+    """
+    Structured summary of a decoded receipt.
+    """
+    return summarise_receipt_details(extract_receipt_details(parsed))
+
+
+def legacy_receipt_details(receipt: "Receipt") -> dict:
+    """
+    Extract the identifying details of a legacy CCF receipt, which is an
+    untagged COSE_Sign1 whose service identity, registration time and
+    inclusion proof are carried outside of the CWT claims.
+    """
+    regtxid = None
+    leaf_info = getattr(receipt.contents, "leaf_info", None)
+    if leaf_info is not None:
+        regtxid = parse_internal_evidence(leaf_info.internal_data)
+
+    return {
+        "iss": receipt.phdr.get(crypto.SCITTIssuer),
+        "iat": receipt.phdr.get("registration_time"),
+        "sigtxid": None,
+        "regtxid": regtxid,
+    }
+
+
+def summarise_encoded_receipt(item: bytes) -> dict:
+    """
+    Structured summary of an encoded receipt, in either the current COSE
+    format or the legacy CCF one.
+    """
+    try:
+        return receipt_summary(Sign1Message.decode(item))
+    except Exception:
+        pass
+    try:
+        return summarise_receipt_details(legacy_receipt_details(Receipt.decode(item)))
+    except Exception:
+        return {"error": "Failed to parse receipt"}
+
+
 def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
     """
     Return a printable representation of a CBOR object.
@@ -65,7 +305,9 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                         parsed = Sign1Message.decode(item)
                         receipt_as_dict = {
                             "protected": cbor_to_printable(parsed.phdr),
-                            "unprotected": cbor_to_printable(parsed.uhdr),
+                            "unprotected": cbor_to_printable(
+                                decode_inclusion_proofs(parsed.uhdr)
+                            ),
                             "payload": (
                                 base64.b64encode(parsed.payload).decode("ascii")
                                 if parsed.payload
@@ -73,10 +315,14 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
                             ),
                         }
                     except Exception:
-                        receipt_as_dict = {
-                            "error": "Failed to parse receipt",
-                            "cbor": item.hex(),
-                        }
+                        # Legacy CCF receipts are untagged and are not COSE_Sign1.
+                        try:
+                            receipt_as_dict = Receipt.decode(item).as_dict()
+                        except Exception:
+                            receipt_as_dict = {
+                                "error": "Failed to parse receipt",
+                                "cbor": item.hex(),
+                            }
                 else:
                     try:
                         receipt_as_dict = Receipt.from_cose_obj(item).as_dict()

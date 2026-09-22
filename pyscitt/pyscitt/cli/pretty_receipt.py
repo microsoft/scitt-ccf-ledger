@@ -6,10 +6,60 @@ import json
 from pathlib import Path
 from typing import Union
 
-import cbor2
 from pycose.messages import Sign1Message
 
-from ..receipt import Receipt, cbor_to_printable
+from .. import crypto
+from ..receipt import (
+    Receipt,
+    cbor_to_printable,
+    decode_inclusion_proofs,
+    is_receipt,
+    receipt_summary,
+    summarise_encoded_receipt,
+)
+
+
+def receipt_summaries(parsed: Sign1Message) -> list:
+    """
+    Summarise every receipt carried by a COSE message: each embedded receipt
+    when it is a transparent statement, or the message itself when it is a
+    standalone receipt.
+
+    A signed statement which carries no receipt yields nothing.
+    """
+    embedded = parsed.uhdr.get(crypto.SCITTReceipts)
+    if not embedded:
+        return [receipt_summary(parsed)] if is_receipt(parsed) else []
+
+    return [
+        summarise_encoded_receipt(item) for item in embedded if isinstance(item, bytes)
+    ]
+
+
+def cose_kind(parsed: Sign1Message) -> str:
+    """
+    What the COSE message is, as far as SCITT is concerned.
+    """
+    if parsed.uhdr.get(crypto.SCITTReceipts):
+        return "transparent_statement"
+    if is_receipt(parsed):
+        return "receipt"
+    return "signed_statement"
+
+
+def extract_metadata(parsed: Sign1Message) -> dict:
+    """
+    Metadata derived from a COSE message, as opposed to the headers which are
+    present in the file itself. Receipts are only reported when there are any.
+
+    Nothing here is verified, so the issuers and the URLs derived from them are
+    only as trustworthy as the file itself; use `scitt validate` to check them.
+    """
+    metadata: dict = {"kind": cose_kind(parsed)}
+    summaries = receipt_summaries(parsed)
+    if summaries:
+        metadata["receipts"] = summaries
+    return metadata
 
 
 def prettyprint_receipt(receipt_path: Path):
@@ -20,11 +70,10 @@ def prettyprint_receipt(receipt_path: Path):
         buffer = f.read()
 
     parsed = Sign1Message.decode(buffer)
-    unprotected = parsed.uhdr
-    if 396 in unprotected:
-        inclusion_vdps = unprotected[396][-1]
-        unprotected[396][-1] = [cbor2.loads(vdp) for vdp in inclusion_vdps]
-    output_dict = {
+    metadata = extract_metadata(parsed)
+    unprotected = decode_inclusion_proofs(parsed.uhdr)
+    output_dict: dict = {
+        "extracted_metadata": metadata,
         "protected": cbor_to_printable(parsed.phdr),
         "unprotected": cbor_to_printable(unprotected),
         "payload": (

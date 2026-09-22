@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import json
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -18,10 +19,14 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
+from pyscitt.cli.validate import build_trust_store
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
+    DEFAULT_AUTHORIZED_DOMAINS,
     DynamicTrustStore,
     DynamicTrustStoreClient,
+    FallbackTrustStore,
+    StaticTrustStore,
     verify_transparent_statement,
 )
 
@@ -76,6 +81,142 @@ class TestDynamicTrustStore:
             pytest.importorskip("cryptography.hazmat.backends").default_backend(),
         )
         assert result == mock_return_key
+
+    @pytest.mark.parametrize(
+        "issuer,authorized,expected",
+        [
+            ("ledger.confidential-ledger.azure.com", None, True),
+            ("evil.example.com", None, True),
+            ("ledger.confidential-ledger.azure.com", DEFAULT_AUTHORIZED_DOMAINS, True),
+            ("Ledger.Confidential-Ledger.Azure.Com", DEFAULT_AUTHORIZED_DOMAINS, True),
+            ("evil.example.com", DEFAULT_AUTHORIZED_DOMAINS, False),
+            # A wildcard only covers one label boundary upwards, as in TLS.
+            (
+                "confidential-ledger.azure.com",
+                DEFAULT_AUTHORIZED_DOMAINS,
+                False,
+            ),
+            ("ledger.confidential-ledger.azure.com", ["*"], True),
+            (
+                "ledger.confidential-ledger.azure.com",
+                ["ledger.confidential-ledger.azure.com"],
+                True,
+            ),
+            (
+                "other.confidential-ledger.azure.com",
+                ["ledger.confidential-ledger.azure.com"],
+                False,
+            ),
+            # An issuer which is not a bare hostname can never be authorized:
+            # it would address a host other than the one it appears to name.
+            (
+                "evil.com/x.confidential-ledger.azure.com",
+                DEFAULT_AUTHORIZED_DOMAINS,
+                False,
+            ),
+            ("evil.com#.confidential-ledger.azure.com", ["*"], False),
+            ("user@evil.com.confidential-ledger.azure.com", ["*"], False),
+            ("evil.com/x.confidential-ledger.azure.com", None, False),
+        ],
+    )
+    def test_is_authorized_issuer(self, issuer, authorized, expected):
+        trust_store = DynamicTrustStore(Mock(), authorized_domains=authorized)
+        assert trust_store.is_authorized_issuer(issuer) is expected
+
+    def test_get_key_refuses_unauthorized_issuer(self):
+        receipt = Sign1Message()
+        receipt.phdr = {CWTClaims: {CWT_ISS: "evil.example.com"}, KID: b"kid"}
+        receipt.payload = b""
+        receipt._signature = b"sig"
+        client = Mock()
+
+        trust_store = DynamicTrustStore(
+            client, authorized_domains=DEFAULT_AUTHORIZED_DOMAINS
+        )
+        with pytest.raises(ValueError, match="not an authorized domain"):
+            trust_store.get_key(receipt.encode(tag=True, sign=False))
+
+        client.get_jwks.assert_not_called()
+
+
+class TestFallbackTrustStore:
+    def _receipt(self) -> bytes:
+        receipt = Sign1Message()
+        receipt.phdr = {
+            CWTClaims: {CWT_ISS: "ledger.confidential-ledger.azure.com"},
+            KID: b"kid",
+        }
+        receipt.payload = b""
+        receipt._signature = b"sig"
+        return receipt.encode(tag=True, sign=False)
+
+    def test_prefers_local_key(self):
+        local, remote = Mock(), Mock()
+        local.get_key.return_value = "local_key"
+
+        store = FallbackTrustStore(local, remote)
+
+        assert store.get_key(self._receipt()) == "local_key"
+        assert store.verification_key_sources == ["trust_store"]
+        remote.get_key.assert_not_called()
+
+    def test_downloads_key_when_missing_locally(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = KeyError(b"kid")
+        remote.get_key.return_value = "downloaded_key"
+
+        store = FallbackTrustStore(local, remote)
+        receipt = self._receipt()
+
+        assert store.get_key(receipt) == "downloaded_key"
+        assert store.verification_key_sources == ["downloaded"]
+        remote.get_key.assert_called_once_with(receipt)
+
+    def test_reports_both_failures(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = KeyError("missing locally")
+        remote.get_key.side_effect = ValueError("not an authorized domain")
+
+        store = FallbackTrustStore(local, remote)
+
+        with pytest.raises(ValueError, match="could not be downloaded"):
+            store.get_key(self._receipt())
+        assert store.verification_key_sources == []
+
+    def test_does_not_download_on_unexpected_local_failure(self):
+        local, remote = Mock(), Mock()
+        local.get_key.side_effect = OSError("trust store is unreadable")
+
+        store = FallbackTrustStore(local, remote)
+
+        with pytest.raises(OSError):
+            store.get_key(self._receipt())
+        remote.get_key.assert_not_called()
+
+
+class TestBuildTrustStore:
+    def test_downloads_by_default_without_trust_store(self):
+        store = build_trust_store()
+        assert isinstance(store, DynamicTrustStore)
+        assert store.authorized_domains == DEFAULT_AUTHORIZED_DOMAINS
+
+    def test_falls_back_to_download_with_trust_store(self, tmp_path):
+        store = build_trust_store(tmp_path)
+        assert isinstance(store, FallbackTrustStore)
+        assert isinstance(store.local, StaticTrustStore)
+        assert store.remote.authorized_domains == DEFAULT_AUTHORIZED_DOMAINS
+
+    def test_custom_authorized_domains(self, tmp_path):
+        store = build_trust_store(tmp_path, ["my.example.com"])
+        assert store.remote.authorized_domains == ["my.example.com"]
+
+    def test_offline_never_downloads(self, tmp_path):
+        store = build_trust_store(tmp_path, offline=True)
+        assert isinstance(store, StaticTrustStore)
+
+    def test_offline_requires_trust_store(self):
+        with pytest.raises(ValueError, match="--offline requires"):
+            build_trust_store(offline=True)
 
 
 class TestDynamicTrustStoreClient:
@@ -401,21 +542,75 @@ class TestVerifyTransparentStatement:
         assert len(details) == 1
         assert details[0]["iss"] is None
 
-    def test_validate_print_issuers(self, capsys):
+    def test_validate_structured_output(self):
         """Validate CLI output against a checked-in golden transparent statement."""
-        from pyscitt.cli.validate import validate_transparent_statement
+        from pyscitt.cli.validate import (
+            format_validation_result,
+            validate_transparent_statement,
+        )
 
         golden_dir = Path(__file__).parent / "transparent_statements"
         golden_file = golden_dir / "uvm_0.2.10.cose"
 
-        validate_transparent_statement(golden_file, service_trust_store_path=golden_dir)
-
-        captured = capsys.readouterr()
-        lines = captured.out.strip().splitlines()
-        assert len(lines) == 2
-        assert lines[0] == (
-            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
-            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00): "
-            "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440"
+        result = validate_transparent_statement(
+            golden_file, service_trust_store_path=golden_dir
         )
-        assert lines[1] == f"Statement is transparent: {golden_file}"
+
+        assert result["transparent"] is True
+        assert result["statement"] == str(golden_file)
+        assert result["receipts"] == [
+            {
+                "issuer": "esrp-cts-db.confidential-ledger.azure.com",
+                "registration_txid": "458.12440",
+                "signature_txid": "458.12441",
+                "issued_at": 1766437888,
+                "issued_at_utc": "2025-12-22T21:11:28+00:00",
+                "urls": {
+                    "receipt": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
+                    "transparent_statement": "https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
+                },
+                "verification_key_source": "trust_store",
+            }
+        ]
+
+        # The JSON rendering is the default and must round-trip.
+        assert json.loads(format_validation_result(result, "json")) == result
+
+        lines = format_validation_result(result, "text").splitlines()
+        assert lines == [
+            "Verified receipt from issuer esrp-cts-db.confidential-ledger.azure.com, "
+            "registered at 458.12440, signed at 458.12441 (2025-12-22T21:11:28+00:00)",
+            "  Receipt URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440",
+            "  Transparent statement URL: https://esrp-cts-db.confidential-ledger.azure.com/entries/458.12440/statement",
+            "  Verification key source: trust_store",
+            f"Statement is transparent: {golden_file}",
+        ]
+
+    def test_error_is_reported_in_the_same_shape(self):
+        """A statement which is not transparent is reported, not raised."""
+        from pyscitt.cli.validate import build_error_result, format_validation_result
+
+        statement = Path("some.cose")
+        result = build_error_result(statement, ValueError("no receipt here"))
+
+        assert result == {
+            "statement": "some.cose",
+            "transparent": False,
+            "error": "no receipt here",
+            "receipts": [],
+        }
+        assert json.loads(format_validation_result(result, "json")) == result
+        assert format_validation_result(result, "text").splitlines() == [
+            "Statement is not transparent: some.cose",
+            "no receipt here",
+        ]
+
+    def test_signed_statement_is_not_transparent(self):
+        """A statement with no receipt fails with a readable message."""
+        signed_statement = (
+            Path(__file__).parent / "payloads" / "cosesign1tool-scitt-a3be7e5.cose"
+        )
+        with pytest.raises(ValueError, match="carries no receipt"):
+            verify_transparent_statement(
+                signed_statement.read_bytes(), Mock(), b"signed_statement"
+            )
