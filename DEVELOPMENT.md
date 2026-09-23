@@ -65,6 +65,25 @@ fetches:
 The first only reads files, so it needs no network and runs as part of
 `scripts/ci-checks.sh`.
 
+### CCF 7.0.17 upgrade considerations
+
+The bundled `set_member` constitution action now clears the member's ACK record
+when adding or resetting a member. Members must call the state digest `:update`
+endpoint before acknowledging; `pyscitt`'s `activate_member` already does this.
+Existing services must adopt the updated **full constitution** through
+`scitt governance propose_constitution`. The `update_scitt_constitution` command
+only replaces the SCITT-specific section, so it does not update this core action.
+
+CCF now starts one more worker than configured, plus a dispatch thread. The
+development configuration's `worker_threads: 1` therefore starts two workers;
+review resource limits and performance when upgrading.
+
+External governance-history auditors must verify detached proposal envelopes in
+`public:ccf.gov.cose_history` using the proposal body from
+`public:ccf.gov.proposals` in the same transaction. Ballots and withdrawals still
+embed their payloads. SCITT statement submission and receipt verification do not
+consume this history and need no format changes.
+
 ## Compiling
 
 ### Using Docker build container
