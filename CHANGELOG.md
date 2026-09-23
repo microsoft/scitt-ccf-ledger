@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- Update CCF to 7.0.16 and align the Python CCF minimum version.
+- Update CCF to 7.0.17 and align the Python CCF minimum version.
 - Use C++23, remove the retired `evercbor` link dependency, and use CCF's owning
   SNP attestation report API while preserving the verified policy details.
 - pyscitt 0.15.0: `scitt validate` and `scitt pretty-receipt` report what was verified
