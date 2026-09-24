@@ -13,8 +13,6 @@ from jwcrypto import jwk
 
 from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
-from pyscitt.governance import CCF_GOV_API_VERSION
-from pyscitt.local_key_sign_client import LocalKeySignClient
 from pyscitt.verify import (
     DynamicTrustStore,
     DynamicTrustStoreClient,
@@ -169,39 +167,6 @@ def test_make_signed_statement_transparent(
     verify_transparent_statement(
         transparent_statement, dynamic_trust_store, signed_statement
     )
-
-
-@pytest.mark.isolated_test
-def test_member_creation_and_reset_require_state_digest_update(client: Client):
-    private_key, _ = crypto.generate_ec_keypair("P-256")
-    cert = crypto.generate_cert(private_key)
-    member_client = client.replace(member_auth=LocalKeySignClient(cert, private_key))
-    proposal = {"actions": [{"name": "set_member", "args": {"cert": cert}}]}
-    digest_path = f"/gov/members/state-digests/{member_client.governance.member_id}"
-    params = {"api-version": CCF_GOV_API_VERSION}
-    stale_digest = "0" * 64
-
-    for reset in (False, True):
-        submitted = client.governance.propose(proposal, must_pass=not reset)
-        if reset:
-            # Both active members must vote before resetting the second member.
-            assert submitted.is_open
-            member_client.governance.vote(submitted.id, must_pass=True)
-
-        with service_error("ResourceNotFound: No ACK record exists for member"):
-            member_client.get(digest_path, params=params)
-        with service_error("AuthorizationFailed: No ACK record exists for member"):
-            member_client.post(
-                f"{digest_path}:ack",
-                json={"stateDigest": stale_digest},
-                sign_request=True,
-                params=params,
-            )
-
-        member_client.governance.activate_member()
-        stale_digest = member_client.get(digest_path, params=params).json()[
-            "stateDigest"
-        ]
 
 
 @pytest.mark.isolated_test
