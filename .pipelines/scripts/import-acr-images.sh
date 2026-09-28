@@ -4,7 +4,7 @@
 
 ###################################################################################################################################################
 #
-#   This script is run in CDPx and imports container images from the docker metadata files to a target ACR.
+#   This script imports container images from the docker metadata files to a target ACR.
 #   It requires the DevOps AzureCLI task to connect to the target ACR and an access token to pull the image from the source ACR.
 #
 ###################################################################################################################################################
