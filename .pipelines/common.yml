@@ -23,10 +23,13 @@ stages:
         system: 'Patch'
         major: '1'
         minor: '0'
-        ${{ if parameters.IsOfficialBuild }}:
+        # consumers deploy only images marked official, i.e. release tag builds
+        ${{ if not(parameters.IsOfficialBuild) }}:
+          tag: pr
+        ${{ elseif startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
           tag: official
         ${{ else }}:
-          tag: pr
+          tag: ci
         name: scitt-ccf-ledger
     - script: |
         echo "SCITT_CI ${{ variables.SCITT_CI }}"
@@ -97,7 +100,7 @@ stages:
       Name: scitt
       DisplayName: Build Docker image
       AcrName: ${{ parameters.AcrName }}
-      # the build number carries the official/pr tag set in the setup stage
+      # the build number carries the official/ci/pr tag set in the setup stage
       DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
       DockerFile: Dockerfile
       AcrEndpoint: ${{ parameters.AcrEndpoint }}
