@@ -159,6 +159,7 @@ stages:
           scriptType: 'bash'
           scriptLocation: 'inlineScript'
           inlineScript: |
+            set -euo pipefail
             access_token=$(az account get-access-token --query accessToken -o tsv --only-show-errors)
             echo "##vso[task.setvariable variable=prodAccessToken;isReadOnly=true;issecret=true]$access_token"
       - task: AzureCLI@2
