@@ -113,7 +113,7 @@ stages:
     dependsOn:
     - docker
     jobs:
-    - job:
+    - job: import_images
       variables:
         ob_outputDirectory: "$(Build.SourcesDirectory)/out"
       pool:
@@ -139,6 +139,7 @@ stages:
       - task: DownloadPipelineArtifact@2
         displayName: 'Download image metadata files'
         inputs:
+          buildType: current
           targetPath: $(Build.SourcesDirectory)/dst
           patterns: |
             drop_docker_*/**/*-metadata.json
