@@ -90,10 +90,11 @@ stages:
           ELEVATE_PRIVILEGES: true
 
 - stage: docker
-  # images are only pushed once the tests pass
   dependsOn:
   - setup
-  - build
+  # official images wait for the tests; PR images build early to get the merge commit GitHub Actions built
+  - ${{ if parameters.IsOfficialBuild }}:
+    - build
   jobs:
   - template: /.pipelines/obpdocker.yml@self
     parameters:
