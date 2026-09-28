@@ -1,7 +1,7 @@
 # Pipeline-level variables shared by pullrequest.yml and official.yml
 variables:
   SCITT_CI: 1 # used in scitt builds and tests
-  # use tag name for tags, commit hash for branches
+  # tag name for tags, otherwise the ref with '/' replaced by '-'
   ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
     gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
   ${{ if ne(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), True) }}:

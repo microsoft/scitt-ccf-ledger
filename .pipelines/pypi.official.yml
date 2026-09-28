@@ -62,7 +62,7 @@ extends:
         value: Production # should be  Test, PPE or Production
       jobs:
       - job: pypi
-        displayName: Release pyscitt 
+        displayName: Release pyscitt
         pool:
           type: release
         templateContext:
@@ -91,7 +91,7 @@ extends:
           inputs:
             connectedservicename: accl-cts-esrp-codesign # Service connection that has access to the subscription and certs
             usemanagedidentity: false # Our ESRP registration is mapped to the app registration and NOT the managed identity
-            keyvaultname: accl-shared-kv # Key vault that stores the signing certificate 
+            keyvaultname: accl-shared-kv # Key vault that stores the signing certificate
             signcertname: ACL-CTS-ESRP-REQUESTSIGN # Name of the sign certificate in above key vault
             authcertname: ACL-CTS-ESRP-AUTH # authentication certificate name in AKV
             clientid: 208e0740-1909-4945-80a6-8a4cf3103a24 # ESPR Client Id
@@ -102,4 +102,4 @@ extends:
             owners: 'iprudnikovas@microsoft.com,andrea.piccione@microsoft.com,musabbirkhan@microsoft.com,pallabpaul@microsoft.com' # alias of an owner. owner and approver should be different. sg's and dl's are not supported.
             approvers: 'settiy@microsoft.com,bhkrishn@microsoft.com' # alias of an approver, this is auto approved on behalf of this user, recommendation in docs is that it should be EM
             mainpublisher: ESRPRELPACMAN # Should be your main publisher value, provided at the time of ESRP Release onboarding. Please reachout to esrprelpm@microsoft.com if you don't know this.
-            domaintenantid: 33e01921-4d64-4f8c-a055-5bdaffd5e33d # Should the one of 975f013f-7f24-47e8-a7d3-abc4752bf346 (PME), 33e01921-4d64-4f8c-a055-5bdaffd5e33d (AME) and cdc5aeea-15c5-4db6-b079-fcadd2505dc2 (Torus) 
+            domaintenantid: 33e01921-4d64-4f8c-a055-5bdaffd5e33d # Should the one of 975f013f-7f24-47e8-a7d3-abc4752bf346 (PME), 33e01921-4d64-4f8c-a055-5bdaffd5e33d (AME) and cdc5aeea-15c5-4db6-b079-fcadd2505dc2 (Torus)
