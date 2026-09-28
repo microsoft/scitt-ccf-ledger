@@ -34,7 +34,7 @@ jobs:
         displayName: Print job parameters
 
       # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
-      - checkout: SCITT
+      - checkout: self
         path: s/
         submodules: recursive
         fetchTags: true
@@ -64,11 +64,8 @@ jobs:
           echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
           echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
-          # Exported to the verification job, which checks out
-          # $(Build.SourceBranch) again; for a pull request that ref is a merge
-          # commit GitHub regenerates whenever the head or the target branch
-          # moves, so re-reading it there could name a different commit than the
-          # one these images were built from.
+          # Exported so the verification job keys on exactly the commit and
+          # context these images were built from, rather than re-deriving them.
           echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT;isOutput=true]${SOURCE_COMMIT}"
 
@@ -101,6 +98,8 @@ jobs:
           dockerFileContextPath: artifacts
           registry: ${{ parameters.AcrName }}.azurecr.io
           saveImageToPath: ${{ parameters.Name }}-reference.tar
+          # sync_prod_to_staging processes every *-metadata.json, so only the pushed image may have one
+          skipSaveImageMetadata: true
           buildkit: 1
           build_tag: ${{ parameters.DockerTag }}-reference
           addPipelineData: false
@@ -146,7 +145,7 @@ jobs:
       sourceCommit: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.SOURCE_COMMIT'] ]
 
     steps:
-      - checkout: SCITT
+      - checkout: self
         path: s/
         fetchDepth: 1
         lfs: false

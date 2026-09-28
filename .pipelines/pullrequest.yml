@@ -7,19 +7,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
   default: false
 
 variables:
-  SCITT_CI: 1 # used in scitt builds and tests
-  # use tag name for tags, commit hash for branches
-  ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
-    gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
-  ${{ if ne(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), True) }}:
-    gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], '/', '-') }}
-  LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
-  CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
-  # CodeQL settings to target the remote repository instead of this wrapper one
-  Codeql.Language: 'cpp,python,javascript'
-  Codeql.ADO.Build.Repository.Provider: override # reference another repository
-  Codeql.ADO.Build.Repository.Uri: https://github.com/microsoft/scitt-ccf-ledger # reference another repository
-  PIP_INDEX_URL: https://github-private.pkgs.visualstudio.com/_packaging/accl-cts-ccf-external-dependencies/pypi/simple/ 
+- template: .pipelines/variables.yml@self
 
 resources:
   repositories:
@@ -27,20 +15,10 @@ resources:
       type: git
       name: OneBranch.Pipelines/GovernedTemplates
       ref: refs/heads/main
-    - repository: SCITT
-      type: github
-      endpoint: microsoft
-      name: microsoft/scitt-ccf-ledger
-      ref: $(Build.SourceBranch)
 
 extends:
   template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
   parameters:
-    featureFlags:
-      WindowsHostVersion:
-        Network: KS4 # Onboard to the KS4 network pool: https://eng.ms/docs/cloud-ai-platform/azure-edge-platform-aep/aep-engineering-systems/productivity-and-experiences/network-isolation/oss/net_restrict 
-      LinuxHostVersion:
-        Network: KS4
     cloudvault: # https://aka.ms/obpipelines/cloudvault
       enabled: false
     globalSdl: # https://aka.ms/obpipelines/sdl
@@ -55,88 +33,8 @@ extends:
         compiled:
           enabled: true
     stages:
-    - stage: setup
-      jobs:
-      - job: setup
-        pool:
-          type: linux
-        variables:
-          ob_outputDirectory: '$(Build.SourcesDirectory)/out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
-        steps:
-        - task: onebranch.pipeline.version@1 # generates automatic version. For other versioning options check https://aka.ms/obpipelines/versioning
-          displayName: Setup BuildNumber
-          inputs:
-            system: 'Patch'
-            major: '1'
-            minor: '0'
-            name: scitt-ccf-ledger
-        - script: |
-            echo "SCITT_CI ${{ variables.SCITT_CI }}"
-            echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
-            echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
-          displayName: Print variables
-    
-    - stage: build
-      jobs:
-      - job: test
-        displayName: Build and test
-        # specific available images already set in the parent config
-        # implicitly target container is linux_build_container
-        # if you want to use a different container, you need to set it in at job/script level
-        pool:
-          type: linux
-          # the steps below will implicitly use "target: linux_build_container"
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
-        steps:
-          # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            fetchTags: true
-            fetchDepth: 0
-            lfs: false
-          - script: ./scripts/setup-env.sh
-            displayName: Setup environment
-          - script: ./build.sh
-            displayName: Build (local)
-          - template: .pipelines/ado_pipauth.yml@self
-          - script: ./run_functional_tests.sh
-            displayName: Run Functional Tests
-
-      - job: test_docker
-        displayName: Build and test with Docker 
-        pool:
-          type: linux
-          isCustom: true
-          name: ado-scitt-pool
-        variables:
-          ob_outputDirectory: $(Build.SourcesDirectory)/out
-        steps:
-          - checkout: SCITT
-            path: s/
-            submodules: recursive
-            fetchTags: true
-            fetchDepth: 0
-            lfs: false
-          - script: ./docker/build.sh
-            displayName: Build with Docker
-          - template: .pipelines/ado_pipauth.yml@self
-          - script: ./run_functional_tests.sh
-            displayName: Run Functional Tests
-            env:
-              DOCKER: 1
-              ELEVATE_PRIVILEGES: true
-
-    - stage: docker
-      dependsOn:
-      - setup
-      jobs:
-      - template: .pipelines/obpdocker.yml@self
-        parameters:
-          Name: scitt
-          DisplayName: Build Docker image
-          AcrName: 'confidentialledgeracrstaging'
-          DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)_pr
-          DockerFile: Dockerfile
-          AcrEndpoint: 'acl-acr-staging-2'
+    - template: .pipelines/common.yml@self
+      parameters:
+        IsOfficialBuild: false
+        AcrName: confidentialledgeracrstaging
+        AcrEndpoint: acl-acr-staging-2

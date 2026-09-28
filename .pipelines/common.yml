@@ -1,0 +1,171 @@
+# Stages shared by pullrequest.yml and official.yml
+parameters:
+- name: IsOfficialBuild
+  type: boolean
+  default: false
+- name: AcrName # registry the image is pushed to
+  type: string
+- name: AcrEndpoint
+  type: string
+
+stages:
+- stage: setup
+  jobs:
+  - job: setup
+    pool:
+      type: linux
+    variables:
+      ob_outputDirectory: '$(Build.SourcesDirectory)/out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
+    steps:
+    - task: onebranch.pipeline.version@1 # generates automatic version. For other versioning options check https://aka.ms/obpipelines/versioning
+      displayName: Setup BuildNumber
+      inputs:
+        system: 'Patch'
+        major: '1'
+        minor: '0'
+        ${{ if parameters.IsOfficialBuild }}:
+          tag: official
+        ${{ else }}:
+          tag: pr
+        name: scitt-ccf-ledger
+    - script: |
+        echo "SCITT_CI ${{ variables.SCITT_CI }}"
+        echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
+        echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
+      displayName: Print variables
+
+- stage: build
+  jobs:
+  - job: test
+    displayName: Build and test
+    # specific available images already set in the parent config
+    # implicitly target container is linux_build_container
+    # if you want to use a different container, you need to set it in at job/script level
+    pool:
+      type: linux
+      # the steps below will implicitly use "target: linux_build_container"
+    variables:
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
+    steps:
+      # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
+      - checkout: self
+        path: s/
+        submodules: recursive
+        fetchTags: true
+        fetchDepth: 0
+        lfs: false
+      - script: ./scripts/setup-env.sh
+        displayName: Setup environment
+      - script: ./build.sh
+        displayName: Build (local)
+      - template: ado_pipauth.yml
+      - script: ./run_functional_tests.sh
+        displayName: Run Functional Tests
+
+  - job: test_docker
+    displayName: Build and test with Docker
+    pool:
+      type: linux
+      isCustom: true
+      name: ado-scitt-pool
+    variables:
+      ob_outputDirectory: $(Build.SourcesDirectory)/out
+    steps:
+      - checkout: self
+        path: s/
+        submodules: recursive
+        fetchTags: true
+        fetchDepth: 0
+        lfs: false
+      - script: ./docker/build.sh
+        displayName: Build with Docker
+      - template: ado_pipauth.yml
+      - script: ./run_functional_tests.sh
+        displayName: Run Functional Tests
+        env:
+          DOCKER: 1
+          ELEVATE_PRIVILEGES: true
+
+- stage: docker
+  # images are only pushed once the tests pass
+  dependsOn:
+  - setup
+  - build
+  jobs:
+  - template: obpdocker.yml
+    parameters:
+      Name: scitt
+      DisplayName: Build Docker image
+      AcrName: ${{ parameters.AcrName }}
+      # the build number carries the official/pr tag set in the setup stage
+      DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
+      DockerFile: Dockerfile
+      AcrEndpoint: ${{ parameters.AcrEndpoint }}
+
+- ${{ if parameters.IsOfficialBuild }}:
+  # Pull the image from Prod ACR and push to Staging ACR
+  # The reason being to make sure we have identical images in both ACRs
+  - stage: sync_prod_to_staging
+    dependsOn:
+    - docker
+    jobs:
+    - job:
+      variables:
+        ob_outputDirectory: "$(Build.SourcesDirectory)/out"
+      pool:
+        type: linux
+        isCustom: true
+        name: ado-scitt-pool
+      steps:
+      - checkout: self
+        path: s/
+      - task: onebranch.pipeline.containercontrol@1
+        displayName: "Login to Staging ACR"
+        inputs:
+          command: login
+          acr_name: confidentialledgeracrstaging
+          endpoint: acl-acr-staging-2
+      - task: onebranch.pipeline.containercontrol@1
+        displayName: "Login to Prod ACR"
+        inputs:
+          command: login
+          acr_name: confidentialledgeracrprod
+          endpoint: acl-acr-prod-federated3
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download image metadata files'
+        inputs:
+          targetPath: $(Build.SourcesDirectory)/dst
+          patterns: |
+            drop_docker_*/**/*-metadata.json
+      - task: CopyFiles@2
+        displayName: 'Copy image metadata to target folder'
+        inputs:
+          SourceFolder: '$(Build.SourcesDirectory)/dst'
+          flattenFolders: true
+          Contents: |
+            **/*-metadata.json
+          TargetFolder: '$(Build.SourcesDirectory)/image-metadata'
+      - task: AzureCLI@2
+        displayName: 'Get access token for the production ACR'
+        inputs:
+          azureSubscription: acl-prod-github-private-azure-conn
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            access_token=$(az account get-access-token --query accessToken -o tsv --only-show-errors)
+            echo "##vso[task.setvariable variable=prodAccessToken;isReadOnly=true;issecret=true]$access_token"
+      - task: AzureCLI@2
+        displayName: 'Export image rootfs diff IDs'
+        inputs:
+          azureSubscription: acl-prod-github-private-azure-conn
+          scriptType: 'bash'
+          scriptLocation: 'scriptPath'
+          scriptPath: "$(Build.SourcesDirectory)/.pipelines/scripts/export-image-rootfs-diff-ids.sh"
+      - task: AzureCLI@2
+        displayName: 'Import docker images to staging ACR'
+        inputs:
+          azureSubscription: acl-staging-github-private-azure-conn
+          scriptType: 'bash'
+          scriptLocation: 'scriptPath'
+          scriptPath: "$(Build.SourcesDirectory)/.pipelines/scripts/import-acr-images.sh"
+          arguments: "confidentialledgeracrstaging $(prodAccessToken)"
