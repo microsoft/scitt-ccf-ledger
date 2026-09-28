@@ -1,0 +1,47 @@
+trigger:
+  branches:
+    include:
+    - main
+  tags:
+    include:
+    - '*.*.*' # release tags, as built by the GitHub workflows
+pr: none
+
+parameters: # parameters are shown up in ADO UI in a build queue time
+- name: debug
+  displayName: Enable debug output
+  type: boolean
+  default: false
+
+variables:
+- template: .pipelines/variables.yml@self
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.Official.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
+  parameters:
+    cloudvault: # https://aka.ms/obpipelines/cloudvault
+      enabled: false
+    globalSdl: # https://aka.ms/obpipelines/sdl
+      perStage:
+        sdl_sources:
+          checkout_all_repos: true
+      tsa:
+        enabled: false
+      policheck:
+        break: true
+      codeql: # https://eng.ms/docs/cloud-ai-platform/devdiv/one-engineering-system-1es/1es-docs/codeql/one-branch-codeql
+        compiled:
+          enabled: true
+    stages:
+    - template: .pipelines/common.yml@self
+      parameters:
+        IsOfficialBuild: true
+        AcrName: confidentialledgeracrprod
+        AcrEndpoint: acl-acr-prod-federated3
