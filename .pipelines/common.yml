@@ -101,8 +101,6 @@ stages:
       Name: scitt
       DisplayName: Build Docker image
       AcrName: ${{ parameters.AcrName }}
-      # the build number carries the official/ci/pr tag set in the setup stage
-      DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
       DockerFile: Dockerfile
       AcrEndpoint: ${{ parameters.AcrEndpoint }}
 
