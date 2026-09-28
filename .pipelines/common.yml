@@ -57,11 +57,12 @@ stages:
         fetchTags: true
         fetchDepth: 0
         lfs: false
+      # first, so no script can install Python packages from public PyPI
+      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./scripts/setup-env.sh
         displayName: Setup environment
       - script: ./build.sh
         displayName: Build (local)
-      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./run_functional_tests.sh
         displayName: Run Functional Tests
 
@@ -80,9 +81,10 @@ stages:
         fetchTags: true
         fetchDepth: 0
         lfs: false
+      # first, so no script can install Python packages from public PyPI
+      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./docker/build.sh
         displayName: Build with Docker
-      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./run_functional_tests.sh
         displayName: Run Functional Tests
         env:
