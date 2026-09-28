@@ -7,7 +7,7 @@ parameters: # parameters are shown up in ADO UI in a build queue time
   default: false
 
 variables:
-- template: .pipelines/variables.yml@self
+- template: /.pipelines/variables.yml@self
 
 resources:
   repositories:
@@ -33,7 +33,7 @@ extends:
         compiled:
           enabled: true
     stages:
-    - template: .pipelines/common.yml@self
+    - template: /.pipelines/common.yml@self
       parameters:
         IsOfficialBuild: false
         AcrName: confidentialledgeracrstaging

@@ -47,7 +47,7 @@ extends:
         - script: |
             echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
           displayName: Print variables
-        - template: .pipelines/ado_pipauth.yml@self
+        - template: /.pipelines/ado_pipauth.yml@self
         - script: |
             python3 -m pip install --upgrade pip
             python3 -m pip install build

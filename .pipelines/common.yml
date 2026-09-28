@@ -61,7 +61,7 @@ stages:
         displayName: Setup environment
       - script: ./build.sh
         displayName: Build (local)
-      - template: ado_pipauth.yml
+      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./run_functional_tests.sh
         displayName: Run Functional Tests
 
@@ -82,7 +82,7 @@ stages:
         lfs: false
       - script: ./docker/build.sh
         displayName: Build with Docker
-      - template: ado_pipauth.yml
+      - template: /.pipelines/ado_pipauth.yml@self
       - script: ./run_functional_tests.sh
         displayName: Run Functional Tests
         env:
@@ -95,7 +95,7 @@ stages:
   - setup
   - build
   jobs:
-  - template: obpdocker.yml
+  - template: /.pipelines/obpdocker.yml@self
     parameters:
       Name: scitt
       DisplayName: Build Docker image
