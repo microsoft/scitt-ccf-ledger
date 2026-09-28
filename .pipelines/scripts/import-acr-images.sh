@@ -4,8 +4,8 @@
 
 ###################################################################################################################################################
 #
-#   This script is run in CDPx and imports container images from the docker metadata files to a target ACR. 
-#   It requires the DevOps AzureCLI task to connect to the target ACR and an access token to pull the image from the source ACR. 
+#   This script is run in CDPx and imports container images from the docker metadata files to a target ACR.
+#   It requires the DevOps AzureCLI task to connect to the target ACR and an access token to pull the image from the source ACR.
 #
 ###################################################################################################################################################
 
@@ -25,7 +25,7 @@ ls -l "$target_dir"
 
 # Process each metadata file
 for metadata_file in "$target_dir"/*.json; do
-    
+
     echo "Processing $metadata_file"
 
     # Extract the image details from the metadata file
@@ -34,7 +34,7 @@ for metadata_file in "$target_dir"/*.json; do
     tag_name=$(jq -r '.build_tag' "$metadata_file")
     image_reference="$image_name:$tag_name"
     source_image_full_name="$source_registry/$image_reference"
-    
+
     # Import the image to the target ACR
     # We don't wait for the import to complete as it can take a long time
     echo "Importing $source_image_full_name to $TARGET_ACR"

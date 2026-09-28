@@ -113,7 +113,7 @@ jobs:
 
       - task: onebranch.pipeline.imagebuildinfo@1
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
-        retryCountOnTaskFailure: 1 
+        retryCountOnTaskFailure: 1
         inputs:
           repositoryName: scitt
           dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
