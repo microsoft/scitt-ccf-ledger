@@ -123,6 +123,7 @@ stages:
       steps:
       - checkout: self
         path: s/
+        clean: true
       - task: onebranch.pipeline.containercontrol@1
         displayName: "Login to Staging ACR"
         inputs:
@@ -149,6 +150,7 @@ stages:
           Contents: |
             **/*-metadata.json
           TargetFolder: '$(Build.SourcesDirectory)/image-metadata'
+          CleanTargetFolder: true
       - task: AzureCLI@2
         displayName: 'Get access token for the production ACR'
         inputs:
