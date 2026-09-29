@@ -57,7 +57,7 @@ extends:
       dependsOn: build
       variables:
       - name: ob_release_environment
-        value: Production # should be  Test, PPE or Production
+        value: Production # should be Test, PPE or Production
       jobs:
       - job: pypi
         displayName: Release pyscitt
@@ -92,12 +92,12 @@ extends:
             keyvaultname: accl-shared-kv # Key vault that stores the signing certificate
             signcertname: ACL-CTS-ESRP-REQUESTSIGN # Name of the sign certificate in above key vault
             authcertname: ACL-CTS-ESRP-AUTH # authentication certificate name in AKV
-            clientid: 208e0740-1909-4945-80a6-8a4cf3103a24 # ESPR Client Id
+            clientid: 208e0740-1909-4945-80a6-8a4cf3103a24 # ESRP Client Id
             contenttype: pypi # Should be maven, pypi or npm depending on which package you are publishing
             intent: PackageDistribution
             waitforreleasecompletion: true
             folderlocation: '$(Pipeline.Workspace)/esrp_dist' # path to the folder which contains package to publish. This should be a path to the package and not the file.
             owners: 'iprudnikovas@microsoft.com,andrea.piccione@microsoft.com,musabbirkhan@microsoft.com,pallabpaul@microsoft.com' # alias of an owner. owner and approver should be different. sg's and dl's are not supported.
             approvers: 'settiy@microsoft.com,bhkrishn@microsoft.com' # alias of an approver, this is auto approved on behalf of this user, recommendation in docs is that it should be EM
-            mainpublisher: ESRPRELPACMAN # Should be your main publisher value, provided at the time of ESRP Release onboarding. Please reachout to esrprelpm@microsoft.com if you don't know this.
-            domaintenantid: 33e01921-4d64-4f8c-a055-5bdaffd5e33d # Should the one of 975f013f-7f24-47e8-a7d3-abc4752bf346 (PME), 33e01921-4d64-4f8c-a055-5bdaffd5e33d (AME) and cdc5aeea-15c5-4db6-b079-fcadd2505dc2 (Torus)
+            mainpublisher: ESRPRELPACMAN # Should be your main publisher value, provided at the time of ESRP Release onboarding. Please reach out to esrprelpm@microsoft.com if you don't know this.
+            domaintenantid: 33e01921-4d64-4f8c-a055-5bdaffd5e33d # Should be one of 975f013f-7f24-47e8-a7d3-abc4752bf346 (PME), 33e01921-4d64-4f8c-a055-5bdaffd5e33d (AME) and cdc5aeea-15c5-4db6-b079-fcadd2505dc2 (Torus)

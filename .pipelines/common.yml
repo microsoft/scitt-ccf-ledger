@@ -147,8 +147,10 @@ stages:
         inputs:
           SourceFolder: '$(Build.SourcesDirectory)/dst'
           flattenFolders: true
+          # failed job attempts publish drop_docker_<job>_failed_<attempt>, which can hold a superseded image
           Contents: |
             **/*-metadata.json
+            !drop_docker_*_failed_*/**
           TargetFolder: '$(Build.SourcesDirectory)/image-metadata'
           CleanTargetFolder: true
       - task: AzureCLI@2

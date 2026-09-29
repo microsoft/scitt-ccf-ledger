@@ -20,6 +20,8 @@ jobs:
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage#examples
       ob_git_checkout: true
       OB_build_container: true
+      # read at job level only; patching is off via featureFlags in the root pipelines
+      enableContainerVulnerabilityScanning: true
       # the build number carries the official/ci/pr marker set in the setup stage
       DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
 
@@ -217,9 +219,9 @@ jobs:
           # Everything above compares two OneBranch builds with each other, so
           # this is the only check spanning both build systems: it reads the
           # commit status GitHub Actions posted for the exact commit built
-          # here, needing no credential and, by keying on the built
-          # refs/pull/N/merge commit rather than the pull request head, never
-          # comparing builds of different sources.
+          # here, needing no credential and, by keying on the built commit
+          # (for pull requests the refs/pull/N/merge commit, not the head),
+          # never comparing builds of different sources.
           source_commit="$(sourceCommit)"
           if [ -z "${source_commit}" ]; then
             echo "The built commit was not passed from the build job." >&2
