@@ -28,7 +28,7 @@ See [pyscitt](../pyscitt/README.md) for more details.
 If the service is running in Azure you can use the following SDK to submit statements, read entries and verify receipts.
 
 ```
-dotnet add package Azure.Security.CodeTransparency --prerelease
+dotnet add package Azure.Security.CodeTransparency
 ```
 
 - Package information and available versions: https://www.nuget.org/packages/Azure.Security.CodeTransparency 
