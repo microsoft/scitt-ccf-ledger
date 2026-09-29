@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
+  tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.17 and align the Python CCF minimum version.
 - Align the bundled `set_member` constitution action with CCF's explicit state
   digest update flow, fixing member creation on COSE-only ledgers and clearing
