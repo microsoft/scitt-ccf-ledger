@@ -76,10 +76,15 @@ class Program
             // extracted directly from the receipt, which works whether the entry was
             // committed inline or via a 303 redirect (the Location header is not
             // preserved across the redirect).
-            Response<BinaryData> receiptResponse = parsedArguments.UseAsync
+            NullableResponse<BinaryData> receiptResponse = parsedArguments.UseAsync
                 ? await client.CreateEntryAsync(content, true, default)
                 : client.CreateEntry(content, true, default);
-            BinaryData receipt = receiptResponse.Value;
+            if (!receiptResponse.HasValue)
+            {
+                throw new Exception(
+                    $"Create entry did not return a receipt, status {receiptResponse.GetRawResponse().Status}");
+            }
+            BinaryData receipt = receiptResponse.Value!;
             string entryId = CcfReceipt.GetRegistrationTransactionId(receipt.ToArray());
 
             if (parsedArguments.SkipTransparentStatement)
@@ -109,7 +114,7 @@ class Program
             byte[] transparentStatementBytes = content.ToArray();
             var verificationOptions = new CodeTransparencyVerificationOptions
             {
-                AuthorizedDomains = new string[] {
+                AuthorizedDomains = {
                     "127.0.0.1:8000",
                     "localhost:8000",
                     endpoint?.Host ?? throw new ArgumentException($"Command line argument {EndpointArgument} must be set when verify is called") },
@@ -274,7 +279,7 @@ class Program
         Uri? resolvedIdentityEndpoint = ResolveDefaultIdentityEndpoint(endpoint);
         if (resolvedIdentityEndpoint is not null)
         {
-            options.IdentityClientEndpoint = resolvedIdentityEndpoint.ToString();
+            options.IdentityClientEndpoint = resolvedIdentityEndpoint;
         }
         if (caCertificatePath is not null)
         {
