@@ -107,8 +107,7 @@ stages:
       AcrEndpoint: ${{ parameters.AcrEndpoint }}
 
 - ${{ if parameters.IsOfficialBuild }}:
-  # Pull the image from Prod ACR and push to Staging ACR
-  # The reason being to make sure we have identical images in both ACRs
+  # import the prod images into staging so both ACRs hold identical images
   - stage: sync_prod_to_staging
     dependsOn:
     - docker
