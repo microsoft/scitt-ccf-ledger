@@ -5,7 +5,6 @@ parameters:
     type: string
   - name: DockerTag
     type: string
-    default: 'unset'
   - name: DockerFile
     type: string
   - name: AcrName
@@ -23,6 +22,8 @@ jobs:
       # https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/dockerimagesandacr/builddockerimage#examples
       ob_git_checkout: true
       OB_build_container: true
+      # read at job level only; patching is off via featureFlags in the root pipelines
+      enableContainerVulnerabilityScanning: true
 
     steps:
       - script: |
@@ -34,7 +35,7 @@ jobs:
         displayName: Print job parameters
 
       # checkout options docs https://eng.ms/docs/products/onebranch/build/containerbasedworkflow/gitcloneoptions
-      - checkout: SCITT
+      - checkout: self
         path: s/
         submodules: recursive
         fetchTags: true
@@ -64,11 +65,8 @@ jobs:
           echo "##vso[task.setvariable variable=SOURCE_DATE_EPOCH]${SOURCE_DATE_EPOCH}"
           echo "##vso[task.setvariable variable=SCITT_VERSION_OVERRIDE]${SCITT_VERSION_OVERRIDE}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT]${SOURCE_COMMIT}"
-          # Exported to the verification job, which checks out
-          # $(Build.SourceBranch) again; for a pull request that ref is a merge
-          # commit GitHub regenerates whenever the head or the target branch
-          # moves, so re-reading it there could name a different commit than the
-          # one these images were built from.
+          # Exported so the verification job keys on exactly the commit and
+          # context these images were built from, rather than re-deriving them.
           echo "##vso[task.setvariable variable=CONTEXT_SHA256;isOutput=true]${CONTEXT_SHA256}"
           echo "##vso[task.setvariable variable=SOURCE_COMMIT;isOutput=true]${SOURCE_COMMIT}"
 
@@ -101,6 +99,8 @@ jobs:
           dockerFileContextPath: artifacts
           registry: ${{ parameters.AcrName }}.azurecr.io
           saveImageToPath: ${{ parameters.Name }}-reference.tar
+          # sync_prod_to_staging processes every *-metadata.json, so only the pushed image may have one
+          skipSaveImageMetadata: true
           buildkit: 1
           build_tag: ${{ parameters.DockerTag }}-reference
           addPipelineData: false
@@ -114,7 +114,7 @@ jobs:
 
       - task: onebranch.pipeline.imagebuildinfo@1
         displayName: 'Build and Push to ACR ${{ parameters.AcrName }}'
-        retryCountOnTaskFailure: 1 
+        retryCountOnTaskFailure: 1
         inputs:
           repositoryName: scitt
           dockerFileRelPath: artifacts/docker/${{ parameters.DockerFile }}
@@ -146,7 +146,7 @@ jobs:
       sourceCommit: $[ dependencies.${{ parameters.Name }}.outputs['prepare_context.SOURCE_COMMIT'] ]
 
     steps:
-      - checkout: SCITT
+      - checkout: self
         path: s/
         fetchDepth: 1
         lfs: false
@@ -219,9 +219,9 @@ jobs:
           # Everything above compares two OneBranch builds with each other, so
           # this is the only check spanning both build systems: it reads the
           # commit status GitHub Actions posted for the exact commit built
-          # here, needing no credential and, by keying on the built
-          # refs/pull/N/merge commit rather than the pull request head, never
-          # comparing builds of different sources.
+          # here, needing no credential and, by keying on the built commit
+          # (for pull requests the refs/pull/N/merge commit, not the head),
+          # never comparing builds of different sources.
           source_commit="$(sourceCommit)"
           if [ -z "${source_commit}" ]; then
             echo "The built commit was not passed from the build job." >&2

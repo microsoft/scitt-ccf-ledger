@@ -1,4 +1,11 @@
-trigger: none
+trigger:
+  branches:
+    include:
+    - main
+  tags:
+    include:
+    - '*.*.*' # release tags, as built by the GitHub workflows
+pr: none
 
 variables:
 - template: /.pipelines/variables.yml@self
@@ -11,7 +18,7 @@ resources:
       ref: refs/heads/main
 
 extends:
-  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
+  template: v2/OneBranch.Official.CrossPlat.yml@templates # https://aka.ms/obpipelines/templates
   parameters:
     featureFlags:
       automaticContainerPatching: false # no Copa patching; it would make images unreproducible
@@ -31,6 +38,6 @@ extends:
     stages:
     - template: /.pipelines/common.yml@self
       parameters:
-        IsOfficialBuild: false
-        AcrName: confidentialledgeracrstaging
-        AcrEndpoint: acl-acr-staging-2
+        IsOfficialBuild: true
+        AcrName: confidentialledgeracrprod
+        AcrEndpoint: acl-acr-prod-federated3
