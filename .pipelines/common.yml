@@ -23,7 +23,8 @@ stages:
         system: 'Patch'
         major: '1'
         minor: '0'
-        # consumers deploy only images marked official, i.e. release tag builds
+        # consumers deploy only images marked official, i.e. release tag builds; match the
+        # '-official-<sha8>' suffix, since the ref part of the tag can contain 'official'
         ${{ if not(parameters.IsOfficialBuild) }}:
           tag: pr
         ${{ elseif startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
@@ -32,9 +33,9 @@ stages:
           tag: ci
         name: scitt-ccf-ledger
     - script: |
-        echo "SCITT_CI ${{ variables.SCITT_CI }}"
-        echo "gitTagOrCommit ${{ variables.gitTagOrCommit }}"
-        echo "LinuxContainerImage ${{ variables.LinuxContainerImage }}"
+        echo "SCITT_CI $(SCITT_CI)"
+        echo "gitTagOrCommit $(gitTagOrCommit)"
+        echo "LinuxContainerImage $(LinuxContainerImage)"
       displayName: Print variables
 
 - stage: build
