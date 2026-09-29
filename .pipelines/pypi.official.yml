@@ -85,7 +85,7 @@ extends:
               *.tar.gz
             targetFolder: $(Pipeline.Workspace)/esrp_dist
         - task: EsrpRelease@10
-          displayName: ESRP Release to PyPi
+          displayName: ESRP Release to PyPI
           inputs:
             connectedservicename: accl-cts-esrp-codesign # Service connection that has access to the subscription and certs
             usemanagedidentity: false # Our ESRP registration is mapped to the app registration and NOT the managed identity

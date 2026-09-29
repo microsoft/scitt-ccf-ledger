@@ -5,8 +5,8 @@ variables:
   LinuxContainerImage: 'mcr.microsoft.com/onebranch/azurelinux/build:3.0' # implicit default but otherwise could be set like => target: 'linux_build_container'
   Codeql.Language: 'cpp,python,javascript'
   enableContainerVulnerabilityScanning: true # scan only; Copa patching would make images unreproducible
-  # tag name for tags, otherwise the ref with '/' replaced by '-'
+  # tag name for tags, otherwise the ref, with '/' replaced by '-'
   ${{ if startsWith(variables['Build.SourceBranch'], 'refs/tags/') }}:
-    gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
+    gitTagOrCommit: ${{ replace(replace(variables['Build.SourceBranch'], 'refs/tags/', ''), '/', '-') }}
   ${{ if ne(startsWith(variables['Build.SourceBranch'], 'refs/tags/'), True) }}:
     gitTagOrCommit: ${{ replace(variables['Build.SourceBranch'], '/', '-') }}

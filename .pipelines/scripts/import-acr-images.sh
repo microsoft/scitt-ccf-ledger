@@ -9,7 +9,6 @@
 #
 ###################################################################################################################################################
 
-#script used to import scr-images is same as the one in CCF-Common
 set -e
 echo "Executing import-acr-images.sh"
 
@@ -32,13 +31,14 @@ for metadata_file in "$target_dir"/*.json; do
     source_registry=$(jq -r '.registry' "$metadata_file")
     image_name=$(jq -r '.repository_name' "$metadata_file")
     tag_name=$(jq -r '.build_tag' "$metadata_file")
+    image_digest=$(jq -r '.acr_digest' "$metadata_file")
     image_reference="$image_name:$tag_name"
-    source_image_full_name="$source_registry/$image_reference"
+    # by digest, so staging gets exactly the image this build pushed even if the tag moved
+    source_image_full_name="$source_registry/$image_name@$image_digest"
 
-    # Import the image to the target ACR
-    # We don't wait for the import to complete as it can take a long time
-    echo "Importing $source_image_full_name to $TARGET_ACR"
-    az acr import --name "$TARGET_ACR" --source "$source_image_full_name" --image "$image_reference" --password "$ACCESS_TOKEN" --no-wait
+    # waits for each import so a failure fails the job; --force keeps re-runs idempotent
+    echo "Importing $source_image_full_name to $TARGET_ACR as $image_reference"
+    az acr import --name "$TARGET_ACR" --source "$source_image_full_name" --image "$image_reference" --password "$ACCESS_TOKEN" --force
 done
 
 echo "Script import-acr-images.sh completed successfully!"
