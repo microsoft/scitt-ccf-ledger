@@ -1,6 +1,6 @@
 # scitt-ccf-ledger
 
-[![Build and test](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml) [![Build Status](https://github-private.visualstudio.com/microsoft/_apis/build/status%2FOneBranch%2Fscitt-ccf-ledger-wrapper%2Fscitt-ccf-ledger-wrapper-Official?repoName=scitt-ccf-ledger-wrapper&branchName=master)](https://github-private.visualstudio.com/microsoft/_build/latest?definitionId=716&repoName=scitt-ccf-ledger-wrapper&branchName=master)
+[![Build and test](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml/badge.svg)](https://github.com/microsoft/scitt-ccf-ledger/actions/workflows/build-test.yml) [![Build Status](https://dev.azure.com/github-private/microsoft/_apis/build/status%2FOneBranch%2Fscitt-ccf-ledger-wrapper%2Fscitt-ccf-ledger-wrapper-Official?repoName=microsoft%2Fscitt-ccf-ledger&branchName=main)](https://dev.azure.com/github-private/microsoft/_build/latest?definitionId=1209&repoName=microsoft%2Fscitt-ccf-ledger&branchName=main)
 
 This repository contains the source code for scitt-ccf-ledger, an application
 that runs on top of [CCF](https://github.com/microsoft/CCF) implementing draft standards developed within the IETF. See [SCITT Standard alignment](docs/scitt.md).
