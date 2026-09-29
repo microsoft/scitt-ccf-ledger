@@ -55,6 +55,8 @@ extends:
 
     - stage: release
       dependsOn: build
+      # main and release tags only; a run queued from any other branch still builds but publishes nothing
+      condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/tags/')))
       variables:
       - name: ob_release_environment
         value: Production # should be Test, PPE or Production

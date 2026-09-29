@@ -3,6 +3,8 @@ parameters:
     type: string
   - name: DisplayName
     type: string
+  - name: DockerTag
+    type: string
   - name: DockerFile
     type: string
   - name: AcrName
@@ -22,14 +24,12 @@ jobs:
       OB_build_container: true
       # read at job level only; patching is off via featureFlags in the root pipelines
       enableContainerVulnerabilityScanning: true
-      # the build number carries the official/ci/pr marker set in the setup stage
-      DockerTag: $(gitTagOrCommit)_$(Build.BuildNumber)
 
     steps:
       - script: |
           echo "Name: ${{ parameters.Name }}"
           echo "DisplayName: ${{ parameters.DisplayName }}"
-          echo "DockerTag: $(DockerTag)"
+          echo "DockerTag: ${{ parameters.DockerTag }}"
           echo "AcrName: ${{ parameters.AcrName }}"
           echo "AcrEndpoint: ${{ parameters.AcrEndpoint }}"
         displayName: Print job parameters
@@ -102,7 +102,7 @@ jobs:
           # sync_prod_to_staging processes every *-metadata.json, so only the pushed image may have one
           skipSaveImageMetadata: true
           buildkit: 1
-          build_tag: $(DockerTag)-reference
+          build_tag: ${{ parameters.DockerTag }}-reference
           addPipelineData: false
           enable_network: true
           enable_cache: false
@@ -122,7 +122,7 @@ jobs:
           registry: ${{ parameters.AcrName }}.azurecr.io
           saveImageToPath: ${{ parameters.Name }}.tar
           buildkit: 1
-          build_tag: $(DockerTag)
+          build_tag: ${{ parameters.DockerTag }}
           enable_network: true
           enable_cache: false
           enable_pull: true
