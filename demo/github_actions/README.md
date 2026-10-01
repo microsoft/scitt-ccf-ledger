@@ -133,26 +133,44 @@ Never give the signing Action governance credentials.
 
 ## 2. Run with real GitHub OIDC
 
-### Temporary build-pipeline signing probe
+### Temporary build-pipeline ledger probe
 
 The [Build and test workflow](../../.github/workflows/build-test.yml) contains a
-temporary `GitHub OIDC/Fulcio signing check` job. Pushing `feat/github-oidc-e2e`
+temporary `GitHub OIDC/Fulcio ledger check` job. Pushing `feat/github-oidc-e2e`
 triggers this existing build workflow and the probe, even without an open PR.
 Same-repository pull requests from that branch also run it. The permissions
 `contents: read` and `id-token: write` are scoped to that job; existing build jobs
 do not gain OIDC permissions, and fork PRs do not run the probe.
 
-The job uses the production signing function to request a real GitHub token for
-`sigstore`, exchange a fresh signed CSR with public Fulcio, sign the sample JSON
-file with `pyscitt`, and verify the resulting COSE signature. It needs no ledger
-URL or API credentials. Failures in issuance, certificate validation, or signing
-fail the job; only a successfully verified statement is uploaded as the
-`github-oidc-fulcio-cose` artifact, retained for one day. Neither the bearer token
-nor private key is saved. The public certificate-transparency disclosure described
-above still applies.
+The normal CI job packages its already-built ledger as an RPM and shares it with
+the isolated probe. The probe runs in the same Azure Linux environment, installs
+that package, and starts a local ledger using the existing managed e2e fixtures.
+It configures the standard registration policy for the bundled public Fulcio
+root and the exact build-workflow URI from `GITHUB_WORKFLOW_REF`, not an identity
+chosen by the returned certificate.
 
-Remove the temporary job and feature-branch push trigger after validating live
-issuance.
+Only after the ledger is open and configured does the probe request a real GitHub
+token for `sigstore`, exchange a fresh signed CSR with public Fulcio, sign the
+sample JSON with `pyscitt`, and verify the COSE signature. It submits the statement
+over HTTPS with the local service certificate pinned and verifies the ledger's
+receipt using the existing submission path. No external ledger URL or API token
+is needed. Harness-generated governance credentials remain separate from the
+signing/submission client.
+
+Issuance, certificate validation, policy rejection, submission, or receipt
+verification failures fail the job. On success, `github-oidc-fulcio-cose` contains
+`signed-statement.cose`, the verified receipt-bearing `transparent-statement.cose`,
+and `submission.json` with the committed transaction ID. The artifact and native
+RPM are retained for one day; no bearer token, signing key, governance key, or
+ledger workspace is uploaded. The public certificate-transparency disclosure
+described above still applies.
+
+The live test is skipped during ordinary local and CI suites. Only this job sets
+`SCITT_LIVE_GITHUB_OIDC=1` and supplies its output directory before running
+`test/test_github_oidc_live.py` with `--start-cchost`.
+
+Remove the temporary job, its native-package sharing steps, and the feature-branch
+push trigger after validating live ledger acceptance.
 
 ### Ledger submission workflow
 
@@ -248,7 +266,11 @@ behavior does **not** change: expiry enforcement belongs to this example's
 registration policy.
 The offline suite also checks the probe's verified artifact and ensures Fulcio
 refusal, payload mismatch, and invalid signatures fail without creating an output
-file.
+file. Managed-ledger coverage exercises the same live registration helper with
+synthetic issuance, including unexpected-workflow rejection and failed receipt
+verification without success artifacts. These local cases do not establish that
+the public Fulcio-issued certificate was accepted; that result comes from the
+opt-in GitHub job.
 
 ## Reference implementations and specifications
 

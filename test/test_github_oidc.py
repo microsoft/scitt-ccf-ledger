@@ -26,6 +26,12 @@ from pyscitt.verify import verify_cose_sign1, verify_transparent_statement
 
 from . import policies
 from .infra.assertions import service_error
+from .test_github_oidc_live import (
+    register_fulcio_statement,
+)
+from .test_github_oidc_live import (
+    test_real_fulcio_statement_to_managed_ledger as live_probe,
+)
 
 WORKFLOW = (
     "https://github.com/octo/example/.github/workflows/submit.yml@refs/heads/main"
@@ -657,6 +663,155 @@ class TestGitHubActionOffline:
 
 
 class TestGitHubLedgerPolicy:
+    @pytest.mark.parametrize("expected_context", [False, True])
+    def test_live_probe_entrypoint(
+        self,
+        fulcio_ca,
+        cchost,
+        configure_service,
+        trust_store,
+        tmp_path,
+        monkeypatch,
+        expected_context,
+    ):
+        workflow_ref = "octo/example/.github/workflows/build-test.yml@refs/heads/main"
+        mock = MockFulcio(
+            fulcio_ca,
+            certificate_options={
+                "basic_constraints": False,
+                "san": f"https://github.com/{workflow_ref}",
+            },
+        )
+        real_sign_payload = sign.sign_payload
+
+        def exchange(payload, session, **kwargs):
+            with httpx.Client(transport=httpx.MockTransport(mock)) as mock_session:
+                return real_sign_payload(
+                    payload, mock_session, environment=ENVIRONMENT, **kwargs
+                )
+
+        monkeypatch.setattr(sign, "sign_payload", exchange)
+        monkeypatch.setenv("GITHUB_REPOSITORY", "octo/example")
+        monkeypatch.setenv(
+            "GITHUB_WORKFLOW_REF",
+            (
+                workflow_ref
+                if expected_context
+                else "unexpected/repo/.github/workflows/build-test.yml@refs/heads/main"
+            ),
+        )
+        output_dir = tmp_path / "output"
+        monkeypatch.setenv("SCITT_GITHUB_OIDC_OUTPUT_DIR", str(output_dir))
+        if not expected_context:
+            with pytest.raises(AssertionError, match="expected build workflow"):
+                live_probe(cchost, configure_service)
+            assert not mock.requests
+            assert not output_dir.exists()
+        else:
+            live_probe(cchost, configure_service)
+            statement = (output_dir / "signed-statement.cose").read_bytes()
+            verify_transparent_statement(
+                (output_dir / "transparent-statement.cose").read_bytes(),
+                trust_store,
+                statement,
+            )
+            assert (
+                Sign1Message.decode(statement).phdr[ContentType] == "application/json"
+            )
+
+    @pytest.mark.parametrize("basic_constraints", [False, True])
+    @pytest.mark.parametrize("failure", [None, "workflow", "receipt"])
+    def test_live_probe_registration(
+        self,
+        fulcio_ca,
+        client: Client,
+        configure_service,
+        trust_store,
+        tmp_path,
+        monkeypatch,
+        basic_constraints,
+        failure,
+    ):
+        mock = MockFulcio(
+            fulcio_ca,
+            certificate_options={
+                "basic_constraints": basic_constraints,
+                "san": (
+                    WORKFLOW
+                    if failure != "workflow"
+                    else "https://github.com/unexpected/repo/.github/workflows/submit.yml@refs/heads/main"
+                ),
+            },
+        )
+        real_sign_payload = sign.sign_payload
+
+        def exchange(payload, session, **kwargs):
+            with httpx.Client(transport=httpx.MockTransport(mock)) as mock_session:
+                return real_sign_payload(
+                    payload, mock_session, environment=ENVIRONMENT, **kwargs
+                )
+
+        monkeypatch.setattr(sign, "sign_payload", exchange)
+        if failure == "receipt":
+
+            def reject_receipt(*_):
+                raise ValueError("Receipt verification failed")
+
+            monkeypatch.setattr(sign, "verify_transparent_statement", reject_receipt)
+        service_ca = tmp_path / "service-ca.pem"
+        service_ca.write_text(client.get_service_certificate())
+        submission_client = Client(client.url, cacert=str(service_ca))
+        output_dir = tmp_path / "output"
+        try:
+            if failure == "workflow":
+                with service_error(
+                    "PolicyFailed:.*Unexpected signing authority or workflow"
+                ):
+                    register_fulcio_statement(
+                        submission_client,
+                        configure_service,
+                        workflow=WORKFLOW,
+                        payload=PAYLOAD,
+                        output_dir=output_dir,
+                    )
+            elif failure == "receipt":
+                with pytest.raises(ValueError, match="Receipt verification failed"):
+                    register_fulcio_statement(
+                        submission_client,
+                        configure_service,
+                        workflow=WORKFLOW,
+                        payload=PAYLOAD,
+                        output_dir=output_dir,
+                    )
+            else:
+                outputs = register_fulcio_statement(
+                    submission_client,
+                    configure_service,
+                    workflow=WORKFLOW,
+                    payload=PAYLOAD,
+                    output_dir=output_dir,
+                )
+                assert re.fullmatch(r"\d+\.\d+", outputs["transaction-id"])
+                statement = (output_dir / "signed-statement.cose").read_bytes()
+                verify_transparent_statement(
+                    (output_dir / "transparent-statement.cose").read_bytes(),
+                    trust_store,
+                    statement,
+                )
+                assert (
+                    json.loads((output_dir / "submission.json").read_text()) == outputs
+                )
+                assert set(path.name for path in output_dir.iterdir()) == {
+                    "signed-statement.cose",
+                    "transparent-statement.cose",
+                    "submission.json",
+                }
+        finally:
+            submission_client.session.close()
+        if failure is not None:
+            assert not (output_dir / "transparent-statement.cose").exists()
+            assert not (output_dir / "submission.json").exists()
+
     @pytest.mark.parametrize("intermediate", [False, True])
     @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_action_to_running_ledger(

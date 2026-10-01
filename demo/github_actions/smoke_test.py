@@ -17,6 +17,14 @@ from pyscitt.verify import verify_cose_sign1
 from . import sign
 
 
+def verify_statement(statement: bytes, payload: bytes) -> None:
+    message = Sign1Message.decode(statement)
+    if message.payload != payload:
+        raise ValueError("Generated COSE payload does not match the input file")
+    leaf = crypto.cert_der_to_pem(message.phdr[X5chain][0])
+    verify_cose_sign1(statement, crypto.get_cert_public_key(leaf))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Probe live GitHub OIDC/Fulcio signing without a ledger"
@@ -30,11 +38,7 @@ def main() -> None:
             statement = sign.sign_payload(
                 payload, session, content_type="application/json"
             )
-        message = Sign1Message.decode(statement)
-        if message.payload != payload:
-            raise ValueError("Generated COSE payload does not match the input file")
-        leaf = crypto.cert_der_to_pem(message.phdr[X5chain][0])
-        verify_cose_sign1(statement, crypto.get_cert_public_key(leaf))
+        verify_statement(statement, payload)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_bytes(statement)
         print(
