@@ -88,7 +88,6 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     --mount=type=bind,from=builder,source=/tmp/app-build,target=/tmp/app-build \
     --mount=type=bind,from=rpmdb-tools,source=/usr/bin/sqlite3,target=/tmp/sqlite3 \
     --mount=type=bind,source=docker/canonicalize-image.sh,target=/tmp/canonicalize-image.sh \
-    --mount=type=bind,source=docker/start-app.sh,target=/tmp/start-app.sh \
     set -e; \
     TDNF_SNAPSHOTTIME=$(cat /tmp/tdnf_snapshottime) && \
     tdnf install -y --snapshottime=${TDNF_SNAPSHOTTIME} \
@@ -120,9 +119,8 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
     /bin/bash /tmp/canonicalize-image.sh /tmp/sqlite3 "${SOURCE_DATE_EPOCH}" && \
     \
     mkdir -p /usr/src/app /host/node && \
-    install -m 0755 /tmp/start-app.sh /host/node/start-app.sh && \
     \
-    # Last, because installing start-app.sh above stamps it with the wall
+    # Last, because the mkdir above stamps what it creates with the wall
     # clock, and only entries newer than SOURCE_DATE_EPOCH are touched.
     find / \
         -xdev \
@@ -138,7 +136,6 @@ RUN --mount=type=bind,from=snapshot-extractor,source=/tmp/tdnf_snapshottime,targ
         ! -path /tmp/ccf_reproduce_sha256 \
         ! -path /tmp/ccf_rpm_sha256 \
         ! -path /tmp/sqlite3 \
-        ! -path /tmp/start-app.sh \
         ! -path /tmp/tdnf_snapshottime \
         -newermt "@${SOURCE_DATE_EPOCH}" \
         -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + && \
@@ -170,6 +167,4 @@ COPY --from=rootfs-normalizer /rootfs/ /
 
 WORKDIR /host/node
 
-# Use tini to handle zombie processes and signal forwarding
-# since we use a custom script to start the app 
-ENTRYPOINT [ "tini", "--", "./start-app.sh" ]
+ENTRYPOINT [ "tini", "--", "cchost" ]
