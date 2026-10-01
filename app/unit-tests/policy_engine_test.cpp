@@ -12,20 +12,6 @@
 
 namespace
 {
-  TEST(PolicyEngineTest, X509MetadataRequiresProtectedX509Identity)
-  {
-    scitt::cose::ProtectedHeader phdr;
-    phdr.x5chain = std::vector<std::vector<uint8_t>>{{1, 2, 3}};
-    EXPECT_FALSE(scitt::x509_policy_info(phdr).has_value());
-    phdr.cwt_claims.iss = "did:attestedsvc:example";
-    EXPECT_FALSE(scitt::x509_policy_info(phdr).has_value());
-    phdr.cwt_claims.iss = "did:x509:example";
-    phdr.x5chain->clear();
-    EXPECT_FALSE(scitt::x509_policy_info(phdr).has_value());
-    phdr.x5chain.reset();
-    EXPECT_FALSE(scitt::x509_policy_info(phdr).has_value());
-  }
-
   class ScopedStreamRedirect
   {
   private:

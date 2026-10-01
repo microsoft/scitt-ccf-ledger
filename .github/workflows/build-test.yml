@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - feat/github-oidc-e2e
   pull_request:
     # 'labeled' is needed so that adding the run-test-on-mult-nodes label to an
     # open pull request triggers the multi-node job below.
@@ -74,6 +75,44 @@ jobs:
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json
           if-no-files-found: warn
+
+  temporary-github-oidc-fulcio:
+    name: Temporary GitHub OIDC/Fulcio signing check
+    # Remove this feature-branch probe after live Fulcio validation.
+    if: >-
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/feat/github-oidc-e2e') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.head_ref == 'feat/github-oidc-e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install pyscitt
+        run: python -m pip install --disable-pip-version-check --quiet ./pyscitt
+      - name: "Temporary: sign with GitHub OIDC and public Fulcio"
+        run: |
+          python -m demo.github_actions.smoke_test \
+            --file demo/github_actions/payload.json \
+            --out "$RUNNER_TEMP/github-oidc-fulcio.cose"
+      - name: Retain the verified COSE signature
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: github-oidc-fulcio-cose
+          path: ${{ runner.temp }}/github-oidc-fulcio.cose
+          retention-days: 1
+          if-no-files-found: error
 
   build-test-multi-node:
     name: CI (3 node cluster)

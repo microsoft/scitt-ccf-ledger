@@ -11,30 +11,15 @@ inputs:
   ledger-url:
     description: HTTPS URL of the configured, running SCITT ledger
     required: true
-  fulcio-root:
-    description: Path to an explicitly trusted Fulcio root CA certificate in PEM format
-    required: true
-  fulcio-url:
-    description: Fulcio certificate authority origin
-    default: https://fulcio.sigstore.dev
-  audience:
-    description: GitHub OIDC audience accepted by the configured Fulcio instance
-    default: sigstore
   content-type:
     description: COSE payload content type
     default: application/octet-stream
   service-ca:
     description: Optional PEM CA bundle for ledger TLS verification
     default: ""
-  auth-token:
-    description: Optional bearer token if the ledger also requires API authentication
-    default: ""
   output-dir:
     description: Directory for signed and transparent statements
     default: scitt-output
-  development:
-    description: Disable only ledger TLS verification, for a local demo only
-    default: "false"
 
 outputs:
   transaction-id:
@@ -69,14 +54,9 @@ runs:
         SCITT_PYTHON: ${{ steps.setup.outputs.python }}
         SCITT_FILE: ${{ inputs.file }}
         SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
-        SCITT_FULCIO_ROOT: ${{ inputs.fulcio-root }}
-        SCITT_FULCIO_URL: ${{ inputs.fulcio-url }}
-        SCITT_AUDIENCE: ${{ inputs.audience }}
         SCITT_CONTENT_TYPE: ${{ inputs.content-type }}
         SCITT_SERVICE_CA: ${{ inputs.service-ca }}
-        SCITT_AUTH_TOKEN: ${{ inputs.auth-token }}
         SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
-        SCITT_DEVELOPMENT: ${{ inputs.development }}
       run: |
         export SCITT_WORKSPACE="$PWD"
         export PYTHONPATH="${GITHUB_ACTION_PATH}/../../.."

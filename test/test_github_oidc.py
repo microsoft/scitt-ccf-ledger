@@ -18,11 +18,13 @@ from pycose.headers import Algorithm, ContentType, X5chain
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-from demo.github_actions import policy, sign
+from demo.github_actions import policy, sign, smoke_test
 from pyscitt import crypto
+from pyscitt.cli.main import main as cli_main
 from pyscitt.client import Client
-from pyscitt.verify import verify_transparent_statement
+from pyscitt.verify import verify_cose_sign1, verify_transparent_statement
 
+from . import policies
 from .infra.assertions import service_error
 
 WORKFLOW = (
@@ -33,20 +35,6 @@ ENVIRONMENT = {
     "ACTIONS_ID_TOKEN_REQUEST_URL": "https://oidc.example/token?existing=1&audience=old",
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "runner-request-credential",
 }
-
-
-def github_claims() -> dict[str, str]:
-    return {
-        "issuer": policy.GITHUB_ISSUER,
-        "workflow": WORKFLOW,
-        "workflow_digest": "a" * 40,
-        "runner": "github-hosted",
-        "repository": "https://github.com/octo/example",
-        "ref": "refs/heads/main",
-        "repository_id": "123",
-        "owner_id": "456",
-        "event": "workflow_dispatch",
-    }
 
 
 class FulcioCA:
@@ -125,7 +113,7 @@ class FulcioCA:
         self,
         public_key,
         *,
-        claims: dict[str, str] | None = None,
+        oidc_issuer: str | None = policy.GITHUB_ISSUER,
         san: str = WORKFLOW,
         lifetime: int = 600,
         offset: int = -30,
@@ -158,16 +146,19 @@ class FulcioCA:
             builder = builder.add_extension(
                 x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CODE_SIGNING]), False
             )
-        for name, value in (claims if claims is not None else github_claims()).items():
+        if oidc_issuer is not None:
             builder = builder.add_extension(
                 x509.UnrecognizedExtension(
-                    ObjectIdentifier(policy.FULCIO_OIDS[name]), policy.der_utf8(value)
+                    ObjectIdentifier(policy.GITHUB_ISSUER_OID),
+                    policy.der_utf8(oidc_issuer),
                 ),
                 False,
             )
         return builder.sign(self.issuer_key, hashes.SHA256())
 
-    def statement(self, *, payload: bytes = PAYLOAD, **kwargs) -> bytes:
+    def statement(
+        self, *, payload: bytes = PAYLOAD, issuer: str | None = None, **kwargs
+    ) -> bytes:
         key = ec.generate_private_key(ec.SECP256R1())
         leaf = self.certificate(key.public_key(), **kwargs)
         signer = crypto.Signer(
@@ -176,8 +167,8 @@ class FulcioCA:
                 serialization.PrivateFormat.PKCS8,
                 serialization.NoEncryption(),
             ).decode("ascii"),
-            algorithm="ES256",
-            issuer=policy.signing_issuer(self.pem, kwargs.get("san", WORKFLOW)),
+            issuer=issuer
+            or policy.signing_issuer(self.pem, kwargs.get("san", WORKFLOW)),
             x5c=[
                 leaf.public_bytes(serialization.Encoding.PEM).decode("ascii"),
                 *self.chain,
@@ -187,20 +178,17 @@ class FulcioCA:
             signer, payload, "application/octet-stream", cwt=True
         )
 
-    def registration_policy(self, **kwargs) -> dict:
-        return policy.registration_policy(
-            self.pem,
-            repository="octo/example",
-            repository_id="123",
-            owner_id="456",
-            workflow=WORKFLOW,
-            **kwargs,
-        )
+    def registration_policy(self) -> dict:
+        return policy.registration_policy(self.pem, workflow=WORKFLOW)
 
 
 @pytest.fixture
-def fulcio_ca():
-    return FulcioCA()
+def fulcio_ca(tmp_path, monkeypatch):
+    ca = FulcioCA()
+    root = tmp_path / "fulcio-root.pem"
+    root.write_text(ca.pem)
+    monkeypatch.setattr(policy, "FULCIO_ROOT", root)
+    return ca
 
 
 @dataclass
@@ -223,7 +211,7 @@ class MockFulcio:
                 request.headers["authorization"] == "Bearer runner-request-credential"
             )
             return httpx.Response(200, json={"value": "test-github-jwt"})
-        assert str(request.url) == "https://fulcio.example/api/v2/signingCert"
+        assert str(request.url) == "https://fulcio.sigstore.dev/api/v2/signingCert"
         assert request.method == "POST"
         assert request.headers["authorization"] == "Bearer test-github-jwt"
         body = json.loads(request.content)
@@ -257,10 +245,8 @@ def action_statement(mock: MockFulcio, *, payload: bytes = PAYLOAD) -> bytes:
     with httpx.Client(transport=httpx.MockTransport(mock)) as session:
         return sign.sign_payload(
             payload,
-            mock.ca.pem,
             session,
             content_type="application/octet-stream",
-            fulcio_url="https://fulcio.example",
             environment=ENVIRONMENT,
         )
 
@@ -283,7 +269,8 @@ class TestGitHubActionOffline:
         assert message.phdr[crypto.CWTClaims][crypto.CWT_ISS] == policy.signing_issuer(
             fulcio_ca.pem, WORKFLOW
         )
-        assert isinstance(message.phdr[crypto.CWTClaims][crypto.CWT_IAT], int)
+        assert set(message.phdr) == {Algorithm, ContentType, X5chain, crypto.CWTClaims}
+        assert set(message.phdr[crypto.CWTClaims]) == {crypto.CWT_ISS}
         leaf = x509.load_der_x509_certificate(message.phdr[X5chain][0])
         message.key = CoseKey.from_pem_public_key(
             crypto.get_cert_public_key(
@@ -295,6 +282,69 @@ class TestGitHubActionOffline:
         assert b"PRIVATE KEY" not in statement
         assert capsys.readouterr().out == "::add-mask::test-github-jwt\n"
 
+    @pytest.mark.parametrize("failure", [None, "fulcio", "payload", "signature"])
+    def test_live_smoke_entrypoint(
+        self, fulcio_ca, tmp_path, monkeypatch, capsys, failure
+    ):
+        input_path = tmp_path / "payload.bin"
+        input_path.write_bytes(PAYLOAD)
+        output_path = tmp_path / "output/signed-statement.cose"
+        monkeypatch.setattr(
+            "sys.argv",
+            ["smoke_test", "--file", str(input_path), "--out", str(output_path)],
+        )
+        for name, value in ENVIRONMENT.items():
+            monkeypatch.setenv(name, value)
+        mock = MockFulcio(fulcio_ca)
+
+        def handler(request):
+            if failure == "fulcio" and request.url.host == "fulcio.sigstore.dev":
+                return httpx.Response(400, json={"message": "Signing request refused"})
+            return mock(request)
+
+        real_client = httpx.Client
+
+        def create_client(**kwargs):
+            return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+        monkeypatch.setattr(smoke_test.httpx, "Client", create_client)
+        real_sign_payload = sign.sign_payload
+
+        def sign_for_test(payload, session, **kwargs):
+            statement = real_sign_payload(
+                b"different" if failure == "payload" else payload, session, **kwargs
+            )
+            if failure == "signature":
+                statement = statement[:-1] + bytes([statement[-1] ^ 1])
+            return statement
+
+        monkeypatch.setattr(sign, "sign_payload", sign_for_test)
+        if failure is not None:
+            with pytest.raises(SystemExit) as error:
+                smoke_test.main()
+            assert error.value.code == 1
+            assert not output_path.exists()
+            error_output = capsys.readouterr().err
+            assert "::error::" in error_output
+            assert {
+                "fulcio": "400",
+                "payload": "COSE payload does not match",
+                "signature": "signature is invalid",
+            }[failure] in error_output
+        else:
+            smoke_test.main()
+            statement = output_path.read_bytes()
+            message = Sign1Message.decode(statement)
+            assert message.payload == PAYLOAD
+            assert message.phdr[ContentType] == "application/json"
+            leaf = crypto.cert_der_to_pem(message.phdr[X5chain][0])
+            verify_cose_sign1(statement, crypto.get_cert_public_key(leaf))
+            assert b"test-github-jwt" not in statement
+            assert b"PRIVATE KEY" not in statement
+            output = capsys.readouterr().out
+            assert "::add-mask::test-github-jwt\n" in output
+            assert "Created and verified Fulcio-backed COSE signature" in output
+
     def test_fresh_keys_per_invocation(self, fulcio_ca):
         mock = MockFulcio(fulcio_ca)
         action_statement(mock)
@@ -305,8 +355,9 @@ class TestGitHubActionOffline:
             serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-    def test_intermediate_chain(self):
+    def test_intermediate_chain(self, fulcio_ca):
         ca = FulcioCA(intermediate=True)
+        policy.FULCIO_ROOT.write_text(ca.pem)
         message = Sign1Message.decode(action_statement(MockFulcio(ca)))
         assert len(message.phdr[X5chain]) == 3
         assert message.phdr[X5chain][-1] == ca.root.public_bytes(
@@ -319,9 +370,7 @@ class TestGitHubActionOffline:
             with pytest.raises(ValueError, match="configured authority"):
                 sign.sign_payload(
                     PAYLOAD,
-                    fulcio_ca.pem,
                     session,
-                    fulcio_url="https://fulcio.example",
                     environment=ENVIRONMENT,
                 )
 
@@ -332,7 +381,7 @@ class TestGitHubActionOffline:
             )
         ) as session:
             with pytest.raises(ValueError, match="id-token: write"):
-                sign.github_token(session, {}, "sigstore")
+                sign.github_token(session, {})
 
     @pytest.mark.parametrize(
         "url",
@@ -362,9 +411,7 @@ class TestGitHubActionOffline:
             with pytest.raises(httpx.HTTPStatusError, match="307"):
                 sign.sign_payload(
                     PAYLOAD,
-                    fulcio_ca.pem,
                     session,
-                    fulcio_url="https://fulcio.example",
                     environment=ENVIRONMENT,
                 )
         assert len(requests) == (1 if endpoint == "oidc" else 2)
@@ -375,7 +422,7 @@ class TestGitHubActionOffline:
             transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body))
         ) as session:
             with pytest.raises(ValueError, match="token"):
-                sign.github_token(session, ENVIRONMENT, "sigstore")
+                sign.github_token(session, ENVIRONMENT)
 
     @pytest.mark.parametrize(
         "body",
@@ -402,9 +449,7 @@ class TestGitHubActionOffline:
             with pytest.raises(ValueError, match="Fulcio"):
                 sign.sign_payload(
                     PAYLOAD,
-                    fulcio_ca.pem,
                     session,
-                    fulcio_url="https://fulcio.example",
                     environment=ENVIRONMENT,
                 )
 
@@ -418,7 +463,7 @@ class TestGitHubActionOffline:
             ({"lifetime": 601}, False, "not short lived"),
             ({"ca": True}, False, "CA certificate"),
             (
-                {"claims": github_claims() | {"issuer": "https://other.example"}},
+                {"oidc_issuer": "https://other.example"},
                 False,
                 "GitHub Actions identity",
             ),
@@ -430,7 +475,12 @@ class TestGitHubActionOffline:
         with pytest.raises(ValueError, match=error):
             action_statement(mock)
 
-    def test_explicit_root_required(self, fulcio_ca):
+    @pytest.mark.parametrize("options", [{"eku": False}, {"oidc_issuer": None}])
+    def test_missing_identity_extensions(self, fulcio_ca, options):
+        with pytest.raises(x509.ExtensionNotFound):
+            action_statement(MockFulcio(fulcio_ca, certificate_options=options))
+
+    def test_trusted_root_validation(self, fulcio_ca):
         with pytest.raises(ValueError, match="exactly one"):
             policy.trusted_root(fulcio_ca.pem * 2)
         leaf = fulcio_ca.certificate(
@@ -438,6 +488,13 @@ class TestGitHubActionOffline:
         )
         with pytest.raises(ValueError, match="CA certificate"):
             policy.trusted_root(leaf.public_bytes(serialization.Encoding.PEM).decode())
+
+    def test_bundled_public_fulcio_root(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        root = policy.trusted_root(policy.FULCIO_ROOT.read_text())
+        assert root.fingerprint(hashes.SHA256()).hex() == (
+            "3ba7b6cc4e95469d4d334b49cb257ad8537076fa84b0ca87ff4ecfe6a54680c1"
+        )
 
     @pytest.mark.parametrize("length", [0, 127, 128, 255, 256])
     def test_fulcio_utf8_encoding(self, length):
@@ -453,8 +510,6 @@ class TestGitHubActionOffline:
             assert encoded[2 + size :] == value.encode()
 
     def test_policy_cli_preserves_configuration(self, fulcio_ca, tmp_path, monkeypatch):
-        root = tmp_path / "root.pem"
-        root.write_text(fulcio_ca.pem)
         original = {
             "authentication": {
                 "allowUnauthenticated": False,
@@ -469,14 +524,6 @@ class TestGitHubActionOffline:
             "sys.argv",
             [
                 "policy",
-                "--fulcio-root",
-                str(root),
-                "--repository",
-                "octo/example",
-                "--repository-id",
-                "123",
-                "--owner-id",
-                "456",
                 "--workflow",
                 WORKFLOW,
                 "--configuration",
@@ -490,6 +537,88 @@ class TestGitHubActionOffline:
         assert result["authentication"] == original["authentication"]
         assert result["maxSignedStatementBytes"] == original["maxSignedStatementBytes"]
         assert result["policy"]["acceptedAlgorithms"] == ["ES256"]
+
+    @pytest.mark.parametrize("allow_unauthenticated", [False, True])
+    def test_policy_cli_defaults(
+        self, fulcio_ca, tmp_path, monkeypatch, allow_unauthenticated
+    ):
+        output = tmp_path / "github-policy.json"
+        arguments = ["policy", "--workflow", WORKFLOW, "--out", str(output)]
+        if allow_unauthenticated:
+            arguments.append("--allow-unauthenticated")
+        monkeypatch.setattr("sys.argv", arguments)
+        policy.main()
+        assert json.loads(output.read_text()) == {
+            "authentication": {"allowUnauthenticated": allow_unauthenticated},
+            "policy": fulcio_ca.registration_policy(),
+        }
+
+    def test_pyscitt_cli_header_compatibility(self, fulcio_ca, tmp_path, monkeypatch):
+        key = ec.generate_private_key(ec.SECP256R1())
+        monkeypatch.setattr(sign.ec, "generate_private_key", lambda _: key)
+        statement = action_statement(MockFulcio(fulcio_ca))
+        message = Sign1Message.decode(statement)
+        payload_path = tmp_path / "payload.bin"
+        payload_path.write_bytes(PAYLOAD)
+        key_path = tmp_path / "key.pem"
+        key_path.write_bytes(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
+        chain_path = tmp_path / "chain.pem"
+        chain_path.write_text(
+            "".join(crypto.cert_der_to_pem(cert) for cert in message.phdr[X5chain])
+        )
+        output_path = tmp_path / "cli-statement.cose"
+        cli_main(
+            [
+                "sign",
+                "--statement",
+                str(payload_path),
+                "--key",
+                str(key_path),
+                "--x5c",
+                str(chain_path),
+                "--issuer",
+                policy.signing_issuer(fulcio_ca.pem, WORKFLOW),
+                "--content-type",
+                "application/octet-stream",
+                "--out",
+                str(output_path),
+                "--uses-cwt",
+            ]
+        )
+        cli_message = Sign1Message.decode(output_path.read_bytes())
+        assert cli_message.phdr == message.phdr
+        assert cli_message.uhdr == message.uhdr == {}
+        assert cli_message.payload == message.payload == PAYLOAD
+        for signed in [message, cli_message]:
+            signed.key = CoseKey.from_pem_public_key(
+                crypto.get_cert_public_key(
+                    crypto.cert_der_to_pem(signed.phdr[X5chain][0])
+                )
+            )
+            assert signed.verify_signature()
+
+    @pytest.mark.parametrize(
+        "option",
+        [
+            "--fulcio-root",
+            "--fulcio-url",
+            "--audience",
+            "--auth-token",
+            "--development",
+        ],
+    )
+    def test_removed_options_rejected(self, option, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["sign", option, "unused"])
+        with pytest.raises(SystemExit) as error:
+            sign.main()
+        assert error.value.code == 2
+        assert f"unrecognized arguments: {option}" in capsys.readouterr().err
 
 
 class TestGitHubLedgerPolicy:
@@ -505,6 +634,7 @@ class TestGitHubLedgerPolicy:
     ):
         if intermediate:
             fulcio_ca = FulcioCA(intermediate=True)
+            policy.FULCIO_ROOT.write_text(fulcio_ca.pem)
         configure_service({"policy": fulcio_ca.registration_policy()})
         statement = action_statement(MockFulcio(fulcio_ca))
         outputs = sign.submit(client, statement, tmp_path)
@@ -528,28 +658,26 @@ class TestGitHubLedgerPolicy:
     ):
         configure_service({"policy": fulcio_ca.registration_policy()})
         (tmp_path / "payload.bin").write_bytes(PAYLOAD)
-        (tmp_path / "root.pem").write_text(fulcio_ca.pem)
+        (tmp_path / "service-ca.pem").write_text(client.get_service_certificate())
         github_output = tmp_path / "github-output"
         for name, value in {
             "SCITT_WORKSPACE": str(tmp_path),
             "SCITT_FILE": "payload.bin",
             "SCITT_LEDGER_URL": client.url,
-            "SCITT_FULCIO_ROOT": "root.pem",
-            "SCITT_FULCIO_URL": "https://fulcio.example",
+            "SCITT_SERVICE_CA": "service-ca.pem",
             "SCITT_OUTPUT_DIR": "output",
-            "SCITT_DEVELOPMENT": "true",
             "GITHUB_OUTPUT": str(github_output),
         }.items():
             monkeypatch.setenv(name, value)
         monkeypatch.setattr("sys.argv", ["sign"])
         real_sign_payload = sign.sign_payload
 
-        def exchange(payload, root_pem, session, **kwargs):
+        def exchange(payload, session, **kwargs):
             with httpx.Client(
                 transport=httpx.MockTransport(MockFulcio(fulcio_ca))
             ) as mock_session:
                 return real_sign_payload(
-                    payload, root_pem, mock_session, environment=ENVIRONMENT, **kwargs
+                    payload, mock_session, environment=ENVIRONMENT, **kwargs
                 )
 
         monkeypatch.setattr(sign, "sign_payload", exchange)
@@ -580,85 +708,48 @@ class TestGitHubLedgerPolicy:
             )
 
     @pytest.mark.parametrize(
-        "claim, value",
+        "workflow",
         [
-            ("repository", "https://github.com/unexpected/repository"),
-            ("repository_id", "999"),
-            ("owner_id", "999"),
-            ("issuer", "https://other.example"),
-            ("ref", "refs/heads/untrusted"),
-            (
-                "workflow",
-                "https://github.com/unexpected/repo/.github/workflows/x.yml@main",
-            ),
-            ("event", "pull_request"),
-            ("runner", "self-hosted"),
+            "https://github.com/unexpected/repository/.github/workflows/submit.yml@refs/heads/main",
+            "https://github.com/octo/example/.github/workflows/other.yml@refs/heads/main",
+            "https://github.com/octo/example/.github/workflows/submit.yml@refs/heads/untrusted",
         ],
     )
-    def test_reject_unexpected_identity(
-        self, fulcio_ca, client: Client, configure_service, claim, value
+    def test_reject_unexpected_workflow(
+        self, fulcio_ca, client: Client, configure_service, workflow
     ):
         configure_service({"policy": fulcio_ca.registration_policy()})
-        statement = fulcio_ca.statement(claims=github_claims() | {claim: value})
-        with service_error("PolicyFailed:.*Unexpected GitHub identity claim"):
+        statement = fulcio_ca.statement(san=workflow)
+        with service_error("PolicyFailed:.*Unexpected signing authority or workflow"):
             client.submit_signed_statement_and_wait(statement)
-
-    def test_unexpected_repo_cannot_reuse_trusted_workflow(
-        self, fulcio_ca, client: Client, configure_service
-    ):
-        configure_service({"policy": fulcio_ca.registration_policy()})
-        statement = fulcio_ca.statement(
-            claims=github_claims()
-            | {
-                "repository": "https://github.com/attacker/source",
-                "repository_id": "789",
-                "owner_id": "999",
-            }
-        )
-        assert Sign1Message.decode(statement).phdr[crypto.CWTClaims][
-            crypto.CWT_ISS
-        ] == (policy.signing_issuer(fulcio_ca.pem, WORKFLOW))
-        with service_error("PolicyFailed:.*Unexpected GitHub identity claim"):
-            client.submit_signed_statement_and_wait(statement)
-
-    def test_reject_missing_identity(
-        self, fulcio_ca, client: Client, configure_service
-    ):
-        configure_service({"policy": fulcio_ca.registration_policy()})
-        claims = github_claims()
-        del claims["repository_id"]
-        with service_error("PolicyFailed:.*Unexpected GitHub identity claim"):
-            client.submit_signed_statement_and_wait(fulcio_ca.statement(claims=claims))
 
     def test_reject_untrusted_ca(self, fulcio_ca, client: Client, configure_service):
         configure_service({"policy": fulcio_ca.registration_policy()})
         with service_error("PolicyFailed:.*Unexpected signing authority"):
             client.submit_signed_statement_and_wait(FulcioCA().statement())
 
-    def test_reject_wrong_workflow_san(
-        self, fulcio_ca, client: Client, configure_service
+    @pytest.mark.parametrize("untrusted_ca", [False, True])
+    def test_cannot_forge_allowed_issuer(
+        self, fulcio_ca, client: Client, configure_service, untrusted_ca
     ):
         configure_service({"policy": fulcio_ca.registration_policy()})
-        with service_error("PolicyFailed:.*Unexpected signing authority"):
+        ca = FulcioCA() if untrusted_ca else fulcio_ca
+        with service_error("InvalidInput:.*Failed to resolve did:x509 issuer"):
             client.submit_signed_statement_and_wait(
-                fulcio_ca.statement(
-                    san="https://github.com/octo/example/.github/workflows/other.yml@refs/heads/main"
+                ca.statement(
+                    san=(
+                        WORKFLOW
+                        if untrusted_ca
+                        else "https://github.com/unexpected/repo/.github/workflows/submit.yml@refs/heads/main"
+                    ),
+                    issuer=policy.signing_issuer(fulcio_ca.pem, WORKFLOW),
                 )
             )
 
-    def test_optional_workflow_digest(
-        self, fulcio_ca, client: Client, configure_service
-    ):
-        configure_service(
-            {"policy": fulcio_ca.registration_policy(workflow_digest="a" * 40)}
-        )
-        client.submit_signed_statement_and_wait(fulcio_ca.statement())
-        with service_error("PolicyFailed:.*Unexpected GitHub identity claim"):
-            client.submit_signed_statement_and_wait(
-                fulcio_ca.statement(
-                    claims=github_claims() | {"workflow_digest": "b" * 40}
-                )
-            )
+    def test_reject_missing_eku(self, fulcio_ca, client: Client, configure_service):
+        configure_service({"policy": fulcio_ca.registration_policy()})
+        with service_error("InvalidInput:.*Failed to resolve did:x509 issuer"):
+            client.submit_signed_statement_and_wait(fulcio_ca.statement(eku=False))
 
     @pytest.mark.parametrize("offset", [-1200, 300])
     def test_certificate_validity_is_policy_specific(
@@ -673,16 +764,6 @@ class TestGitHubLedgerPolicy:
         with service_error("PolicyFailed:.*expired, not yet valid, or untrusted"):
             client.submit_signed_statement_and_wait(statement)
 
-    @pytest.mark.parametrize("lifetime", [0, 601])
-    def test_reject_invalid_certificate_lifetime(
-        self, fulcio_ca, client: Client, configure_service, lifetime
-    ):
-        configure_service({"policy": fulcio_ca.registration_policy()})
-        with service_error("PolicyFailed:.*not short lived"):
-            client.submit_signed_statement_and_wait(
-                fulcio_ca.statement(lifetime=lifetime)
-            )
-
     def test_reject_payload_tampering(
         self, fulcio_ca, client: Client, configure_service
     ):
@@ -693,33 +774,12 @@ class TestGitHubLedgerPolicy:
             client.submit_signed_statement_and_wait(cbor2.dumps(statement))
 
     @pytest.mark.parametrize("language", ["js", "rego"])
-    def test_authenticated_metadata_mapping(
+    def test_existing_policy_engine_accepts_action_statement(
         self, fulcio_ca, client: Client, configure_service, language
     ):
-        oid = policy.FULCIO_OIDS["repository_id"]
-        expected = policy.der_utf8("123").hex()
-        if language == "js":
-            registration = {"policyScript": f"""
-export function apply(phdr) {{
-    return phdr.x509.validitySeconds === 600 &&
-        phdr.x509.extensions[{json.dumps(oid)}].length === 1 &&
-        phdr.x509.extensions[{json.dumps(oid)}][0] === {json.dumps(expected)}
-        ? true : "Certificate metadata mismatch";
-}}
-"""}
-        else:
-            registration = {"policyRego": f"""
-package policy
-default allow := false
-allow if {{
-    input.phdr["X.509"].validitySeconds == 600
-    input.phdr["X.509"].extensions[{json.dumps(oid)}] == [{json.dumps(expected)}]
-}}
-errors contains "Certificate metadata mismatch" if {{ not allow }}
-"""}
+        issuer = policy.signing_issuer(fulcio_ca.pem, WORKFLOW)
+        registration = policies.DID_X509[language](issuer)
         configure_service({"policy": registration})
-        client.submit_signed_statement_and_wait(fulcio_ca.statement())
-        with service_error("PolicyFailed:.*Certificate metadata mismatch"):
-            client.submit_signed_statement_and_wait(
-                fulcio_ca.statement(claims=github_claims() | {"repository_id": "999"})
-            )
+        client.submit_signed_statement_and_wait(action_statement(MockFulcio(fulcio_ca)))
+        with service_error("PolicyFailed:.*Invalid issuer"):
+            client.submit_signed_statement_and_wait(FulcioCA().statement())

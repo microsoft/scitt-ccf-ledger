@@ -21,16 +21,10 @@ from pyscitt import crypto
 from pyscitt.client import Client, ServiceError
 from pyscitt.verify import StaticTrustStore, verify_transparent_statement
 
-from .policy import (
-    FULCIO_OIDS,
-    GITHUB_ISSUER,
-    MAX_CERTIFICATE_LIFETIME,
-    der_utf8,
-    signing_issuer,
-    trusted_root,
-)
+from . import policy
 
-DEFAULT_FULCIO_URL = "https://fulcio.sigstore.dev"
+FULCIO_URL = "https://fulcio.sigstore.dev"
+FULCIO_AUDIENCE = "sigstore"
 
 
 def https_url(value: str, name: str) -> httpx.URL:
@@ -44,9 +38,7 @@ def workflow_command_escape(value: str) -> str:
     return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def github_token(
-    session: httpx.Client, environment: Mapping[str, str], audience: str
-) -> str:
+def github_token(session: httpx.Client, environment: Mapping[str, str]) -> str:
     url = environment.get("ACTIONS_ID_TOKEN_REQUEST_URL")
     credential = environment.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
     if not url or not credential:
@@ -56,7 +48,7 @@ def github_token(
         )
     response = session.get(
         https_url(url, "GitHub OIDC request URL").copy_merge_params(
-            {"audience": audience}
+            {"audience": FULCIO_AUDIENCE}
         ),
         headers={"Authorization": f"Bearer {credential}"},
         follow_redirects=False,
@@ -75,19 +67,14 @@ def github_token(
 
 def sign_payload(
     payload: bytes,
-    root_pem: str,
     session: httpx.Client,
     *,
     content_type: str = "application/octet-stream",
-    fulcio_url: str = DEFAULT_FULCIO_URL,
-    audience: str = "sigstore",
     environment: Mapping[str, str] = os.environ,
 ) -> bytes:
-    root = trusted_root(root_pem)
-    endpoint = https_url(fulcio_url, "Fulcio URL")
-    if endpoint.path not in ("", "/") or endpoint.query:
-        raise ValueError("Fulcio URL must be an origin without a path or query")
-    token = github_token(session, environment, audience)
+    root_pem = policy.FULCIO_ROOT.read_text()
+    root = policy.trusted_root(root_pem)
+    token = github_token(session, environment)
     key = ec.generate_private_key(ec.SECP256R1())
     csr = (
         x509.CertificateSigningRequestBuilder()
@@ -96,7 +83,7 @@ def sign_payload(
         .sign(key, hashes.SHA256())
     )
     response = session.post(
-        endpoint.copy_with(path="/api/v2/signingCert"),
+        f"{FULCIO_URL}/api/v2/signingCert",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "certificateSigningRequest": base64.b64encode(
@@ -133,7 +120,7 @@ def sign_payload(
         raise ValueError("Fulcio certificate does not bind the ephemeral signing key")
     now = datetime.now(UTC)
     lifetime = (leaf.not_valid_after_utc - leaf.not_valid_before_utc).total_seconds()
-    if not 0 < lifetime <= MAX_CERTIFICATE_LIFETIME:
+    if not 0 < lifetime <= policy.MAX_CERTIFICATE_LIFETIME:
         raise ValueError("Fulcio certificate is not short lived")
     if not leaf.not_valid_before_utc <= now < leaf.not_valid_after_utc:
         raise ValueError("Fulcio certificate is expired or not yet valid")
@@ -142,11 +129,11 @@ def sign_payload(
             "Fulcio returned a CA certificate instead of a signing certificate"
         )
     issuer_extension = leaf.extensions.get_extension_for_oid(
-        ObjectIdentifier(FULCIO_OIDS["issuer"])
+        ObjectIdentifier(policy.GITHUB_ISSUER_OID)
     ).value
     if not isinstance(
         issuer_extension, x509.UnrecognizedExtension
-    ) or issuer_extension.value != der_utf8(GITHUB_ISSUER):
+    ) or issuer_extension.value != policy.der_utf8(policy.GITHUB_ISSUER):
         raise ValueError(
             "Fulcio certificate was not issued to a GitHub Actions identity"
         )
@@ -179,8 +166,7 @@ def sign_payload(
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         ).decode("ascii"),
-        algorithm="ES256",
-        issuer=signing_issuer(root_pem, uris[0]),
+        issuer=policy.signing_issuer(root_pem, uris[0]),
         x5c=chain,
     )
     return crypto.sign_statement(
@@ -188,9 +174,6 @@ def sign_payload(
         payload,
         content_type,
         cwt=True,
-        additional_phdr={
-            crypto.CWTClaims.identifier: {crypto.CWT_IAT: int(now.timestamp())}
-        },
     )
 
 
@@ -225,16 +208,6 @@ def main() -> None:
     parser.add_argument("--file", type=Path, default=os.environ.get("SCITT_FILE"))
     parser.add_argument("--ledger-url", default=os.environ.get("SCITT_LEDGER_URL"))
     parser.add_argument(
-        "--fulcio-root", type=Path, default=os.environ.get("SCITT_FULCIO_ROOT")
-    )
-    parser.add_argument(
-        "--fulcio-url",
-        default=os.environ.get("SCITT_FULCIO_URL", DEFAULT_FULCIO_URL),
-    )
-    parser.add_argument(
-        "--audience", default=os.environ.get("SCITT_AUDIENCE", "sigstore")
-    )
-    parser.add_argument(
         "--content-type",
         default=os.environ.get("SCITT_CONTENT_TYPE", "application/octet-stream"),
     )
@@ -246,35 +219,21 @@ def main() -> None:
     parser.add_argument(
         "--service-ca", type=Path, default=os.environ.get("SCITT_SERVICE_CA") or None
     )
-    parser.add_argument(
-        "--development",
-        action="store_true",
-        default=os.environ.get("SCITT_DEVELOPMENT", "false") == "true",
-        help="Disable ledger TLS verification for a local demo only",
-    )
     args = parser.parse_args()
-    if os.environ.get("SCITT_DEVELOPMENT", "false") not in ("true", "false"):
-        parser.error("SCITT_DEVELOPMENT must be 'true' or 'false'")
-    if args.file is None or args.ledger_url is None or args.fulcio_root is None:
-        parser.error("--file, --ledger-url and --fulcio-root are required")
+    if args.file is None or args.ledger_url is None:
+        parser.error("--file and --ledger-url are required")
     try:
         https_url(args.ledger_url, "Ledger URL")
         workspace = args.workspace.resolve()
-        root_pem = (workspace / args.fulcio_root).read_text()
         with httpx.Client(timeout=30, follow_redirects=False) as session:
             statement = sign_payload(
                 (workspace / args.file).read_bytes(),
-                root_pem,
                 session,
                 content_type=args.content_type,
-                fulcio_url=args.fulcio_url,
-                audience=args.audience,
             )
         client = Client(
             args.ledger_url,
-            development=args.development,
             cacert=str(workspace / args.service_ca) if args.service_ca else None,
-            auth_token=os.environ.get("SCITT_AUTH_TOKEN") or None,
         )
         try:
             outputs = submit(client, statement, workspace / args.output_dir)

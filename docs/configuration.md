@@ -191,12 +191,6 @@ Function arguments:
       
       // X.509 certificate chain (array of PEM strings)
       x5chain?: string[],
-
-      // Protected leaf certificate metadata, only for did:x509 issuers
-      x509?: {
-        extensions: { [oid: string]: string[] }, // Raw extension-value hex strings
-        validitySeconds: number                 // notAfter minus notBefore
-      },
       
       // CWT Claims object
       cwt: {
@@ -325,12 +319,6 @@ Attributes in `input` object:
         sub?: string,  // Subject
         iat?: number,  // Issued at
         _svn?: number   // Software version number
-      },
-
-      // Protected leaf certificate metadata, only for did:x509 issuers
-      "X.509"?: {
-        extensions: { [oid: string]: string[] }, // Raw extension-value hex strings
-        validitySeconds: number                 // notAfter minus notBefore
       }
     }
     ```
@@ -408,28 +396,6 @@ It is possible to configure a policy execution limit, specified in number of reg
 ```
 
 The default value is 10000, if registration policy execution exceeds the limit, it will be aborted and an error message returned.
-
-### X.509 identity claims in policy
-
-For a verified `did:x509` statement, JS `phdr.x509` and Rego
-`input.phdr["X.509"]` describe the **protected leaf certificate**, not the
-unprotected chain or arbitrary payload claims. Extension keys are numeric OIDs;
-values are arrays of lowercase hexadecimal encodings of the contents of the
-extension's OCTET STRING. An extension's inner DER encoding, if any, is preserved.
-Duplicates are retained rather than overwritten. An identity policy should
-require exactly one expected value for each required extension.
-
-Certificate metadata is authenticated by signature and `did:x509` chain
-verification before policy execution, but the policy must still authorize the
-issuer's CA fingerprint and identity. `validitySeconds` is a duration, **not**
-an expiry check. Default `did:x509` verification deliberately ignores certificate
-time validity; a JS policy can additionally enforce current chain validity with
-`ccf.crypto.isValidX509CertChain(phdr.x5chain.join("\n"), trustedRootPem)`.
-This check uses the node's host clock.
-
-The [GitHub Actions example](../demo/github_actions) uses these extensions to
-authorize an immutable source repository independently of a reusable signing
-workflow, and requires a currently valid, short-lived Fulcio certificate.
 
 ## Maximum signed statement size
 

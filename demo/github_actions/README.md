@@ -15,6 +15,12 @@ token, and private key are not uploaded to Rekor; the file is sent to the ledger
 and neither the token nor private key is included in the COSE envelope or saved
 to disk. This is not a Sigstore bundle or a Rekor transparency-log example.
 
+Signing uses `pyscitt.crypto.Signer` and `crypto.sign_statement(cwt=True)`, the
+same implementation used by `scitt sign --uses-cwt` in
+[`2-claim-generator.sh`](../transparency-service-poc/2-claim-generator.sh).
+`pyscitt` creates the standard algorithm, content-type, protected certificate
+chain, and CWT issuer headers; the example adds no custom headers.
+
 ## Trust and the authorization boundary
 
 GitHub's token authenticates the workflow to Fulcio, which binds its public key
@@ -22,8 +28,9 @@ to GitHub identity in a short-lived code-signing certificate. Fulcio is an
 explicit additional trust authority. The public service at
 `https://fulcio.sigstore.dev` records certificate identity in public certificate
 transparency logs; repository/workflow information can become public, including
-for private repositories. Use an appropriately configured private Fulcio
-instance if that disclosure or public CA trust is unacceptable.
+for private repositories. This simplified Action uses the public Fulcio service
+and its bundled trusted root; do not use it if that disclosure or CA trust is
+unacceptable.
 
 **The ledger, not the Action, decides which identities may submit.** Ledger
 governance installs a registration policy that requires:
@@ -31,46 +38,43 @@ governance installs a registration policy that requires:
 | Bound identity | Check |
 | --- | --- |
 | Signing authority | Exact trusted root fingerprint in the certificate-bound `did:x509` issuer |
-| GitHub issuer | `https://token.actions.githubusercontent.com`, CA-signed extension `.8` |
-| Signing workflow | Exact workflow URI including its ref, both SAN and extension `.9` |
-| Source repository | Exact repository URI (`.12`), immutable repository ID (`.15`), and owner ID (`.17`) |
-| Source revision | Exact ref (`.14`); optional signing workflow commit digest (`.10`) |
-| Execution context | Expected event (`.20`) and runner environment (`.11`) |
-| Short-lived registration | Positive certificate lifetime at most 600 seconds, plus currently valid chain |
+| Signing workflow | Exact GitHub workflow URI including repository and ref, bound to the certificate SAN |
+| Code-signing key | Code-signing EKU in the certificate-bound issuer |
+| Registration time | Currently valid certificate chain |
 
-The OID prefix is `1.3.6.1.4.1.57264.1`. Modern Fulcio values are DER UTF8String
-encodings, not the raw strings used by older extensions. Policies compare the
-authenticated raw extension bytes and reject missing or duplicate identity
-extensions.
+The existing ledger verifier authenticates the COSE signature and `did:x509`
+CA/EKU/SAN predicates before its existing policy engine runs. The policy only
+uses the already available CWT issuer, certificate chain, and
+`ccf.crypto.isValidX509CertChain`; no changes to the native application are needed.
 
-A reusable workflow can have the **same signer SAN in jobs from different source
-repositories**. Checking only that SAN would authorize unintended callers. The
-independent source-repository URI and immutable IDs prevent that. Names alone are
-also insufficient when a repository is renamed, transferred, or deleted and
-recreated. Protect the allowed branch/workflow, restrict dispatch privileges, and
-optionally pin the workflow digest. The policy does not guarantee that allowed
-workflow code is benign, that every GitHub Action is trusted, or that the file's
-contents are correct.
+This example uses a **non-reusable signing workflow**. Its SAN identifies the
+repository, workflow file, and ref. A reusable workflow can have the same signer
+SAN for different calling repositories; this policy **does not distinguish those
+callers**. It also does not inspect immutable repository/owner IDs, triggering
+events, or runner environments. Repository renames, transfers, and recreation
+require policy review. Protect the allowed workflow/ref and restrict dispatch
+privileges. The policy does not guarantee that workflow code is benign or that
+the input file's contents are correct.
 
 OIDC tokens are bearer credentials: a stolen, unexpired token can also be used
 to obtain certificates outside the runner. The claims identify the GitHub job,
 not the physical location of signing or the provenance of the input file.
 
-The private key does not mathematically expire. The policy restricts when its
-certificate can authorize **new registrations**. It does not provide replay
-prevention during that window, revoke compromised keys, or retroactively remove
-accepted statements. Current validity is checked against the CCF node's host
-clock; this example adds no trusted timestamp service. Historical receipt
+Public Fulcio issues short-lived certificates, and the Action rejects a lifetime
+outside `(0, 600]` seconds. The private key does not mathematically expire. The
+policy checks current validity, not certificate lifetime duration, and restricts
+when the certificate can authorize **new registrations**. It does not provide
+replay prevention during that window, revoke compromised keys, or retroactively
+remove accepted statements. Current validity is checked against the CCF node's
+host clock; this example adds no trusted timestamp service. Historical receipt
 verification remains separate from certificate validity at registration.
 
 ## 1. Build and configure the ledger
 
-Use a ledger built from this revision: the example needs the new protected-leaf
-certificate policy metadata described in [configuration.md](../../docs/configuration.md).
-Start it using the [usual build/run instructions](../../README.md). A GitHub-hosted
-runner needs to be able to reach the configured HTTPS endpoint; a ledger running
-only on your laptop's localhost is not reachable. A self-hosted runner requires
-an administrator-selected `--runner self-hosted` policy.
+Start the ledger using the [usual build/run instructions](../../README.md).
+Its existing `did:x509` verifier and registration policy engine suffice. A
+GitHub-hosted runner needs to be able to reach the configured HTTPS endpoint; a
+ledger running only on your laptop's localhost is not reachable.
 
 Install `pyscitt` using Python 3.12 or later, from the repository root:
 
@@ -83,46 +87,30 @@ The bundled `fulcio-root.pem` is the public Sigstore Fulcio root from
 [sigstore/root-signing](https://github.com/sigstore/root-signing/blob/main/targets/fulcio_v1.crt.pem).
 Its SHA-256 certificate fingerprint is
 `3ba7b6cc4e95469d4d334b49cb257ad8537076fa84b0ca87ff4ecfe6a54680c1`.
-This is an explicit trust pin, not a root downloaded from the issuing endpoint
-at signing time. Review it before trusting it; root rotation requires deliberately
-updating both the Action configuration and ledger policy. For a private Fulcio
-deployment, substitute its trusted root and endpoint.
+The Action and policy generator use this root automatically, independently of
+the caller's working directory. It is an explicit trust pin, not a root trusted
+just because Fulcio returned it. Review it before use; root rotation requires
+updating the bundled root and regenerating the ledger policy.
 
-Obtain the immutable IDs as the ledger administrator, for example:
-
-```sh
-gh api repos/OWNER/REPOSITORY --jq '{repository_id: .id, owner_id: .owner.id}'
-```
-
-Generate a policy for the actual repository and workflow. The numbers below
-are placeholders to replace with the API results. The default allowed source
-ref is `refs/heads/main`, event is `workflow_dispatch`, and runner is `github-hosted`:
+Generate a policy for the actual signing workflow, including its repository
+and exact ref:
 
 ```sh
 .venv/bin/python -m demo.github_actions.policy \
-  --fulcio-root demo/github_actions/fulcio-root.pem \
-  --repository OWNER/REPOSITORY \
-  --repository-id 123 --owner-id 456 \
   --workflow 'https://github.com/OWNER/REPOSITORY/.github/workflows/github-oidc-ledger.yml@refs/heads/main' \
   --allow-unauthenticated \
   --out github-policy.json
 ```
 
 `--allow-unauthenticated` deliberately disables **API bearer authentication**
-for this demo, not COSE signature validation or registration policy. Omit it
-for an authenticated service and use `--configuration existing-configuration.json`
-to preserve its JWT requirements and other configuration settings. Without an
-existing configuration, API authentication defaults to enabled. A SCITT
-configuration proposal replaces the service configuration, so inspect the
-generated JSON before proposing it. API authentication and signing identity
-are separate: the GitHub OIDC token is exchanged with Fulcio, **not** automatically
-accepted as a ledger API token.
-
-Use `--ref`, `--event`, or `--runner` to change the corresponding policy checks.
-Use `--workflow-digest FULL_LOWERCASE_COMMIT_SHA` to pin the signing workflow's
-CA-signed Git commit digest. For a reusable workflow, `--workflow` must identify
-the reusable signer workflow while `--repository`, immutable IDs, and `--ref`
-must identify the **calling/source** repository.
+for this demo, not COSE signature validation or registration policy. This
+simplified Action supplies no ledger API bearer token, so the example requires
+that API configuration. Use `--configuration existing-configuration.json` to
+preserve other configuration settings; inspect the result before proposing it.
+Without an existing configuration or the explicit flag, API authentication
+defaults to enabled. A SCITT configuration proposal replaces the service
+configuration. API authentication and signing identity are separate: the GitHub
+OIDC token is exchanged with Fulcio, **not** accepted as a ledger API token.
 
 Install this configuration through ledger governance, using a member's
 credentials, **outside** the signing job:
@@ -134,11 +122,33 @@ credentials, **outside** the signing job:
   --configuration github-policy.json
 ```
 
-For a private ledger TLS CA, add `--cacert SERVICE_CA.pem`. Use `--development`
-only for a local demo with deliberately disabled ledger TLS verification.
+For a private ledger TLS CA, add `--cacert SERVICE_CA.pem`.
 Never give the signing Action governance credentials.
 
 ## 2. Run with real GitHub OIDC
+
+### Temporary build-pipeline signing probe
+
+The [Build and test workflow](../../.github/workflows/build-test.yml) contains a
+temporary `GitHub OIDC/Fulcio signing check` job. Pushing `feat/github-oidc-e2e`
+triggers this existing build workflow and the probe, even without an open PR.
+Same-repository pull requests from that branch also run it. The permissions
+`contents: read` and `id-token: write` are scoped to that job; existing build jobs
+do not gain OIDC permissions, and fork PRs do not run the probe.
+
+The job uses the production signing function to request a real GitHub token for
+`sigstore`, exchange a fresh signed CSR with public Fulcio, sign the sample JSON
+file with `pyscitt`, and verify the resulting COSE signature. It needs no ledger
+URL or API credentials. Failures in issuance, certificate validation, or signing
+fail the job; only a successfully verified statement is uploaded as the
+`github-oidc-fulcio-cose` artifact, retained for one day. Neither the bearer token
+nor private key is saved. The public certificate-transparency disclosure described
+above still applies.
+
+Remove the temporary job and feature-branch push trigger after validating live
+issuance.
+
+### Ledger submission workflow
 
 Publish the workflow on the repository's default branch (required for
 `workflow_dispatch`), with the example also committed on the branch/ref allowed
@@ -146,10 +156,13 @@ by policy. Then dispatch
 [`github-oidc-ledger.yml`](../../.github/workflows/github-oidc-ledger.yml) from
 that ref, passing the running ledger's HTTPS URL. It signs
 `demo/github_actions/payload.json` by default and uploads the signed and
-transparent statements as artifacts. An optional `SCITT_AUTH_TOKEN` repository
-secret supplies a separately authorized ledger API bearer token.
+transparent statements as artifacts.
 
-The Action needs `permissions: id-token: write`. Example use from this checkout:
+The Action needs `permissions: id-token: write`. It requests the audience
+`sigstore`, which public Fulcio requires. The audience is selected when requesting
+the GitHub token, not derived from an already issued token.
+
+Example use from this checkout:
 
 ```yaml
 permissions:
@@ -166,30 +179,25 @@ steps:
       file: artifact.json
       content-type: application/json
       ledger-url: https://LEDGER
-      fulcio-root: demo/github_actions/fulcio-root.pem
       # service-ca: path/to/ledger-tls-ca.pem
-      # auth-token: ${{ secrets.SCITT_AUTH_TOKEN }}
 ```
 
 Once published, a different caller repository can reference
 `microsoft/scitt-ccf-ledger/.github/actions/scitt-sign@FULL_COMMIT_SHA` directly.
 Alternatively, check this Action's repository out separately at a reviewed commit
 and reference its local `.github/actions/scitt-sign` directory. Keep the caller's
-input file and explicitly trusted root CA paths relative to its workspace, pin
-the Action version, and configure policy for the caller's repository identity.
+input file and optional ledger TLS CA paths relative to its workspace, pin
+the Action version, and configure policy for the caller's signing workflow.
 
 Inputs are passed through environment variables rather than interpolated into
 shell commands. The Action creates an isolated runner-temp Python environment,
 generates its signing key only in process memory, masks the OIDC token, enforces
 HTTPS and timeouts, and refuses credential-bearing redirects. TLS verification
-is enabled by default. `development: "true"` disables only ledger TLS verification,
-not OIDC or Fulcio TLS.
+is always enabled; use `service-ca` when the ledger uses a private TLS CA.
 
-Required inputs are `file`, `ledger-url`, and `fulcio-root`. Optional inputs are
-`fulcio-url`, `audience` (default `sigstore`), `content-type`, `service-ca`,
-`auth-token`, `output-dir`, and `development`. A private Fulcio instance must
-trust GitHub's OIDC issuer and the configured audience, and emit the modern
-GitHub identity extensions listed above.
+Required inputs are `file` and `ledger-url`. Optional inputs are `content-type`,
+`service-ca`, and `output-dir`. The Fulcio endpoint, trusted root, and token
+audience are not Action inputs.
 
 Outputs:
 
@@ -224,12 +232,16 @@ Offline exchange tests can also be run without a ledger:
 
 Tests cover fresh keys, exact binary payload bytes, CSR proof of possession,
 missing OIDC permissions, malformed responses, key mismatch, HTTPS/redirect
-handling, wrong CA/repository/IDs/issuer/ref/workflow/event/runner, unexpected
-callers of a trusted reusable workflow, expired/future/overlong certificates,
-tampering, and JS/Rego metadata mapping. Native unit tests retain duplicate
-extension values. The tests also demonstrate that ordinary `did:x509` policy
+handling, wrong CA/workflow/repository/ref, forged issuer claims,
+expired/future/overlong certificates, tampering, and compatibility with the
+existing JS/Rego issuer policies and `scitt sign --uses-cwt` headers.
+The Action entrypoint verifies ledger TLS with a supplied CA.
+The tests also demonstrate that ordinary `did:x509` policy
 behavior does **not** change: expiry enforcement belongs to this example's
 registration policy.
+The offline suite also checks the probe's verified artifact and ensures Fulcio
+refusal, payload mismatch, and invalid signatures fail without creating an output
+file.
 
 ## Reference implementations and specifications
 

@@ -44,9 +44,7 @@ jobs:
           file: ${{ inputs.file }}
           ledger-url: ${{ inputs.ledger-url }}
           content-type: ${{ inputs.content-type }}
-          fulcio-root: demo/github_actions/fulcio-root.pem
           service-ca: ${{ inputs.service-ca }}
-          auth-token: ${{ secrets.SCITT_AUTH_TOKEN }}
       - name: Retain the signed statement and receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
