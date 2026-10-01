@@ -1,0 +1,55 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: GitHub OIDC ledger example
+on:
+  workflow_dispatch:
+    inputs:
+      ledger-url:
+        description: HTTPS URL of a running ledger configured with the GitHub policy
+        required: true
+        type: string
+      file:
+        description: Repository file to sign and submit
+        default: demo/github_actions/payload.json
+        required: true
+        type: string
+      content-type:
+        description: Content type of the input file
+        default: application/json
+        type: string
+      service-ca:
+        description: Optional repository path to a PEM bundle for ledger TLS
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Sign the file and submit it to the ledger
+        id: scitt
+        uses: ./.github/actions/scitt-sign
+        with:
+          file: ${{ inputs.file }}
+          ledger-url: ${{ inputs.ledger-url }}
+          content-type: ${{ inputs.content-type }}
+          fulcio-root: demo/github_actions/fulcio-root.pem
+          service-ca: ${{ inputs.service-ca }}
+          auth-token: ${{ secrets.SCITT_AUTH_TOKEN }}
+      - name: Retain the signed statement and receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scitt-submission
+          path: scitt-output/
+          if-no-files-found: error

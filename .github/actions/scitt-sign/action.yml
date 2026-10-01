@@ -1,0 +1,84 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Sign and submit to SCITT
+description: Sign a file with a GitHub OIDC-backed ephemeral key and register it in SCITT
+
+inputs:
+  file:
+    description: File whose exact bytes are embedded in the signed statement
+    required: true
+  ledger-url:
+    description: HTTPS URL of the configured, running SCITT ledger
+    required: true
+  fulcio-root:
+    description: Path to an explicitly trusted Fulcio root CA certificate in PEM format
+    required: true
+  fulcio-url:
+    description: Fulcio certificate authority origin
+    default: https://fulcio.sigstore.dev
+  audience:
+    description: GitHub OIDC audience accepted by the configured Fulcio instance
+    default: sigstore
+  content-type:
+    description: COSE payload content type
+    default: application/octet-stream
+  service-ca:
+    description: Optional PEM CA bundle for ledger TLS verification
+    default: ""
+  auth-token:
+    description: Optional bearer token if the ledger also requires API authentication
+    default: ""
+  output-dir:
+    description: Directory for signed and transparent statements
+    default: scitt-output
+  development:
+    description: Disable only ledger TLS verification, for a local demo only
+    default: "false"
+
+outputs:
+  transaction-id:
+    description: Committed SCITT transaction ID
+    value: ${{ steps.submit.outputs.transaction-id }}
+  signed-statement:
+    description: Absolute path to the COSE signed statement
+    value: ${{ steps.submit.outputs.signed-statement }}
+  transparent-statement:
+    description: Absolute path to the COSE statement with its verified ledger receipt
+    value: ${{ steps.submit.outputs.transparent-statement }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+    - name: Prepare isolated pyscitt environment
+      id: setup
+      shell: bash
+      run: |
+        venv_dir="$(mktemp -d "${RUNNER_TEMP}/scitt-sign.XXXXXX")"
+        python -m venv "$venv_dir"
+        "$venv_dir/bin/python" -m pip install --disable-pip-version-check --quiet \
+          "${GITHUB_ACTION_PATH}/../../../pyscitt"
+        echo "python=$venv_dir/bin/python" >> "$GITHUB_OUTPUT"
+    - name: Sign and register the input file
+      id: submit
+      shell: bash
+      env:
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_FILE: ${{ inputs.file }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
+        SCITT_FULCIO_ROOT: ${{ inputs.fulcio-root }}
+        SCITT_FULCIO_URL: ${{ inputs.fulcio-url }}
+        SCITT_AUDIENCE: ${{ inputs.audience }}
+        SCITT_CONTENT_TYPE: ${{ inputs.content-type }}
+        SCITT_SERVICE_CA: ${{ inputs.service-ca }}
+        SCITT_AUTH_TOKEN: ${{ inputs.auth-token }}
+        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        SCITT_DEVELOPMENT: ${{ inputs.development }}
+      run: |
+        export SCITT_WORKSPACE="$PWD"
+        export PYTHONPATH="${GITHUB_ACTION_PATH}/../../.."
+        cd "${GITHUB_ACTION_PATH}/../../.."
+        "$SCITT_PYTHON" -m demo.github_actions.sign

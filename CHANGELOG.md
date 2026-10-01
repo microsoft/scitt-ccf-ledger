@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Add a GitHub Actions keyless signing example using GitHub OIDC, short-lived
+  Fulcio certificates, pyscitt COSE envelopes, and ledger-side repository policy.
+  Expose leaf certificate extension values and validity duration to JS and Rego
+  registration policies.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.17 and align the Python CCF minimum version.

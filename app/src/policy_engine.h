@@ -7,6 +7,7 @@
 #include "http_error.h"
 #include "tracing.h"
 #include "verified_details.h"
+#include "x509.h"
 
 #include <ccf/_private/js/checks.h>
 #include <ccf/crypto/sha256_hash.h>
@@ -116,6 +117,19 @@ namespace scitt
 {
   using PolicyScript = std::string;
 
+  static inline std::optional<x509::CertificateInfo> x509_policy_info(
+    const cose::ProtectedHeader& phdr)
+  {
+    if (
+      phdr.cwt_claims.iss.has_value() &&
+      phdr.cwt_claims.iss->starts_with("did:x509:") &&
+      phdr.x5chain.has_value() && !phdr.x5chain->empty())
+    {
+      return x509::get_certificate_info(phdr.x5chain->front());
+    }
+    return std::nullopt;
+  }
+
   namespace js
   {
     static inline ccf::js::core::JSWrappedValue protected_header_to_js_val(
@@ -206,6 +220,27 @@ namespace scitt
           }
 
           JS_CHECK_OR_THROW(obj.set("x5chain", std::move(x5_array)));
+        }
+
+        if (auto info = x509_policy_info(phdr); info.has_value())
+        {
+          auto certificate = ctx.new_obj();
+          auto extensions = ctx.new_obj();
+          for (const auto& [oid, values] : info->extensions)
+          {
+            auto array = ctx.new_array();
+            size_t i = 0;
+            for (const auto& value : values)
+            {
+              JS_CHECK_OR_THROW(array.set_at_index(i++, ctx.new_string(value)));
+            }
+            JS_CHECK_OR_THROW(extensions.set(oid, std::move(array)));
+          }
+          JS_CHECK_OR_THROW(
+            certificate.set("extensions", std::move(extensions)));
+          JS_CHECK_OR_THROW(
+            certificate.set_int64("validitySeconds", info->validity_seconds));
+          JS_CHECK_OR_THROW(obj.set("x509", std::move(certificate)));
         }
 
         auto cwt = ctx.new_obj();
@@ -552,6 +587,25 @@ namespace scitt
       {rego::object_item(rego::scalar("alg"), alg),
        rego::object_item(rego::scalar("cty"), cty_node),
        rego::object_item(rego::scalar("CWT Claims"), cwt_claims)});
+    if (auto info = x509_policy_info(phdr); info.has_value())
+    {
+      auto extensions = rego::object({});
+      for (const auto& [oid, values] : info->extensions)
+      {
+        auto array = rego::array({});
+        for (const auto& value : values)
+        {
+          array->push_back(rego::scalar(value));
+        }
+        extensions->push_back(rego::object_item(rego::scalar(oid), array));
+      }
+      auto certificate = rego::object(
+        {rego::object_item(rego::scalar("extensions"), extensions),
+         rego::object_item(
+           rego::scalar("validitySeconds"),
+           rego::scalar(rego::BigInt(info->validity_seconds)))});
+      phdr_->push_back(rego::object_item(rego::scalar("X.509"), certificate));
+    }
     auto payload_ = rego::scalar(ccf::ds::to_hex(payload));
     auto rego_input = rego::object(
       {rego::object_item(rego::scalar("phdr"), phdr_),
