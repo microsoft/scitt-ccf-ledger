@@ -118,6 +118,7 @@ class FulcioCA:
         lifetime: int = 600,
         offset: int = -30,
         ca: bool = False,
+        basic_constraints: bool = True,
         eku: bool = True,
     ) -> x509.Certificate:
         before = datetime.now(UTC) + timedelta(seconds=offset)
@@ -129,7 +130,6 @@ class FulcioCA:
             .serial_number(x509.random_serial_number())
             .not_valid_before(before)
             .not_valid_after(before + timedelta(seconds=lifetime))
-            .add_extension(x509.BasicConstraints(ca=ca, path_length=None), True)
             .add_extension(x509.SubjectKeyIdentifier.from_public_key(public_key), False)
             .add_extension(
                 x509.AuthorityKeyIdentifier.from_issuer_public_key(
@@ -142,6 +142,10 @@ class FulcioCA:
                 True,
             )
         )
+        if basic_constraints:
+            builder = builder.add_extension(
+                x509.BasicConstraints(ca=ca, path_length=None), True
+            )
         if eku:
             builder = builder.add_extension(
                 x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CODE_SIGNING]), False
@@ -256,9 +260,15 @@ class TestGitHubActionOffline:
         "variant", ["signedCertificateEmbeddedSct", "signedCertificateDetachedSct"]
     )
     @pytest.mark.parametrize("include_root", [False, True])
-    def test_oidc_csr_cose_flow(self, fulcio_ca, capsys, variant, include_root):
+    @pytest.mark.parametrize("basic_constraints", [False, True])
+    def test_oidc_csr_cose_flow(
+        self, fulcio_ca, capsys, variant, include_root, basic_constraints
+    ):
         mock = MockFulcio(
-            fulcio_ca, response_variant=variant, include_root=include_root
+            fulcio_ca,
+            certificate_options={"basic_constraints": basic_constraints},
+            response_variant=variant,
+            include_root=include_root,
         )
         statement = action_statement(mock)
         message = Sign1Message.decode(statement)
@@ -272,6 +282,9 @@ class TestGitHubActionOffline:
         assert set(message.phdr) == {Algorithm, ContentType, X5chain, crypto.CWTClaims}
         assert set(message.phdr[crypto.CWTClaims]) == {crypto.CWT_ISS}
         leaf = x509.load_der_x509_certificate(message.phdr[X5chain][0])
+        if not basic_constraints:
+            with pytest.raises(x509.ExtensionNotFound):
+                leaf.extensions.get_extension_for_class(x509.BasicConstraints)
         message.key = CoseKey.from_pem_public_key(
             crypto.get_cert_public_key(
                 leaf.public_bytes(serialization.Encoding.PEM).decode("ascii")
@@ -283,8 +296,9 @@ class TestGitHubActionOffline:
         assert capsys.readouterr().out == "::add-mask::test-github-jwt\n"
 
     @pytest.mark.parametrize("failure", [None, "fulcio", "payload", "signature"])
+    @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_live_smoke_entrypoint(
-        self, fulcio_ca, tmp_path, monkeypatch, capsys, failure
+        self, fulcio_ca, tmp_path, monkeypatch, capsys, failure, basic_constraints
     ):
         input_path = tmp_path / "payload.bin"
         input_path.write_bytes(PAYLOAD)
@@ -295,7 +309,9 @@ class TestGitHubActionOffline:
         )
         for name, value in ENVIRONMENT.items():
             monkeypatch.setenv(name, value)
-        mock = MockFulcio(fulcio_ca)
+        mock = MockFulcio(
+            fulcio_ca, certificate_options={"basic_constraints": basic_constraints}
+        )
 
         def handler(request):
             if failure == "fulcio" and request.url.host == "fulcio.sigstore.dev":
@@ -476,17 +492,36 @@ class TestGitHubActionOffline:
             action_statement(mock)
 
     @pytest.mark.parametrize("options", [{"eku": False}, {"oidc_issuer": None}])
-    def test_missing_identity_extensions(self, fulcio_ca, options):
-        with pytest.raises(x509.ExtensionNotFound):
-            action_statement(MockFulcio(fulcio_ca, certificate_options=options))
+    @pytest.mark.parametrize("basic_constraints", [False, True])
+    def test_missing_identity_extensions(self, fulcio_ca, options, basic_constraints):
+        with pytest.raises(x509.ExtensionNotFound) as error:
+            action_statement(
+                MockFulcio(
+                    fulcio_ca,
+                    certificate_options={
+                        **options,
+                        "basic_constraints": basic_constraints,
+                    },
+                )
+            )
+        assert error.value.oid == (
+            x509.ExtendedKeyUsage.oid
+            if "eku" in options
+            else ObjectIdentifier(policy.GITHUB_ISSUER_OID)
+        )
 
-    def test_trusted_root_validation(self, fulcio_ca):
+    @pytest.mark.parametrize("basic_constraints", [False, True])
+    def test_trusted_root_validation(self, fulcio_ca, basic_constraints):
         with pytest.raises(ValueError, match="exactly one"):
             policy.trusted_root(fulcio_ca.pem * 2)
         leaf = fulcio_ca.certificate(
-            ec.generate_private_key(ec.SECP256R1()).public_key()
+            ec.generate_private_key(ec.SECP256R1()).public_key(),
+            basic_constraints=basic_constraints,
         )
-        with pytest.raises(ValueError, match="CA certificate"):
+        error = ValueError if basic_constraints else x509.ExtensionNotFound
+        with pytest.raises(
+            error, match="CA certificate" if basic_constraints else "BasicConstraints"
+        ):
             policy.trusted_root(leaf.public_bytes(serialization.Encoding.PEM).decode())
 
     def test_bundled_public_fulcio_root(self, tmp_path, monkeypatch):
@@ -623,6 +658,7 @@ class TestGitHubActionOffline:
 
 class TestGitHubLedgerPolicy:
     @pytest.mark.parametrize("intermediate", [False, True])
+    @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_action_to_running_ledger(
         self,
         fulcio_ca,
@@ -631,12 +667,17 @@ class TestGitHubLedgerPolicy:
         trust_store,
         tmp_path,
         intermediate,
+        basic_constraints,
     ):
         if intermediate:
             fulcio_ca = FulcioCA(intermediate=True)
             policy.FULCIO_ROOT.write_text(fulcio_ca.pem)
         configure_service({"policy": fulcio_ca.registration_policy()})
-        statement = action_statement(MockFulcio(fulcio_ca))
+        statement = action_statement(
+            MockFulcio(
+                fulcio_ca, certificate_options={"basic_constraints": basic_constraints}
+            )
+        )
         outputs = sign.submit(client, statement, tmp_path)
         assert (tmp_path / "signed-statement.cose").read_bytes() == statement
         transparent = (tmp_path / "transparent-statement.cose").read_bytes()
@@ -646,6 +687,7 @@ class TestGitHubLedgerPolicy:
         assert json.loads((tmp_path / "submission.json").read_text()) == outputs
 
     @pytest.mark.parametrize("valid_receipt", [False, True])
+    @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_action_entrypoint(
         self,
         fulcio_ca,
@@ -655,6 +697,7 @@ class TestGitHubLedgerPolicy:
         monkeypatch,
         capsys,
         valid_receipt,
+        basic_constraints,
     ):
         configure_service({"policy": fulcio_ca.registration_policy()})
         (tmp_path / "payload.bin").write_bytes(PAYLOAD)
@@ -674,7 +717,12 @@ class TestGitHubLedgerPolicy:
 
         def exchange(payload, session, **kwargs):
             with httpx.Client(
-                transport=httpx.MockTransport(MockFulcio(fulcio_ca))
+                transport=httpx.MockTransport(
+                    MockFulcio(
+                        fulcio_ca,
+                        certificate_options={"basic_constraints": basic_constraints},
+                    )
+                )
             ) as mock_session:
                 return real_sign_payload(
                     payload, mock_session, environment=ENVIRONMENT, **kwargs

@@ -69,6 +69,12 @@ remove accepted statements. Current validity is checked against the CCF node's
 host clock; this example adds no trusted timestamp service. Historical receipt
 verification remains separate from certificate validity at registration.
 
+The signing leaf may omit `BasicConstraints`, as permitted for end-entity
+certificates by [RFC 5280](https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9).
+An explicit `ca=true` leaf is rejected, and the pinned root must still declare
+itself a CA. Required GitHub issuer, code-signing EKU, workflow SAN, key binding,
+certificate validity, and chain-signature checks are unchanged.
+
 ## 1. Build and configure the ledger
 
 Start the ledger using the [usual build/run instructions](../../README.md).
@@ -230,7 +236,8 @@ Offline exchange tests can also be run without a ledger:
 .venv/bin/python -m pytest -q test/test_github_oidc.py::TestGitHubActionOffline
 ```
 
-Tests cover fresh keys, exact binary payload bytes, CSR proof of possession,
+Tests cover signing leaves with and without `BasicConstraints`, fresh keys, exact
+binary payload bytes, CSR proof of possession,
 missing OIDC permissions, malformed responses, key mismatch, HTTPS/redirect
 handling, wrong CA/workflow/repository/ref, forged issuer claims,
 expired/future/overlong certificates, tampering, and compatibility with the

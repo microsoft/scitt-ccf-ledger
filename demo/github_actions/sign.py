@@ -124,7 +124,11 @@ def sign_payload(
         raise ValueError("Fulcio certificate is not short lived")
     if not leaf.not_valid_before_utc <= now < leaf.not_valid_after_utc:
         raise ValueError("Fulcio certificate is expired or not yet valid")
-    if leaf.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+    # RFC 5280 permits end-entity certificates without BasicConstraints.
+    if any(
+        isinstance(extension.value, x509.BasicConstraints) and extension.value.ca
+        for extension in leaf.extensions
+    ):
         raise ValueError(
             "Fulcio returned a CA certificate instead of a signing certificate"
         )
