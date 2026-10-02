@@ -262,6 +262,13 @@ def action_statement(mock: MockFulcio, *, payload: bytes = PAYLOAD) -> bytes:
         )
 
 
+def tamper_payload(statement: bytes) -> bytes:
+    message = Sign1Message.decode(statement)
+    assert message.payload is not None
+    message.payload += b"tampered"
+    return message.encode(tag=True, sign=False)
+
+
 class TestSignGhaFulcioOffline:
     @pytest.mark.parametrize(
         "variant", ["signedCertificateEmbeddedSct", "signedCertificateDetachedSct"]
@@ -721,37 +728,36 @@ class TestSignGhaFulcioOffline:
         }
         sign.verify_statement(statement, message.payload)
 
-    def test_submit_verify_requires_confirmation(self, monkeypatch, capsys):
+    @pytest.mark.parametrize("arguments", [["--verify"], ["--output", "json"]])
+    def test_removed_submit_options(self, monkeypatch, capsys, arguments):
         monkeypatch.setattr(
             register,
             "create_client",
             lambda _: pytest.fail("No client should be created"),
         )
         with pytest.raises(SystemExit) as error:
-            cli_main(["submit", "statement.cose", "--verify", "--skip-confirmation"])
+            cli_main(["submit", "statement.cose", *arguments])
         assert error.value.code == 2
-        assert (
-            "--verify cannot be used with --skip-confirmation"
-            in capsys.readouterr().err
-        )
+        assert "unrecognized arguments" in capsys.readouterr().err
 
     @pytest.mark.parametrize("flow", ["pending", "async", "sync"])
-    @pytest.mark.parametrize("output", ["text", "json"])
-    def test_submit_output_formats(self, tmp_path, monkeypatch, capsys, flow, output):
+    def test_submit_preserves_existing_flow(self, tmp_path, monkeypatch, capsys, flow):
         statement_path = tmp_path / "statement.cose"
         statement_path.write_bytes(PAYLOAD)
         transparent_path = tmp_path / "transparent-statement.cose"
         client = Client("https://ledger.example", development=True)
         pending = Mock(return_value=PendingSubmission("1.2"))
         asynchronous = Mock(return_value=Submission("1.2", "1.3", b"transparent", True))
-        synchronous = Mock(return_value=Submission("1.2", "1.4", b"transparent", True))
+        synchronous = Mock(return_value=Submission("1.2", "1.4", b"receipt", False))
         monkeypatch.setattr(client, "submit_signed_statement", pending)
         monkeypatch.setattr(client, "submit_signed_statement_and_wait", asynchronous)
         monkeypatch.setattr(
             client, "submit_signed_statement_wait_for_commit", synchronous
         )
         monkeypatch.setattr(
-            client, "get_scitt_keys", lambda: pytest.fail("Verification is opt-in")
+            client,
+            "get_scitt_keys",
+            lambda: pytest.fail("Registration must not fetch verification keys"),
         )
         monkeypatch.setattr(
             client,
@@ -762,30 +768,22 @@ class TestSignGhaFulcioOffline:
         )
         monkeypatch.setattr(register, "create_client", lambda _: client)
         arguments = ["submit", str(statement_path)]
-        if output == "json":
-            arguments.extend(["--output", "json"])
         if flow == "pending":
             arguments.append("--skip-confirmation")
         else:
             arguments.extend(["--transparent-statement", str(transparent_path)])
             if flow == "sync":
                 arguments.append("--wait-for-commit")
-        cli_main(arguments)
-        assert client.session.is_closed
+        with client.session:
+            cli_main(arguments)
         text = capsys.readouterr().out
         if flow == "pending":
             pending.assert_called_once_with(PAYLOAD)
             asynchronous.assert_not_called()
             synchronous.assert_not_called()
             assert not transparent_path.exists()
-            if output == "json":
-                assert json.loads(text) == {
-                    "operation-id": "1.2",
-                    "signed-statement": str(statement_path.resolve()),
-                }
-            else:
-                assert f"Submitted {statement_path} as operation 1.2" in text
-                assert "Confirmation of submission was skipped" in text
+            assert f"Submitted {statement_path} as operation 1.2" in text
+            assert "Confirmation of submission was skipped" in text
         else:
             pending.assert_not_called()
             expected_tx = "1.4" if flow == "sync" else "1.3"
@@ -795,77 +793,21 @@ class TestSignGhaFulcioOffline:
             else:
                 asynchronous.assert_called_once_with(PAYLOAD)
                 synchronous.assert_not_called()
-            assert transparent_path.read_bytes() == b"transparent"
-            if output == "json":
-                assert json.loads(text) == {
-                    "transaction-id": expected_tx,
-                    "signed-statement": str(statement_path.resolve()),
-                    "transparent-statement": str(transparent_path.resolve()),
-                }
-            else:
-                assert (
-                    f"Registered {statement_path} as transaction {expected_tx}" in text
-                )
-                assert f"Received {transparent_path}" in text
-
-    @pytest.mark.parametrize("wait_for_commit", [False, True])
-    @pytest.mark.parametrize("failure", ["receipt", "keys"])
-    def test_verified_submit_failure(
-        self, tmp_path, monkeypatch, capsys, wait_for_commit, failure
-    ):
-        statement_path = (
-            Path(__file__).with_name("payloads") / "github-fulcio-20261001.cose"
-        )
-        statement = statement_path.read_bytes()
-        client = Client("https://ledger.example", development=True)
-        submission = Submission("1.2", "1.3", statement, True)
-        monkeypatch.setattr(
-            client, "submit_signed_statement_and_wait", lambda _: submission
-        )
-        monkeypatch.setattr(
-            client, "submit_signed_statement_wait_for_commit", lambda _: submission
-        )
-        monkeypatch.setattr(client, "get_transparent_statement", lambda _: statement)
-        if failure == "keys":
-            monkeypatch.setattr(
-                client,
-                "get_scitt_keys",
-                Mock(side_effect=ValueError("Cannot fetch service keys")),
+            assert transparent_path.read_bytes() == (
+                b"receipt" if flow == "sync" else b"transparent"
             )
-        else:
-            monkeypatch.setattr(client, "get_scitt_keys", lambda: [])
-        monkeypatch.setattr(register, "create_client", lambda _: client)
-        output_path = tmp_path / "transparent-statement.cose"
-        arguments = [
-            "submit",
-            str(statement_path),
-            "--verify",
-            "--output",
-            "json",
-            "--transparent-statement",
-            str(output_path),
-        ]
-        if wait_for_commit:
-            arguments.append("--wait-for-commit")
-        with pytest.raises(
-            ValueError,
-            match="Cannot fetch service keys" if failure == "keys" else "no receipt",
-        ):
-            cli_main(arguments)
-        assert client.session.is_closed
-        assert not output_path.exists()
-        assert not capsys.readouterr().out
+            assert f"Registered {statement_path} as transaction {expected_tx}" in text
+            assert f"Received {transparent_path}" in text
 
 
 class TestSignGhaFulcioLedger:
     @pytest.mark.parametrize("basic_constraints", [False, True])
     @pytest.mark.parametrize("failure", ["workflow", "receipt"])
-    def test_submit_cli_failure(
+    def test_sign_submit_and_validate_cli_failure(
         self,
         fulcio_ca,
         client: Client,
         configure_service,
-        trust_store,
         tmp_path,
         monkeypatch,
         capsys,
@@ -892,14 +834,6 @@ class TestSignGhaFulcioLedger:
                 )
 
         monkeypatch.setattr(sign, "sign_payload", exchange)
-        if failure == "receipt":
-
-            def reject_receipt(*_):
-                raise ValueError("Receipt verification failed")
-
-            monkeypatch.setattr(
-                register, "verify_transparent_statement", reject_receipt
-            )
         configure_service({"policy": fulcio_ca.registration_policy()})
         statement_path = tmp_path / "signed-statement.cose"
         payload_path = tmp_path / "payload"
@@ -926,23 +860,45 @@ class TestSignGhaFulcioLedger:
             str(service_ca),
             "--transparent-statement",
             str(transparent_path),
-            "--verify",
-            "--output",
-            "json",
         ]
         if failure == "workflow":
             with service_error("PolicyFailed:.*Invalid issuer"):
                 cli_main(arguments)
-        else:
-            with pytest.raises(ValueError, match="Receipt verification failed"):
-                cli_main(arguments)
-        assert not transparent_path.exists()
-        assert not capsys.readouterr().out
+            assert not transparent_path.exists()
+            assert not capsys.readouterr().out
+            return
+
+        cli_main(arguments)
+        assert transparent_path.exists()
+        assert f"Received {transparent_path}" in capsys.readouterr().out
+        transparent_path.write_bytes(tamper_payload(transparent_path.read_bytes()))
+        trust_directory = tmp_path / "trust-store"
+        trust_directory.mkdir()
+        (trust_directory / "scitt-keys.cbor").write_bytes(
+            cbor2.dumps(client.get_scitt_keys())
+        )
+        with pytest.raises(SystemExit) as error:
+            cli_main(
+                [
+                    "validate",
+                    str(transparent_path),
+                    "--service-trust-store",
+                    str(trust_directory),
+                    "--offline",
+                    "--output",
+                    "json",
+                ]
+            )
+        assert error.value.code == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["transparent"] is False
+        assert report["error"]
+        assert report["receipts"] == []
+        assert transparent_path.exists()
 
     @pytest.mark.parametrize("intermediate", [False, True])
     @pytest.mark.parametrize("basic_constraints", [False, True])
-    @pytest.mark.parametrize("wait_for_commit", [False, True])
-    def test_sign_and_submit_cli(
+    def test_sign_submit_and_validate_cli(
         self,
         fulcio_ca,
         client: Client,
@@ -953,7 +909,6 @@ class TestSignGhaFulcioLedger:
         capsys,
         intermediate,
         basic_constraints,
-        wait_for_commit,
     ):
         if intermediate:
             fulcio_ca = FulcioCA(intermediate=True)
@@ -989,23 +944,36 @@ class TestSignGhaFulcioLedger:
         service_ca = tmp_path / "service-ca.pem"
         service_ca.write_text(client.get_service_certificate())
         transparent_path = tmp_path / "transparent-statement.cose"
-        arguments = [
-            "submit",
-            str(statement_path),
-            "--url",
-            client.url,
-            "--cacert",
-            str(service_ca),
-            "--transparent-statement",
-            str(transparent_path),
-            "--verify",
-            "--output",
-            "json",
-        ]
-        if wait_for_commit:
-            arguments.append("--wait-for-commit")
-        cli_main(arguments)
-        outputs = json.loads(capsys.readouterr().out)
+        cli_main(
+            [
+                "submit",
+                str(statement_path),
+                "--url",
+                client.url,
+                "--cacert",
+                str(service_ca),
+                "--transparent-statement",
+                str(transparent_path),
+            ]
+        )
+        registration_output = capsys.readouterr().out
+        trust_directory = tmp_path / "trust-store"
+        trust_directory.mkdir()
+        (trust_directory / "scitt-keys.cbor").write_bytes(
+            cbor2.dumps(client.get_scitt_keys())
+        )
+        cli_main(
+            [
+                "validate",
+                str(transparent_path),
+                "--service-trust-store",
+                str(trust_directory),
+                "--offline",
+                "--output",
+                "json",
+            ]
+        )
+        report = json.loads(capsys.readouterr().out)
         statement = statement_path.read_bytes()
         transparent = transparent_path.read_bytes()
         message = Sign1Message.decode(statement)
@@ -1013,14 +981,26 @@ class TestSignGhaFulcioLedger:
         assert message.phdr[ContentType] == "application/json"
         assert len(message.phdr[X5chain]) == (3 if intermediate else 2)
         verify_transparent_statement(transparent, trust_store, statement)
-        assert re.fullmatch(r"\d+\.\d+", outputs["transaction-id"])
-        assert outputs == {
-            "transaction-id": outputs["transaction-id"],
-            "signed-statement": str(statement_path.resolve()),
-            "transparent-statement": str(transparent_path.resolve()),
+        assert report["transparent"] is True
+        assert report["statement"] == str(transparent_path)
+        assert len(report["receipts"]) == 1
+        receipt = report["receipts"][0]
+        transaction_id = receipt["registration_txid"]
+        assert re.fullmatch(r"\d+\.\d+", transaction_id)
+        assert (
+            f"Registered {statement_path} as transaction {transaction_id}"
+            in registration_output
+        )
+        entry_url = f"https://{receipt['issuer']}/entries/{transaction_id}"
+        assert receipt["urls"] == {
+            "receipt": entry_url,
+            "transparent_statement": f"{entry_url}/statement",
         }
+        assert receipt["verification_key_source"] == "trust_store"
 
-    @pytest.mark.parametrize("failure", [None, "workflow", "receipt", "url"])
+    @pytest.mark.parametrize(
+        "failure", [None, "workflow", "receipt", "keys", "url", "metadata"]
+    )
     def test_composite_action_scripts(
         self,
         fulcio_ca,
@@ -1058,20 +1038,26 @@ class TestSignGhaFulcioLedger:
             "import os\n"
             "import sys\n"
             "from pathlib import Path\n"
-            "from pyscitt.cli import register, sign_gha_fulcio\n"
+            "from pyscitt.cli import sign_gha_fulcio, validate\n"
             "from pyscitt.cli.main import main\n"
             "if sys.argv[1] == 'sign-gha-fulcio':\n"
             "    sign_gha_fulcio.sign_payload = lambda *a, **kw: "
             "Path(os.environ['SCITT_TEST_STATEMENT']).read_bytes()\n"
-            "elif os.environ.get('SCITT_TEST_REJECT_RECEIPT'):\n"
-            "    def reject_receipt(*args):\n"
-            "        raise ValueError('Receipt verification failed')\n"
-            "    register.verify_transparent_statement = reject_receipt\n"
+            "elif sys.argv[1] == 'validate' and os.environ.get('SCITT_TEST_BAD_METADATA'):\n"
+            "    real_validate = validate.validate_transparent_statement\n"
+            "    def invalid_metadata(*args):\n"
+            "        result = real_validate(*args)\n"
+            "        result['receipts'][0]['registration_txid'] = '1.2\\ninjected=value'\n"
+            "        return result\n"
+            "    validate.validate_transparent_statement = invalid_metadata\n"
             "main(sys.argv[1:])\n"
         )
         cli_path.chmod(0o700)
         github_output = tmp_path / "github-output"
         output_dir = tmp_path / "output with spaces;$(echo injected)"
+        transparent_path = output_dir / "transparent-statement.cose"
+        runner_temp = tmp_path / "runner temp"
+        runner_temp.mkdir()
         environment = os.environ | {
             "SCITT_CLI": str(cli_path),
             "SCITT_PYTHON": sys.executable,
@@ -1083,8 +1069,9 @@ class TestSignGhaFulcioLedger:
             "SCITT_CONTENT_TYPE": "application/octet-stream",
             "SCITT_OUTPUT_DIR": str(output_dir),
             "SCITT_TEST_STATEMENT": str(fixture_path),
-            "SCITT_TEST_REJECT_RECEIPT": "1" if failure == "receipt" else "",
+            "SCITT_TEST_BAD_METADATA": "1" if failure == "metadata" else "",
             "GITHUB_OUTPUT": str(github_output),
+            "RUNNER_TEMP": str(runner_temp),
         }
         yaml = import_module("yaml")
         action = yaml.safe_load(
@@ -1093,13 +1080,18 @@ class TestSignGhaFulcioLedger:
             ).read_text()
         )
         steps = action["runs"]["steps"]
-        scripts = [
-            next(step["run"] for step in steps if "SCITT_FILE" in step.get("env", {})),
-            next(step["run"] for step in steps if step.get("id") == "submit"),
+        action_steps = [
+            next(step for step in steps if "SCITT_FILE" in step.get("env", {})),
+            next(step for step in steps if step.get("id") == "submit"),
+            next(step for step in steps if step.get("id") == "verify"),
         ]
-        for script in scripts:
+        assert "--verify" not in action_steps[1]["run"]
+        assert "--output" not in action_steps[1]["run"]
+        for name, output in action["outputs"].items():
+            assert output["value"] == f"${{{{ steps.verify.outputs.{name} }}}}"
+        for step in action_steps:
             result = subprocess.run(
-                ["bash", "-euo", "pipefail", "-c", script],
+                ["bash", "-euo", "pipefail", "-c", step["run"]],
                 cwd=tmp_path,
                 env=environment,
                 capture_output=True,
@@ -1107,17 +1099,39 @@ class TestSignGhaFulcioLedger:
             )
             if result.returncode:
                 break
+            if step.get("id") == "submit":
+                assert transparent_path.exists()
+                assert not github_output.exists()
+                assert not list(output_dir.glob("*.json"))
+                if failure == "receipt":
+                    transparent_path.write_bytes(
+                        tamper_payload(transparent_path.read_bytes())
+                    )
+                elif failure == "keys":
+                    wrong_ca = tmp_path / "wrong-ca.pem"
+                    wrong_ca.write_text(fulcio_ca.pem)
+                    environment["SCITT_SERVICE_CA"] = str(wrong_ca)
         assert not (tmp_path / "injected").exists()
+        assert not list(runner_temp.iterdir())
+        assert not list(output_dir.glob("*.json"))
         if failure:
             assert result.returncode != 0
-            assert {
-                "workflow": "PolicyFailed",
-                "receipt": "Receipt verification failed",
-                "url": "Ledger URL must use HTTPS",
-            }[failure] in result.stderr
+            if failure == "receipt":
+                report = json.loads(result.stdout)
+                assert report["transparent"] is False
+                assert report["error"]
+                assert report["receipts"] == []
+            else:
+                assert {
+                    "workflow": "PolicyFailed",
+                    "keys": "CERTIFICATE_VERIFY_FAILED",
+                    "url": "Ledger URL must use HTTPS",
+                    "metadata": "Verification output has an invalid registration transaction ID",
+                }[failure] in result.stderr
             assert not github_output.exists()
-            assert not (output_dir / "transparent-statement.cose").exists()
-            assert not (output_dir / "submission.json").exists()
+            assert transparent_path.exists() == (
+                failure in ("receipt", "keys", "metadata")
+            )
         else:
             assert result.returncode == 0, result.stderr
             outputs = dict(
@@ -1128,7 +1142,20 @@ class TestSignGhaFulcioLedger:
                 "signed-statement",
                 "transparent-statement",
             }
-            assert json.loads((output_dir / "submission.json").read_text()) == outputs
+            report = json.loads(result.stdout)
+            assert report["transparent"] is True
+            assert report["statement"] == outputs["transparent-statement"]
+            assert len(report["receipts"]) == 1
+            receipt = report["receipts"][0]
+            assert receipt["registration_txid"] == outputs["transaction-id"]
+            entry_url = (
+                f"https://{receipt['issuer']}/entries/{outputs['transaction-id']}"
+            )
+            assert receipt["urls"] == {
+                "receipt": entry_url,
+                "transparent_statement": f"{entry_url}/statement",
+            }
+            assert receipt["verification_key_source"] == "trust_store"
             assert Path(outputs["signed-statement"]).read_bytes() == statement
             verify_transparent_statement(
                 Path(outputs["transparent-statement"]).read_bytes(),

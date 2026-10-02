@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 ### Changes
 - Add `scitt sign-gha-fulcio` to create SCITT-ready COSE statements with GitHub
-  Actions OIDC and short-lived Fulcio certificates, and verified submission
-  support for the composite signing Action.
+  Actions OIDC and short-lived Fulcio certificates. The composite signing Action
+  registers and verifies in separate steps, reporting receipt URLs and the
+  registration transaction ID from `scitt validate`.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.17 and align the Python CCF minimum version.
