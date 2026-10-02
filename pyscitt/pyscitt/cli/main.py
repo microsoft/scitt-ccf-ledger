@@ -10,12 +10,14 @@ from . import (
     register,
     retrieve_signed_claims,
     sign,
+    sign_gha_fulcio,
     split_payload,
     validate,
 )
 
 COMMANDS = [
     ("sign", sign),
+    ("sign-gha-fulcio", sign_gha_fulcio),
     ("submit", register),
     ("retrieve", retrieve_signed_claims),
     ("split-payload", split_payload),
@@ -32,7 +34,7 @@ def main(argv=None):
     # https://github.com/python/cpython/issues/67037
     # https://docs.python.org/3/library/argparse.html#sub-commands
     sub = parser.add_subparsers(
-        metavar="{submit,retrieve,pretty-receipt,embed-receipt,validate,split-payload}",
+        metavar="{sign-gha-fulcio,submit,retrieve,pretty-receipt,embed-receipt,validate,split-payload}",
         help="""Choose one of the available commands to run. 
                                 Use the --help flag to see the options for each command.
                                 For instance 'scitt submit --help' will show the options for the submit command.

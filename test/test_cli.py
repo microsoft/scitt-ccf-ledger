@@ -240,6 +240,7 @@ def test_submit_default_async_flow(run, tmp_path, cert_authority, configure_serv
         "test/payloads/manifest.spdx.json.sha384.digest.cose",
         "test/payloads/css-attested-cosesign1-20250925.cose",
         "test/payloads/css-attested-cosesign1-20260302.cose",
+        "test/payloads/github-fulcio-20261001.cose",
     ],
 )
 def test_submit_and_validate(
