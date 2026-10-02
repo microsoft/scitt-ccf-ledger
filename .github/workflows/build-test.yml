@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - feat/github-oidc-e2e
   pull_request:
     # 'labeled' is needed so that adding the run-test-on-mult-nodes label to an
     # open pull request triggers the multi-node job below.
@@ -62,26 +61,6 @@ jobs:
 
       - run: ./scripts/setup-env.sh
       - run: ./build.sh
-      - name: Package ledger for temporary Fulcio probe
-        id: temporary_ledger_rpm
-        if: >-
-          (github.event_name == 'push' &&
-           github.ref == 'refs/heads/feat/github-oidc-e2e') ||
-          (github.event_name == 'pull_request' &&
-           github.event.pull_request.head.repo.full_name == github.repository &&
-           github.head_ref == 'feat/github-oidc-e2e')
-        working-directory: app/build/app
-        run: |
-          tdnf install -y rpm-build
-          cpack -G RPM -B "$RUNNER_TEMP/github-oidc-ledger-rpm"
-      - name: Share ledger build with temporary Fulcio probe
-        if: steps.temporary_ledger_rpm.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: github-oidc-ledger-rpm
-          path: ${{ runner.temp }}/github-oidc-ledger-rpm/*.rpm
-          retention-days: 1
-          if-no-files-found: error
       - name: Install dotnet test dependencies
         run: |
           tdnf install -y dotnet-sdk-8.0.x86_64
@@ -95,64 +74,6 @@ jobs:
             /tmp/pytest-of-root/*current/*current/*.{out,err}
             /tmp/pytest-of-root/*current/*current/config.json
           if-no-files-found: warn
-
-  temporary-github-oidc-fulcio:
-    name: Temporary GitHub OIDC/Fulcio ledger check
-    # Remove this feature-branch probe after live ledger validation.
-    needs: build-test
-    if: >-
-      (github.event_name == 'push' &&
-       github.ref == 'refs/heads/feat/github-oidc-e2e') ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       github.head_ref == 'feat/github-oidc-e2e')
-    runs-on: ubuntu-latest
-    container: mcr.microsoft.com/azurelinux/base/core:3.0
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Set up runtime environment
-        run: |
-          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
-          tdnf update -y
-          tdnf install -y --disablerepo azurelinux-official-ms-non-oss ca-certificates git python3-pip
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Download the CI-built ledger
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: github-oidc-ledger-rpm
-          path: ${{ runner.temp }}/github-oidc-ledger-rpm
-      - name: Install ledger and test dependencies
-        run: |
-          tdnf install -y "$RUNNER_TEMP/github-oidc-ledger-rpm/"*.rpm
-          python3.12 -m venv "$RUNNER_TEMP/scitt-fulcio-venv"
-          "$RUNNER_TEMP/scitt-fulcio-venv/bin/python" -m pip install \
-            --disable-pip-version-check --quiet ./pyscitt -r test/requirements.txt
-      - name: "Temporary: submit a real Fulcio-backed statement to a local ledger"
-        env:
-          SCITT_LIVE_GITHUB_OIDC: "1"
-          SCITT_GITHUB_OIDC_OUTPUT_DIR: ${{ runner.temp }}/github-oidc-ledger-output
-        run: |
-          "$RUNNER_TEMP/scitt-fulcio-venv/bin/python" -m pytest -v -s --tb=short \
-            --start-cchost \
-            --cchost-binary=/opt/scitt/bin/cchost \
-            --constitution=/opt/scitt/share/scitt/constitution \
-            test/test_github_oidc_live.py
-      - name: Retain the signed statement and verified registration receipt
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: github-oidc-fulcio-cose
-          path: |
-            ${{ runner.temp }}/github-oidc-ledger-output/signed-statement.cose
-            ${{ runner.temp }}/github-oidc-ledger-output/transparent-statement.cose
-            ${{ runner.temp }}/github-oidc-ledger-output/submission.json
-          retention-days: 1
-          if-no-files-found: error
 
   build-test-multi-node:
     name: CI (3 node cluster)

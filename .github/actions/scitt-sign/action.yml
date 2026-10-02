@@ -47,18 +47,67 @@ runs:
         "$venv_dir/bin/python" -m pip install --disable-pip-version-check --quiet \
           "${GITHUB_ACTION_PATH}/../../../pyscitt"
         echo "python=$venv_dir/bin/python" >> "$GITHUB_OUTPUT"
-    - name: Sign and register the input file
-      id: submit
+        echo "scitt=$venv_dir/bin/scitt" >> "$GITHUB_OUTPUT"
+    - name: Sign the input file with GitHub OIDC and Fulcio
       shell: bash
       env:
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
         SCITT_PYTHON: ${{ steps.setup.outputs.python }}
         SCITT_FILE: ${{ inputs.file }}
         SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
         SCITT_CONTENT_TYPE: ${{ inputs.content-type }}
+        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        "$SCITT_PYTHON" - <<'PY'
+        import os
+        from urllib.parse import urlsplit
+
+        url = urlsplit(os.environ["SCITT_LEDGER_URL"])
+        if (url.scheme != "https" or not url.hostname or url.username is not None
+            or url.password is not None or url.fragment):
+            raise ValueError("Ledger URL must use HTTPS without credentials or fragment")
+        output_dir = os.environ["SCITT_OUTPUT_DIR"]
+        if "\n" in output_dir or "\r" in output_dir:
+            raise ValueError("Action output paths must not contain newlines")
+        PY
+        "$SCITT_CLI" sign-gha-fulcio \
+          --statement="$SCITT_FILE" \
+          --content-type="$SCITT_CONTENT_TYPE" \
+          --out="$SCITT_OUTPUT_DIR/signed-statement.cose"
+    - name: Register the signed statement and verify its receipt
+      id: submit
+      shell: bash
+      env:
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
         SCITT_SERVICE_CA: ${{ inputs.service-ca }}
         SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
-        export SCITT_WORKSPACE="$PWD"
-        export PYTHONPATH="${GITHUB_ACTION_PATH}/../../.."
-        cd "${GITHUB_ACTION_PATH}/../../.."
-        "$SCITT_PYTHON" -m demo.github_actions.sign
+        client_args=(--url "$SCITT_LEDGER_URL")
+        if [ -n "$SCITT_SERVICE_CA" ]; then
+          client_args+=("--cacert=$SCITT_SERVICE_CA")
+        fi
+        submission="$("$SCITT_CLI" submit \
+          "${client_args[@]}" \
+          --transparent-statement="$SCITT_OUTPUT_DIR/transparent-statement.cose" \
+          --verify --output json -- "$SCITT_OUTPUT_DIR/signed-statement.cose")"
+        SCITT_SUBMISSION="$submission" "$SCITT_PYTHON" - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+
+        outputs = json.loads(os.environ["SCITT_SUBMISSION"])
+        expected = {"transaction-id", "signed-statement", "transparent-statement"}
+        if set(outputs) != expected:
+            raise ValueError("Unexpected submission outputs")
+        if any(not isinstance(value, str) or "\n" in value or "\r" in value
+               for value in outputs.values()):
+            raise ValueError("Action outputs must not contain newlines")
+        (Path(os.environ["SCITT_OUTPUT_DIR"]) / "submission.json").write_text(
+            json.dumps(outputs, indent=2) + "\n"
+        )
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+            for name, value in outputs.items():
+                stream.write(f"{name}={value}\n")
+        PY

@@ -5,5 +5,3 @@ This folder contains step-by-step demos for the Transparency Service. These demo
 - Local end-to-end demo (runs on your machine): [transparency-service-poc](./transparency-service-poc)
 - Azure deployment demo (Azure Confidential Containers): [azure-confidential-containers](./azure-confidential-containers)
 - Creating signatures for submission: [signing-and-policies](./signing-and-policies)
-- GitHub OIDC keyless signing and ledger-side repository policy:
-  [github_actions](./github_actions)

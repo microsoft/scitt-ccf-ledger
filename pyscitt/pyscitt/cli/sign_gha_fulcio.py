@@ -3,12 +3,11 @@
 
 import argparse
 import base64
-import json
 import os
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import quote
 
 import httpx
 from cryptography import x509
@@ -16,15 +15,55 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, ObjectIdentifier
+from pycose.headers import X5chain
+from pycose.messages import Sign1Message
 
-from pyscitt import crypto
-from pyscitt.client import Client, ServiceError
-from pyscitt.verify import StaticTrustStore, verify_transparent_statement
-
-from . import policy
+from .. import crypto
+from ..verify import verify_cose_sign1
 
 FULCIO_URL = "https://fulcio.sigstore.dev"
 FULCIO_AUDIENCE = "sigstore"
+FULCIO_ROOT = Path(__file__).with_name("fulcio-root.pem")
+GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
+GITHUB_ISSUER_OID = "1.3.6.1.4.1.57264.1.8"
+MAX_CERTIFICATE_LIFETIME = 600
+
+
+def der_utf8(value: str) -> bytes:
+    data = value.encode("utf-8")
+    length = len(data)
+    if length < 128:
+        encoded_length = bytes([length])
+    else:
+        size = (length.bit_length() + 7) // 8
+        encoded_length = bytes([128 + size]) + length.to_bytes(size, "big")
+    return b"\x0c" + encoded_length + data
+
+
+def trusted_root(pem: str) -> x509.Certificate:
+    certificates = x509.load_pem_x509_certificates(pem.encode("ascii"))
+    if len(certificates) != 1:
+        raise ValueError("Fulcio root must contain exactly one trusted CA certificate")
+    root = certificates[0]
+    if not root.extensions.get_extension_for_class(x509.BasicConstraints).value.ca:
+        raise ValueError("Fulcio root must be a CA certificate")
+    try:
+        root.verify_directly_issued_by(root)
+    except InvalidSignature as error:
+        raise ValueError(
+            "The trusted Fulcio root is not correctly self-signed"
+        ) from error
+    return root
+
+
+def signing_issuer(root_pem: str, workflow_uri: str) -> str:
+    trusted_root(root_pem)
+    fingerprint = crypto.get_cert_fingerprint_b64url(root_pem)
+    encoded_uri = quote(workflow_uri, safe="").replace("~", "%7E")
+    return (
+        f"did:x509:0:sha256:{fingerprint}"
+        f"::eku:1.3.6.1.5.5.7.3.3::san:uri:{encoded_uri}"
+    )
 
 
 def https_url(value: str, name: str) -> httpx.URL:
@@ -72,8 +111,8 @@ def sign_payload(
     content_type: str = "application/octet-stream",
     environment: Mapping[str, str] = os.environ,
 ) -> bytes:
-    root_pem = policy.FULCIO_ROOT.read_text()
-    root = policy.trusted_root(root_pem)
+    root_pem = FULCIO_ROOT.read_text()
+    root = trusted_root(root_pem)
     token = github_token(session, environment)
     key = ec.generate_private_key(ec.SECP256R1())
     csr = (
@@ -120,7 +159,7 @@ def sign_payload(
         raise ValueError("Fulcio certificate does not bind the ephemeral signing key")
     now = datetime.now(UTC)
     lifetime = (leaf.not_valid_after_utc - leaf.not_valid_before_utc).total_seconds()
-    if not 0 < lifetime <= policy.MAX_CERTIFICATE_LIFETIME:
+    if not 0 < lifetime <= MAX_CERTIFICATE_LIFETIME:
         raise ValueError("Fulcio certificate is not short lived")
     if not leaf.not_valid_before_utc <= now < leaf.not_valid_after_utc:
         raise ValueError("Fulcio certificate is expired or not yet valid")
@@ -133,11 +172,11 @@ def sign_payload(
             "Fulcio returned a CA certificate instead of a signing certificate"
         )
     issuer_extension = leaf.extensions.get_extension_for_oid(
-        ObjectIdentifier(policy.GITHUB_ISSUER_OID)
+        ObjectIdentifier(GITHUB_ISSUER_OID)
     ).value
     if not isinstance(
         issuer_extension, x509.UnrecognizedExtension
-    ) or issuer_extension.value != policy.der_utf8(policy.GITHUB_ISSUER):
+    ) or issuer_extension.value != der_utf8(GITHUB_ISSUER):
         raise ValueError(
             "Fulcio certificate was not issued to a GitHub Actions identity"
         )
@@ -170,7 +209,7 @@ def sign_payload(
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         ).decode("ascii"),
-        issuer=policy.signing_issuer(root_pem, uris[0]),
+        issuer=signing_issuer(root_pem, uris[0]),
         x5c=chain,
     )
     return crypto.sign_statement(
@@ -181,88 +220,65 @@ def sign_payload(
     )
 
 
-def submit(client: Client, statement: bytes, output_dir: Path) -> dict[str, str]:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    statement_path = output_dir / "signed-statement.cose"
-    transparent_path = output_dir / "transparent-statement.cose"
-    statement_path.write_bytes(statement)
-    result = client.submit_signed_statement_and_wait(statement)
-    trust_store = StaticTrustStore(cose_keys=client.get_scitt_keys())
-    verify_transparent_statement(result.response_bytes, trust_store, statement)
-    transparent_path.write_bytes(result.response_bytes)
-    outputs = {
-        "transaction-id": result.tx,
-        "signed-statement": str(statement_path.resolve()),
-        "transparent-statement": str(transparent_path.resolve()),
-    }
-    (output_dir / "submission.json").write_text(json.dumps(outputs, indent=2) + "\n")
-    return outputs
+def verify_statement(statement: bytes, payload: bytes) -> None:
+    message = Sign1Message.decode(statement)
+    if message.payload != payload:
+        raise ValueError("Generated COSE payload does not match the input file")
+    leaf = crypto.cert_der_to_pem(message.phdr[X5chain][0])
+    verify_cose_sign1(statement, crypto.get_cert_public_key(leaf))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Sign a file using GitHub OIDC and submit it to a SCITT ledger"
+def sign_statement(statement_path: Path, out_path: Path, content_type: str) -> None:
+    if out_path.suffix != ".cose":
+        raise ValueError("--out must end with .cose")
+    payload = statement_path.read_bytes()
+    with httpx.Client(timeout=30, follow_redirects=False) as session:
+        statement = sign_payload(payload, session, content_type=content_type)
+    verify_statement(statement, payload)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(statement)
+    print(f"Writing {out_path}")
+
+
+def cli(fn):
+    parser = fn(
+        description=(
+            "Sign a statement using GitHub Actions OIDC and a short-lived public "
+            "Fulcio certificate. Requires permissions: id-token: write."
+        )
     )
     parser.add_argument(
-        "--workspace",
-        type=Path,
-        default=os.environ.get("SCITT_WORKSPACE", Path.cwd()),
-        help="Base directory for relative input and output paths",
+        "--statement", type=Path, required=True, help="Path to statement file"
     )
-    parser.add_argument("--file", type=Path, default=os.environ.get("SCITT_FILE"))
-    parser.add_argument("--ledger-url", default=os.environ.get("SCITT_LEDGER_URL"))
+    parser.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="Output path for signed statement (.cose)",
+    )
     parser.add_argument(
         "--content-type",
-        default=os.environ.get("SCITT_CONTENT_TYPE", "application/octet-stream"),
+        default="application/octet-stream",
+        help="Content type of statement (default: application/octet-stream)",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=os.environ.get("SCITT_OUTPUT_DIR", "scitt-output"),
-    )
-    parser.add_argument(
-        "--service-ca", type=Path, default=os.environ.get("SCITT_SERVICE_CA") or None
-    )
-    args = parser.parse_args()
-    if args.file is None or args.ledger_url is None:
-        parser.error("--file and --ledger-url are required")
-    try:
-        https_url(args.ledger_url, "Ledger URL")
-        workspace = args.workspace.resolve()
-        with httpx.Client(timeout=30, follow_redirects=False) as session:
-            statement = sign_payload(
-                (workspace / args.file).read_bytes(),
-                session,
-                content_type=args.content_type,
-            )
-        client = Client(
-            args.ledger_url,
-            cacert=str(workspace / args.service_ca) if args.service_ca else None,
-        )
+
+    def cmd(args):
         try:
-            outputs = submit(client, statement, workspace / args.output_dir)
-        finally:
-            client.session.close()
-        if output_file := os.environ.get("GITHUB_OUTPUT"):
-            with open(output_file, "a", encoding="utf-8") as f:
-                for name, value in outputs.items():
-                    if "\n" in value or "\r" in value:
-                        raise ValueError(
-                            "Action output paths must not contain newlines"
-                        )
-                    f.write(f"{name}={value}\n")
-        print(json.dumps(outputs, indent=2))
-    except (
-        OSError,
-        ValueError,
-        InvalidSignature,
-        httpx.HTTPError,
-        ServiceError,
-        x509.ExtensionNotFound,
-    ) as e:
-        print(f"::error::{workflow_command_escape(str(e))}", file=sys.stderr)
-        raise SystemExit(1) from e
+            sign_statement(args.statement, args.out, args.content_type)
+        except (
+            OSError,
+            ValueError,
+            InvalidSignature,
+            httpx.HTTPError,
+            x509.ExtensionNotFound,
+        ) as error:
+            parser.exit(1, f"Error: {error}\n")
+
+    parser.set_defaults(func=cmd)
+    return parser
 
 
 if __name__ == "__main__":
-    main()
+    parser = cli(argparse.ArgumentParser)
+    args = parser.parse_args()
+    args.func(args)

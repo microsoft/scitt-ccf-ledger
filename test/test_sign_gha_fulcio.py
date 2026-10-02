@@ -3,9 +3,16 @@
 
 import base64
 import json
+import os
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from importlib import import_module
+from pathlib import Path
+from unittest.mock import Mock
 
 import cbor2
 import httpx
@@ -18,20 +25,15 @@ from pycose.headers import Algorithm, ContentType, X5chain
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
-from demo.github_actions import policy, sign, smoke_test
 from pyscitt import crypto
+from pyscitt.cli import register
+from pyscitt.cli import sign_gha_fulcio as sign
 from pyscitt.cli.main import main as cli_main
-from pyscitt.client import Client
+from pyscitt.client import Client, PendingSubmission, Submission
 from pyscitt.verify import verify_cose_sign1, verify_transparent_statement
 
 from . import policies
 from .infra.assertions import service_error
-from .test_github_oidc_live import (
-    register_fulcio_statement,
-)
-from .test_github_oidc_live import (
-    test_real_fulcio_statement_to_managed_ledger as live_probe,
-)
 
 WORKFLOW = (
     "https://github.com/octo/example/.github/workflows/submit.yml@refs/heads/main"
@@ -119,7 +121,7 @@ class FulcioCA:
         self,
         public_key,
         *,
-        oidc_issuer: str | None = policy.GITHUB_ISSUER,
+        oidc_issuer: str | None = sign.GITHUB_ISSUER,
         san: str = WORKFLOW,
         lifetime: int = 600,
         offset: int = -30,
@@ -159,8 +161,8 @@ class FulcioCA:
         if oidc_issuer is not None:
             builder = builder.add_extension(
                 x509.UnrecognizedExtension(
-                    ObjectIdentifier(policy.GITHUB_ISSUER_OID),
-                    policy.der_utf8(oidc_issuer),
+                    ObjectIdentifier(sign.GITHUB_ISSUER_OID),
+                    sign.der_utf8(oidc_issuer),
                 ),
                 False,
             )
@@ -177,8 +179,7 @@ class FulcioCA:
                 serialization.PrivateFormat.PKCS8,
                 serialization.NoEncryption(),
             ).decode("ascii"),
-            issuer=issuer
-            or policy.signing_issuer(self.pem, kwargs.get("san", WORKFLOW)),
+            issuer=issuer or sign.signing_issuer(self.pem, kwargs.get("san", WORKFLOW)),
             x5c=[
                 leaf.public_bytes(serialization.Encoding.PEM).decode("ascii"),
                 *self.chain,
@@ -189,7 +190,7 @@ class FulcioCA:
         )
 
     def registration_policy(self) -> dict:
-        return policy.registration_policy(self.pem, workflow=WORKFLOW)
+        return policies.DID_X509["js"](sign.signing_issuer(self.pem, WORKFLOW))
 
 
 @pytest.fixture
@@ -197,7 +198,7 @@ def fulcio_ca(tmp_path, monkeypatch):
     ca = FulcioCA()
     root = tmp_path / "fulcio-root.pem"
     root.write_text(ca.pem)
-    monkeypatch.setattr(policy, "FULCIO_ROOT", root)
+    monkeypatch.setattr(sign, "FULCIO_ROOT", root)
     return ca
 
 
@@ -261,7 +262,7 @@ def action_statement(mock: MockFulcio, *, payload: bytes = PAYLOAD) -> bytes:
         )
 
 
-class TestGitHubActionOffline:
+class TestSignGhaFulcioOffline:
     @pytest.mark.parametrize(
         "variant", ["signedCertificateEmbeddedSct", "signedCertificateDetachedSct"]
     )
@@ -282,7 +283,7 @@ class TestGitHubActionOffline:
         assert message.phdr[Algorithm].identifier == -7
         assert message.phdr[ContentType] == "application/octet-stream"
         assert len(message.phdr[X5chain]) == 2
-        assert message.phdr[crypto.CWTClaims][crypto.CWT_ISS] == policy.signing_issuer(
+        assert message.phdr[crypto.CWTClaims][crypto.CWT_ISS] == sign.signing_issuer(
             fulcio_ca.pem, WORKFLOW
         )
         assert set(message.phdr) == {Algorithm, ContentType, X5chain, crypto.CWTClaims}
@@ -303,16 +304,29 @@ class TestGitHubActionOffline:
 
     @pytest.mark.parametrize("failure", [None, "fulcio", "payload", "signature"])
     @pytest.mark.parametrize("basic_constraints", [False, True])
-    def test_live_smoke_entrypoint(
-        self, fulcio_ca, tmp_path, monkeypatch, capsys, failure, basic_constraints
+    @pytest.mark.parametrize("content_type", [None, "application/json"])
+    def test_sign_cli(
+        self,
+        fulcio_ca,
+        tmp_path,
+        monkeypatch,
+        capsys,
+        failure,
+        basic_constraints,
+        content_type,
     ):
         input_path = tmp_path / "payload.bin"
         input_path.write_bytes(PAYLOAD)
         output_path = tmp_path / "output/signed-statement.cose"
-        monkeypatch.setattr(
-            "sys.argv",
-            ["smoke_test", "--file", str(input_path), "--out", str(output_path)],
-        )
+        arguments = [
+            "sign-gha-fulcio",
+            "--statement",
+            str(input_path),
+            "--out",
+            str(output_path),
+        ]
+        if content_type is not None:
+            arguments.extend(["--content-type", content_type])
         for name, value in ENVIRONMENT.items():
             monkeypatch.setenv(name, value)
         mock = MockFulcio(
@@ -329,7 +343,7 @@ class TestGitHubActionOffline:
         def create_client(**kwargs):
             return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
-        monkeypatch.setattr(smoke_test.httpx, "Client", create_client)
+        monkeypatch.setattr(sign.httpx, "Client", create_client)
         real_sign_payload = sign.sign_payload
 
         def sign_for_test(payload, session, **kwargs):
@@ -343,29 +357,59 @@ class TestGitHubActionOffline:
         monkeypatch.setattr(sign, "sign_payload", sign_for_test)
         if failure is not None:
             with pytest.raises(SystemExit) as error:
-                smoke_test.main()
+                cli_main(arguments)
             assert error.value.code == 1
             assert not output_path.exists()
             error_output = capsys.readouterr().err
-            assert "::error::" in error_output
+            assert "Error:" in error_output
             assert {
                 "fulcio": "400",
                 "payload": "COSE payload does not match",
                 "signature": "signature is invalid",
             }[failure] in error_output
         else:
-            smoke_test.main()
+            cli_main(arguments)
             statement = output_path.read_bytes()
             message = Sign1Message.decode(statement)
             assert message.payload == PAYLOAD
-            assert message.phdr[ContentType] == "application/json"
+            assert message.phdr[ContentType] == (
+                content_type or "application/octet-stream"
+            )
             leaf = crypto.cert_der_to_pem(message.phdr[X5chain][0])
             verify_cose_sign1(statement, crypto.get_cert_public_key(leaf))
             assert b"test-github-jwt" not in statement
             assert b"PRIVATE KEY" not in statement
             output = capsys.readouterr().out
             assert "::add-mask::test-github-jwt\n" in output
-            assert "Created and verified Fulcio-backed COSE signature" in output
+            assert f"Writing {output_path}" in output
+
+    @pytest.mark.parametrize("failure", ["oidc", "missing-file", "output-extension"])
+    def test_sign_cli_invalid_input(self, tmp_path, monkeypatch, capsys, failure):
+        statement_path = tmp_path / "payload"
+        if failure != "missing-file":
+            statement_path.write_bytes(PAYLOAD)
+        output_path = tmp_path / (
+            "signed-statement.txt" if failure == "output-extension" else "output.cose"
+        )
+        for name in ENVIRONMENT:
+            monkeypatch.delenv(name, raising=False)
+        with pytest.raises(SystemExit) as error:
+            cli_main(
+                [
+                    "sign-gha-fulcio",
+                    "--statement",
+                    str(statement_path),
+                    "--out",
+                    str(output_path),
+                ]
+            )
+        assert error.value.code == 1
+        assert not output_path.exists()
+        assert {
+            "oidc": "id-token: write",
+            "missing-file": "No such file",
+            "output-extension": "--out must end with .cose",
+        }[failure] in capsys.readouterr().err
 
     def test_fresh_keys_per_invocation(self, fulcio_ca):
         mock = MockFulcio(fulcio_ca)
@@ -379,7 +423,7 @@ class TestGitHubActionOffline:
 
     def test_intermediate_chain(self, fulcio_ca):
         ca = FulcioCA(intermediate=True)
-        policy.FULCIO_ROOT.write_text(ca.pem)
+        sign.FULCIO_ROOT.write_text(ca.pem)
         message = Sign1Message.decode(action_statement(MockFulcio(ca)))
         assert len(message.phdr[X5chain]) == 3
         assert message.phdr[X5chain][-1] == ca.root.public_bytes(
@@ -513,13 +557,13 @@ class TestGitHubActionOffline:
         assert error.value.oid == (
             x509.ExtendedKeyUsage.oid
             if "eku" in options
-            else ObjectIdentifier(policy.GITHUB_ISSUER_OID)
+            else ObjectIdentifier(sign.GITHUB_ISSUER_OID)
         )
 
     @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_trusted_root_validation(self, fulcio_ca, basic_constraints):
         with pytest.raises(ValueError, match="exactly one"):
-            policy.trusted_root(fulcio_ca.pem * 2)
+            sign.trusted_root(fulcio_ca.pem * 2)
         leaf = fulcio_ca.certificate(
             ec.generate_private_key(ec.SECP256R1()).public_key(),
             basic_constraints=basic_constraints,
@@ -528,11 +572,11 @@ class TestGitHubActionOffline:
         with pytest.raises(
             error, match="CA certificate" if basic_constraints else "BasicConstraints"
         ):
-            policy.trusted_root(leaf.public_bytes(serialization.Encoding.PEM).decode())
+            sign.trusted_root(leaf.public_bytes(serialization.Encoding.PEM).decode())
 
     def test_bundled_public_fulcio_root(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        root = policy.trusted_root(policy.FULCIO_ROOT.read_text())
+        root = sign.trusted_root(sign.FULCIO_ROOT.read_text())
         assert root.fingerprint(hashes.SHA256()).hex() == (
             "3ba7b6cc4e95469d4d334b49cb257ad8537076fa84b0ca87ff4ecfe6a54680c1"
         )
@@ -540,7 +584,7 @@ class TestGitHubActionOffline:
     @pytest.mark.parametrize("length", [0, 127, 128, 255, 256])
     def test_fulcio_utf8_encoding(self, length):
         value = "a" * length
-        encoded = policy.der_utf8(value)
+        encoded = sign.der_utf8(value)
         assert encoded[0] == 12
         if encoded[1] < 128:
             assert encoded[1] == length
@@ -549,50 +593,6 @@ class TestGitHubActionOffline:
             size = encoded[1] & 127
             assert int.from_bytes(encoded[2 : 2 + size]) == length
             assert encoded[2 + size :] == value.encode()
-
-    def test_policy_cli_preserves_configuration(self, fulcio_ca, tmp_path, monkeypatch):
-        original = {
-            "authentication": {
-                "allowUnauthenticated": False,
-                "jwt": {"requiredClaims": {"aud": "ledger"}},
-            },
-            "maxSignedStatementBytes": 32768,
-        }
-        configuration = tmp_path / "configuration.json"
-        configuration.write_text(json.dumps(original))
-        output = tmp_path / "github-policy.json"
-        monkeypatch.setattr(
-            "sys.argv",
-            [
-                "policy",
-                "--workflow",
-                WORKFLOW,
-                "--configuration",
-                str(configuration),
-                "--out",
-                str(output),
-            ],
-        )
-        policy.main()
-        result = json.loads(output.read_text())
-        assert result["authentication"] == original["authentication"]
-        assert result["maxSignedStatementBytes"] == original["maxSignedStatementBytes"]
-        assert result["policy"]["acceptedAlgorithms"] == ["ES256"]
-
-    @pytest.mark.parametrize("allow_unauthenticated", [False, True])
-    def test_policy_cli_defaults(
-        self, fulcio_ca, tmp_path, monkeypatch, allow_unauthenticated
-    ):
-        output = tmp_path / "github-policy.json"
-        arguments = ["policy", "--workflow", WORKFLOW, "--out", str(output)]
-        if allow_unauthenticated:
-            arguments.append("--allow-unauthenticated")
-        monkeypatch.setattr("sys.argv", arguments)
-        policy.main()
-        assert json.loads(output.read_text()) == {
-            "authentication": {"allowUnauthenticated": allow_unauthenticated},
-            "policy": fulcio_ca.registration_policy(),
-        }
 
     def test_pyscitt_cli_header_compatibility(self, fulcio_ca, tmp_path, monkeypatch):
         key = ec.generate_private_key(ec.SECP256R1())
@@ -624,7 +624,7 @@ class TestGitHubActionOffline:
                 "--x5c",
                 str(chain_path),
                 "--issuer",
-                policy.signing_issuer(fulcio_ca.pem, WORKFLOW),
+                sign.signing_issuer(fulcio_ca.pem, WORKFLOW),
                 "--content-type",
                 "application/octet-stream",
                 "--out",
@@ -652,76 +652,215 @@ class TestGitHubActionOffline:
             "--audience",
             "--auth-token",
             "--development",
+            "--ledger-url",
+            "--service-ca",
         ],
     )
-    def test_removed_options_rejected(self, option, monkeypatch, capsys):
-        monkeypatch.setattr("sys.argv", ["sign", option, "unused"])
+    def test_removed_options_rejected(self, option, capsys):
         with pytest.raises(SystemExit) as error:
-            sign.main()
+            cli_main(
+                [
+                    "sign-gha-fulcio",
+                    "--statement",
+                    "unused",
+                    "--out",
+                    "unused.cose",
+                    option,
+                    "unused",
+                ]
+            )
         assert error.value.code == 2
         assert f"unrecognized arguments: {option}" in capsys.readouterr().err
 
-
-class TestGitHubLedgerPolicy:
-    @pytest.mark.parametrize("expected_context", [False, True])
-    def test_live_probe_entrypoint(
-        self,
-        fulcio_ca,
-        cchost,
-        configure_service,
-        trust_store,
-        tmp_path,
-        monkeypatch,
-        expected_context,
-    ):
-        workflow_ref = "octo/example/.github/workflows/build-test.yml@refs/heads/main"
-        mock = MockFulcio(
-            fulcio_ca,
-            certificate_options={
-                "basic_constraints": False,
-                "san": f"https://github.com/{workflow_ref}",
-            },
+    def test_archived_public_fulcio_statement(self):
+        payloads = Path(__file__).with_name("payloads")
+        statement = (payloads / "github-fulcio-20261001.cose").read_bytes()
+        provenance = json.loads((payloads / "github-fulcio-20261001.json").read_text())
+        assert sha256(statement).hexdigest() == provenance["statement_sha256"]
+        message = Sign1Message.decode(statement)
+        assert set(message.phdr) == {Algorithm, ContentType, X5chain, crypto.CWTClaims}
+        assert message.phdr[Algorithm].identifier == -7
+        assert message.phdr[ContentType] == "application/json"
+        assert json.loads(message.payload) == {
+            "example": "GitHub Actions keyless SCITT submission",
+            "version": 1,
+        }
+        chain = [x509.load_der_x509_certificate(der) for der in message.phdr[X5chain]]
+        root_pem = sign.FULCIO_ROOT.read_text()
+        root = sign.trusted_root(root_pem)
+        assert len(chain) == 3
+        assert chain[-1].fingerprint(hashes.SHA256()) == root.fingerprint(
+            hashes.SHA256()
         )
-        real_sign_payload = sign.sign_payload
+        for child, parent in zip(chain, chain[1:]):
+            child.verify_directly_issued_by(parent)
+        leaf = chain[0]
+        assert (
+            leaf.not_valid_before_utc.isoformat()
+            == provenance["certificate_not_before"]
+        )
+        assert (
+            leaf.not_valid_after_utc.isoformat() == provenance["certificate_not_after"]
+        )
+        issuer_extension = leaf.extensions.get_extension_for_oid(
+            ObjectIdentifier(sign.GITHUB_ISSUER_OID)
+        ).value
+        assert isinstance(issuer_extension, x509.UnrecognizedExtension)
+        assert issuer_extension.value == sign.der_utf8(sign.GITHUB_ISSUER)
+        assert (
+            ExtendedKeyUsageOID.CODE_SIGNING
+            in leaf.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        )
+        assert leaf.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName
+        ).value.get_values_for_type(x509.UniformResourceIdentifier) == [
+            provenance["workflow"]
+        ]
+        assert message.phdr[crypto.CWTClaims] == {
+            crypto.CWT_ISS: sign.signing_issuer(root_pem, provenance["workflow"])
+        }
+        sign.verify_statement(statement, message.payload)
 
-        def exchange(payload, session, **kwargs):
-            with httpx.Client(transport=httpx.MockTransport(mock)) as mock_session:
-                return real_sign_payload(
-                    payload, mock_session, environment=ENVIRONMENT, **kwargs
-                )
+    def test_submit_verify_requires_confirmation(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            register,
+            "create_client",
+            lambda _: pytest.fail("No client should be created"),
+        )
+        with pytest.raises(SystemExit) as error:
+            cli_main(["submit", "statement.cose", "--verify", "--skip-confirmation"])
+        assert error.value.code == 2
+        assert (
+            "--verify cannot be used with --skip-confirmation"
+            in capsys.readouterr().err
+        )
 
-        monkeypatch.setattr(sign, "sign_payload", exchange)
-        monkeypatch.setenv("GITHUB_REPOSITORY", "octo/example")
-        monkeypatch.setenv(
-            "GITHUB_WORKFLOW_REF",
-            (
-                workflow_ref
-                if expected_context
-                else "unexpected/repo/.github/workflows/build-test.yml@refs/heads/main"
+    @pytest.mark.parametrize("flow", ["pending", "async", "sync"])
+    @pytest.mark.parametrize("output", ["text", "json"])
+    def test_submit_output_formats(self, tmp_path, monkeypatch, capsys, flow, output):
+        statement_path = tmp_path / "statement.cose"
+        statement_path.write_bytes(PAYLOAD)
+        transparent_path = tmp_path / "transparent-statement.cose"
+        client = Client("https://ledger.example", development=True)
+        pending = Mock(return_value=PendingSubmission("1.2"))
+        asynchronous = Mock(return_value=Submission("1.2", "1.3", b"transparent", True))
+        synchronous = Mock(return_value=Submission("1.2", "1.4", b"transparent", True))
+        monkeypatch.setattr(client, "submit_signed_statement", pending)
+        monkeypatch.setattr(client, "submit_signed_statement_and_wait", asynchronous)
+        monkeypatch.setattr(
+            client, "submit_signed_statement_wait_for_commit", synchronous
+        )
+        monkeypatch.setattr(
+            client, "get_scitt_keys", lambda: pytest.fail("Verification is opt-in")
+        )
+        monkeypatch.setattr(
+            client,
+            "get_transparent_statement",
+            lambda _: pytest.fail(
+                "Existing unverified synchronous output is unchanged"
             ),
         )
-        output_dir = tmp_path / "output"
-        monkeypatch.setenv("SCITT_GITHUB_OIDC_OUTPUT_DIR", str(output_dir))
-        if not expected_context:
-            with pytest.raises(AssertionError, match="expected build workflow"):
-                live_probe(cchost, configure_service)
-            assert not mock.requests
-            assert not output_dir.exists()
+        monkeypatch.setattr(register, "create_client", lambda _: client)
+        arguments = ["submit", str(statement_path)]
+        if output == "json":
+            arguments.extend(["--output", "json"])
+        if flow == "pending":
+            arguments.append("--skip-confirmation")
         else:
-            live_probe(cchost, configure_service)
-            statement = (output_dir / "signed-statement.cose").read_bytes()
-            verify_transparent_statement(
-                (output_dir / "transparent-statement.cose").read_bytes(),
-                trust_store,
-                statement,
-            )
-            assert (
-                Sign1Message.decode(statement).phdr[ContentType] == "application/json"
-            )
+            arguments.extend(["--transparent-statement", str(transparent_path)])
+            if flow == "sync":
+                arguments.append("--wait-for-commit")
+        cli_main(arguments)
+        assert client.session.is_closed
+        text = capsys.readouterr().out
+        if flow == "pending":
+            pending.assert_called_once_with(PAYLOAD)
+            asynchronous.assert_not_called()
+            synchronous.assert_not_called()
+            assert not transparent_path.exists()
+            if output == "json":
+                assert json.loads(text) == {
+                    "operation-id": "1.2",
+                    "signed-statement": str(statement_path.resolve()),
+                }
+            else:
+                assert f"Submitted {statement_path} as operation 1.2" in text
+                assert "Confirmation of submission was skipped" in text
+        else:
+            pending.assert_not_called()
+            expected_tx = "1.4" if flow == "sync" else "1.3"
+            if flow == "sync":
+                synchronous.assert_called_once_with(PAYLOAD)
+                asynchronous.assert_not_called()
+            else:
+                asynchronous.assert_called_once_with(PAYLOAD)
+                synchronous.assert_not_called()
+            assert transparent_path.read_bytes() == b"transparent"
+            if output == "json":
+                assert json.loads(text) == {
+                    "transaction-id": expected_tx,
+                    "signed-statement": str(statement_path.resolve()),
+                    "transparent-statement": str(transparent_path.resolve()),
+                }
+            else:
+                assert (
+                    f"Registered {statement_path} as transaction {expected_tx}" in text
+                )
+                assert f"Received {transparent_path}" in text
 
+    @pytest.mark.parametrize("wait_for_commit", [False, True])
+    @pytest.mark.parametrize("failure", ["receipt", "keys"])
+    def test_verified_submit_failure(
+        self, tmp_path, monkeypatch, capsys, wait_for_commit, failure
+    ):
+        statement_path = (
+            Path(__file__).with_name("payloads") / "github-fulcio-20261001.cose"
+        )
+        statement = statement_path.read_bytes()
+        client = Client("https://ledger.example", development=True)
+        submission = Submission("1.2", "1.3", statement, True)
+        monkeypatch.setattr(
+            client, "submit_signed_statement_and_wait", lambda _: submission
+        )
+        monkeypatch.setattr(
+            client, "submit_signed_statement_wait_for_commit", lambda _: submission
+        )
+        monkeypatch.setattr(client, "get_transparent_statement", lambda _: statement)
+        if failure == "keys":
+            monkeypatch.setattr(
+                client,
+                "get_scitt_keys",
+                Mock(side_effect=ValueError("Cannot fetch service keys")),
+            )
+        else:
+            monkeypatch.setattr(client, "get_scitt_keys", lambda: [])
+        monkeypatch.setattr(register, "create_client", lambda _: client)
+        output_path = tmp_path / "transparent-statement.cose"
+        arguments = [
+            "submit",
+            str(statement_path),
+            "--verify",
+            "--output",
+            "json",
+            "--transparent-statement",
+            str(output_path),
+        ]
+        if wait_for_commit:
+            arguments.append("--wait-for-commit")
+        with pytest.raises(
+            ValueError,
+            match="Cannot fetch service keys" if failure == "keys" else "no receipt",
+        ):
+            cli_main(arguments)
+        assert client.session.is_closed
+        assert not output_path.exists()
+        assert not capsys.readouterr().out
+
+
+class TestSignGhaFulcioLedger:
     @pytest.mark.parametrize("basic_constraints", [False, True])
-    @pytest.mark.parametrize("failure", [None, "workflow", "receipt"])
-    def test_live_probe_registration(
+    @pytest.mark.parametrize("failure", ["workflow", "receipt"])
+    def test_submit_cli_failure(
         self,
         fulcio_ca,
         client: Client,
@@ -729,6 +868,7 @@ class TestGitHubLedgerPolicy:
         trust_store,
         tmp_path,
         monkeypatch,
+        capsys,
         basic_constraints,
         failure,
     ):
@@ -757,147 +897,229 @@ class TestGitHubLedgerPolicy:
             def reject_receipt(*_):
                 raise ValueError("Receipt verification failed")
 
-            monkeypatch.setattr(sign, "verify_transparent_statement", reject_receipt)
+            monkeypatch.setattr(
+                register, "verify_transparent_statement", reject_receipt
+            )
+        configure_service({"policy": fulcio_ca.registration_policy()})
+        statement_path = tmp_path / "signed-statement.cose"
+        payload_path = tmp_path / "payload"
+        payload_path.write_bytes(PAYLOAD)
+        cli_main(
+            [
+                "sign-gha-fulcio",
+                "--statement",
+                str(payload_path),
+                "--out",
+                str(statement_path),
+            ]
+        )
+        capsys.readouterr()
         service_ca = tmp_path / "service-ca.pem"
         service_ca.write_text(client.get_service_certificate())
-        submission_client = Client(client.url, cacert=str(service_ca))
-        output_dir = tmp_path / "output"
-        try:
-            if failure == "workflow":
-                with service_error(
-                    "PolicyFailed:.*Unexpected signing authority or workflow"
-                ):
-                    register_fulcio_statement(
-                        submission_client,
-                        configure_service,
-                        workflow=WORKFLOW,
-                        payload=PAYLOAD,
-                        output_dir=output_dir,
-                    )
-            elif failure == "receipt":
-                with pytest.raises(ValueError, match="Receipt verification failed"):
-                    register_fulcio_statement(
-                        submission_client,
-                        configure_service,
-                        workflow=WORKFLOW,
-                        payload=PAYLOAD,
-                        output_dir=output_dir,
-                    )
-            else:
-                outputs = register_fulcio_statement(
-                    submission_client,
-                    configure_service,
-                    workflow=WORKFLOW,
-                    payload=PAYLOAD,
-                    output_dir=output_dir,
-                )
-                assert re.fullmatch(r"\d+\.\d+", outputs["transaction-id"])
-                statement = (output_dir / "signed-statement.cose").read_bytes()
-                verify_transparent_statement(
-                    (output_dir / "transparent-statement.cose").read_bytes(),
-                    trust_store,
-                    statement,
-                )
-                assert (
-                    json.loads((output_dir / "submission.json").read_text()) == outputs
-                )
-                assert set(path.name for path in output_dir.iterdir()) == {
-                    "signed-statement.cose",
-                    "transparent-statement.cose",
-                    "submission.json",
-                }
-        finally:
-            submission_client.session.close()
-        if failure is not None:
-            assert not (output_dir / "transparent-statement.cose").exists()
-            assert not (output_dir / "submission.json").exists()
+        transparent_path = tmp_path / "transparent-statement.cose"
+        arguments = [
+            "submit",
+            str(statement_path),
+            "--url",
+            client.url,
+            "--cacert",
+            str(service_ca),
+            "--transparent-statement",
+            str(transparent_path),
+            "--verify",
+            "--output",
+            "json",
+        ]
+        if failure == "workflow":
+            with service_error("PolicyFailed:.*Invalid issuer"):
+                cli_main(arguments)
+        else:
+            with pytest.raises(ValueError, match="Receipt verification failed"):
+                cli_main(arguments)
+        assert not transparent_path.exists()
+        assert not capsys.readouterr().out
 
     @pytest.mark.parametrize("intermediate", [False, True])
     @pytest.mark.parametrize("basic_constraints", [False, True])
-    def test_action_to_running_ledger(
+    @pytest.mark.parametrize("wait_for_commit", [False, True])
+    def test_sign_and_submit_cli(
         self,
         fulcio_ca,
         client: Client,
         configure_service,
         trust_store,
         tmp_path,
+        monkeypatch,
+        capsys,
         intermediate,
         basic_constraints,
+        wait_for_commit,
     ):
         if intermediate:
             fulcio_ca = FulcioCA(intermediate=True)
-            policy.FULCIO_ROOT.write_text(fulcio_ca.pem)
+            sign.FULCIO_ROOT.write_text(fulcio_ca.pem)
         configure_service({"policy": fulcio_ca.registration_policy()})
-        statement = action_statement(
-            MockFulcio(
-                fulcio_ca, certificate_options={"basic_constraints": basic_constraints}
-            )
+        mock = MockFulcio(
+            fulcio_ca, certificate_options={"basic_constraints": basic_constraints}
         )
-        outputs = sign.submit(client, statement, tmp_path)
-        assert (tmp_path / "signed-statement.cose").read_bytes() == statement
-        transparent = (tmp_path / "transparent-statement.cose").read_bytes()
-        assert Sign1Message.decode(transparent).payload == PAYLOAD
-        verify_transparent_statement(transparent, trust_store, statement)
-        assert re.fullmatch(r"\d+\.\d+", outputs["transaction-id"])
-        assert json.loads((tmp_path / "submission.json").read_text()) == outputs
-
-    @pytest.mark.parametrize("valid_receipt", [False, True])
-    @pytest.mark.parametrize("basic_constraints", [False, True])
-    def test_action_entrypoint(
-        self,
-        fulcio_ca,
-        client: Client,
-        configure_service,
-        tmp_path,
-        monkeypatch,
-        capsys,
-        valid_receipt,
-        basic_constraints,
-    ):
-        configure_service({"policy": fulcio_ca.registration_policy()})
-        (tmp_path / "payload.bin").write_bytes(PAYLOAD)
-        (tmp_path / "service-ca.pem").write_text(client.get_service_certificate())
-        github_output = tmp_path / "github-output"
-        for name, value in {
-            "SCITT_WORKSPACE": str(tmp_path),
-            "SCITT_FILE": "payload.bin",
-            "SCITT_LEDGER_URL": client.url,
-            "SCITT_SERVICE_CA": "service-ca.pem",
-            "SCITT_OUTPUT_DIR": "output",
-            "GITHUB_OUTPUT": str(github_output),
-        }.items():
-            monkeypatch.setenv(name, value)
-        monkeypatch.setattr("sys.argv", ["sign"])
         real_sign_payload = sign.sign_payload
 
         def exchange(payload, session, **kwargs):
-            with httpx.Client(
-                transport=httpx.MockTransport(
-                    MockFulcio(
-                        fulcio_ca,
-                        certificate_options={"basic_constraints": basic_constraints},
-                    )
-                )
-            ) as mock_session:
+            with httpx.Client(transport=httpx.MockTransport(mock)) as mock_session:
                 return real_sign_payload(
                     payload, mock_session, environment=ENVIRONMENT, **kwargs
                 )
 
         monkeypatch.setattr(sign, "sign_payload", exchange)
-        if not valid_receipt:
+        payload_path = tmp_path / "payload.bin"
+        payload_path.write_bytes(PAYLOAD)
+        statement_path = tmp_path / "signed-statement.cose"
+        cli_main(
+            [
+                "sign-gha-fulcio",
+                "--statement",
+                str(payload_path),
+                "--out",
+                str(statement_path),
+                "--content-type",
+                "application/json",
+            ]
+        )
+        capsys.readouterr()
+        service_ca = tmp_path / "service-ca.pem"
+        service_ca.write_text(client.get_service_certificate())
+        transparent_path = tmp_path / "transparent-statement.cose"
+        arguments = [
+            "submit",
+            str(statement_path),
+            "--url",
+            client.url,
+            "--cacert",
+            str(service_ca),
+            "--transparent-statement",
+            str(transparent_path),
+            "--verify",
+            "--output",
+            "json",
+        ]
+        if wait_for_commit:
+            arguments.append("--wait-for-commit")
+        cli_main(arguments)
+        outputs = json.loads(capsys.readouterr().out)
+        statement = statement_path.read_bytes()
+        transparent = transparent_path.read_bytes()
+        message = Sign1Message.decode(statement)
+        assert message.payload == PAYLOAD
+        assert message.phdr[ContentType] == "application/json"
+        assert len(message.phdr[X5chain]) == (3 if intermediate else 2)
+        verify_transparent_statement(transparent, trust_store, statement)
+        assert re.fullmatch(r"\d+\.\d+", outputs["transaction-id"])
+        assert outputs == {
+            "transaction-id": outputs["transaction-id"],
+            "signed-statement": str(statement_path.resolve()),
+            "transparent-statement": str(transparent_path.resolve()),
+        }
 
-            def reject_receipt(*_):
-                raise ValueError("Receipt verification failed")
-
-            monkeypatch.setattr(sign, "verify_transparent_statement", reject_receipt)
-            with pytest.raises(SystemExit) as error:
-                sign.main()
-            assert error.value.code == 1
+    @pytest.mark.parametrize("failure", [None, "workflow", "receipt", "url"])
+    def test_composite_action_scripts(
+        self,
+        fulcio_ca,
+        client: Client,
+        configure_service,
+        trust_store,
+        tmp_path,
+        failure,
+    ):
+        configure_service({"policy": fulcio_ca.registration_policy()})
+        statement = action_statement(
+            MockFulcio(
+                fulcio_ca,
+                certificate_options={
+                    "basic_constraints": False,
+                    "san": (
+                        WORKFLOW
+                        if failure != "workflow"
+                        else WORKFLOW.replace(
+                            "/octo/example/", "/unexpected/repository/"
+                        )
+                    ),
+                },
+            )
+        )
+        fixture_path = tmp_path / "issued.cose"
+        fixture_path.write_bytes(statement)
+        payload_path = tmp_path / "payload with spaces;$(echo injected).bin"
+        payload_path.write_bytes(PAYLOAD)
+        service_ca = tmp_path / "service ca.pem"
+        service_ca.write_text(client.get_service_certificate())
+        cli_path = tmp_path / "scitt"
+        cli_path.write_text(
+            f"#!{sys.executable}\n"
+            "import os\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "from pyscitt.cli import register, sign_gha_fulcio\n"
+            "from pyscitt.cli.main import main\n"
+            "if sys.argv[1] == 'sign-gha-fulcio':\n"
+            "    sign_gha_fulcio.sign_payload = lambda *a, **kw: "
+            "Path(os.environ['SCITT_TEST_STATEMENT']).read_bytes()\n"
+            "elif os.environ.get('SCITT_TEST_REJECT_RECEIPT'):\n"
+            "    def reject_receipt(*args):\n"
+            "        raise ValueError('Receipt verification failed')\n"
+            "    register.verify_transparent_statement = reject_receipt\n"
+            "main(sys.argv[1:])\n"
+        )
+        cli_path.chmod(0o700)
+        github_output = tmp_path / "github-output"
+        output_dir = tmp_path / "output with spaces;$(echo injected)"
+        environment = os.environ | {
+            "SCITT_CLI": str(cli_path),
+            "SCITT_PYTHON": sys.executable,
+            "SCITT_FILE": str(payload_path),
+            "SCITT_LEDGER_URL": (
+                client.url if failure != "url" else "http://ledger.example"
+            ),
+            "SCITT_SERVICE_CA": str(service_ca),
+            "SCITT_CONTENT_TYPE": "application/octet-stream",
+            "SCITT_OUTPUT_DIR": str(output_dir),
+            "SCITT_TEST_STATEMENT": str(fixture_path),
+            "SCITT_TEST_REJECT_RECEIPT": "1" if failure == "receipt" else "",
+            "GITHUB_OUTPUT": str(github_output),
+        }
+        yaml = import_module("yaml")
+        action = yaml.safe_load(
+            (
+                Path(__file__).parents[1] / ".github/actions/scitt-sign/action.yml"
+            ).read_text()
+        )
+        steps = action["runs"]["steps"]
+        scripts = [
+            next(step["run"] for step in steps if "SCITT_FILE" in step.get("env", {})),
+            next(step["run"] for step in steps if step.get("id") == "submit"),
+        ]
+        for script in scripts:
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", script],
+                cwd=tmp_path,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode:
+                break
+        assert not (tmp_path / "injected").exists()
+        if failure:
+            assert result.returncode != 0
+            assert {
+                "workflow": "PolicyFailed",
+                "receipt": "Receipt verification failed",
+                "url": "Ledger URL must use HTTPS",
+            }[failure] in result.stderr
             assert not github_output.exists()
-            assert not (tmp_path / "output/transparent-statement.cose").exists()
-            assert "::error::Receipt verification failed" in capsys.readouterr().err
+            assert not (output_dir / "transparent-statement.cose").exists()
+            assert not (output_dir / "submission.json").exists()
         else:
-            sign.main()
+            assert result.returncode == 0, result.stderr
             outputs = dict(
                 line.split("=", 1) for line in github_output.read_text().splitlines()
             )
@@ -906,8 +1128,12 @@ class TestGitHubLedgerPolicy:
                 "signed-statement",
                 "transparent-statement",
             }
-            assert (
-                json.loads((tmp_path / "output/submission.json").read_text()) == outputs
+            assert json.loads((output_dir / "submission.json").read_text()) == outputs
+            assert Path(outputs["signed-statement"]).read_bytes() == statement
+            verify_transparent_statement(
+                Path(outputs["transparent-statement"]).read_bytes(),
+                trust_store,
+                statement,
             )
 
     @pytest.mark.parametrize(
@@ -923,12 +1149,12 @@ class TestGitHubLedgerPolicy:
     ):
         configure_service({"policy": fulcio_ca.registration_policy()})
         statement = fulcio_ca.statement(san=workflow)
-        with service_error("PolicyFailed:.*Unexpected signing authority or workflow"):
+        with service_error("PolicyFailed:.*Invalid issuer"):
             client.submit_signed_statement_and_wait(statement)
 
     def test_reject_untrusted_ca(self, fulcio_ca, client: Client, configure_service):
         configure_service({"policy": fulcio_ca.registration_policy()})
-        with service_error("PolicyFailed:.*Unexpected signing authority"):
+        with service_error("PolicyFailed:.*Invalid issuer"):
             client.submit_signed_statement_and_wait(FulcioCA().statement())
 
     @pytest.mark.parametrize("untrusted_ca", [False, True])
@@ -945,7 +1171,7 @@ class TestGitHubLedgerPolicy:
                         if untrusted_ca
                         else "https://github.com/unexpected/repo/.github/workflows/submit.yml@refs/heads/main"
                     ),
-                    issuer=policy.signing_issuer(fulcio_ca.pem, WORKFLOW),
+                    issuer=sign.signing_issuer(fulcio_ca.pem, WORKFLOW),
                 )
             )
 
@@ -955,17 +1181,12 @@ class TestGitHubLedgerPolicy:
             client.submit_signed_statement_and_wait(fulcio_ca.statement(eku=False))
 
     @pytest.mark.parametrize("offset", [-1200, 300])
-    def test_certificate_validity_is_policy_specific(
+    def test_issuer_policy_does_not_require_current_certificate_validity(
         self, fulcio_ca, client: Client, configure_service, offset
     ):
         statement = fulcio_ca.statement(offset=offset)
-        configure_service(
-            {"policy": {"policyScript": "export function apply() { return true; }"}}
-        )
-        client.submit_signed_statement_and_wait(statement)
         configure_service({"policy": fulcio_ca.registration_policy()})
-        with service_error("PolicyFailed:.*expired, not yet valid, or untrusted"):
-            client.submit_signed_statement_and_wait(statement)
+        client.submit_signed_statement_and_wait(statement)
 
     def test_reject_payload_tampering(
         self, fulcio_ca, client: Client, configure_service
@@ -980,9 +1201,29 @@ class TestGitHubLedgerPolicy:
     def test_existing_policy_engine_accepts_action_statement(
         self, fulcio_ca, client: Client, configure_service, language
     ):
-        issuer = policy.signing_issuer(fulcio_ca.pem, WORKFLOW)
+        issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW)
         registration = policies.DID_X509[language](issuer)
         configure_service({"policy": registration})
         client.submit_signed_statement_and_wait(action_statement(MockFulcio(fulcio_ca)))
         with service_error("PolicyFailed:.*Invalid issuer"):
             client.submit_signed_statement_and_wait(FulcioCA().statement())
+
+    @pytest.mark.parametrize("language", ["js", "rego"])
+    def test_archived_fulcio_statement_with_issuer_policy(
+        self, client: Client, configure_service, trust_store, language
+    ):
+        payloads = Path(__file__).with_name("payloads")
+        statement = (payloads / "github-fulcio-20261001.cose").read_bytes()
+        provenance = json.loads((payloads / "github-fulcio-20261001.json").read_text())
+        root_pem = sign.FULCIO_ROOT.read_text()
+        issuer = sign.signing_issuer(root_pem, provenance["workflow"])
+        configure_service({"policy": policies.DID_X509[language](issuer)})
+        result = client.submit_signed_statement_and_wait(statement)
+        verify_transparent_statement(result.response_bytes, trust_store, statement)
+        unexpected_workflow = provenance["workflow"].replace(
+            "/microsoft/scitt-ccf-ledger/", "/unexpected/repository/"
+        )
+        unexpected_issuer = sign.signing_issuer(root_pem, unexpected_workflow)
+        configure_service({"policy": policies.DID_X509[language](unexpected_issuer)})
+        with service_error("PolicyFailed:.*Invalid issuer"):
+            client.submit_signed_statement_and_wait(statement)

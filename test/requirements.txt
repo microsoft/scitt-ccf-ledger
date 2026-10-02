@@ -2,6 +2,7 @@ boofuzz
 locust
 httpx
 pytest
+PyYAML
 loguru
 aiotools
 ccf>=7.0.16,<8
