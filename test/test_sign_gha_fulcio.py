@@ -44,6 +44,12 @@ ENVIRONMENT = {
     "ACTIONS_ID_TOKEN_REQUEST_URL": "https://oidc.example/token?existing=1&audience=old",
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "runner-request-credential",
 }
+ARCHIVED_FULCIO_ISSUER = (
+    "did:x509:0:sha256:O6e2zE6VRp1NM0tJyyV62FNwdvqEsMqH_07P5qVGgME"
+    "::eku:1.3.6.1.5.5.7.3.3"
+    "::san:uri:https%3A%2F%2Fgithub.com%2Fmicrosoft%2Fscitt-ccf-ledger"
+    "%2F.github%2Fworkflows%2Fbuild-test.yml%40refs%2Fpull%2F462%2Fmerge"
+)
 
 
 class FulcioCA:
@@ -123,6 +129,9 @@ class FulcioCA:
         public_key,
         *,
         oidc_issuer: str | None = sign.GITHUB_ISSUER,
+        legacy_oidc_issuer: str | None = sign.GITHUB_ISSUER,
+        oidc_issuer_critical: bool = False,
+        legacy_oidc_issuer_critical: bool = False,
         san: str = WORKFLOW,
         lifetime: int = 600,
         offset: int = -30,
@@ -165,7 +174,15 @@ class FulcioCA:
                     ObjectIdentifier(sign.GITHUB_ISSUER_OID),
                     sign.der_utf8(oidc_issuer),
                 ),
-                False,
+                oidc_issuer_critical,
+            )
+        if legacy_oidc_issuer is not None:
+            builder = builder.add_extension(
+                x509.UnrecognizedExtension(
+                    ObjectIdentifier(sign.GITHUB_ISSUER_LEGACY_OID),
+                    legacy_oidc_issuer.encode("utf-8"),
+                ),
+                legacy_oidc_issuer_critical,
             )
         return builder.sign(self.issuer_key, hashes.SHA256())
 
@@ -271,6 +288,24 @@ def tamper_payload(statement: bytes) -> bytes:
 
 
 class TestSignGhaFulcioOffline:
+    @pytest.mark.parametrize(
+        "filename,encoded_filename",
+        [
+            ("submit.yml", "submit.yml"),
+            ("submit~workflow.yml", "submit%7Eworkflow.yml"),
+        ],
+    )
+    def test_signing_issuer(self, fulcio_ca, filename, encoded_filename):
+        workflow = WORKFLOW.replace("submit.yml", filename)
+        fingerprint = crypto.get_cert_fingerprint_b64url(fulcio_ca.pem)
+        assert sign.signing_issuer(fulcio_ca.pem, workflow) == (
+            f"did:x509:0:sha256:{fingerprint}"
+            "::eku:1.3.6.1.5.5.7.3.3"
+            "::fulcio-issuer:token.actions.githubusercontent.com"
+            "::san:uri:https%3A%2F%2Fgithub.com%2Focto%2Fexample"
+            f"%2F.github%2Fworkflows%2F{encoded_filename}%40refs%2Fheads%2Fmain"
+        )
+
     @pytest.mark.parametrize(
         "variant", ["signedCertificateEmbeddedSct", "signedCertificateDetachedSct"]
     )
@@ -541,6 +576,26 @@ class TestSignGhaFulcioOffline:
                 False,
                 "GitHub Actions identity",
             ),
+            (
+                {"legacy_oidc_issuer": "https://other.example"},
+                False,
+                "GitHub Actions identity",
+            ),
+            (
+                {"legacy_oidc_issuer": sign.GITHUB_ISSUER + "\x00"},
+                False,
+                "GitHub Actions identity",
+            ),
+            (
+                {"oidc_issuer_critical": True},
+                False,
+                "must not be critical",
+            ),
+            (
+                {"legacy_oidc_issuer_critical": True},
+                False,
+                "must not be critical",
+            ),
             ({"san": "https://other.example/workflow"}, False, "workflow URI"),
         ],
     )
@@ -549,9 +604,21 @@ class TestSignGhaFulcioOffline:
         with pytest.raises(ValueError, match=error):
             action_statement(mock)
 
-    @pytest.mark.parametrize("options", [{"eku": False}, {"oidc_issuer": None}])
+    @pytest.mark.parametrize(
+        "options,oid",
+        [
+            ({"eku": False}, x509.ExtendedKeyUsage.oid),
+            ({"oidc_issuer": None}, ObjectIdentifier(sign.GITHUB_ISSUER_OID)),
+            (
+                {"legacy_oidc_issuer": None},
+                ObjectIdentifier(sign.GITHUB_ISSUER_LEGACY_OID),
+            ),
+        ],
+    )
     @pytest.mark.parametrize("basic_constraints", [False, True])
-    def test_missing_identity_extensions(self, fulcio_ca, options, basic_constraints):
+    def test_missing_identity_extensions(
+        self, fulcio_ca, options, oid, basic_constraints
+    ):
         with pytest.raises(x509.ExtensionNotFound) as error:
             action_statement(
                 MockFulcio(
@@ -562,11 +629,7 @@ class TestSignGhaFulcioOffline:
                     },
                 )
             )
-        assert error.value.oid == (
-            x509.ExtendedKeyUsage.oid
-            if "eku" in options
-            else ObjectIdentifier(sign.GITHUB_ISSUER_OID)
-        )
+        assert error.value.oid == oid
 
     @pytest.mark.parametrize("basic_constraints", [False, True])
     def test_trusted_root_validation(self, fulcio_ca, basic_constraints):
@@ -710,11 +773,16 @@ class TestSignGhaFulcioOffline:
         assert (
             leaf.not_valid_after_utc.isoformat() == provenance["certificate_not_after"]
         )
-        issuer_extension = leaf.extensions.get_extension_for_oid(
-            ObjectIdentifier(sign.GITHUB_ISSUER_OID)
-        ).value
-        assert isinstance(issuer_extension, x509.UnrecognizedExtension)
-        assert issuer_extension.value == sign.der_utf8(sign.GITHUB_ISSUER)
+        for oid, expected in (
+            (sign.GITHUB_ISSUER_OID, sign.der_utf8(sign.GITHUB_ISSUER)),
+            (sign.GITHUB_ISSUER_LEGACY_OID, sign.GITHUB_ISSUER.encode("utf-8")),
+        ):
+            issuer_extension = leaf.extensions.get_extension_for_oid(
+                ObjectIdentifier(oid)
+            )
+            assert not issuer_extension.critical
+            assert isinstance(issuer_extension.value, x509.UnrecognizedExtension)
+            assert issuer_extension.value.value == expected
         assert (
             ExtendedKeyUsageOID.CODE_SIGNING
             in leaf.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
@@ -725,7 +793,7 @@ class TestSignGhaFulcioOffline:
             provenance["workflow"]
         ]
         assert message.phdr[crypto.CWTClaims] == {
-            crypto.CWT_ISS: sign.signing_issuer(root_pem, provenance["workflow"])
+            crypto.CWT_ISS: ARCHIVED_FULCIO_ISSUER
         }
         sign.verify_statement(statement, message.payload)
 
@@ -1261,6 +1329,41 @@ class TestSignGhaFulcioLedger:
         with service_error("InvalidInput:.*Failed to resolve did:x509 issuer"):
             client.submit_signed_statement_and_wait(fulcio_ca.statement(eku=False))
 
+    @pytest.mark.parametrize("language", ["js", "rego"])
+    @pytest.mark.parametrize(
+        "options,error",
+        [
+            ({"legacy_oidc_issuer": None}, "invalid fulcio-issuer"),
+            (
+                {"legacy_oidc_issuer": "https://accounts.google.com"},
+                "invalid fulcio-issuer",
+            ),
+            (
+                {"legacy_oidc_issuer_critical": True},
+                "unhandled critical extension",
+            ),
+        ],
+    )
+    def test_reject_invalid_fulcio_issuer(
+        self, fulcio_ca, client: Client, configure_service, language, options, error
+    ):
+        issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW)
+        configure_service({"policy": policies.DID_X509[language](issuer)})
+        with service_error(f"InvalidInput:.*{error}"):
+            client.submit_signed_statement_and_wait(fulcio_ca.statement(**options))
+
+    @pytest.mark.parametrize("language", ["js", "rego"])
+    def test_cannot_forge_fulcio_issuer(
+        self, fulcio_ca, client: Client, configure_service, language
+    ):
+        issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW).replace(
+            "::fulcio-issuer:token.actions.githubusercontent.com",
+            "::fulcio-issuer:accounts.google.com",
+        )
+        configure_service({"policy": policies.DID_X509[language](issuer)})
+        with service_error("InvalidInput:.*invalid fulcio-issuer"):
+            client.submit_signed_statement_and_wait(fulcio_ca.statement(issuer=issuer))
+
     @pytest.mark.parametrize("offset", [-1200, 300])
     def test_issuer_policy_does_not_require_current_certificate_validity(
         self, fulcio_ca, client: Client, configure_service, offset
@@ -1295,16 +1398,15 @@ class TestSignGhaFulcioLedger:
     ):
         payloads = Path(__file__).with_name("payloads")
         statement = (payloads / "github-fulcio-20261001.cose").read_bytes()
-        provenance = json.loads((payloads / "github-fulcio-20261001.json").read_text())
-        root_pem = sign.FULCIO_ROOT.read_text()
-        issuer = sign.signing_issuer(root_pem, provenance["workflow"])
+        issuer = Sign1Message.decode(statement).phdr[crypto.CWTClaims][crypto.CWT_ISS]
+        assert issuer == ARCHIVED_FULCIO_ISSUER
         configure_service({"policy": policies.DID_X509[language](issuer)})
         result = client.submit_signed_statement_and_wait(statement)
         verify_transparent_statement(result.response_bytes, trust_store, statement)
-        unexpected_workflow = provenance["workflow"].replace(
-            "/microsoft/scitt-ccf-ledger/", "/unexpected/repository/"
+        unexpected_issuer = issuer.replace(
+            "%2Fmicrosoft%2Fscitt-ccf-ledger%2F",
+            "%2Funexpected%2Frepository%2F",
         )
-        unexpected_issuer = sign.signing_issuer(root_pem, unexpected_workflow)
         configure_service({"policy": policies.DID_X509[language](unexpected_issuer)})
         with service_error("PolicyFailed:.*Invalid issuer"):
             client.submit_signed_statement_and_wait(statement)

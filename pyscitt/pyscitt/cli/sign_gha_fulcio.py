@@ -26,6 +26,7 @@ FULCIO_AUDIENCE = "sigstore"
 FULCIO_ROOT = Path(__file__).with_name("fulcio-root.pem")
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_ISSUER_OID = "1.3.6.1.4.1.57264.1.8"
+GITHUB_ISSUER_LEGACY_OID = "1.3.6.1.4.1.57264.1.1"
 MAX_CERTIFICATE_LIFETIME = 600
 
 
@@ -59,10 +60,15 @@ def trusted_root(pem: str) -> x509.Certificate:
 def signing_issuer(root_pem: str, workflow_uri: str) -> str:
     trusted_root(root_pem)
     fingerprint = crypto.get_cert_fingerprint_b64url(root_pem)
+    encoded_issuer = quote(GITHUB_ISSUER.removeprefix("https://"), safe="").replace(
+        "~", "%7E"
+    )
     encoded_uri = quote(workflow_uri, safe="").replace("~", "%7E")
     return (
         f"did:x509:0:sha256:{fingerprint}"
-        f"::eku:1.3.6.1.5.5.7.3.3::san:uri:{encoded_uri}"
+        "::eku:1.3.6.1.5.5.7.3.3"
+        f"::fulcio-issuer:{encoded_issuer}"
+        f"::san:uri:{encoded_uri}"
     )
 
 
@@ -171,15 +177,21 @@ def sign_payload(
         raise ValueError(
             "Fulcio returned a CA certificate instead of a signing certificate"
         )
-    issuer_extension = leaf.extensions.get_extension_for_oid(
-        ObjectIdentifier(GITHUB_ISSUER_OID)
-    ).value
-    if not isinstance(
-        issuer_extension, x509.UnrecognizedExtension
-    ) or issuer_extension.value != der_utf8(GITHUB_ISSUER):
-        raise ValueError(
-            "Fulcio certificate was not issued to a GitHub Actions identity"
-        )
+    # The current did:x509 resolver reads the legacy raw-string issuer extension.
+    for oid, expected in (
+        (GITHUB_ISSUER_OID, der_utf8(GITHUB_ISSUER)),
+        (GITHUB_ISSUER_LEGACY_OID, GITHUB_ISSUER.encode("utf-8")),
+    ):
+        issuer_extension = leaf.extensions.get_extension_for_oid(ObjectIdentifier(oid))
+        if issuer_extension.critical:
+            raise ValueError("Fulcio issuer extension must not be critical")
+        if (
+            not isinstance(issuer_extension.value, x509.UnrecognizedExtension)
+            or issuer_extension.value.value != expected
+        ):
+            raise ValueError(
+                "Fulcio certificate was not issued to a GitHub Actions identity"
+            )
     usages = leaf.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     if ExtendedKeyUsageOID.CODE_SIGNING not in usages:
         raise ValueError("Fulcio certificate is not a code-signing certificate")
