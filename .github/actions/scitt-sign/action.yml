@@ -2,7 +2,9 @@
 # Licensed under the MIT License.
 
 name: Sign and submit to SCITT
-description: Sign a file with a GitHub OIDC-backed ephemeral key and register it in SCITT
+description: >-
+  Sign a file with a GitHub OIDC-backed ephemeral key and register it in SCITT.
+  Requires job permissions id-token: write to request an OIDC token.
 
 inputs:
   file:
@@ -18,7 +20,7 @@ inputs:
     description: Optional PEM CA bundle for ledger TLS verification
     default: ""
   output-dir:
-    description: Directory for signed and transparent statements
+    description: Parent directory for unique per-invocation signed and transparent statements
     default: scitt-output
 
 outputs:
@@ -40,124 +42,71 @@ runs:
         python-version: "3.12"
     - name: Prepare isolated pyscitt environment
       id: setup
-      shell: bash
-      run: |
-        venv_dir="$(mktemp -d "${RUNNER_TEMP}/scitt-sign.XXXXXX")"
-        python -m venv "$venv_dir"
-        "$venv_dir/bin/python" -m pip install --disable-pip-version-check --quiet \
-          "${GITHUB_ACTION_PATH}/../../../pyscitt"
-        echo "python=$venv_dir/bin/python" >> "$GITHUB_OUTPUT"
-        echo "scitt=$venv_dir/bin/scitt" >> "$GITHUB_OUTPUT"
-    - name: Sign the input file with GitHub OIDC and Fulcio
-      shell: bash
+      shell: python
       env:
-        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        import os
+        import subprocess
+        import sys
+
+        raise SystemExit(subprocess.run([
+            sys.executable,
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "setup",
+        ]).returncode)
+    - name: Sign the input file with GitHub OIDC and Fulcio
+      shell: python
+      env:
         SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
         SCITT_FILE: ${{ inputs.file }}
         SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
         SCITT_CONTENT_TYPE: ${{ inputs.content-type }}
-        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
       run: |
-        "$SCITT_PYTHON" - <<'PY'
         import os
-        from urllib.parse import urlsplit
+        import subprocess
 
-        url = urlsplit(os.environ["SCITT_LEDGER_URL"])
-        if (url.scheme != "https" or not url.hostname or url.username is not None
-            or url.password is not None or url.fragment):
-            raise ValueError("Ledger URL must use HTTPS without credentials or fragment")
-        output_dir = os.environ["SCITT_OUTPUT_DIR"]
-        if "\n" in output_dir or "\r" in output_dir:
-            raise ValueError("Action output paths must not contain newlines")
-        PY
-        "$SCITT_CLI" sign-gha-fulcio \
-          --statement="$SCITT_FILE" \
-          --content-type="$SCITT_CONTENT_TYPE" \
-          --out="$SCITT_OUTPUT_DIR/signed-statement.cose"
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "sign",
+        ]).returncode)
     - name: Register the signed statement
       id: submit
-      shell: bash
-      env:
-        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
-        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
-        SCITT_SERVICE_CA: ${{ inputs.service-ca }}
-        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
-      run: |
-        client_args=(--url "$SCITT_LEDGER_URL")
-        if [ -n "$SCITT_SERVICE_CA" ]; then
-          client_args+=("--cacert=$SCITT_SERVICE_CA")
-        fi
-        "$SCITT_CLI" submit \
-          "${client_args[@]}" \
-          --transparent-statement="$SCITT_OUTPUT_DIR/transparent-statement.cose" \
-          -- "$SCITT_OUTPUT_DIR/signed-statement.cose"
-    - name: Verify the transparent statement and report registration details
-      id: verify
-      shell: bash
+      shell: python
       env:
         SCITT_CLI: ${{ steps.setup.outputs.scitt }}
         SCITT_PYTHON: ${{ steps.setup.outputs.python }}
         SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
         SCITT_SERVICE_CA: ${{ inputs.service-ca }}
-        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
       run: |
-        trust_store_dir="$(mktemp -d "${RUNNER_TEMP}/scitt-trust.XXXXXX")"
-        trap 'rm -f -- "$trust_store_dir/scitt-keys.cbor"; rmdir -- "$trust_store_dir"' EXIT
-        SCITT_TRUST_STORE="$trust_store_dir" "$SCITT_PYTHON" - <<'PY'
         import os
-        from pathlib import Path
+        import subprocess
 
-        import cbor2
-        from pyscitt.client import Client
-
-        client = Client(
-            os.environ["SCITT_LEDGER_URL"],
-            cacert=os.environ["SCITT_SERVICE_CA"] or None,
-        )
-        try:
-            keys = client.get_scitt_keys()
-        finally:
-            client.session.close()
-        (Path(os.environ["SCITT_TRUST_STORE"]) / "scitt-keys.cbor").write_bytes(
-            cbor2.dumps(keys)
-        )
-        PY
-        verification="$("$SCITT_CLI" validate \
-          --service-trust-store="$trust_store_dir" \
-          --offline --output=json -- "$SCITT_OUTPUT_DIR/transparent-statement.cose")" || {
-          status=$?
-          printf '%s\n' "$verification"
-          exit "$status"
-        }
-        printf '%s\n' "$verification"
-        SCITT_VERIFICATION="$verification" "$SCITT_PYTHON" - <<'PY'
-        import json
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "submit",
+        ]).returncode)
+    - name: Verify the transparent statement and report registration details
+      id: verify
+      shell: python
+      env:
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
+        SCITT_SERVICE_CA: ${{ inputs.service-ca }}
+        SCITT_FILE: ${{ inputs.file }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
+      run: |
         import os
-        import re
-        from pathlib import Path
+        import subprocess
 
-        result = json.loads(os.environ["SCITT_VERIFICATION"])
-        if not isinstance(result, dict) or result.get("transparent") is not True:
-            raise ValueError("The statement was not verified as transparent")
-        receipts = result.get("receipts")
-        if (not isinstance(receipts, list) or len(receipts) != 1
-            or not isinstance(receipts[0], dict)):
-            raise ValueError("Expected one verified ledger receipt")
-        receipt = receipts[0]
-        transaction_id = receipt.get("registration_txid")
-        if (not isinstance(transaction_id, str)
-            or not re.fullmatch(r"[0-9]+\.[0-9]+", transaction_id)):
-            raise ValueError("Verification output has an invalid registration transaction ID")
-        directory = Path(os.environ["SCITT_OUTPUT_DIR"])
-        outputs = {
-            "transaction-id": transaction_id,
-            "signed-statement": str((directory / "signed-statement.cose").resolve()),
-            "transparent-statement": str((directory / "transparent-statement.cose").resolve()),
-        }
-        if any(not isinstance(value, str) or "\n" in value or "\r" in value
-               for value in outputs.values()):
-            raise ValueError("Action outputs must not contain newlines")
-        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
-            for name, value in outputs.items():
-                stream.write(f"{name}={value}\n")
-        PY
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "verify",
+        ]).returncode)

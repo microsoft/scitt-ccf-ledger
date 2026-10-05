@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from importlib import import_module
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import cbor2
 import httpx
@@ -34,6 +34,7 @@ from pyscitt.verify import verify_cose_sign1, verify_transparent_statement
 
 from . import policies
 from .infra.assertions import service_error
+from .infra.scitt_action import ACTION_DIRECTORY, load_action
 
 WORKFLOW = (
     "https://github.com/octo/example/.github/workflows/submit.yml@refs/heads/main"
@@ -999,7 +1000,8 @@ class TestSignGhaFulcioLedger:
         assert receipt["verification_key_source"] == "trust_store"
 
     @pytest.mark.parametrize(
-        "failure", [None, "workflow", "receipt", "keys", "url", "metadata"]
+        "failure",
+        [None, "workflow", "receipt", "keys", "url", "metadata", "payload", "repeat"],
     )
     def test_composite_action_scripts(
         self,
@@ -1027,9 +1029,7 @@ class TestSignGhaFulcioLedger:
             )
         )
         fixture_path = tmp_path / "issued.cose"
-        fixture_path.write_bytes(statement)
         payload_path = tmp_path / "payload with spaces;$(echo injected).bin"
-        payload_path.write_bytes(PAYLOAD)
         service_ca = tmp_path / "service ca.pem"
         service_ca.write_text(client.get_service_certificate())
         cli_path = tmp_path / "scitt"
@@ -1053,9 +1053,7 @@ class TestSignGhaFulcioLedger:
             "main(sys.argv[1:])\n"
         )
         cli_path.chmod(0o700)
-        github_output = tmp_path / "github-output"
-        output_dir = tmp_path / "output with spaces;$(echo injected)"
-        transparent_path = output_dir / "transparent-statement.cose"
+        output_root = tmp_path / "output with spaces;$(echo injected)"
         runner_temp = tmp_path / "runner temp"
         runner_temp.mkdir()
         environment = os.environ | {
@@ -1067,101 +1065,157 @@ class TestSignGhaFulcioLedger:
             ),
             "SCITT_SERVICE_CA": str(service_ca),
             "SCITT_CONTENT_TYPE": "application/octet-stream",
-            "SCITT_OUTPUT_DIR": str(output_dir),
+            "SCITT_OUTPUT_DIR": str(output_root),
             "SCITT_TEST_STATEMENT": str(fixture_path),
             "SCITT_TEST_BAD_METADATA": "1" if failure == "metadata" else "",
-            "GITHUB_OUTPUT": str(github_output),
+            "GITHUB_ACTION_PATH": str(ACTION_DIRECTORY),
             "RUNNER_TEMP": str(runner_temp),
         }
         yaml = import_module("yaml")
-        action = yaml.safe_load(
-            (
-                Path(__file__).parents[1] / ".github/actions/scitt-sign/action.yml"
-            ).read_text()
-        )
+        action = yaml.safe_load((ACTION_DIRECTORY / "action.yml").read_text())
         steps = action["runs"]["steps"]
         action_steps = [
             next(step for step in steps if "SCITT_FILE" in step.get("env", {})),
             next(step for step in steps if step.get("id") == "submit"),
             next(step for step in steps if step.get("id") == "verify"),
         ]
-        assert "--verify" not in action_steps[1]["run"]
-        assert "--output" not in action_steps[1]["run"]
         for name, output in action["outputs"].items():
             assert output["value"] == f"${{{{ steps.verify.outputs.{name} }}}}"
-        for step in action_steps:
-            result = subprocess.run(
-                ["bash", "-euo", "pipefail", "-c", step["run"]],
-                cwd=tmp_path,
-                env=environment,
-                capture_output=True,
-                text=True,
+        artifacts = []
+        for invocation in range(2 if failure == "repeat" else 1):
+            payload = PAYLOAD if invocation == 0 else PAYLOAD + b"second invocation"
+            if invocation:
+                statement = action_statement(MockFulcio(fulcio_ca), payload=payload)
+            fixture_path.write_bytes(statement)
+            payload_path.write_bytes(payload)
+            setup_output = tmp_path / f"setup-output-{invocation}"
+            github_output = tmp_path / f"github-output-{invocation}"
+            helper = load_action()
+            with (
+                patch.dict(
+                    os.environ,
+                    environment
+                    | {
+                        "SCITT_OUTPUT_DIR": str(output_root),
+                        "GITHUB_OUTPUT": str(setup_output),
+                    },
+                ),
+                patch.object(helper.venv, "create"),
+                patch.object(helper.subprocess, "run"),
+            ):
+                helper.setup()
+            setup_outputs = dict(
+                line.split("=", 1) for line in setup_output.read_text().splitlines()
             )
-            if result.returncode:
-                break
-            if step.get("id") == "submit":
+            output_dir = Path(setup_outputs["output-dir"])
+            transparent_path = output_dir / "transparent-statement.cose"
+            environment["SCITT_OUTPUT_DIR"] = str(output_dir)
+            environment["GITHUB_OUTPUT"] = str(github_output)
+            for step in action_steps:
+                assert step["shell"] == "python"
+                result = subprocess.run(
+                    [sys.executable, "-c", step["run"]],
+                    cwd=tmp_path,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode:
+                    break
+                if step.get("id") != "submit":
+                    continue
                 assert transparent_path.exists()
                 assert not github_output.exists()
                 assert not list(output_dir.glob("*.json"))
                 if failure == "receipt":
-                    transparent_path.write_bytes(
-                        tamper_payload(transparent_path.read_bytes())
+                    message = Sign1Message.decode(transparent_path.read_bytes())
+                    receipts = message.uhdr[crypto.SCITTReceipts]
+                    receipt = Sign1Message.decode(receipts[0])
+                    receipt._signature = (
+                        bytes([receipt.signature[0] ^ 1]) + receipt.signature[1:]
                     )
+                    receipts[0] = receipt.encode(tag=True, sign=False)
+                    transparent_path.write_bytes(message.encode(tag=True, sign=False))
                 elif failure == "keys":
                     wrong_ca = tmp_path / "wrong-ca.pem"
                     wrong_ca.write_text(fulcio_ca.pem)
                     environment["SCITT_SERVICE_CA"] = str(wrong_ca)
-        assert not (tmp_path / "injected").exists()
-        assert not list(runner_temp.iterdir())
-        assert not list(output_dir.glob("*.json"))
-        if failure:
-            assert result.returncode != 0
-            if failure == "receipt":
-                report = json.loads(result.stdout)
-                assert report["transparent"] is False
-                assert report["error"]
-                assert report["receipts"] == []
+                elif failure == "payload":
+                    unrelated = fulcio_ca.statement(payload=PAYLOAD + b"unrelated")
+                    replacement = client.submit_signed_statement_and_wait(unrelated)
+                    verify_transparent_statement(
+                        replacement.response_bytes, trust_store, unrelated
+                    )
+                    transparent_path.write_bytes(replacement.response_bytes)
+            assert not (tmp_path / "injected").exists()
+            assert not list(runner_temp.glob("scitt-trust-*"))
+            assert not list(output_dir.glob("*.json"))
+            if failure not in (None, "repeat"):
+                assert result.returncode != 0
+                if failure in ("receipt", "payload"):
+                    report = json.loads(result.stdout)
+                    assert report["transparent"] is False
+                    assert report["error"]
+                    assert report["receipts"] == []
+                    if failure == "payload":
+                        assert "does not match expected payload" in report["error"]
+                    else:
+                        assert "does not match expected payload" not in report["error"]
+                else:
+                    assert {
+                        "workflow": "PolicyFailed",
+                        "keys": "CERTIFICATE_VERIFY_FAILED",
+                        "url": "Ledger URL must use HTTPS",
+                        "metadata": "Verification output has an invalid registration transaction ID",
+                    }[failure] in result.stderr
+                assert not github_output.exists()
+                assert transparent_path.exists() == (
+                    failure in ("receipt", "keys", "metadata", "payload")
+                )
             else:
-                assert {
-                    "workflow": "PolicyFailed",
-                    "keys": "CERTIFICATE_VERIFY_FAILED",
-                    "url": "Ledger URL must use HTTPS",
-                    "metadata": "Verification output has an invalid registration transaction ID",
-                }[failure] in result.stderr
-            assert not github_output.exists()
-            assert transparent_path.exists() == (
-                failure in ("receipt", "keys", "metadata")
-            )
-        else:
-            assert result.returncode == 0, result.stderr
-            outputs = dict(
-                line.split("=", 1) for line in github_output.read_text().splitlines()
-            )
-            assert set(outputs) == {
-                "transaction-id",
-                "signed-statement",
-                "transparent-statement",
-            }
-            report = json.loads(result.stdout)
-            assert report["transparent"] is True
-            assert report["statement"] == outputs["transparent-statement"]
-            assert len(report["receipts"]) == 1
-            receipt = report["receipts"][0]
-            assert receipt["registration_txid"] == outputs["transaction-id"]
-            entry_url = (
-                f"https://{receipt['issuer']}/entries/{outputs['transaction-id']}"
-            )
-            assert receipt["urls"] == {
-                "receipt": entry_url,
-                "transparent_statement": f"{entry_url}/statement",
-            }
-            assert receipt["verification_key_source"] == "trust_store"
-            assert Path(outputs["signed-statement"]).read_bytes() == statement
-            verify_transparent_statement(
-                Path(outputs["transparent-statement"]).read_bytes(),
-                trust_store,
-                statement,
-            )
+                assert result.returncode == 0, result.stderr
+                outputs = dict(
+                    line.split("=", 1)
+                    for line in github_output.read_text().splitlines()
+                )
+                assert set(outputs) == {
+                    "transaction-id",
+                    "signed-statement",
+                    "transparent-statement",
+                }
+                report = json.loads(result.stdout)
+                assert report["transparent"] is True
+                assert report["statement"] == outputs["transparent-statement"]
+                assert len(report["receipts"]) == 1
+                receipt = report["receipts"][0]
+                assert receipt["registration_txid"] == outputs["transaction-id"]
+                entry_url = (
+                    f"https://{receipt['issuer']}/entries/{outputs['transaction-id']}"
+                )
+                assert receipt["urls"] == {
+                    "receipt": entry_url,
+                    "transparent_statement": f"{entry_url}/statement",
+                }
+                assert receipt["verification_key_source"] == "trust_store"
+                signed_path = Path(outputs["signed-statement"])
+                assert signed_path.read_bytes() == statement
+                verify_transparent_statement(
+                    transparent_path.read_bytes(), trust_store, statement
+                )
+                artifacts.append(
+                    (
+                        signed_path,
+                        statement,
+                        transparent_path,
+                        transparent_path.read_bytes(),
+                    )
+                )
+        for signed_path, signed_bytes, transparent_path, transparent_bytes in artifacts:
+            assert signed_path.read_bytes() == signed_bytes
+            assert transparent_path.read_bytes() == transparent_bytes
+        if failure == "repeat":
+            assert artifacts[0][0] != artifacts[1][0]
+            assert artifacts[0][2] != artifacts[1][2]
 
     @pytest.mark.parametrize(
         "workflow",
