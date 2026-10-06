@@ -4,11 +4,14 @@
 #pragma once
 
 #include "cose.h"
+#include "signature_algorithms.h"
 
+#include <ccf/crypto/ec_key_pair.h>
 #include <cstdint>
 #include <cstdlib>
 #include <iomanip> // setw
 #include <string>
+#include <tav/cbor.hpp>
 #include <vector>
 
 using namespace scitt;
@@ -162,16 +165,15 @@ namespace testutils
       cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
       cbor::from_string("uvm endoresements data"));
     QCBOREncode_AddInt64ToMap(&ectx, cose::COSE_HEADER_PARAM_TSS_VER, 0);
-    // TSS map -> COSE Key
-    QCBOREncode_OpenMapInMap(&ectx, cose::COSE_HEADER_PARAM_TSS_COSE_KEY);
-    QCBOREncode_AddInt64ToMapN(&ectx, cose::COSE_KEY_KTY, 2); // EC key type
-    QCBOREncode_AddInt64ToMapN(
-      &ectx, cose::COSE_KEY_CRV_N_K_PUB, 2); // crv: secp384r1
-    QCBOREncode_AddBytesToMapN(
-      &ectx, cose::COSE_KEY_X_E, cbor::from_string("x value"));
-    QCBOREncode_AddBytesToMapN(
-      &ectx, cose::COSE_KEY_Y, cbor::from_string("y value"));
-    QCBOREncode_CloseMap(&ectx);
+    // TSS map -> COSE Key, which must be a valid public key
+    const auto cose_key =
+      ccf::crypto::COSEKey(
+        ccf::crypto::make_ec_public_key(
+          ccf::crypto::make_ec_key_pair(ccf::crypto::CurveID::SECP384R1)
+            ->public_key_der()))
+        .to_cbor(COSE_ALGORITHM_ES384);
+    QCBOREncode_AddEncodedToMapSZ(
+      &ectx, cose::COSE_HEADER_PARAM_TSS_COSE_KEY, cbor::from_bytes(cose_key));
 
     QCBOREncode_CloseMap(&ectx);
 

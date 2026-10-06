@@ -79,31 +79,25 @@ namespace
     EXPECT_TRUE(phdr.tss_map.ver.has_value());
     EXPECT_EQ(phdr.tss_map.ver.value(), 0);
     EXPECT_TRUE(phdr.tss_map.cose_key.has_value());
-    EXPECT_EQ(phdr.tss_map.cose_key->kty(), 2);
+    EXPECT_EQ(phdr.tss_map.cose_key->kty(), ccf::crypto::COSEKeyType::EC2);
     /*
     cose_key:
       1: 2,
-      -1: 2,
+      -1: 1,
       -2:
       h'ED2669A17FD85DC926AD405507877F882F005194EE236A7B6443FD8A1735EC78',
       -3:
       h'44D1BD3B99BB2A185A2FA1060FFFAB37CD25FBEF8E812D89A6BBE36E91F365D9'
     */
-    EXPECT_TRUE(std::holds_alternative<int64_t>(
-      phdr.tss_map.cose_key->crv_n_k_pub().value()));
-    auto crv_n_k_pub =
-      std::get<int64_t>(phdr.tss_map.cose_key->crv_n_k_pub().value());
-    EXPECT_EQ(crv_n_k_pub, 1);
-
-    EXPECT_EQ(phdr.tss_map.cose_key->x_e().has_value(), true);
+    const auto ec2 = phdr.tss_map.cose_key->ec2_parameters();
+    ASSERT_TRUE(ec2.has_value());
+    EXPECT_EQ(ec2->crv, 1);
     EXPECT_EQ(
-      phdr.tss_map.cose_key->x_e().value(),
+      ec2->x,
       from_hex_string(
         "ED2669A17FD85DC926AD405507877F882F005194EE236A7B6443FD8A1735EC78"));
-
-    EXPECT_EQ(phdr.tss_map.cose_key->y().has_value(), true);
     EXPECT_EQ(
-      phdr.tss_map.cose_key->y().value(),
+      ec2->y,
       from_hex_string(
         "44D1BD3B99BB2A185A2FA1060FFFAB37CD25FBEF8E812D89A6BBE36E91F365D9"));
   }
@@ -239,81 +233,135 @@ namespace
     EXPECT_EQ(uhdr.x5chain.has_value(), false);
   }
 
-  TEST(CoseTest, ECCoseKeyMap)
+  TEST(CoseTest, DecodeTSSHeadersCoseKey)
   {
-    // Create a CoseKeyMap with a valid EC key
-    cose::CoseKeyMap cose_key = cose::CoseKeyMap();
+    using namespace tav::cbor;
+    // Decode the given COSE_Key from the attestedsvc map of a protected header
+    const auto decode = [](std::vector<MapItem>&& cose_key) {
+      std::vector<MapItem> tss;
+      tss.emplace_back(
+        make_string(cose::COSE_HEADER_PARAM_TSS_COSE_KEY),
+        make_map(std::move(cose_key)));
+      std::vector<MapItem> phdr;
+      phdr.emplace_back(
+        make_string(cose::COSE_HEADER_PARAM_TSS), make_map(std::move(tss)));
+      // Wrapped in a byte string, as the protected header of a COSE_Sign1
+      const auto phdr_bytes = make_map(std::move(phdr)).nondet_serialize();
+      const auto wrapped_phdr = make_bytes(phdr_bytes).nondet_serialize();
 
-    EXPECT_ANY_THROW(cose_key.validate());
-    EXPECT_ANY_THROW(cose_key.to_public_key());
-    EXPECT_ANY_THROW(cose_key.to_sha256_thumb());
+      QCBORDecodeContext ctx;
+      QCBORDecode_Init(
+        &ctx, cbor::from_bytes(wrapped_phdr), QCBOR_DECODE_MODE_NORMAL);
+      return cose::decode_protected_header(ctx).tss_map.cose_key.value();
+    };
+    const auto error_of = [&decode](std::vector<MapItem>&& cose_key) {
+      try
+      {
+        decode(std::move(cose_key));
+      }
+      catch (const cose::COSEDecodeError& e)
+      {
+        return std::string(e.what());
+      }
+      return std::string();
+    };
+    // Byte payloads are borrowed by the CBOR values, so they must outlive them
+    const auto ec2_key = [](
+                           int64_t crv,
+                           const std::vector<uint8_t>& x,
+                           const std::vector<uint8_t>& y) {
+      std::vector<MapItem> key;
+      key.emplace_back(make_signed(1), make_signed(2));
+      key.emplace_back(make_signed(-1), make_signed(crv));
+      key.emplace_back(make_signed(-2), make_bytes(x));
+      key.emplace_back(make_signed(-3), make_bytes(y));
+      return key;
+    };
 
-    cose_key.set_kty(1); // OKP unsupported key type
-    EXPECT_ANY_THROW(cose_key.validate());
+    // A COSE_Key without kty is rejected, not ignored
+    std::vector<MapItem> no_kty;
+    no_kty.emplace_back(make_signed(-1), make_signed(1));
+    EXPECT_THAT(
+      error_of(std::move(no_kty)),
+      HasSubstr("Failed to decode protected header: attestedsvc.cose_key: "
+                "Invalid COSE_Key: kty is missing"));
 
-    // Valid EC P-256 key parameters
-    // from rfc9679 example
-    cose_key.set_kty(2); // EC key type
-    cose_key.set_crv_n_k_pub(1); // P-256 curve
-    cose_key.set_x_e(from_hex_string(
-      "65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d"));
-    cose_key.set_y(from_hex_string(
-      "1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c"));
-    EXPECT_NO_THROW(cose_key.validate());
-    EXPECT_NO_THROW(cose_key.to_public_key());
+    // EC2 coordinates must have the curve's size
+    const std::vector<uint8_t> short_coordinate(31, 1);
+    EXPECT_THAT(
+      error_of(ec2_key(1, short_coordinate, short_coordinate)),
+      HasSubstr("attestedsvc.cose_key: Invalid COSE_Key: x and y must be 32 "
+                "bytes long"));
+
+    // EC P-256 key from the RFC 9679 example, with its thumbprint
+    const auto p256_x = from_hex_string(
+      "65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d");
+    const auto p256_y = from_hex_string(
+      "1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c");
+    const auto p256 = decode(ec2_key(1, p256_x, p256_y));
+    EXPECT_EQ(p256.kty(), ccf::crypto::COSEKeyType::EC2);
     EXPECT_EQ(
-      cose_key.to_sha256_thumb(),
-      from_hex_string("496bd8afadf307e5b08c64b0421bf9dc01528a344a43bda88fadd166"
-                      "9da253ec"));
+      p256.thumbprint_sha256().hex_str(),
+      "496bd8afadf307e5b08c64b0421bf9dc01528a344a43bda88fadd1669da253ec");
 
-    // Valid EC P-384 key parameters
-    cose_key.set_kty(2); // EC key type
-    cose_key.set_crv_n_k_pub(2); // P-384 curve
-    cose_key.set_x_e(
-      from_hex_string("6D2ECFA295A4FEAB4DF1715E9978B13A335AA3468013A6B1933A2020"
-                      "5FB0943C3115EDBA2DADBC6EAC64403904347B23"));
-    cose_key.set_y(
-      from_hex_string("2D0FFD0127F1C015E1F5D2BA86DE32ECC872EED7F84F9CD961452756"
-                      "32297903CD246D87F29912D0CE19F81C7F6CAB3A"));
-    EXPECT_NO_THROW(cose_key.validate());
-    EXPECT_NO_THROW(cose_key.to_public_key());
-    EXPECT_NO_THROW(cose_key.to_sha256_thumb());
-
-    // Valid EC P-521 key parameters
-    cose_key.set_kty(2); // EC key type
-    cose_key.set_crv_n_k_pub(3); // P-521 curve
-    cose_key.set_x_e(from_hex_string(
+    // EC P-384 and P-521 keys
+    const auto p384_x = from_hex_string(
+      "6D2ECFA295A4FEAB4DF1715E9978B13A335AA3468013A6B1933A20205FB0943C3115EDBA"
+      "2DADBC6EAC64403904347B23");
+    const auto p384_y = from_hex_string(
+      "2D0FFD0127F1C015E1F5D2BA86DE32ECC872EED7F84F9CD96145275632297903CD246D87"
+      "F29912D0CE19F81C7F6CAB3A");
+    const auto p384 = decode(ec2_key(2, p384_x, p384_y));
+    EXPECT_EQ(p384.kty(), ccf::crypto::COSEKeyType::EC2);
+    const auto p521_x = from_hex_string(
       "01c3708e226d587482b11d5398c3462d6aba8fa2c48bd0a1004ea0f9c0729f89ac03b966"
-      "e53b58aae32ad1d73d926628be99efd4788fb6ac291031be10f209387b29"));
-    cose_key.set_y(from_hex_string(
+      "e53b58aae32ad1d73d926628be99efd4788fb6ac291031be10f209387b29");
+    const auto p521_y = from_hex_string(
       "010941e39ea4cd64b28c4e4df601faf227188c2c79ccd1640781d4677fafb684ee0cacbd"
-      "464fd424187680103899bcf458c7467a023da710acc69ab853f7e291d06c"));
-    EXPECT_NO_THROW(cose_key.validate());
-    EXPECT_NO_THROW(cose_key.to_public_key());
-    EXPECT_NO_THROW(cose_key.to_sha256_thumb());
-  }
+      "464fd424187680103899bcf458c7467a023da710acc69ab853f7e291d06c");
+    const auto p521 = decode(ec2_key(3, p521_x, p521_y));
+    EXPECT_EQ(p521.kty(), ccf::crypto::COSEKeyType::EC2);
 
-  TEST(CoseTest, RSACoseKeyMap)
-  {
-    // Create a CoseKeyMap with a valid EC key
-    cose::CoseKeyMap cose_key = cose::CoseKeyMap();
+    // RSA 2048 key
+    const auto rsa_key =
+      [](const std::vector<uint8_t>& n, const std::vector<uint8_t>& e) {
+        std::vector<MapItem> key;
+        key.emplace_back(make_signed(1), make_signed(3));
+        key.emplace_back(make_signed(-1), make_bytes(n));
+        key.emplace_back(make_signed(-2), make_bytes(e));
+        return key;
+      };
+    const auto rsa_n = from_hex_string(
+      "d3ee08a208d1f77305370d8caf1573927be7bd07965f386f8b07bff4b489dfad93ed95b5"
+      "b48a5e5e1c541970bc8d9a5c32b7c140e70dc84133e730e74ee9563d64772dc35c8bf816"
+      "e4b12b5b91e662fd903f73e5009f48e1c0317658d0fb869e10852af6bfa165645718525"
+      "049ea4425f37e891614957be33aac2fe812d7b2f3cb4bcb3356a4939975427e5bc76b871"
+      "a697729eb81ca80b378492849aeee6aa339e97c853dcba5ce2ced58fd6d4bbadcbd12145"
+      "c7fb24f22ae32078efe8a302d856388a79e86aafc33bc129103b757f26455c82d7fbec64"
+      "318ca9bd74635b5a6601c6cbc9ce128a0c8ba9a50c2ba64d413be21f59dc3f38ece21261"
+      "e0b9362d5");
+    const auto rsa_e = from_hex_string("010001");
+    const auto rsa = decode(rsa_key(rsa_n, rsa_e));
+    EXPECT_EQ(rsa.kty(), ccf::crypto::COSEKeyType::RSA);
 
-    // Valid RSA 2048 key parameters
-    // manually generated using openssl
-    cose_key.set_kty(3); // RSA key type
-    cose_key.set_crv_n_k_pub(from_hex_string(
-      "00d3ee08a208d1f77305370d8caf1573927be7bd07965f386f8b07bff4b489dfad93ed95"
-      "b5b48a5e5e1c541970bc8d9a5c32b7c140e70dc84133e730e74ee9563d64772dc35c8bf8"
-      "16e4b12b5b91e662fd903f73e5009f48e1c0317658d0fb869e10852af6bfa16564571852"
-      "5049ea4425f37e891614957be33aac2fe812d7b2f3cb4bcb3356a4939975427e5bc76b87"
-      "1a697729eb81ca80b378492849aeee6aa339e97c853dcba5ce2ced58fd6d4bbadcbd1214"
-      "5c7fb24f22ae32078efe8a302d856388a79e86aafc33bc129103b757f26455c82d7fbec6"
-      "4318ca9bd74635b5a6601c6cbc9ce128a0c8ba9a50c2ba64d413be21f59dc3f38ece2126"
-      "1e0b9362d5"));
-    cose_key.set_x_e(from_hex_string("010001"));
+    // Unlike a DER INTEGER, n must not carry a leading zero octet (RFC 8230)
+    std::vector<uint8_t> padded_n = {0};
+    padded_n.insert(padded_n.end(), rsa_n.begin(), rsa_n.end());
+    EXPECT_THAT(
+      error_of(rsa_key(padded_n, rsa_e)),
+      HasSubstr("attestedsvc.cose_key: Invalid COSE_Key: n must be non-empty "
+                "and have no leading zero octets"));
 
-    EXPECT_NO_THROW(cose_key.validate());
-    EXPECT_NO_THROW(cose_key.to_public_key());
-    EXPECT_NO_THROW(cose_key.to_sha256_thumb());
+    // OKP keys are not supported
+    static constexpr int64_t COSE_CRV_ED25519 = 6;
+    const auto ed25519_x = from_hex_string(
+      "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+    std::vector<MapItem> okp_key;
+    okp_key.emplace_back(make_signed(1), make_signed(1));
+    okp_key.emplace_back(make_signed(-1), make_signed(COSE_CRV_ED25519));
+    okp_key.emplace_back(make_signed(-2), make_bytes(ed25519_x));
+    EXPECT_THAT(
+      error_of(std::move(okp_key)),
+      HasSubstr("attestedsvc.cose_key: Invalid COSE_Key: unsupported kty 1"));
   }
 }

@@ -249,47 +249,34 @@ namespace scitt
         }
         if (phdr.tss_map.cose_key.has_value())
         {
-          auto cose_key = phdr.tss_map.cose_key.value();
+          const auto& cose_key = phdr.tss_map.cose_key.value();
           auto cose_key_obj = ctx.new_obj();
 
-          if (cose_key.kty().has_value())
+          JS_CHECK_OR_THROW(cose_key_obj.set_int64(
+            "kty", static_cast<int64_t>(cose_key.kty())));
+          const auto ec2 = cose_key.ec2_parameters();
+          if (ec2.has_value())
+          {
+            JS_CHECK_OR_THROW(cose_key_obj.set_int64("crv", ec2->crv));
+            JS_CHECK_OR_THROW(
+              cose_key_obj.set("x_e", ctx.new_array_buffer_copy(ec2->x)));
+            JS_CHECK_OR_THROW(
+              cose_key_obj.set("y", ctx.new_array_buffer_copy(ec2->y)));
+          }
+          const auto rsa = cose_key.rsa_parameters();
+          if (rsa.has_value())
           {
             JS_CHECK_OR_THROW(
-              cose_key_obj.set_int64("kty", cose_key.kty().value()));
-          }
-          if (cose_key.crv_n_k_pub().has_value())
-          {
-            if (std::holds_alternative<int64_t>(cose_key.crv_n_k_pub().value()))
-            {
-              JS_CHECK_OR_THROW(cose_key_obj.set_int64(
-                "crv", std::get<int64_t>(cose_key.crv_n_k_pub().value())));
-            }
-            else if (std::holds_alternative<std::vector<uint8_t>>(
-                       cose_key.crv_n_k_pub().value()))
-            {
-              JS_CHECK_OR_THROW(cose_key_obj.set(
-                "n",
-                ctx.new_array_buffer_copy(std::get<std::vector<uint8_t>>(
-                  cose_key.crv_n_k_pub().value()))));
-            }
-          }
-          if (cose_key.x_e().has_value())
-          {
-            JS_CHECK_OR_THROW(cose_key_obj.set(
-              "x_e", ctx.new_array_buffer_copy(cose_key.x_e().value())));
-          }
-          if (cose_key.y().has_value())
-          {
-            JS_CHECK_OR_THROW(cose_key_obj.set(
-              "y", ctx.new_array_buffer_copy(cose_key.y().value())));
+              cose_key_obj.set("n", ctx.new_array_buffer_copy(rsa->n)));
+            JS_CHECK_OR_THROW(
+              cose_key_obj.set("x_e", ctx.new_array_buffer_copy(rsa->e)));
           }
 
           JS_CHECK_OR_THROW(tss_map.set("cose_key", std::move(cose_key_obj)));
 
-          auto cose_key_sha256 = cose_key.to_sha256_thumb();
           JS_CHECK_OR_THROW(tss_map.set(
             "cose_key_sha256",
-            ctx.new_string(ccf::ds::to_hex(cose_key_sha256))));
+            ctx.new_string(cose_key.thumbprint_sha256().hex_str())));
         }
         if (phdr.tss_map.snp_endorsements.has_value())
         {

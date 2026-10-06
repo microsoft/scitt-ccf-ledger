@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Align the bundled `set_member` constitution action with CCF's explicit state
   digest update flow, fixing member creation on COSE-only ledgers and clearing
   stale acknowledgements when resetting a member.
+- `attestedsvc` COSE keys are parsed and validated with CCF's COSE key API when
+  decoding, and their signatures are verified with CCF's COSE verifier. Only
+  EC2 and RSA keys are accepted, as before, but validation is stricter: the
+  key's `alg`, `key_ops` and `kid` are checked, EC2 points must be on the
+  curve, RSA keys must be canonical and 2048 to 16384 bits long.
 - Use C++23, remove the retired `evercbor` link dependency, and use CCF's owning
   SNP attestation report API while preserving the verified policy details.
 - pyscitt 0.15.0: `scitt validate` and `scitt pretty-receipt` report what was verified

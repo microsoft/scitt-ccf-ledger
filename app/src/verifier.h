@@ -258,25 +258,24 @@ namespace scitt::verifier
       {
         throw VerificationError("Protected header KID is missing");
       }
-      auto cose_key_thumb = phdr.tss_map.cose_key->to_sha256_thumb();
+      const auto& cose_key = phdr.tss_map.cose_key.value();
+      const auto cose_key_thumb = cose_key.thumbprint_sha256();
       std::vector<uint8_t> kid_bytes(phdr.kid->begin(), phdr.kid->end());
       if (!std::equal(
-            cose_key_thumb.begin(),
-            cose_key_thumb.end(),
+            cose_key_thumb.h.begin(),
+            cose_key_thumb.h.end(),
             kid_bytes.begin(),
             kid_bytes.end()))
       {
         throw VerificationError("COSE key thumbprint does not match KID");
       }
 
-      PublicKey public_key = phdr.tss_map.cose_key->to_public_key();
-
       // First verify the signature to then trust the structure integrity
       // and the attestation contained in the protected header.
       std::span<uint8_t> payload;
       try
       {
-        payload = cose::verify(data, public_key);
+        payload = cose::verify(data, cose_key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -365,16 +364,8 @@ namespace scitt::verifier
           report_data.data.size()));
       }
 
-      std::vector<uint8_t> cose_key_hash;
-      try
-      {
-        cose_key_hash = phdr.tss_map.cose_key->to_sha256_thumb();
-      }
-      catch (const std::exception& e)
-      {
-        throw VerificationError(
-          fmt::format("Failed to compute COSE key hash: {}", e.what()));
-      }
+      std::vector<uint8_t> cose_key_hash(
+        cose_key_thumb.h.begin(), cose_key_thumb.h.end());
 
       // create a span of data which starts with cose_key_hash bytes and then is
       // padded with zeros to match the report data bytes
