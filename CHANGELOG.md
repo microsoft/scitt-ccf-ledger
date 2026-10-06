@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   as a structured document including the receipt and transparent statement URLs, and
   `scitt validate` downloads missing verification keys from authorized issuers
   (breaking: JSON output by default, see `--output text` and `--offline`).
+- The COSE_Keys served by `/.well-known/scitt-keys` and
+  `/.well-known/scitt-keys/{kid}` now include `alg`.
 
 ## [0.19.0]
 ### Changes

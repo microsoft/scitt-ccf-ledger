@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ccf/crypto/curve.h>
 #include <optional>
 #include <qcbor/UsefulBuf.h>
 #include <qcbor/qcbor_encode.h>
@@ -211,81 +210,6 @@ namespace scitt::cbor
     if (err != QCBOR_SUCCESS)
     {
       throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
-  }
-
-  // COSE Key type constants (RFC 9052)
-  static constexpr int64_t COSE_KEY_TYPE_EC2 = 2;
-
-  // COSE EC curve constants (RFC 9052)
-  static constexpr int64_t COSE_EC_CURVE_P256 = 1;
-  static constexpr int64_t COSE_EC_CURVE_P384 = 2;
-  static constexpr int64_t COSE_EC_CURVE_P521 = 3;
-
-  // COSE Key parameter labels (RFC 9052)
-  static constexpr int64_t COSE_KEY_PARAM_KTY = 1;
-  static constexpr int64_t COSE_KEY_PARAM_KID = 2;
-  static constexpr int64_t COSE_KEY_PARAM_CRV = -1;
-  static constexpr int64_t COSE_KEY_PARAM_X = -2;
-  static constexpr int64_t COSE_KEY_PARAM_Y = -3;
-
-  /**
-   * Map a CCF CurveID to its COSE curve identifier.
-   * See RFC 9053 Section 7.1.
-   */
-  inline int64_t curve_id_to_cose_crv(ccf::crypto::CurveID curve_id)
-  {
-    switch (curve_id)
-    {
-      case ccf::crypto::CurveID::SECP256R1:
-        return COSE_EC_CURVE_P256;
-      case ccf::crypto::CurveID::SECP384R1:
-        return COSE_EC_CURVE_P384;
-      case ccf::crypto::CurveID::SECP521R1:
-        return COSE_EC_CURVE_P521;
-      case ccf::crypto::CurveID::NONE:
-      case ccf::crypto::CurveID::CURVE25519:
-      case ccf::crypto::CurveID::X25519:
-        throw std::runtime_error(
-          "Unsupported curve ID: " +
-          std::to_string(static_cast<uint8_t>(curve_id)));
-    }
-  }
-
-  /**
-   * Encode an EC COSE_Key with kid to CBOR.
-   * See RFC 9052 Section 7.
-   */
-  inline std::vector<uint8_t> ec_cose_key_with_kid_to_cbor(
-    const int64_t crv,
-    const std::vector<uint8_t>& x,
-    const std::vector<uint8_t>& y,
-    const std::string& kid)
-  {
-    size_t approx_buff_size = (1 + 5 + 5) * QCBOR_HEAD_BUFFER_SIZE +
-      sizeof(COSE_KEY_TYPE_EC2) + sizeof(crv) + x.size() + y.size() +
-      kid.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_KTY, COSE_KEY_TYPE_EC2);
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_KID, from_string(kid));
-    QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_CRV, crv);
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_X, from_bytes(x));
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_Y, from_bytes(y));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode COSE Key to CBOR");
     }
     output.resize(encoded_cbor.len);
     output.shrink_to_fit();
