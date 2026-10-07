@@ -36,7 +36,7 @@ jobs:
           ./run_functional_tests.sh -m bencher
         shell: bash
 
-      - uses: bencherdev/bencher@main
+      - uses: bencherdev/bencher@f80847436d7157936b40525db4c2a1064124f04a # v0.6.13
       - name: Track base branch benchmarks with Bencher
         run: |
           bencher run \
