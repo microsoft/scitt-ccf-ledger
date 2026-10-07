@@ -156,9 +156,8 @@ namespace
       nlohmann::json::parse(
         R"({ "requiredClaims": { "aud": "scitt" }, "oneOfClaims": { "appid": ["identity-a", "identity-b"] } })")
         .get<JWT>();
-    ASSERT_TRUE(config.one_of_claims.has_value());
     EXPECT_EQ(
-      *config.one_of_claims,
+      config.one_of_claims,
       nlohmann::json::parse(R"({ "appid": ["identity-a", "identity-b"] })"));
     EXPECT_EQ(
       nlohmann::json(config),
