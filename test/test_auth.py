@@ -18,14 +18,15 @@ def configure_authentication(
     one_of_claims=None,
     allow_unauthenticated_reads=None,
 ):
+    jwt_config = {"requiredClaims": required_claims}
+    if one_of_claims is not None:
+        jwt_config["oneOfClaims"] = one_of_claims
     auth_config = {
         "allowUnauthenticated": allow_unauthenticated,
-        "jwt": {"requiredClaims": required_claims},
+        "jwt": jwt_config,
     }
     if allow_unauthenticated_reads is not None:
         auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
-    if one_of_claims is not None:
-        auth_config["jwt"]["oneOfClaims"] = one_of_claims
     configure_service(
         {
             "authentication": auth_config,
