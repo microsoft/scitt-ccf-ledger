@@ -5,6 +5,7 @@
 
 #include "kv_types.h"
 
+#include <algorithm>
 #include <ccf/common_auth_policies.h>
 #include <ccf/rpc_context.h>
 
@@ -49,7 +50,11 @@ namespace scitt
         return nullptr;
       }
 
-      if (check_claims(jwt->payload, required_claims, error_reason))
+      if (
+        check_claims(jwt->payload, required_claims, error_reason) &&
+        (!cfg.authentication.jwt.one_of_claims.has_value() ||
+         check_one_of_claims(
+           jwt->payload, *cfg.authentication.jwt.one_of_claims, error_reason)))
       {
         return identity;
       }
@@ -77,6 +82,47 @@ namespace scitt
         if (it == claims.end() || *it != kv.value())
         {
           error_reason = fmt::format("Missing claim {}", kv.key());
+          return false;
+        }
+      }
+      return true;
+    }
+
+    static bool check_one_of_claims(
+      const nlohmann::json& claims,
+      const nlohmann::json& one_of_claims,
+      std::string& error_reason)
+    {
+      if (!claims.is_object())
+      {
+        throw std::logic_error("Ill-formed JWT claims");
+      }
+
+      if (!one_of_claims.is_object())
+      {
+        error_reason = "Invalid oneOfClaims configuration";
+        return false;
+      }
+
+      for (const auto& kv : one_of_claims.items())
+      {
+        const auto& allowed = kv.value();
+        if (
+          !allowed.is_array() || allowed.empty() ||
+          !std::all_of(allowed.begin(), allowed.end(), [](const auto& value) {
+            return value.is_string();
+          }))
+        {
+          error_reason = fmt::format("Invalid oneOfClaims for {}", kv.key());
+          return false;
+        }
+
+        auto it = claims.find(kv.key());
+        if (
+          it == claims.end() ||
+          std::find(allowed.begin(), allowed.end(), *it) == allowed.end())
+        {
+          error_reason = fmt::format("Missing allowed claim {}", kv.key());
           return false;
         }
       }
