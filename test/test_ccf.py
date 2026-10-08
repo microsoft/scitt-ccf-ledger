@@ -27,6 +27,13 @@ CURVE_TO_COSE_CRV = {
     "secp521r1": 3,  # P-521
 }
 
+# The algorithm that CCF signs with, for a service key on each curve
+CURVE_TO_COSE_ALG = {
+    "secp256r1": -7,  # ES256
+    "secp384r1": -35,  # ES384
+    "secp521r1": -36,  # ES512
+}
+
 
 def pem_cert_to_ccf_cose_key(cert_pem: str) -> dict:
     cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
@@ -49,6 +56,7 @@ def pem_cert_to_ccf_cose_key(cert_pem: str) -> dict:
     return {
         1: 2,  # kty: EC2
         2: ccf_kid.encode(),  # kid (bstr per RFC 9052 Section 7)
+        3: CURVE_TO_COSE_ALG[curve.name],  # alg
         -1: crv,  # crv
         -2: numbers.x.to_bytes(key_size, "big"),  # x
         -3: numbers.y.to_bytes(key_size, "big"),  # y
