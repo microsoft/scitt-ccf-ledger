@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Allow multiple managed identities to authenticate using JWT `oneOfClaims`
+  alongside the existing exact-match `requiredClaims`.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.18.

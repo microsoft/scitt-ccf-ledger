@@ -15,11 +15,15 @@ def configure_authentication(
     *,
     allow_unauthenticated: bool,
     required_claims=None,
+    one_of_claims=None,
     allow_unauthenticated_reads=None,
 ):
+    jwt_config = {"requiredClaims": required_claims}
+    if one_of_claims is not None:
+        jwt_config["oneOfClaims"] = one_of_claims
     auth_config = {
         "allowUnauthenticated": allow_unauthenticated,
-        "jwt": {"requiredClaims": required_claims},
+        "jwt": jwt_config,
     }
     if allow_unauthenticated_reads is not None:
         auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
@@ -126,6 +130,33 @@ class TestAuthentication:
 
         with service_error("InvalidAuthenticationInfo"):
             submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
+
+    def test_one_of_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
+        setup(
+            allow_unauthenticated=False,
+            required_claims={"aud": "scitt", "iss": valid_issuer.name},
+            one_of_claims={"appid": ["identity-a", "identity-b"]},
+        )
+
+        for appid in ("identity-a", "identity-b"):
+            submit(
+                auth_token=valid_issuer.create_token({"aud": "scitt", "appid": appid})
+            )
+
+        for claims in (
+            {"aud": "scitt"},
+            {"aud": "scitt", "appid": "identity-c"},
+            {"aud": "other", "appid": "identity-a"},
+        ):
+            with service_error("InvalidAuthenticationInfo"):
+                submit(auth_token=valid_issuer.create_token(claims))
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(
+                auth_token=invalid_issuer.create_token(
+                    {"aud": "scitt", "appid": "identity-a"}
+                )
+            )
 
     def test_allow_anything(self, setup, submit, valid_issuer, invalid_issuer):
         # Allow anything
