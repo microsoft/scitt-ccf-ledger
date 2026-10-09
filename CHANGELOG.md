@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   (breaking: JSON output by default, see `--output text` and `--offline`).
 - The COSE_Keys served by `/.well-known/scitt-keys` and
   `/.well-known/scitt-keys/{kid}` now include `alg`.
+- Switch ledger signatures to `CoseOnly`. Nodes using CCF's default `Dual`
+  mode (0.19.0 and earlier) can no longer join; upgrade from 0.20.0 or later.
 
 ## [0.19.0]
 ### Changes
