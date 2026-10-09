@@ -7,6 +7,6 @@ namespace ccf
 {
   LedgerSignMode get_ledger_sign_mode()
   {
-    return LedgerSignMode::CoseAllowDualJoin;
+    return LedgerSignMode::CoseOnly;
   }
 }
