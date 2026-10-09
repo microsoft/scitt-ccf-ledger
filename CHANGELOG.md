@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- CBOR error responses, operation statuses and COSE_Key sets are encoded with
+  the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
+  are not valid UTF-8 (for example, quoting bytes from the request) are no
+  longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.18.
