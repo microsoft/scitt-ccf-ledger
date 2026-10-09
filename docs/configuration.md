@@ -419,9 +419,9 @@ Please refer to the latest [CCF configuration documentation](https://microsoft.g
 
 ### Ledger signature mode
 
-The application selects the CCF ledger signature mode at link time through [`ccf::get_ledger_sign_mode()`](../app/src/ledger_sign_mode.cpp). This build uses `CoseAllowDualJoin`: nodes emit only COSE Sign1 ledger signatures while continuing to accept join requests from nodes using CCF's default `Dual` mode. This supports the first phase of a rolling upgrade to COSE-only ledger signatures.
+The application selects the CCF ledger signature mode at link time through [`ccf::get_ledger_sign_mode()`](../app/src/ledger_sign_mode.cpp). This build uses `CoseOnly`: nodes emit only COSE Sign1 ledger signatures and reject join requests from nodes using CCF's default `Dual` mode. The mode is not part of the CCF node JSON configuration.
 
-The mode is not part of the CCF node JSON configuration. Once every node in every ledger has been upgraded, change the callback to return `CoseOnly` and perform a second rolling upgrade. After COSE-only signatures have advanced beyond the latest traditional signature, the ledger cannot be recovered with a `Dual` binary; use a `CoseAllowDualJoin` or `CoseOnly` binary. See [Upgrading to COSE-Only Ledger Signatures](https://ccf.dev/main/operations/configuration.html#upgrading-to-cose-only-ledger-signatures) for the complete sequence.
+Before deploying this build, every node in the ledger must run release 0.20.0 or later, which emit only COSE signatures. Nodes on those releases can still join during the rolling upgrade, but a ledger with COSE-only signatures cannot be recovered with a `Dual` binary (0.19.0 or earlier). See [Upgrading to COSE-Only Ledger Signatures](https://ccf.dev/main/operations/configuration.html#upgrading-to-cose-only-ledger-signatures) for details.
 
 ### Historical cache soft limit
 
