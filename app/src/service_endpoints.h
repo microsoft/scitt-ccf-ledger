@@ -6,6 +6,7 @@
 #include "cbor.h"
 #include "did/document.h"
 #include "signature_algorithms.h"
+#include "utf8.h"
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
@@ -284,13 +285,17 @@ namespace scitt
           }
         }
 
+        // The kid is a raw path parameter, so it is only echoed back if it is
+        // valid UTF-8
+        std::string message =
+          "No key could be found for this value, which is not valid UTF-8";
+        if (is_valid_utf8(kid_value))
+        {
+          message =
+            fmt::format("No key could be found for this '{}' value", kid_value);
+        }
         set_cbor_error_response(
-          ctx,
-          HTTP_STATUS_NOT_FOUND,
-          cbor::cbor_error(
-            "No such key",
-            fmt::format(
-              "No key could be found for this '{}' value", kid_value)));
+          ctx, HTTP_STATUS_NOT_FOUND, cbor::cbor_error("No such key", message));
       };
 
     registry

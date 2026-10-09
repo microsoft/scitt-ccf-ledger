@@ -5,6 +5,7 @@
 
 #include "cbor.h"
 #include "tracing.h"
+#include "utf8.h"
 
 #include <ccf/endpoint.h>
 #include <functional>
@@ -42,10 +43,15 @@ namespace scitt
      * Convert the error to a CBOR-encoded byte array.
      * Follow rfc9290 for error encoding but use only
      * title and detail and encode them cbor text.
+     * The message may quote unverified request bytes, for example a
+     * URL-unescaped did:x509 issuer, so it is only returned if it is valid
+     * UTF-8. The error adapter logs it either way.
      */
     std::vector<uint8_t> to_cbor_error() const
     {
-      return cbor::cbor_error(code, what());
+      return cbor::cbor_error(
+        code,
+        is_valid_utf8(what()) ? what() : "Error message is not valid UTF-8");
     }
   };
 
