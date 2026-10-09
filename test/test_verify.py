@@ -19,6 +19,7 @@ from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
+from pyscitt.cli.main import main as cli_main
 from pyscitt.cli.validate import build_trust_store
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
@@ -585,6 +586,92 @@ class TestVerifyTransparentStatement:
             "  Verification key source: trust_store",
             f"Statement is transparent: {golden_file}",
         ]
+
+    @pytest.mark.parametrize("output", ["json", "text"])
+    @pytest.mark.parametrize("expected", ["matching", "mismatched", "missing"])
+    def test_validate_expected_payload(self, tmp_path, capsys, output, expected):
+        golden_dir = Path(__file__).parent / "transparent_statements"
+        golden_file = golden_dir / "uvm_0.2.10.cose"
+        payload = Sign1Message.decode(golden_file.read_bytes()).payload
+        assert payload is not None
+        expected_path = tmp_path / "expected payload.bin"
+        if expected != "missing":
+            expected_path.write_bytes(
+                payload if expected == "matching" else payload + b"\x00"
+            )
+        arguments = [
+            "validate",
+            f"--expected-payload={expected_path}",
+            f"--service-trust-store={golden_dir}",
+            "--offline",
+            f"--output={output}",
+            str(golden_file),
+        ]
+        if expected == "matching":
+            cli_main(arguments)
+        else:
+            with pytest.raises(SystemExit) as exit:
+                cli_main(arguments)
+            assert exit.value.code == 1
+        captured = capsys.readouterr()
+        assert not captured.err
+        if output == "json":
+            result = json.loads(captured.out)
+            assert result["transparent"] == (expected == "matching")
+            assert set(result) == (
+                {"statement", "transparent", "receipts"}
+                if expected == "matching"
+                else {"statement", "transparent", "receipts", "error"}
+            )
+            if expected == "matching":
+                assert result["receipts"][0]["registration_txid"] == "458.12440"
+            else:
+                assert result["receipts"] == []
+                assert result["error"]
+            if expected == "mismatched":
+                assert "does not match expected payload" in result["error"]
+        elif expected == "matching":
+            assert "Statement is transparent:" in captured.out
+        else:
+            assert "Statement is not transparent:" in captured.out
+            if expected == "mismatched":
+                assert "does not match expected payload" in captured.out
+
+    @pytest.mark.parametrize("payload", [b"", b"\x00\xff\r\n"])
+    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    def test_expected_payload_compares_exact_bytes(
+        self, mock_verify_receipt, tmp_path, payload
+    ):
+        from pyscitt.cli.validate import validate_transparent_statement
+
+        receipt = self._build_receipt("ledger.example")
+        statement = Sign1Message.decode(self._build_transparent_statement([receipt]))
+        statement.payload = payload
+        statement_path = tmp_path / "transparent.cose"
+        statement_path.write_bytes(statement.encode(tag=True, sign=False))
+        expected_path = tmp_path / "payload.bin"
+        expected_path.write_bytes(payload)
+        trust_store = Mock(verification_key_sources=["trust_store"])
+        with patch("pyscitt.cli.validate.build_trust_store", return_value=trust_store):
+            result = validate_transparent_statement(
+                statement_path, expected_payload=expected_path
+            )
+        assert result["transparent"] is True
+        mock_verify_receipt.assert_called_once()
+
+    def test_expected_payload_rejects_detached_payload(self, tmp_path):
+        from pyscitt.cli.validate import validate_transparent_statement
+
+        message = cbor2.loads(self._build_transparent_statement([]))
+        message.value[2] = None
+        statement_path = tmp_path / "detached.cose"
+        statement_path.write_bytes(cbor2.dumps(message))
+        expected_path = tmp_path / "empty.bin"
+        expected_path.write_bytes(b"")
+        with pytest.raises(ValueError, match="does not match expected payload"):
+            validate_transparent_statement(
+                statement_path, expected_payload=expected_path
+            )
 
     def test_error_is_reported_in_the_same_shape(self):
         """A statement which is not transparent is reported, not raised."""

@@ -1,0 +1,112 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Sign and submit to SCITT
+description: >-
+  Sign a file with a GitHub OIDC-backed ephemeral key and register it in SCITT.
+  Requires job permissions id-token: write to request an OIDC token.
+
+inputs:
+  file:
+    description: File whose exact bytes are embedded in the signed statement
+    required: true
+  ledger-url:
+    description: HTTPS URL of the configured, running SCITT ledger
+    required: true
+  content-type:
+    description: COSE payload content type
+    default: application/octet-stream
+  service-ca:
+    description: Optional PEM CA bundle for ledger TLS verification
+    default: ""
+  output-dir:
+    description: Parent directory for unique per-invocation signed and transparent statements
+    default: scitt-output
+
+outputs:
+  transaction-id:
+    description: Committed SCITT transaction ID
+    value: ${{ steps.verify.outputs.transaction-id }}
+  signed-statement:
+    description: Absolute path to the COSE signed statement
+    value: ${{ steps.verify.outputs.signed-statement }}
+  transparent-statement:
+    description: Absolute path to the COSE statement with its verified ledger receipt
+    value: ${{ steps.verify.outputs.transparent-statement }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12"
+    - name: Prepare isolated pyscitt environment
+      id: setup
+      shell: python
+      env:
+        SCITT_OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        import os
+        import subprocess
+        import sys
+
+        raise SystemExit(subprocess.run([
+            sys.executable,
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "setup",
+        ]).returncode)
+    - name: Sign the input file with GitHub OIDC and Fulcio
+      shell: python
+      env:
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_FILE: ${{ inputs.file }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
+        SCITT_CONTENT_TYPE: ${{ inputs.content-type }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
+      run: |
+        import os
+        import subprocess
+
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "sign",
+        ]).returncode)
+    - name: Register the signed statement
+      id: submit
+      shell: python
+      env:
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
+        SCITT_SERVICE_CA: ${{ inputs.service-ca }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
+      run: |
+        import os
+        import subprocess
+
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "submit",
+        ]).returncode)
+    - name: Verify the transparent statement and report registration details
+      id: verify
+      shell: python
+      env:
+        SCITT_CLI: ${{ steps.setup.outputs.scitt }}
+        SCITT_PYTHON: ${{ steps.setup.outputs.python }}
+        SCITT_LEDGER_URL: ${{ inputs.ledger-url }}
+        SCITT_SERVICE_CA: ${{ inputs.service-ca }}
+        SCITT_FILE: ${{ inputs.file }}
+        SCITT_OUTPUT_DIR: ${{ steps.setup.outputs.output-dir }}
+      run: |
+        import os
+        import subprocess
+
+        raise SystemExit(subprocess.run([
+            os.environ["SCITT_PYTHON"],
+            os.path.join(os.environ["GITHUB_ACTION_PATH"], "action.py"),
+            "verify",
+        ]).returncode)
