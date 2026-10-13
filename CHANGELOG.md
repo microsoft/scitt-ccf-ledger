@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `/.well-known/scitt-keys/{kid}` now include `alg`.
 - Switch ledger signatures to `CoseOnly`. Nodes using CCF's default `Dual`
   mode (0.19.0 and earlier) can no longer join; upgrade from 0.20.0 or later.
+- Cached historical states (used to serve receipts and transparent statements)
+  now expire after 1 minute without a request, instead of CCF's default of
+  30 minutes.
 
 ## [0.19.0]
 ### Changes
