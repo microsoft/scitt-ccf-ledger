@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- CBOR error responses, operation statuses and COSE_Key sets are encoded with
+- CBOR error responses and COSE_Key sets are encoded with
   the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
   are not valid UTF-8 (for example, quoting bytes from the request) are no
   longer echoed back, so that error responses are always valid CBOR.
@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Cached historical states (used to serve receipts and transparent statements)
   now expire after 1 minute without a request, instead of CCF's default of
   30 minutes.
+- Remove the `GET /entries/txIds` and `GET /operations/{txid}` endpoints and
+  the indexing strategies behind them. Without `waitForCommit`, `POST /entries`
+  now always answers `303 See Other` to `/entries/{txid}`, including requests
+  without `api-version=2026-03-26` that used to get `202 Accepted` with an
+  operation body, and registrations no longer write to
+  `public:scitt.operations`.
+- pyscitt 0.15.0: remove `Client.enumerate_statements`,
+  `Client.wait_for_operation`, the `operation` argument of `get_receipt` and
+  `get_transparent_statement`, and the `scitt retrieve` command. Submissions
+  without `waitForCommit` only accept the `303 See Other` response.
 
 ## [0.19.0]
 ### Changes
