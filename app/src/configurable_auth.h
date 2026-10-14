@@ -5,7 +5,6 @@
 
 #include "kv_types.h"
 
-#include <algorithm>
 #include <ccf/common_auth_policies.h>
 #include <ccf/rpc_context.h>
 
@@ -52,9 +51,9 @@ namespace scitt
 
       if (
         check_claims(jwt->payload, required_claims, error_reason) &&
-        (!cfg.authentication.jwt.one_of_claims.has_value() ||
-         check_one_of_claims(
-           jwt->payload, *cfg.authentication.jwt.one_of_claims, error_reason)))
+        (!cfg.authentication.jwt.any_of_claims.has_value() ||
+         check_any_of_claims(
+           jwt->payload, *cfg.authentication.jwt.any_of_claims, error_reason)))
       {
         return identity;
       }
@@ -88,9 +87,9 @@ namespace scitt
       return true;
     }
 
-    static bool check_one_of_claims(
+    static bool check_any_of_claims(
       const nlohmann::json& claims,
-      const nlohmann::json& one_of_claims,
+      const nlohmann::json& any_of_claims,
       std::string& error_reason)
     {
       if (!claims.is_object())
@@ -98,35 +97,32 @@ namespace scitt
         throw std::logic_error("Ill-formed JWT claims");
       }
 
-      if (!one_of_claims.is_object())
+      if (!any_of_claims.is_array() || any_of_claims.empty())
       {
-        error_reason = "Invalid oneOfClaims configuration";
+        error_reason = "Invalid anyOfClaims configuration";
         return false;
       }
 
-      for (const auto& kv : one_of_claims.items())
+      bool matches = false;
+      for (const auto& alternative : any_of_claims)
       {
-        const auto& allowed = kv.value();
-        if (
-          !allowed.is_array() || allowed.empty() ||
-          !std::all_of(allowed.begin(), allowed.end(), [](const auto& value) {
-            return value.is_string();
-          }))
+        if (!alternative.is_object() || alternative.empty())
         {
-          error_reason = fmt::format("Invalid oneOfClaims for {}", kv.key());
+          error_reason = "Invalid anyOfClaims alternative";
           return false;
         }
 
-        auto it = claims.find(kv.key());
-        if (
-          it == claims.end() ||
-          std::find(allowed.begin(), allowed.end(), *it) == allowed.end())
+        std::string ignored_error_reason;
+        if (check_claims(claims, alternative, ignored_error_reason))
         {
-          error_reason = fmt::format("Missing allowed claim {}", kv.key());
-          return false;
+          matches = true;
         }
       }
-      return true;
+      if (!matches)
+      {
+        error_reason = "No matching anyOfClaims alternative";
+      }
+      return matches;
     }
 
     static void log_auth_error(

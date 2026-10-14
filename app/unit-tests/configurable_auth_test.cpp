@@ -19,13 +19,13 @@ namespace
       error_reason);
   }
 
-  bool check_one_of_claims(
-    std::string_view claims, std::string_view one_of_claims)
+  bool check_any_of_claims(
+    std::string_view claims, std::string_view any_of_claims)
   {
     std::string error_reason;
-    return ConfigurableJwtAuthnPolicy::check_one_of_claims(
+    return ConfigurableJwtAuthnPolicy::check_any_of_claims(
       nlohmann::json::parse(claims),
-      nlohmann::json::parse(one_of_claims),
+      nlohmann::json::parse(any_of_claims),
       error_reason);
   }
 
@@ -114,54 +114,58 @@ namespace
       R"({ "data": [ "foo" ] })"));
   }
 
-  TEST(ConfigurableJwtAuthnPolicy, CheckOneOfClaims)
+  TEST(ConfigurableJwtAuthnPolicy, CheckAnyOfClaims)
   {
-    EXPECT_TRUE(check_one_of_claims(
-      R"({ "appid": "identity-a", "aud": "scitt" })",
-      R"({ "appid": ["identity-a", "identity-b"], "aud": ["scitt"] })"));
-    EXPECT_TRUE(check_one_of_claims(
-      R"({ "appid": "identity-b", "aud": "scitt" })",
-      R"({ "appid": ["identity-a", "identity-b"], "aud": ["scitt"] })"));
-    EXPECT_TRUE(check_one_of_claims(R"({})", R"({})"));
+    const std::string_view alternatives =
+      R"([{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }])";
+    EXPECT_TRUE(check_any_of_claims(
+      R"({ "appid": "identity-a", "tid": "tenant-a", "extra": true })",
+      alternatives));
+    EXPECT_TRUE(check_any_of_claims(
+      R"({ "appid": "identity-b", "tid": "tenant-b" })", alternatives));
+    EXPECT_FALSE(check_any_of_claims(
+      R"({ "appid": "identity-a", "tid": "tenant-b" })", alternatives));
+    EXPECT_FALSE(check_any_of_claims(
+      R"({ "appid": "identity-b", "tid": "tenant-a" })", alternatives));
+    EXPECT_FALSE(
+      check_any_of_claims(R"({ "appid": "identity-a" })", alternatives));
+    EXPECT_FALSE(check_any_of_claims(
+      R"({ "appid": "identity-c", "tid": "tenant-a" })", alternatives));
+    EXPECT_TRUE(check_any_of_claims(
+      R"({ "appid": "identity-a", "tid": "tenant-a" })",
+      R"([{ "appid": "identity-a" }, { "tid": "tenant-a" }])"));
 
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": "identity-c", "aud": "scitt" })",
-      R"({ "appid": ["identity-a", "identity-b"], "aud": ["scitt"] })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": "identity-a", "aud": "other" })",
-      R"({ "appid": ["identity-a", "identity-b"], "aud": ["scitt"] })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "aud": "scitt" })", R"({ "appid": ["identity-a", "identity-b"] })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": ["identity-a"] })",
-      R"({ "appid": ["identity-a", "identity-b"] })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": "identity-a" })", R"({ "appid": [] })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": "identity-a" })", R"({ "appid": "identity-a" })"));
-    EXPECT_FALSE(check_one_of_claims(
-      R"({ "appid": "identity-a" })", R"({ "appid": [null, "identity-a"] })"));
-    EXPECT_FALSE(check_one_of_claims(R"({ "appid": "identity-a" })", R"([])"));
+    EXPECT_FALSE(check_any_of_claims(R"({ "appid": "identity-a" })", R"([])"));
+    EXPECT_FALSE(check_any_of_claims(R"({ "appid": "identity-a" })", R"({})"));
+    EXPECT_FALSE(
+      check_any_of_claims(R"({ "appid": "identity-a" })", R"([{}])"));
+    EXPECT_FALSE(check_any_of_claims(
+      R"({ "appid": "identity-a" })", R"([[ "identity-a" ]])"));
+    EXPECT_FALSE(
+      check_any_of_claims(R"({ "appid": "identity-a" })", R"([null])"));
+    EXPECT_FALSE(check_any_of_claims(
+      R"({ "appid": "identity-a" })", R"([{ "appid": "identity-a" }, {}])"));
   }
 
-  TEST(ConfigurableJwtAuthnPolicy, OneOfClaimsConfiguration)
+  TEST(ConfigurableJwtAuthnPolicy, AnyOfClaimsConfiguration)
   {
     using JWT = Configuration::Authentication::JWT;
     const auto old_config =
       nlohmann::json::parse(R"({ "requiredClaims": { "aud": "scitt" } })")
         .get<JWT>();
-    EXPECT_FALSE(old_config.one_of_claims.has_value());
+    EXPECT_FALSE(old_config.any_of_claims.has_value());
 
     const auto config =
       nlohmann::json::parse(
-        R"({ "requiredClaims": { "aud": "scitt" }, "oneOfClaims": { "appid": ["identity-a", "identity-b"] } })")
+        R"({ "requiredClaims": { "aud": "scitt" }, "anyOfClaims": [{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }] })")
         .get<JWT>();
     EXPECT_EQ(
-      config.one_of_claims,
-      nlohmann::json::parse(R"({ "appid": ["identity-a", "identity-b"] })"));
+      config.any_of_claims,
+      nlohmann::json::parse(
+        R"([{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }])"));
     EXPECT_EQ(
       nlohmann::json(config),
       nlohmann::json::parse(
-        R"({ "requiredClaims": { "aud": "scitt" }, "oneOfClaims": { "appid": ["identity-a", "identity-b"] } })"));
+        R"({ "requiredClaims": { "aud": "scitt" }, "anyOfClaims": [{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }] })"));
   }
 }
