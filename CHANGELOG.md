@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changes
 - Allow multiple managed identities to authenticate using JWT `anyOfClaims`
   alongside the existing exact-match `requiredClaims`.
+- CBOR error responses, operation statuses and COSE_Key sets are encoded with
+  the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
+  are not valid UTF-8 (for example, quoting bytes from the request) are no
+  longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
 - Update CCF to 7.0.18.
@@ -23,6 +27,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   (breaking: JSON output by default, see `--output text` and `--offline`).
 - The COSE_Keys served by `/.well-known/scitt-keys` and
   `/.well-known/scitt-keys/{kid}` now include `alg`.
+- Switch ledger signatures to `CoseOnly`. Nodes using CCF's default `Dual`
+  mode (0.19.0 and earlier) can no longer join; upgrade from 0.20.0 or later.
+- Cached historical states (used to serve receipts and transparent statements)
+  now expire after 1 minute without a request, instead of CCF's default of
+  30 minutes.
 
 ## [0.19.0]
 ### Changes

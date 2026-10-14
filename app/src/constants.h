@@ -15,6 +15,9 @@ namespace scitt
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 
+  // Idle time before a cached historical state is dropped (CCF default: 30m).
+  const std::chrono::seconds HISTORICAL_CACHE_EXPIRY{60};
+
   // IANA-registered SCITT content types
   // https://www.iana.org/assignments/media-types/
   const std::string CT_SCITT_RECEIPT = "application/scitt-receipt+cose";

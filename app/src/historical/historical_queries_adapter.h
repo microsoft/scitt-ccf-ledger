@@ -20,8 +20,9 @@
 // Adapted to match the rest of the SCITT code base, eg. uses
 // exceptions to return HTTP errors.
 //
-// Cache eviction is handled by CCF's historical_cache_soft_limit node
-// configuration option. See the CCF documentation for details.
+// Cached states expire after HISTORICAL_CACHE_EXPIRY without a request, and
+// are evicted earlier (LRU) once CCF's historical_cache_soft_limit node
+// configuration option is exceeded. See the CCF documentation for details.
 
 namespace scitt::historical
 {
