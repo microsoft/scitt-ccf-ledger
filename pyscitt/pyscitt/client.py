@@ -14,7 +14,6 @@ from http import HTTPStatus
 from typing import (
     Any,
     Dict,
-    Iterable,
     List,
     Literal,
     Optional,
@@ -22,7 +21,6 @@ from typing import (
     Union,
     overload,
 )
-from urllib.parse import urlencode
 
 import cbor2
 import httpx
@@ -725,9 +723,6 @@ class Client(BaseClient):
         Per SCRAPI v09, POST /entries returns 303 See Other with a Location
         header pointing to /entries/{txid}. The txid is extracted from the
         Location header.
-
-        Falls back to the legacy 202 + CBOR OperationId flow if the server
-        returns 202.
         """
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
@@ -736,15 +731,12 @@ class Client(BaseClient):
             content=signed_statement,
             follow_redirects=False,
         )
-        if resp.status_code == HTTPStatus.SEE_OTHER:
-            location = resp.headers.get("location", "")
-            tx = self._extract_tx_from_location(location)
-            return PendingSubmission(tx)
-        resp.raise_for_status()
-        # Legacy fallback: 202 with CBOR body
-        operation = cbor2.loads(resp.read())
-        operation_id = operation["OperationId"]
-        return PendingSubmission(operation_id)
+        if resp.status_code != HTTPStatus.SEE_OTHER:
+            raise ValueError(
+                f"Expected 303 See Other from POST /entries, got {resp.status_code}"
+            )
+        tx = self._extract_tx_from_location(resp.headers.get("location", ""))
+        return PendingSubmission(tx)
 
     def submit_signed_statement_and_wait(
         self,
@@ -756,30 +748,11 @@ class Client(BaseClient):
         Per SCRAPI v09, POST /entries returns 303, then polling
         GET /entries/{txid} returns 302 while running and 200 with the
         receipt when committed.
-
-        Falls back to the legacy /operations/ polling flow if the server
-        returns 202.
         """
-        headers = {"Content-Type": CT_APPLICATION_COSE}
-        resp = self.post(
-            "/entries",
-            headers=headers,
-            content=signed_statement,
-            follow_redirects=False,
-        )
-        if resp.status_code == HTTPStatus.SEE_OTHER:
-            location = resp.headers.get("location", "")
-            tx = self._extract_tx_from_location(location)
-            self.wait_for_entry(tx)
-            statement = self.get_transparent_statement(tx)
-            return Submission(tx, tx, statement, False)
-        resp.raise_for_status()
-        # Legacy fallback
-        operation = cbor2.loads(resp.read())
-        operation_id = operation["OperationId"]
-        tx = self.wait_for_operation(operation_id)
+        tx = self.submit_signed_statement(signed_statement).operation_tx
+        self.wait_for_entry(tx)
         statement = self.get_transparent_statement(tx)
-        return Submission(operation_id, tx, statement, False)
+        return Submission(tx, tx, statement, False)
 
     def submit_signed_statement_and_wait_for_receipt(
         self,
@@ -791,29 +764,10 @@ class Client(BaseClient):
         Per SCRAPI v09, POST /entries returns 303, then polling
         GET /entries/{txid} returns 302 while running and 200 with the
         receipt when committed.
-
-        Falls back to the legacy /operations/ polling flow if the server
-        returns 202.
         """
-        headers = {"Content-Type": CT_APPLICATION_COSE}
-        resp = self.post(
-            "/entries",
-            headers=headers,
-            content=signed_statement,
-            follow_redirects=False,
-        )
-        if resp.status_code == HTTPStatus.SEE_OTHER:
-            location = resp.headers.get("location", "")
-            tx = self._extract_tx_from_location(location)
-            receipt = self.wait_for_entry(tx)
-            return Submission(tx, tx, receipt, False)
-        resp.raise_for_status()
-        # Legacy fallback
-        operation = cbor2.loads(resp.read())
-        operation_id = operation["OperationId"]
-        tx = self.wait_for_operation(operation_id)
-        receipt = self.get_receipt(tx)
-        return Submission(operation_id, tx, receipt, False)
+        tx = self.submit_signed_statement(signed_statement).operation_tx
+        receipt = self.wait_for_entry(tx)
+        return Submission(tx, tx, receipt, False)
 
     def submit_signed_statement_wait_for_commit(
         self,
@@ -838,34 +792,6 @@ class Client(BaseClient):
         receipt = resp.content
         return Submission("", tx, receipt, False)
 
-    def wait_for_operation(self, operation: str) -> str:
-        """
-        Legacy polling method using GET /operations/{id}.
-
-        Kept for backward compatibility with older servers that return 202
-        with CBOR operation status.
-        """
-        resp = self.get(
-            f"/operations/{operation}",
-            retry_on=[
-                HTTPStatus.ACCEPTED.value,
-                HTTPStatus.TOO_MANY_REQUESTS.value,
-                HTTPStatus.SERVICE_UNAVAILABLE.value,
-                lambda r: r.is_success and cbor2.loads(r.read())["Status"] == "running",
-            ],
-        )
-        response = cbor2.loads(resp.read())
-
-        if response["Status"] == "succeeded":
-            return response["EntryId"]
-        elif response["Status"] == "failed":
-            error = response["Error"]
-            raise ServiceError(
-                response.headers, error[CBOR_ERR_TITLE_TAG], error[CBOR_ERR_DETAIL_TAG]
-            )
-        else:
-            raise ValueError("Invalid status {}".format(response["Status"]))
-
     def wait_for_entry(self, tx: str) -> bytes:
         """
         Poll GET /entries/{txid} per SCRAPI v09 section 2.4.
@@ -888,62 +814,19 @@ class Client(BaseClient):
         response = self.get_historical(f"/entries/{tx}")
         return response.content
 
-    def get_receipt(self, tx: str, *, operation: bool = False) -> bytes:
+    def get_receipt(self, tx: str) -> bytes:
         """
         Get a receipt from the ledger.
-
-        If `operation` is true, the tx is treated as an operation ID and is
-        first waited on in order to obtain the actual entry ID.
         """
-        if operation:
-            tx = self.wait_for_operation(tx)
-
         response = self.get_historical(f"/entries/{tx}")
         return response.content
 
-    def get_transparent_statement(self, tx: str, *, operation: bool = False) -> bytes:
+    def get_transparent_statement(self, tx: str) -> bytes:
         """
         Get a transparent statement from the ledger.
-
-        If `operation` is true, the tx is treated as an operation ID and is
-        first waited on in order to obtain the actual entry ID.
         """
-        if operation:
-            tx = self.wait_for_operation(tx)
-
         response = self.get_historical(f"/entries/{tx}/statement")
         return response.content
-
-    def enumerate_statements(
-        self, *, start: Optional[int] = None, end: Optional[int] = None
-    ) -> Iterable[str]:
-        """
-        Enumerate all statements on the ledger, with an optional start and end range.
-
-        Yields a sequence of transaction numbers. The contents and/or receipt for a given claim can
-        be fetched using the `get_claim` and `get_receipt` methods.
-        """
-        params = {}
-        if start is not None:
-            params["from"] = start
-        if end is not None:
-            params["to"] = end
-
-        link = f"/entries/txIds?{urlencode(params)}"
-
-        while link:
-            response = self.get(
-                link,
-                params=params,
-                retry_on=[
-                    (HTTPStatus.SERVICE_UNAVAILABLE, "IndexingInProgressRetryLater")
-                ],
-            )
-            body = response.json()
-            for tx in body["transactionIds"]:
-                yield tx
-
-            link = body.get("nextLink")
 
     def wait_for_network_open(self):
         self.get(
