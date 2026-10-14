@@ -130,7 +130,7 @@ namespace scitt
       struct JWT
       {
         nlohmann::json required_claims;
-        std::optional<nlohmann::json> one_of_claims;
+        std::optional<nlohmann::json> any_of_claims;
         bool operator==(const JWT& other) const = default;
       };
 
@@ -182,8 +182,8 @@ namespace scitt
     Configuration::Authentication::JWT,
     required_claims,
     "requiredClaims",
-    one_of_claims,
-    "oneOfClaims");
+    any_of_claims,
+    "anyOfClaims");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);

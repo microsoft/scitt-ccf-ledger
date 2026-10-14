@@ -29,21 +29,22 @@ actions.set("set_scitt_configuration",
         checkType(args.configuration.authentication.jwt, "object?", "configuration.authentication.jwt");
         if (args.configuration.authentication.jwt) {
           checkType(args.configuration.authentication.jwt.requiredClaims, "object?", "configuration.authentication.jwt.requiredClaims");
-          const oneOfClaims = args.configuration.authentication.jwt.oneOfClaims;
-          checkType(oneOfClaims, "object?", "configuration.authentication.jwt.oneOfClaims");
-          if (Array.isArray(oneOfClaims)) {
-            throw new Error("configuration.authentication.jwt.oneOfClaims must be an object");
-          }
-          if (oneOfClaims) {
-            for (const [claim, allowed] of Object.entries(oneOfClaims)) {
-              checkType(allowed, "array", `configuration.authentication.jwt.oneOfClaims.${claim}`);
-              if (allowed.length === 0) {
-                throw new Error(`configuration.authentication.jwt.oneOfClaims.${claim} must not be empty`);
-              }
-              for (const [i, value] of allowed.entries()) {
-                checkType(value, "string", `configuration.authentication.jwt.oneOfClaims.${claim}[${i}]`);
+          const anyOfClaims = args.configuration.authentication.jwt.anyOfClaims;
+          if (anyOfClaims !== undefined) {
+            checkType(anyOfClaims, "array", "configuration.authentication.jwt.anyOfClaims");
+            if (anyOfClaims.length === 0) {
+              throw new Error("configuration.authentication.jwt.anyOfClaims must not be empty");
+            }
+            for (const [i, alternative] of anyOfClaims.entries()) {
+              const field = `configuration.authentication.jwt.anyOfClaims[${i}]`;
+              checkType(alternative, "object", field);
+              if (alternative === null || Array.isArray(alternative) || Object.keys(alternative).length === 0) {
+                throw new Error(`${field} must be a non-empty object`);
               }
             }
+          }
+          if (args.configuration.authentication.jwt.oneOfClaims !== undefined) {
+            throw new Error("configuration.authentication.jwt.oneOfClaims is not supported; use anyOfClaims");
           }
         }
       }
