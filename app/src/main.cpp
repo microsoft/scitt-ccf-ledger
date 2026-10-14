@@ -35,7 +35,6 @@
 #include <ccf/service/tables/service.h>
 #include <iomanip>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <openssl/evp.h>
 #include <span>
 #include <sstream>
