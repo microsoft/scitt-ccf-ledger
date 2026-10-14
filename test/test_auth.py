@@ -177,6 +177,48 @@ class TestAuthentication:
             )
         )
 
+    def test_any_of_claims_with_multiple_issuers(
+        self, setup, client: Client, signed_statement, valid_issuer
+    ):
+        issuer_a = JwtIssuer("https://tenant-a.example.com")
+        issuer_b = JwtIssuer("https://tenant-b.example.com")
+        for issuer in (issuer_a, issuer_b):
+            client.governance.propose(issuer.create_proposal(), must_pass=True)
+
+        setup(
+            allow_unauthenticated=False,
+            required_claims={"aud": "scitt"},
+            any_of_claims=[
+                {"iss": issuer_a.name, "appid": "identity-a", "tid": "tenant-a"},
+                {"iss": issuer_b.name, "appid": "identity-b", "tid": "tenant-b"},
+            ],
+        )
+
+        for issuer, appid, tid in (
+            (issuer_a, "identity-a", "tenant-a"),
+            (issuer_b, "identity-b", "tenant-b"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            authenticated_client = client.replace(auth_token=token)
+            tx = authenticated_client.submit_signed_statement_and_wait(
+                signed_statement
+            ).tx
+            assert_application_reads_succeed(authenticated_client, tx)
+            assert_application_reads_require_authentication(client, tx)
+
+        for issuer, appid, tid in (
+            (issuer_a, "identity-b", "tenant-b"),
+            (issuer_b, "identity-a", "tenant-a"),
+            (valid_issuer, "identity-a", "tenant-a"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            with service_error("InvalidAuthenticationInfo"):
+                client.replace(auth_token=token).submit_signed_statement_and_wait(
+                    signed_statement
+                )
+            with service_error("InvalidAuthenticationInfo"):
+                client.replace(auth_token=token).get("/entries/txIds")
+
     @pytest.mark.parametrize(
         "invalid_alternatives",
         [
