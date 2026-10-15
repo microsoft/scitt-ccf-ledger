@@ -35,8 +35,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   now always answers `303 See Other` to `/entries/{txid}`, including requests
   without `api-version=2026-03-26` that used to get `202 Accepted` with an
   operation body, and registrations no longer write to
-  `public:scitt.operations`.
-- pyscitt 0.15.0: remove `Client.enumerate_statements`,
+  `public:scitt.operations`. Upgrade clients that still rely on the `202`
+  flow, such as `Azure.Security.CodeTransparency` 1.0.0-beta.9 and earlier,
+  before deploying: they treat the `303` as a failure even though the
+  statement was registered, so retrying registers it again.
+- pyscitt 0.16.0: remove `Client.enumerate_statements`,
   `Client.wait_for_operation`, the `operation` argument of `get_receipt` and
   `get_transparent_statement`, and the `scitt retrieve` command. Submissions
   without `waitForCommit` only accept the `303 See Other` response.
