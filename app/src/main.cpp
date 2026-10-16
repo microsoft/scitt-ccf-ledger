@@ -10,7 +10,6 @@
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
 #include "kv_types.h"
-#include "operations_endpoints.h"
 #include "policy_engine.h"
 #include "service_endpoints.h"
 #include "tracing.h"
@@ -27,8 +26,6 @@
 #include <ccf/historical_queries_adapter.h>
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
-#include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
-#include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
 #include <ccf/node/quote.h>
 #include <ccf/run.h>
@@ -38,7 +35,6 @@
 #include <ccf/service/tables/service.h>
 #include <iomanip>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <openssl/evp.h>
 #include <span>
 #include <sstream>
@@ -52,9 +48,6 @@
 namespace scitt
 {
   using ccf::endpoints::EndpointContext;
-
-  using EntrySeqnoIndexingStrategy =
-    ccf::indexing::strategies::SeqnosForValue_Bucketed<EntryTable>;
 
   /**
    * This is a re-implementation of CCF's get_query_value, but it throws a
@@ -153,31 +146,35 @@ namespace scitt
     return cose_receipt;
   }
 
+  namespace
+  {
+    /**
+     * Answers POST /entries with 303 See Other to /entries/{txid} (SCRAPI v09
+     * section 2.3.2), which the handler can't do before its TxID is assigned.
+     */
+    void entry_locally_committed_func(
+      ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
+    {
+      std::string tx_str = tx_id.to_str();
+      SCITT_TRACE("New entry was locally committed with tx={}", tx_str);
+
+      ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
+
+      if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
+      {
+        ctx.rpc_ctx->set_response_header(
+          ccf::http::headers::LOCATION,
+          fmt::format("https://{}/entries/{}", *host, tx_str));
+      }
+
+      ctx.rpc_ctx->set_response_status(HTTP_STATUS_SEE_OTHER);
+    }
+  }
+
   class AppEndpoints : public ccf::UserEndpointRegistry
   {
   private:
-    std::shared_ptr<EntrySeqnoIndexingStrategy> entry_seqno_index = nullptr;
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
-
-    std::optional<ccf::TxStatus> get_tx_status(ccf::SeqNo seqno)
-    {
-      SCITT_TRACE("Get transaction status");
-
-      ccf::View view_of_seqno;
-      ccf::ApiResult result = get_view_for_seqno_v1(seqno, view_of_seqno);
-      if (result == ccf::ApiResult::OK)
-      {
-        ccf::TxStatus status;
-        result = get_status_for_txid_v1(view_of_seqno, seqno, status);
-        if (result == ccf::ApiResult::OK)
-        {
-          SCITT_TRACE("Transaction status: {}", ccf::tx_status_to_str(status));
-          return status;
-        }
-      }
-
-      return std::nullopt;
-    }
 
     /**
      * Create an endpoint with a default locally committed handler.
@@ -239,14 +236,6 @@ namespace scitt
       SCITT_DEBUG("Get historical state from CCF");
       auto& state_cache = context.get_historical_state();
       state_cache.set_default_expiry_duration(HISTORICAL_CACHE_EXPIRY);
-
-      SCITT_DEBUG("Install custom indexing strategy");
-      entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
-        ENTRY_TABLE,
-        context,
-        indexing::SEQNOS_PER_BUCKET,
-        indexing::MAX_BUCKETS);
-      context.get_indexing_strategies().install_strategy(entry_seqno_index);
 
       verifier = std::make_unique<verifier::Verifier>();
 
@@ -431,8 +420,6 @@ namespace scitt
         auto* entry_table = ctx.tx.template rw<EntryTable>(ENTRY_TABLE);
         entry_table->put(signed_statement);
         SCITT_TRACE("Signed statement stored in the ledger");
-
-        record_synchronous_operation(host_time, ctx.tx);
       };
 
       /**
@@ -443,7 +430,7 @@ namespace scitt
         "/entries",
         HTTP_POST,
         register_signed_statement,
-        operation_locally_committed_func,
+        entry_locally_committed_func,
         authn_policy)
         .add_query_parameter<bool>(
           "waitForCommit",
@@ -563,149 +550,7 @@ namespace scitt
         .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
         .install();
 
-      static constexpr auto get_entries_tx_ids_path = "/entries/txIds";
-      auto get_entries_tx_ids =
-        [this](EndpointContext& ctx, nlohmann::json&& params) {
-          std::ignore = params;
-
-          const auto parsed_query =
-            ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-
-          SCITT_TRACE("Parse input params and determine entries range");
-          ccf::SeqNo from_seqno =
-            get_query_value<uint64_t>(parsed_query, "from").value_or(1);
-          std::optional<ccf::SeqNo> to_seqno_opt =
-            get_query_value<uint64_t>(parsed_query, "to");
-          ccf::SeqNo to_seqno;
-
-          if (to_seqno_opt.has_value())
-          {
-            to_seqno = *to_seqno_opt;
-          }
-          else
-          {
-            ccf::View view;
-            ccf::SeqNo seqno;
-            const auto result = get_last_committed_txid_v1(view, seqno);
-            if (result != ccf::ApiResult::OK)
-            {
-              throw InternalJsonError(fmt::format(
-                "Failed to get last committed transaction ID: {}",
-                ccf::api_result_to_str(result)));
-            }
-            to_seqno = seqno;
-          }
-
-          if (to_seqno < from_seqno)
-          {
-            throw BadRequestJsonError(
-              errors::InvalidInput,
-              fmt::format(
-                "Invalid range: Starts at {} but ends at {}",
-                from_seqno,
-                to_seqno));
-          }
-
-          const auto tx_status = get_tx_status(to_seqno);
-          if (!tx_status.has_value())
-          {
-            throw InternalJsonError(fmt::format(
-              "Failed to get transaction status for seqno {}", to_seqno));
-          }
-
-          if (tx_status.value() != ccf::TxStatus::Committed)
-          {
-            throw BadRequestJsonError(
-              errors::InvalidInput,
-              fmt::format(
-                "Only committed transactions can be queried. Transaction at "
-                "seqno {} is {}",
-                to_seqno,
-                ccf::tx_status_to_str(tx_status.value())));
-          }
-
-          const auto indexed_txid = entry_seqno_index->get_indexed_watermark();
-          if (indexed_txid.seqno < to_seqno)
-          {
-            throw ServiceUnavailableJsonError(
-              errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
-          }
-
-          static constexpr size_t max_seqno_per_page = 10000;
-          const auto range_begin = from_seqno;
-          const auto range_end =
-            std::min(to_seqno, range_begin + max_seqno_per_page);
-
-          const auto interesting_seqnos =
-            entry_seqno_index->get_write_txs_in_range(range_begin, range_end);
-          if (!interesting_seqnos.has_value())
-          {
-            throw ServiceUnavailableJsonError(
-              errors::IndexingInProgressRetryLater,
-              "Index of requested range not available yet, retry later");
-          }
-
-          SCITT_TRACE("Get entries for the target range");
-          std::vector<std::string> tx_ids;
-          for (auto seqno : interesting_seqnos.value())
-          {
-            ccf::View view;
-            auto result = get_view_for_seqno_v1(seqno, view);
-            if (result != ccf::ApiResult::OK)
-            {
-              throw InternalJsonError(fmt::format(
-                "Failed to get view for seqno: {}",
-                ccf::api_result_to_str(result)));
-            }
-            auto tx_id = ccf::TxID{view, seqno}.to_str();
-            tx_ids.push_back(tx_id);
-          }
-
-          GetEntriesTransactionIds::Out out;
-          out.transaction_ids = std::move(tx_ids);
-
-          // If this didn't cover the total requested range, begin fetching the
-          // next page and tell the caller how to retrieve it
-          if (range_end != to_seqno)
-          {
-            SCITT_TRACE("Add next link to retrieve the rest of entries");
-            const auto next_page_start = range_end + 1;
-            const auto next_range_end =
-              std::min(to_seqno, next_page_start + max_seqno_per_page);
-            entry_seqno_index->get_write_txs_in_range(
-              next_page_start, next_range_end);
-            // NB: This path tells the caller to continue to ask until the end
-            // of the range, even if the next response is paginated
-            out.next_link = fmt::format(
-              "/entries/txIds?from={}&to={}", next_page_start, to_seqno);
-          }
-
-          return out;
-        };
-
-      /**
-       * This endpoint is not part of RFC,
-       * but for convenience we provide a way to retrieve the transaction IDs
-       * of all entries in a given range.
-       */
-      make_endpoint(
-        get_entries_tx_ids_path,
-        HTTP_GET,
-        ccf::json_adapter(get_entries_tx_ids),
-        read_authn_policy)
-        .set_auto_schema<void, GetEntriesTransactionIds::Out>()
-        .add_query_parameter<size_t>(
-          "from", ccf::endpoints::QueryParamPresence::OptionalParameter)
-        .add_query_parameter<size_t>(
-          "to", ccf::endpoints::QueryParamPresence::OptionalParameter)
-        .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
-        .set_redirection_strategy(ccf::endpoints::RedirectionStrategy::None)
-        .install();
-
       register_service_endpoints(context, *this);
-
-      register_operations_endpoints(context, *this, read_authn_policy);
     }
   };
 } // namespace scitt

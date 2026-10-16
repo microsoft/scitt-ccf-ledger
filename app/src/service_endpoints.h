@@ -7,7 +7,6 @@
 #include "did/document.h"
 #include "signature_algorithms.h"
 #include "utf8.h"
-#include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/cose_signatures_config_interface.h>
