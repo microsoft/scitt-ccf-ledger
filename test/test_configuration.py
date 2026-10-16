@@ -164,7 +164,7 @@ class TestPolicyEngine:
 
         invalid_issuer = "Invalid issuer"
         eku_not_found = "EKU not found"
-        openssl_error = "OpenSSL error"
+        invalid_eku = "invalid EKU"
         invalid_did = "invalid DID string"
         not_supported = "CWT_Claims issuer is unsupported"
 
@@ -181,7 +181,7 @@ class TestPolicyEngine:
                     identities[2], statement, feed=feed, cwt=True
                 ),
             ],
-            openssl_error: [
+            invalid_eku: [
                 crypto.sign_json_statement(
                     identities[3], statement, feed=feed, cwt=True
                 ),

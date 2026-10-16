@@ -332,7 +332,7 @@ namespace scitt
         {
           SCITT_TRACE("Verify submitted signed statement");
           std::tie(phdr, uhdr, payload, details) =
-            verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
+            verifier->verify_signed_statement(body, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
         {
