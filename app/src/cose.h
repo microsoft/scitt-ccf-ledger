@@ -9,6 +9,7 @@
 #include "util.h"
 
 #include <ccf/crypto/base64.h>
+#include <ccf/crypto/cose_key.h>
 #include <ccf/crypto/cose_verifier.h>
 #include <ccf/crypto/hash_provider.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
@@ -67,13 +68,6 @@ namespace scitt::cose
   static constexpr int64_t COSE_CWT_CLAIM_SUB = 2;
   static constexpr int64_t COSE_CWT_CLAIM_IAT = 6;
 
-  static constexpr int64_t COSE_KEY_KTY_EC = 2;
-  static constexpr int64_t COSE_KEY_KTY_RSA = 3;
-  static constexpr int64_t COSE_KEY_KTY = 1;
-  static constexpr int64_t COSE_KEY_CRV_N_K_PUB = -1;
-  static constexpr int64_t COSE_KEY_X_E = -2;
-  static constexpr int64_t COSE_KEY_Y = -3;
-
   static const std::set<std::variant<int64_t, std::string>> EXTRA_HEADER_PARAMS{
     COSE_HEADER_PARAM_ISSUER,
     COSE_HEADER_PARAM_FEED,
@@ -82,194 +76,9 @@ namespace scitt::cose
 
   static constexpr const char* SVN_HEADER_PARAM = "svn";
 
-  static std::shared_ptr<ccf::crypto::HashProvider>& get_hash_provider()
-  {
-    static thread_local std::shared_ptr<ccf::crypto::HashProvider>
-      hash_provider;
-    if (!hash_provider)
-    {
-      hash_provider = ccf::crypto::make_hash_provider();
-      if (!hash_provider)
-      {
-        throw std::runtime_error("Failed to create hash provider");
-      }
-    }
-    return hash_provider;
-  }
-
   struct COSEDecodeError : public std::runtime_error
   {
     COSEDecodeError(const std::string& msg) : std::runtime_error(msg) {}
-  };
-
-  // Cose Key https://www.rfc-editor.org/rfc/rfc9679.html
-  // Presence of values depends on kty
-  // Can fit any key parameters as expressed in rfc9679,
-  // but instance methods support only RSA,EC2 keys.
-  class CoseKeyMap
-  {
-  private:
-    std::optional<int64_t> kty_;
-    std::optional<std::variant<int64_t, std::vector<uint8_t>>> crv_n_k_pub_;
-    std::optional<std::vector<uint8_t>> x_e_;
-    std::optional<std::vector<uint8_t>> y_;
-
-  public:
-    CoseKeyMap() = default;
-
-    CoseKeyMap(
-      std::optional<int64_t> kty,
-      std::optional<std::variant<int64_t, std::vector<uint8_t>>> crv_n_k_pub,
-      std::optional<std::vector<uint8_t>> x_e,
-      std::optional<std::vector<uint8_t>> y) :
-      kty_(kty),
-      crv_n_k_pub_(crv_n_k_pub),
-      x_e_(x_e),
-      y_(y)
-    {}
-
-    // Getters
-    std::optional<int64_t> kty() const
-    {
-      return kty_;
-    }
-    std::optional<std::variant<int64_t, std::vector<uint8_t>>> crv_n_k_pub()
-      const
-    {
-      return crv_n_k_pub_;
-    }
-    std::optional<std::vector<uint8_t>> x_e() const
-    {
-      return x_e_;
-    }
-    std::optional<std::vector<uint8_t>> y() const
-    {
-      return y_;
-    }
-
-    // Setters
-    void set_kty(std::optional<int64_t> kty)
-    {
-      kty_ = kty;
-    }
-    void set_crv_n_k_pub(
-      std::optional<std::variant<int64_t, std::vector<uint8_t>>> crv_n_k_pub)
-    {
-      crv_n_k_pub_ = crv_n_k_pub;
-    }
-    void set_x_e(std::optional<std::vector<uint8_t>> x_e)
-    {
-      x_e_ = x_e;
-    }
-    void set_y(std::optional<std::vector<uint8_t>> y)
-    {
-      y_ = y;
-    }
-
-    void validate() const
-    {
-      if (!kty_.has_value())
-      {
-        throw COSEDecodeError("CoseKeyMap kty is not set");
-      }
-
-      switch (kty_.value())
-      {
-        case COSE_KEY_KTY_EC:
-          if (
-            !crv_n_k_pub_.has_value() ||
-            !std::holds_alternative<int64_t>(crv_n_k_pub_.value()))
-          {
-            throw COSEDecodeError(
-              "CoseKeyMap crv is not set or not an int64_t.");
-          }
-          if (!x_e_.has_value() || x_e_.value().empty())
-          {
-            throw COSEDecodeError("CoseKeyMap x is not set or empty.");
-          }
-          if (!y_.has_value() || y_.value().empty())
-          {
-            throw COSEDecodeError("CoseKeyMap y is not set or empty.");
-          }
-          break;
-        case COSE_KEY_KTY_RSA:
-          if (
-            !crv_n_k_pub_.has_value() ||
-            !std::holds_alternative<std::vector<uint8_t>>(crv_n_k_pub_.value()))
-          {
-            throw COSEDecodeError(
-              "CoseKeyMap crv is not set or not a vector of bytes.");
-          }
-          if (!x_e_.has_value() || x_e_.value().empty())
-          {
-            throw COSEDecodeError("CoseKeyMap x is not set or empty.");
-          }
-          break;
-        default:
-          throw COSEDecodeError(fmt::format(
-            "Unsupported kty value, only EC2 and RSA are supported: {}",
-            kty_.value()));
-      }
-    }
-
-    PublicKey to_public_key() const
-    {
-      validate();
-      PublicKey key;
-      switch (kty_.value())
-      {
-        case COSE_KEY_KTY_EC:
-        {
-          auto crv = std::get<int64_t>(crv_n_k_pub_.value());
-          std::vector<uint8_t> x = x_e_.value();
-          std::vector<uint8_t> y = y_.value();
-          key = PublicKey(x, y, crv, std::nullopt);
-          break;
-        }
-        case COSE_KEY_KTY_RSA:
-        {
-          auto n = std::get<std::vector<uint8_t>>(crv_n_k_pub_.value());
-          auto e = x_e_.value();
-          key = PublicKey(n, e, std::nullopt);
-          break;
-        }
-        default:
-          throw COSEDecodeError("Unsupported kty value");
-      }
-      return key;
-    }
-
-    // see https://www.ietf.org/rfc/rfc9679.html
-    std::vector<uint8_t> to_sha256_thumb() const
-    {
-      validate();
-      std::vector<uint8_t> key_cbor;
-      switch (kty_.value())
-      {
-        case COSE_KEY_KTY_EC:
-        {
-          key_cbor = cbor::ec_cose_key_to_cbor(
-            kty_.value(),
-            std::get<int64_t>(crv_n_k_pub_.value()),
-            x_e_.value(),
-            y_.value());
-          break;
-        }
-        case COSE_KEY_KTY_RSA:
-        {
-          auto n = std::get<std::vector<uint8_t>>(crv_n_k_pub_.value());
-          auto e = x_e_.value();
-          key_cbor = cbor::rsa_cose_key_to_cbor(kty_.value(), n, e);
-          break;
-        }
-        default:
-          throw COSEDecodeError("Unsupported kty value");
-      }
-      auto& hash_provider = get_hash_provider();
-      // Hash the CBOR representation of the COSE key using SHA-256
-      return hash_provider->hash(
-        key_cbor.data(), key_cbor.size(), ccf::crypto::MDType::SHA256);
-    }
   };
 
   /**
@@ -286,7 +95,7 @@ namespace scitt::cose
     std::optional<std::string> svc_id;
     std::optional<std::vector<uint8_t>> attestation;
     std::optional<std::string> attestation_type;
-    std::optional<CoseKeyMap> cose_key;
+    std::optional<ccf::crypto::COSEKey> cose_key;
     std::optional<std::vector<uint8_t>> snp_endorsements;
     std::optional<std::vector<uint8_t>> uvm_endorsements;
     std::optional<int64_t> ver;
@@ -530,36 +339,6 @@ namespace scitt::cose
     tss_items[TSS_COSE_KEY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
     tss_items[TSS_COSE_KEY_INDEX].uDataType = QCBOR_TYPE_MAP;
 
-    enum
-    {
-      TSS_COSE_KEY_KTY_INDEX,
-      TSS_COSE_KEY_CRV_N_K_PUB_INDEX,
-      TSS_COSE_KEY_X_E_INDEX,
-      TSS_COSE_KEY_Y_INDEX,
-      TSS_COSE_KEY_END_INDEX,
-    };
-    QCBORItem cose_key_items[TSS_COSE_KEY_END_INDEX + 1];
-
-    cose_key_items[TSS_COSE_KEY_KTY_INDEX].label.int64 = COSE_KEY_KTY;
-    cose_key_items[TSS_COSE_KEY_KTY_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cose_key_items[TSS_COSE_KEY_KTY_INDEX].uDataType = QCBOR_TYPE_INT64;
-
-    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].label.int64 =
-      COSE_KEY_CRV_N_K_PUB;
-    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uLabelType =
-      QCBOR_TYPE_INT64;
-    cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    cose_key_items[TSS_COSE_KEY_X_E_INDEX].label.int64 = COSE_KEY_X_E;
-    cose_key_items[TSS_COSE_KEY_X_E_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cose_key_items[TSS_COSE_KEY_X_E_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    cose_key_items[TSS_COSE_KEY_Y_INDEX].label.int64 = COSE_KEY_Y;
-    cose_key_items[TSS_COSE_KEY_Y_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cose_key_items[TSS_COSE_KEY_Y_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    cose_key_items[TSS_COSE_KEY_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
-
     tss_items[TSS_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
 
     header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
@@ -757,72 +536,46 @@ namespace scitt::cose
 
       if (tss_items[TSS_COSE_KEY_INDEX].uDataType != QCBOR_TYPE_NONE)
       {
-        QCBORDecode_EnterMapFromMapSZ(&ctx, COSE_HEADER_PARAM_TSS_COSE_KEY);
+        QCBORItem cose_key_item;
+        UsefulBufC cose_key_cbor{};
+        QCBORDecode_GetMapFromMapSZ(
+          &ctx, COSE_HEADER_PARAM_TSS_COSE_KEY, &cose_key_item, &cose_key_cbor);
         auto cose_key_error = QCBORDecode_GetError(&ctx);
         if (cose_key_error != QCBOR_SUCCESS)
         {
           throw COSEDecodeError(fmt::format(
             "Failed to decode {} map: {}",
             COSE_HEADER_PARAM_TSS_COSE_KEY,
-            tss_error));
+            qcbor_err_to_str(cose_key_error)));
         }
 
-        QCBORDecode_GetItemsInMap(&ctx, cose_key_items);
-        cose_key_error = QCBORDecode_GetError(&ctx);
-        if (cose_key_error != QCBOR_SUCCESS)
+        try
+        {
+          parsed.tss_map.cose_key =
+            ccf::crypto::COSEKey::from_cbor(cbor::as_vector(cose_key_cbor));
+        }
+        catch (const std::invalid_argument& e)
         {
           throw COSEDecodeError(fmt::format(
-            "Failed to decode {} map contents: {}",
+            "Failed to decode protected header: {}.{}: {}",
+            COSE_HEADER_PARAM_TSS,
             COSE_HEADER_PARAM_TSS_COSE_KEY,
-            tss_error));
+            e.what()));
         }
 
-        if (cose_key_items[TSS_COSE_KEY_KTY_INDEX].uDataType != QCBOR_TYPE_NONE)
+        // Only EC2 and RSA keys are supported, whatever CCF accepts
+        const auto kty = parsed.tss_map.cose_key->kty();
+        if (
+          kty != ccf::crypto::COSEKeyType::EC2 &&
+          kty != ccf::crypto::COSEKeyType::RSA)
         {
-          parsed.tss_map.cose_key = CoseKeyMap();
-          parsed.tss_map.cose_key->set_kty(
-            cose_key_items[TSS_COSE_KEY_KTY_INDEX].val.int64);
-
-          // save other fields only if KTY is present
-
-          if (
-            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType ==
-            QCBOR_TYPE_BYTE_STRING)
-          {
-            parsed.tss_map.cose_key->set_crv_n_k_pub(cbor::as_vector(
-              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].val.string));
-          }
-          else if (
-            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType ==
-            QCBOR_TYPE_INT64)
-          {
-            parsed.tss_map.cose_key->set_crv_n_k_pub(
-              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].val.int64);
-          }
-          else if (
-            cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType !=
-            QCBOR_TYPE_NONE)
-          {
-            throw COSEDecodeError(fmt::format(
-              "Cose Key value must be of type int64 or byte string, got {}",
-              cose_key_items[TSS_COSE_KEY_CRV_N_K_PUB_INDEX].uDataType));
-          }
-
-          if (
-            cose_key_items[TSS_COSE_KEY_X_E_INDEX].uDataType != QCBOR_TYPE_NONE)
-          {
-            parsed.tss_map.cose_key->set_x_e(cbor::as_vector(
-              cose_key_items[TSS_COSE_KEY_X_E_INDEX].val.string));
-          }
-
-          if (cose_key_items[TSS_COSE_KEY_Y_INDEX].uDataType != QCBOR_TYPE_NONE)
-          {
-            parsed.tss_map.cose_key->set_y(
-              cbor::as_vector(cose_key_items[TSS_COSE_KEY_Y_INDEX].val.string));
-          }
+          throw COSEDecodeError(fmt::format(
+            "Failed to decode protected header: {}.{}: Invalid COSE_Key: "
+            "unsupported kty {}",
+            COSE_HEADER_PARAM_TSS,
+            COSE_HEADER_PARAM_TSS_COSE_KEY,
+            static_cast<int>(kty)));
         }
-
-        QCBORDecode_ExitMap(&ctx);
       }
 
       QCBORDecode_ExitMap(&ctx);
@@ -984,6 +737,23 @@ namespace scitt::cose
       throw COSESignatureValidationError("Signature verification failed");
     }
 
+    return payload;
+  }
+
+  /**
+   * Verify the signature of a COSE Sign1 message using the given COSE key,
+   * and return its payload.
+   */
+  static std::span<uint8_t> verify(
+    const std::vector<uint8_t>& cose_sign1, const ccf::crypto::COSEKey& key)
+  {
+    auto verifier = ccf::crypto::make_cose_verifier_from_key(key);
+
+    std::span<uint8_t> payload;
+    if (!verifier->verify(cose_sign1, payload))
+    {
+      throw COSESignatureValidationError("Signature verification failed");
+    }
     return payload;
   }
 }
