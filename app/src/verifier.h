@@ -413,7 +413,6 @@ namespace scitt::verifier
       std::optional<VerifiedSevSnpAttestationDetails>>
     verify_signed_statement(
       const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       const Configuration& configuration)
     {

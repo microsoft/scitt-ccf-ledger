@@ -42,16 +42,14 @@ namespace
 
     auto verifier = std::make_unique<scitt::verifier::Verifier>();
 
-    // Create a mock or test transaction - adjust based on your test framework
-    ccf::kv::ReadOnlyTx* tx_ptr = nullptr; // Or use your test framework's mock
     timespec time = {0, 0}; // Use a fixed time for testing
     scitt::Configuration configuration; // Use a default or mock configuration
     cose::ProtectedHeader phdr;
     cose::UnprotectedHeader uhdr;
     std::span<uint8_t> payload;
     std::optional<verifier::VerifiedSevSnpAttestationDetails> details;
-    std::tie(phdr, uhdr, payload, details) = verifier->verify_signed_statement(
-      signed_statement, *tx_ptr, time, configuration);
+    std::tie(phdr, uhdr, payload, details) =
+      verifier->verify_signed_statement(signed_statement, time, configuration);
 
     EXPECT_TRUE(phdr.tss_map.attestation.has_value());
     EXPECT_TRUE(phdr.tss_map.snp_endorsements.has_value());
