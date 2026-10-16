@@ -88,6 +88,7 @@ If JWT authentication is enabled then API requests must include a header contain
 - JWT providers can be configured via the `set_jwt_issuer` action as explained in the [CCF documentation](https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html#setting-up-a-token-issuer-with-manual-key-refresh).
 
 Extra `requiredClaims` can be configured which must then be present in an API request's JWT for authentication to succeed.
+To allow alternative sets of claims, use `anyOfClaims`: the JWT must match at least one non-empty claim set in its non-empty array. Each claim within a set is matched by exact equality, and the token may include additional claims. `requiredClaims` also must match, regardless of the alternative selected. Overlapping alternatives are permitted. An absent `anyOfClaims` has no effect; arrays in `requiredClaims` still mean exact array equality, not allow-lists.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json
@@ -95,11 +96,30 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
   "allowUnauthenticated": false,
   "jwt": {
     "requiredClaims": {
-      "foo": "bar",
+      "foo": "bar"
     }
   }
 }
 ```
+
+For example, to allow two managed identities in different tenants while requiring the same audience:
+
+```json
+"authentication": {
+  "allowUnauthenticated": false,
+  "jwt": {
+    "requiredClaims": {
+      "aud": "api://<ledger-app-id>"
+    },
+    "anyOfClaims": [
+      { "appid": "<first-mi-client-id>", "tid": "<tenant-a-id>" },
+      { "appid": "<second-mi-client-id>", "tid": "<tenant-b-id>" }
+    ]
+  }
+}
+```
+
+Use the claim names and exact values from the tokens your identities actually obtain (for example, some tokens use `azp` rather than `appid`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` does not establish trust in the issuer. To constrain each identity to a specific issuer, include `iss` in the corresponding `anyOfClaims` alternative.
 
 ### Per-Endpoint Authentication (Write-Only JWT)
 

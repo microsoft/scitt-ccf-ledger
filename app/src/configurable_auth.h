@@ -49,7 +49,11 @@ namespace scitt
         return nullptr;
       }
 
-      if (check_claims(jwt->payload, required_claims, error_reason))
+      if (
+        check_claims(jwt->payload, required_claims, error_reason) &&
+        (!cfg.authentication.jwt.any_of_claims.has_value() ||
+         check_any_of_claims(
+           jwt->payload, *cfg.authentication.jwt.any_of_claims, error_reason)))
       {
         return identity;
       }
@@ -81,6 +85,44 @@ namespace scitt
         }
       }
       return true;
+    }
+
+    static bool check_any_of_claims(
+      const nlohmann::json& claims,
+      const nlohmann::json& any_of_claims,
+      std::string& error_reason)
+    {
+      if (!claims.is_object())
+      {
+        throw std::logic_error("Ill-formed JWT claims");
+      }
+
+      if (!any_of_claims.is_array() || any_of_claims.empty())
+      {
+        error_reason = "Invalid anyOfClaims configuration";
+        return false;
+      }
+
+      bool matches = false;
+      for (const auto& alternative : any_of_claims)
+      {
+        if (!alternative.is_object() || alternative.empty())
+        {
+          error_reason = "Invalid anyOfClaims alternative";
+          return false;
+        }
+
+        std::string ignored_error_reason;
+        if (check_claims(claims, alternative, ignored_error_reason))
+        {
+          matches = true;
+        }
+      }
+      if (!matches)
+      {
+        error_reason = "No matching anyOfClaims alternative";
+      }
+      return matches;
     }
 
     static void log_auth_error(

@@ -15,11 +15,15 @@ def configure_authentication(
     *,
     allow_unauthenticated: bool,
     required_claims=None,
+    any_of_claims=None,
     allow_unauthenticated_reads=None,
 ):
+    jwt_config = {"requiredClaims": required_claims}
+    if any_of_claims is not None:
+        jwt_config["anyOfClaims"] = any_of_claims
     auth_config = {
         "allowUnauthenticated": allow_unauthenticated,
-        "jwt": {"requiredClaims": required_claims},
+        "jwt": jwt_config,
     }
     if allow_unauthenticated_reads is not None:
         auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
@@ -126,6 +130,114 @@ class TestAuthentication:
 
         with service_error("InvalidAuthenticationInfo"):
             submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
+
+    def test_any_of_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
+        setup(
+            allow_unauthenticated=False,
+            required_claims={"aud": "scitt", "iss": valid_issuer.name},
+            any_of_claims=[
+                {"appid": "identity-a", "tid": "tenant-a"},
+                {"appid": "identity-b", "tid": "tenant-b"},
+            ],
+        )
+
+        for appid, tid in (("identity-a", "tenant-a"), ("identity-b", "tenant-b")):
+            submit(
+                auth_token=valid_issuer.create_token(
+                    {"aud": "scitt", "appid": appid, "tid": tid}
+                )
+            )
+
+        for claims in (
+            {"aud": "scitt"},
+            {"aud": "scitt", "appid": "identity-a"},
+            {"aud": "scitt", "appid": "identity-a", "tid": "tenant-b"},
+            {"aud": "scitt", "appid": "identity-b", "tid": "tenant-a"},
+            {"aud": "scitt", "appid": "identity-c", "tid": "tenant-a"},
+            {"aud": "other", "appid": "identity-a", "tid": "tenant-a"},
+        ):
+            with service_error("InvalidAuthenticationInfo"):
+                submit(auth_token=valid_issuer.create_token(claims))
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(
+                auth_token=invalid_issuer.create_token(
+                    {"aud": "scitt", "appid": "identity-a", "tid": "tenant-a"}
+                )
+            )
+
+        setup(
+            allow_unauthenticated=False,
+            required_claims={"aud": "scitt"},
+            any_of_claims=[{"appid": "identity-a"}, {"tid": "tenant-a"}],
+        )
+        submit(
+            auth_token=valid_issuer.create_token(
+                {"aud": "scitt", "appid": "identity-a", "tid": "tenant-a"}
+            )
+        )
+
+    def test_any_of_claims_with_multiple_issuers(
+        self, setup, client: Client, signed_statement, valid_issuer
+    ):
+        issuer_a = JwtIssuer("https://tenant-a.example.com")
+        issuer_b = JwtIssuer("https://tenant-b.example.com")
+        for issuer in (issuer_a, issuer_b):
+            client.governance.propose(issuer.create_proposal(), must_pass=True)
+
+        setup(
+            allow_unauthenticated=False,
+            required_claims={"aud": "scitt"},
+            any_of_claims=[
+                {"iss": issuer_a.name, "appid": "identity-a", "tid": "tenant-a"},
+                {"iss": issuer_b.name, "appid": "identity-b", "tid": "tenant-b"},
+            ],
+        )
+
+        for issuer, appid, tid in (
+            (issuer_a, "identity-a", "tenant-a"),
+            (issuer_b, "identity-b", "tenant-b"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            authenticated_client = client.replace(auth_token=token)
+            tx = authenticated_client.submit_signed_statement_and_wait(
+                signed_statement
+            ).tx
+            assert_application_reads_succeed(authenticated_client, tx)
+            assert_application_reads_require_authentication(client, tx)
+
+        for issuer, appid, tid in (
+            (issuer_a, "identity-b", "tenant-b"),
+            (issuer_b, "identity-a", "tenant-a"),
+            (valid_issuer, "identity-a", "tenant-a"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            with service_error("InvalidAuthenticationInfo"):
+                client.replace(auth_token=token).submit_signed_statement_and_wait(
+                    signed_statement
+                )
+            with service_error("InvalidAuthenticationInfo"):
+                client.replace(auth_token=token).get("/entries/txIds")
+
+    @pytest.mark.parametrize(
+        "invalid_alternatives",
+        [
+            [],
+            {},
+            [{}],
+            [[]],
+            [None],
+            ["identity-a"],
+            [{"appid": "identity-a"}, {}],
+        ],
+    )
+    def test_reject_invalid_any_of_claims(self, setup, invalid_alternatives):
+        with service_error("anyOfClaims"):
+            setup(
+                allow_unauthenticated=False,
+                required_claims={},
+                any_of_claims=invalid_alternatives,
+            )
 
     def test_allow_anything(self, setup, submit, valid_issuer, invalid_issuer):
         # Allow anything
