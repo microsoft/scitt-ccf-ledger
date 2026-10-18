@@ -207,11 +207,6 @@ def generate_cert(
         ]
     )
 
-    if isinstance(subject_priv, Ed25519PrivateKey):
-        hash_alg = None
-    else:
-        hash_alg = hashes.SHA256()
-
     if issuer is not None:
         issuer_name = load_pem_x509_certificate(issuer[0].encode("ascii")).subject
         issuer_key = load_pem_private_key(
@@ -224,6 +219,12 @@ def generate_cert(
     else:
         issuer_name = subject_name
         issuer_key = subject_priv
+
+    # The signature hash is determined by the issuer's key, as it signs
+    if isinstance(issuer_key, Ed25519PrivateKey):
+        hash_alg = None
+    else:
+        hash_alg = hashes.SHA256()
 
     cert = (
         x509.CertificateBuilder()

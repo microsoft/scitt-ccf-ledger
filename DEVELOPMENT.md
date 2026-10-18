@@ -85,6 +85,20 @@ Build scitt-ccf-ledger by running:
 ./build.sh
 ```
 
+CBOR is encoded and decoded with TAV's `<tav/cbor.hpp>` API. CCF installs it
+with its headers, from CCF 7.0.18, and links its implementation through the
+`ccf` target, so no separate CBOR library is needed.
+
+To build against a CCF RPM installed under a non-default prefix, for example
+one built from a local CCF checkout, point CMake at its package
+configuration:
+
+```sh
+cd app
+cmake --preset dev -Dccf_DIR=/opt/<ccf-install-prefix>/cmake
+cmake --build build/app
+```
+
 ## Running
 
 ### Using Docker development script

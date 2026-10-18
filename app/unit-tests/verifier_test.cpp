@@ -7,15 +7,11 @@
 #include "testutils.h"
 #include "verified_details.h"
 
-#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <openssl/core_names.h>
-#include <openssl/encoder.h>
-#include <openssl/param_build.h>
 #include <stdexcept>
 
 using namespace testing;
