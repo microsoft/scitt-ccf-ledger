@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- COSE_Sign1 headers are decoded with the TAV CBOR API that CCF installs
+  rather than QCBOR, so decoding now enforces the CBOR rules that CCF's
+  signature verification already applied: the COSE_Sign1 tag must be the
+  outermost tag, the protected header, payload and signature must be byte
+  strings, and indefinite-length items, floating-point values, integers
+  outside the signed 64-bit range and duplicate map labels are rejected
+  anywhere in the message. Such statements were never accepted; they are now
+  rejected with a decode error. Envelopes with other than four elements are
+  now rejected, and a zero-length protected header is decoded as an empty map.
 - CBOR error responses, operation statuses and COSE_Key sets are encoded with
   the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
   are not valid UTF-8 (for example, quoting bytes from the request) are no

@@ -16,6 +16,7 @@
 #include <openssl/encoder.h>
 #include <openssl/param_build.h>
 #include <stdexcept>
+#include <tuple>
 
 using namespace testing;
 using namespace scitt;
@@ -29,11 +30,28 @@ namespace
     {
       auto phdr_b = create_valid_protected_header_bytes(iat_is_tagged);
 
-      QCBORDecodeContext ctx;
-      QCBORDecode_Init(
-        &ctx, cbor::from_bytes(phdr_b), QCBOR_DECODE_MODE_NORMAL);
-      EXPECT_NO_THROW(cose::decode_protected_header(ctx));
+      cose::ProtectedHeader phdr;
+      EXPECT_NO_THROW(phdr = cose::decode_protected_header(phdr_b));
+      EXPECT_EQ(phdr.alg, -35);
+      EXPECT_EQ(phdr.cwt_claims.iss, "did:example:issuer");
+      EXPECT_EQ(phdr.cwt_claims.iat, 1622547800);
+      EXPECT_EQ(phdr.cwt_claims.svn, 1);
+      EXPECT_EQ(phdr.svn, 1);
+      EXPECT_EQ(phdr.tss_map.svc_id, "msft-css-dev");
+      EXPECT_EQ(phdr.tss_map.ver, 0);
+      EXPECT_TRUE(phdr.tss_map.cose_key.has_value());
+      EXPECT_EQ(
+        phdr.crit,
+        cose::CritValuesContent{std::string(cose::COSE_HEADER_PARAM_TSS)});
     }
+  }
+
+  TEST(CoseTest, DecodeEmptyProtectedHeader)
+  {
+    // A zero-length protected header stands for an empty map (RFC 9052).
+    const auto phdr = cose::decode_protected_header({});
+    EXPECT_FALSE(phdr.alg.has_value());
+    EXPECT_FALSE(phdr.cwt_claims.iss.has_value());
   }
 
   // add a test case to use payloads from test/payloads directory
@@ -174,7 +192,69 @@ namespace
     EXPECT_THAT(
       error_message,
       HasSubstr(
-        "Failed to decode protected header: QCBOR_ERR_UNEXPECTED_TYPE"));
+        "Failed to decode protected header: attestedsvc must be a map"));
+  }
+
+  // The COSEDecodeError message for a hex-encoded COSE_Sign1, or empty.
+  static std::string decode_headers_error(const std::string& hex)
+  {
+    try
+    {
+      cose::decode_headers(from_hex_string(hex));
+    }
+    catch (const cose::COSEDecodeError& e)
+    {
+      return std::string(e.what());
+    }
+    return std::string();
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsMalformedEnvelopes)
+  {
+    // Untagged [bstr({1:-7}), {}, h'00', h'00']
+    EXPECT_THAT(
+      decode_headers_error("8443a10126a041004100"),
+      HasSubstr("COSE_Sign1 is not tagged"));
+    // 55799(18([...])): the COSE_Sign1 tag must be the outermost one
+    EXPECT_THAT(
+      decode_headers_error("d9d9f7d28443a10126a041004100"),
+      HasSubstr("COSE_Sign1 is not tagged"));
+    // COSE_Sign1 with three elements
+    EXPECT_THAT(
+      decode_headers_error("d28343a10126a04100"),
+      HasSubstr("Failed to parse COSE_Sign1 outer array"));
+    // COSE_Sign1 with a fifth element
+    EXPECT_THAT(
+      decode_headers_error("d28543a10126a04100410000"),
+      HasSubstr("Failed to parse COSE_Sign1 outer array"));
+    // Protected header given as a map rather than a byte string
+    EXPECT_THAT(
+      decode_headers_error("d284a10126a041004100"),
+      HasSubstr("Failed to decode protected header: not a byte string"));
+    // Text string payload
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a061614100"),
+      HasSubstr("COSE_Sign1 payload is not a byte string"));
+    // COSE_Sign1 with a nil signature
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a04100f6"),
+      HasSubstr("COSE_Sign1 signature is not a byte string"));
+    // Not CBOR
+    EXPECT_THAT(
+      decode_headers_error("d284ff"), HasSubstr("Failed to decode COSE_Sign1"));
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsDuplicateLabels)
+  {
+    // Protected header {1: -7, 1: -35}: a repeated label is rejected by the
+    // CBOR parser rather than resolved to either value.
+    EXPECT_THAT(
+      decode_headers_error("d28446a20126013822a041004100"),
+      HasSubstr("Failed to decode protected header"));
+    // Unprotected header {1: -7, 1: -7}
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a20126012641004100"),
+      HasSubstr("Failed to decode COSE_Sign1"));
   }
 
   TEST(CoseTest, DecodeDidX509Headers)
@@ -245,14 +325,9 @@ namespace
       std::vector<MapItem> phdr;
       phdr.emplace_back(
         make_string(cose::COSE_HEADER_PARAM_TSS), make_map(std::move(tss)));
-      // Wrapped in a byte string, as the protected header of a COSE_Sign1
-      const auto phdr_bytes = make_map(std::move(phdr)).nondet_serialize();
-      const auto wrapped_phdr = make_bytes(phdr_bytes).nondet_serialize();
-
-      QCBORDecodeContext ctx;
-      QCBORDecode_Init(
-        &ctx, cbor::from_bytes(wrapped_phdr), QCBOR_DECODE_MODE_NORMAL);
-      return cose::decode_protected_header(ctx).tss_map.cose_key.value();
+      return cose::decode_protected_header(
+               make_map(std::move(phdr)).nondet_serialize())
+        .tss_map.cose_key.value();
     };
     const auto error_of = [&decode](std::vector<MapItem>&& cose_key) {
       try

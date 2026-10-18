@@ -36,6 +36,11 @@ namespace scitt::cbor
       static_cast<const uint8_t*>(buf.ptr) + buf.len);
   }
 
+  inline std::vector<uint8_t> as_vector(std::span<const uint8_t> bytes)
+  {
+    return {bytes.begin(), bytes.end()};
+  }
+
   inline std::string_view as_string(UsefulBufC buf)
   {
     return {static_cast<const char*>(buf.ptr), buf.len};
