@@ -505,7 +505,7 @@ evidence is available.
 - Prefer direct edits to source and text files. Do not install dependencies or
   execute repository/upstream build or test scripts in this preparation workflow.
 - Run lightweight non-executing checks where applicable, including
-  `git diff --check` against the branch you started from.
+  `git diff --check` against the branch you started from. Also run `scripts/check-ccf-version.sh`, which only reads the files that pin CCF.
   Re-resolve the authoritative version plus every linked active declaration to
   confirm they all name the target, and check changed artifact references and
   verification values against official evidence.
