@@ -50,7 +50,7 @@ namespace
     envelope.push_back(make_map({}));
     envelope.push_back(make_bytes(payload));
     envelope.push_back(make_bytes(signature));
-    return make_tagged(CBOR_TAG_COSE_SIGN1, make_array(std::move(envelope)))
+    return make_tagged(cose::COSE_SIGN1_TAG, make_array(std::move(envelope)))
       .nondet_serialize();
   }
 
