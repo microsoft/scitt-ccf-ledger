@@ -7,6 +7,7 @@ ARG CCF_VERSION
 RUN tdnf update -y && \
     tdnf install -y \
     git \
+    gh \
     build-essential \
     python3-pip \
     ca-certificates \
