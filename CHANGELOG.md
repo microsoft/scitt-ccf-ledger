@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Registrations admitted without HTTP authentication are capped at 64 KiB
+  before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated
+  registrations retain their configured size limit.
 - COSE_Sign1 headers are decoded with the TAV CBOR API that CCF installs
   rather than QCBOR, so decoding now enforces the CBOR rules that CCF's
   signature verification already applied: the COSE_Sign1 tag must be the
