@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "cert_der_to_pem.h"
 #include "cose.h"
 #include "http_error.h"
 #include "tracing.h"
@@ -200,7 +201,7 @@ namespace scitt
 
           for (const auto& der_cert : phdr.x5chain.value())
           {
-            auto pem = ccf::crypto::cert_der_to_pem(der_cert);
+            auto pem = cert_der_to_pem(der_cert);
             JS_CHECK_OR_THROW(
               x5_array.set_at_index(i++, ctx.new_string(pem.str())));
           }
@@ -312,7 +313,7 @@ namespace scitt
 
         for (const auto& der_cert : uhdr.x5chain.value())
         {
-          auto pem = ccf::crypto::cert_der_to_pem(der_cert);
+          auto pem = cert_der_to_pem(der_cert);
           JS_CHECK_OR_THROW(
             x5_array.set_at_index(i++, ctx.new_string(pem.str())));
         }
