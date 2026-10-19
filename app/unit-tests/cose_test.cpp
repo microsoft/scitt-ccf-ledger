@@ -264,7 +264,7 @@ namespace
   }
 
   // The COSEDecodeError message for a hex-encoded COSE_Sign1, or empty.
-  static std::string decode_headers_error(const std::string& hex)
+  std::string decode_headers_error(const std::string& hex)
   {
     try
     {
@@ -272,9 +272,9 @@ namespace
     }
     catch (const cose::COSEDecodeError& e)
     {
-      return std::string(e.what());
+      return {e.what()};
     }
-    return std::string();
+    return {};
   }
 
   TEST(CoseTest, DecodeHeadersRejectsMalformedEnvelopes)
