@@ -3,19 +3,21 @@
 
 #include "cose.h"
 
+#include "signature_algorithms.h"
 #include "testutils.h"
 
-#include <ccf/crypto/openssl/openssl_wrappers.h>
+#include <ccf/crypto/cose_key.h>
+#include <ccf/crypto/ec_key_pair.h>
+#include <ccf/crypto/ecdsa.h>
+#include <ccf/crypto/md_type.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/ds/hex.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <openssl/core_names.h>
-#include <openssl/encoder.h>
-#include <openssl/param_build.h>
 #include <stdexcept>
+#include <tav/cbor.hpp>
 #include <tuple>
 
 using namespace testing;
@@ -24,6 +26,34 @@ using namespace testutils;
 
 namespace
 {
+  // Signs payload as a COSE_Sign1 with protected header {alg(1): alg}.
+  template <typename Sign>
+  std::vector<uint8_t> make_cose_sign1(
+    int64_t alg, std::span<const uint8_t> payload, Sign&& sign)
+  {
+    using namespace tav::cbor;
+
+    std::vector<MapItem> phdr;
+    phdr.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_ALG), make_signed(alg));
+    const auto phdr_bytes = make_map(std::move(phdr)).nondet_serialize();
+
+    std::vector<tav::cbor::Value> tbs;
+    tbs.push_back(make_string("Signature1"));
+    tbs.push_back(make_bytes(phdr_bytes));
+    tbs.push_back(make_bytes({}));
+    tbs.push_back(make_bytes(payload));
+    const auto signature = sign(make_array(std::move(tbs)).nondet_serialize());
+
+    std::vector<tav::cbor::Value> envelope;
+    envelope.push_back(make_bytes(phdr_bytes));
+    envelope.push_back(make_map({}));
+    envelope.push_back(make_bytes(payload));
+    envelope.push_back(make_bytes(signature));
+    return make_tagged(CBOR_TAG_COSE_SIGN1, make_array(std::move(envelope)))
+      .nondet_serialize();
+  }
+
   TEST(CoseTest, DecodeAllProtectedHeaders)
   {
     for (auto iat_is_tagged : {false, true})
@@ -176,6 +206,31 @@ namespace
     }
     EXPECT_THAT(
       error_message, HasSubstr("Detached or empty payloads are not supported"));
+  }
+
+  TEST(CoseTest, VerifyWithCoseKey)
+  {
+    using ccf::crypto::CurveID;
+    const std::vector<uint8_t> payload = {'p', 'a', 'y', 'l', 'o', 'a', 'd'};
+    const auto key = ccf::crypto::make_ec_key_pair(CurveID::SECP256R1);
+    const auto signed_statement = make_cose_sign1(
+      COSE_ALGORITHM_ES256, payload, [&](const std::vector<uint8_t>& tbs) {
+        return ccf::crypto::ecdsa_sig_der_to_p1363(
+          key->sign(tbs, ccf::crypto::MDType::SHA256), CurveID::SECP256R1);
+      });
+    const auto cose_key_of = [](const ccf::crypto::ECKeyPairPtr& k) {
+      return ccf::crypto::COSEKey(
+        ccf::crypto::make_ec_public_key(k->public_key_der()));
+    };
+
+    const auto verified = cose::verify(signed_statement, cose_key_of(key));
+    EXPECT_EQ(std::vector<uint8_t>(verified.begin(), verified.end()), payload);
+
+    EXPECT_THROW(
+      cose::verify(
+        signed_statement,
+        cose_key_of(ccf::crypto::make_ec_key_pair(CurveID::SECP256R1))),
+      cose::COSESignatureValidationError);
   }
 
   TEST(CoseTest, DecodeTSSHeadersFailsDueToInvalidMap)
