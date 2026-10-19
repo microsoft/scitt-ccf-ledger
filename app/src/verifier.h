@@ -175,14 +175,14 @@ namespace scitt::verifier
       }
 
       // Then authenticate the did:x509 claim against the x5chain
-      std::vector<std::string> pem_certs;
-      for (auto const& c : phdr.x5chain.value())
-      {
-        pem_certs.push_back(cert_der_to_pem(c).str());
-      }
       ccf::crypto::Sha256Hash resolved_thumbprint;
       try
       {
+        std::vector<std::string> pem_certs;
+        for (auto const& c : phdr.x5chain.value())
+        {
+          pem_certs.push_back(cert_der_to_pem(c).str());
+        }
         auto resolved_jwk_str = didx509::resolve_jwk(
           pem_certs,
           phdr.cwt_claims.iss.value(),
