@@ -84,6 +84,7 @@ namespace scitt::cose
   // https://www.rfc-editor.org/rfc/rfc9052#section-4.2
   static constexpr uint64_t COSE_SIGN1_TAG = 18;
   static constexpr size_t COSE_SIGN1_SIZE = 4;
+  static constexpr size_t CBOR_MAX_DEPTH = 15;
 
   // https://www.rfc-editor.org/rfc/rfc8949#section-3.4.2
   static constexpr uint64_t CBOR_TAG_EPOCH_DATE = 1;
@@ -252,7 +253,8 @@ namespace scitt::cose
 
     if (crit.kind() != Kind::ARRAY)
     {
-      throw COSEDecodeError("crit(2) must be an array");
+      throw COSEDecodeError(
+        fmt::format("crit({}) must be an array", COSE_HEADER_PARAM_CRIT));
     }
 
     const auto size = crit.size();
@@ -294,9 +296,8 @@ namespace scitt::cose
   // https://www.rfc-editor.org/rfc/rfc7049#section-2.4.1
   // The encoding is modified so that the leading tag 1
   // (epoch-based date/time) MUST be omitted.
-  // However, some implementations tag iat(6) it as date epoch. Values of any
-  // other type are ignored.
-  static std::optional<int64_t> decode_iat(const tav::cbor::Value& iat)
+  // However, some implementations tag iat(6) as an epoch-based date.
+  static int64_t decode_iat(const tav::cbor::Value& iat)
   {
     using tav::cbor::Kind;
 
@@ -312,7 +313,10 @@ namespace scitt::cose
         return date.as_signed();
       }
     }
-    return std::nullopt;
+    throw COSEDecodeError(fmt::format(
+      "CWT claim iat({}) must be an integer or a tag {}-wrapped integer",
+      COSE_CWT_CLAIM_IAT,
+      CBOR_TAG_EPOCH_DATE));
   }
 
   static CWTClaims decode_cwt_claims(const tav::cbor::Value& claims)
@@ -322,16 +326,20 @@ namespace scitt::cose
 
     CWTClaims parsed;
     detail::for_each_entry(
-      claims, "CWT claims(15)", [&](const Value& label, const Value& value) {
+      claims,
+      fmt::format("CWT claims({})", COSE_HEADER_PARAM_CWT_CLAIMS),
+      [&](const Value& label, const Value& value) {
         if (label.kind() == Kind::SIGNED)
         {
           switch (label.as_signed())
           {
             case COSE_CWT_CLAIM_ISS:
-              parsed.iss = detail::as_text(value, "CWT claim iss(1)");
+              parsed.iss = detail::as_text(
+                value, fmt::format("CWT claim iss({})", COSE_CWT_CLAIM_ISS));
               break;
             case COSE_CWT_CLAIM_SUB:
-              parsed.sub = detail::as_text(value, "CWT claim sub(2)");
+              parsed.sub = detail::as_text(
+                value, fmt::format("CWT claim sub({})", COSE_CWT_CLAIM_SUB));
               break;
             case COSE_CWT_CLAIM_IAT:
               parsed.iat = decode_iat(value);
@@ -343,7 +351,8 @@ namespace scitt::cose
         else if (
           label.kind() == Kind::STRING && label.as_string() == SVN_HEADER_PARAM)
         {
-          parsed.svn = detail::as_int(value, "CWT claim svn");
+          parsed.svn = detail::as_int(
+            value, fmt::format("CWT claim {}", SVN_HEADER_PARAM));
         }
       });
     return parsed;
@@ -441,7 +450,7 @@ namespace scitt::cose
 
     try
     {
-      const auto header = tav::cbor::nondet_parse(encoded);
+      const auto header = tav::cbor::nondet_parse(encoded, CBOR_MAX_DEPTH);
       detail::for_each_entry(
         header,
         "protected header",
@@ -451,7 +460,8 @@ namespace scitt::cose
             switch (label.as_signed())
             {
               case COSE_HEADER_PARAM_ALG:
-                parsed.alg = detail::as_int(value, "alg(1)");
+                parsed.alg = detail::as_int(
+                  value, fmt::format("alg({})", COSE_HEADER_PARAM_ALG));
                 break;
               case COSE_HEADER_PARAM_CRIT:
                 parsed.crit = decode_crit(value);
@@ -473,7 +483,8 @@ namespace scitt::cose
                 break;
               case COSE_HEADER_PARAM_KID:
               {
-                const auto kid = detail::as_bytes(value, "kid(4)");
+                const auto kid = detail::as_bytes(
+                  value, fmt::format("kid({})", COSE_HEADER_PARAM_KID));
                 parsed.kid = std::string(kid.begin(), kid.end());
                 break;
               }
@@ -484,10 +495,12 @@ namespace scitt::cose
                 parsed.x5chain = decode_x5chain(value);
                 break;
               case COSE_HEADER_PARAM_ISSUER:
-                parsed.issuer = detail::as_text(value, "issuer(391)");
+                parsed.issuer = detail::as_text(
+                  value, fmt::format("issuer({})", COSE_HEADER_PARAM_ISSUER));
                 break;
               case COSE_HEADER_PARAM_FEED:
-                parsed.feed = detail::as_text(value, "feed(392)");
+                parsed.feed = detail::as_text(
+                  value, fmt::format("feed({})", COSE_HEADER_PARAM_FEED));
                 break;
               default:
                 break;
@@ -562,7 +575,7 @@ namespace scitt::cose
 
     try
     {
-      const auto document = tav::cbor::nondet_parse(cose_sign1);
+      const auto document = tav::cbor::nondet_parse(cose_sign1, CBOR_MAX_DEPTH);
       if (
         document.kind() != Kind::TAGGED || document.as_tag() != COSE_SIGN1_TAG)
       {

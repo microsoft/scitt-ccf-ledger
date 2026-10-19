@@ -54,6 +54,19 @@ namespace
     EXPECT_FALSE(phdr.cwt_claims.iss.has_value());
   }
 
+  TEST(CoseTest, DecodeProtectedHeaderRejectsInvalidIat)
+  {
+    // {15: {6: value}} with text, bytes, null, or tag 1 wrapping text.
+    for (const auto& hex :
+         {"a10fa1066161", "a10fa1064161", "a10fa106f6", "a10fa106c16161"})
+    {
+      SCOPED_TRACE(hex);
+      EXPECT_THROW(
+        cose::decode_protected_header(from_hex_string(hex)),
+        cose::COSEDecodeError);
+    }
+  }
+
   // add a test case to use payloads from test/payloads directory
   // NOLINTBEGIN(bugprone-unchecked-optional-access)
 
@@ -254,6 +267,19 @@ namespace
     // Unprotected header {1: -7, 1: -7}
     EXPECT_THAT(
       decode_headers_error("d28443a10126a20126012641004100"),
+      HasSubstr("Failed to decode COSE_Sign1"));
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsExcessiveNesting)
+  {
+    // An unknown header containing 16 nested single-element arrays.
+    const std::string header = "a1008181818181818181818181818181818100";
+
+    EXPECT_THROW(
+      cose::decode_protected_header(from_hex_string(header)),
+      cose::COSEDecodeError);
+    EXPECT_THAT(
+      decode_headers_error("d28440" + header + "41004100"),
       HasSubstr("Failed to decode COSE_Sign1"));
   }
 
