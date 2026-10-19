@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Signed statements with an EdDSA (Ed25519) `x5chain` are now accepted, as
+  CCF's COSE verifier supports them since 7.0.19.
+- x509-signed statements are verified with CCF's COSE key API, and `did:x509`
+  keys are matched by COSE key thumbprint.
 - CBOR error responses, operation statuses and COSE_Key sets are encoded with
   the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
   are not valid UTF-8 (for example, quoting bytes from the request) are no

@@ -146,6 +146,7 @@ def test_scitt_key_by_kid_not_found(client: Client):
         {"alg": "PS256", "kty": "rsa", "add_eku": "2.999"},
         {"alg": "PS384", "kty": "rsa", "add_eku": "2.999"},
         {"alg": "PS512", "kty": "rsa", "add_eku": "2.999"},
+        {"alg": "EdDSA", "kty": "ed25519", "add_eku": "2.999"},
     ],
 )
 def test_make_signed_statement_transparent(
