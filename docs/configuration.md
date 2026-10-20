@@ -91,6 +91,7 @@ Extra `requiredClaims` can be configured which must then be present in an API re
 Without `$schema`, JWT authentication continues to use `requiredClaims`: each named claim must match its configured value exactly, and `{}` accepts any JWT from a trusted issuer. Arrays are compared as values, not as allow-lists.
 
 Alternatively, a JWT configuration beginning with `$schema` validates the token claims with JSON Schema draft-07. The supported profile is limited to `type: "object"`, `properties` with `const` values, `required`, and a top-level `anyOf` of object schemas with required `const` claims. All configured claims must be required; additional JWT claims are allowed. Each `anyOf` alternative is a complete claim set, and overlapping alternatives are allowed. Schema mode cannot be combined with `requiredClaims`. Invalid or unsupported schema features are rejected by governance; schema validation runs after CCF verifies the JWT and its issuer.
+Numeric constants are compared without rounding integers through floating point, including numbers nested in arrays or objects. Floating-point claim values with magnitude at or above 2^53 are rejected because parsing them cannot reliably distinguish adjacent integers; use integer or string claims for identity identifiers.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json

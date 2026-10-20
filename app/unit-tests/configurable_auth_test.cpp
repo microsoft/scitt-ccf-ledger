@@ -144,6 +144,39 @@ namespace
       R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"},"appid":{"const":"identity-b"}},"required":["aud","appid"]})"));
   }
 
+  TEST(ConfigurableJwtAuthnPolicy, SchemaConstNumbersAreExact)
+  {
+    const std::string_view schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"identity_id":{"const":9007199254740992},"nested":{"const":{"ids":[9007199254740992,{"id":9007199254740992}]}}},"required":["identity_id","nested"],"anyOf":[{"properties":{"tenant":{"const":1}},"required":["tenant"]},{"properties":{"tenant":{"const":9007199254740992}},"required":["tenant"]}]})";
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740992})",
+      schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1.0})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740993,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740993.0,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740993,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740993}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740993})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740993.0})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":true})",
+      schema));
+  }
+
   TEST(ConfigurableJwtAuthnPolicy, LegacyAndInvalidConfiguration)
   {
     EXPECT_TRUE(check_jwt_claims(

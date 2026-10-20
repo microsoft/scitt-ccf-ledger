@@ -273,6 +273,44 @@ class TestAuthentication:
         submit(auth_token=token_a)
         submit(auth_token=token_b)
 
+    def test_schema_numeric_constants_are_exact(self, setup, submit, valid_issuer):
+        identity_id = 9007199254740992
+        nested = {"ids": [identity_id, {"id": identity_id}]}
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema(
+                {"identity_id": identity_id, "nested": nested},
+                [{"tenant": 1}, {"tenant": identity_id}],
+            ),
+        )
+        submit(
+            auth_token=valid_issuer.create_token(
+                {"identity_id": identity_id, "nested": nested, "tenant": identity_id}
+            )
+        )
+
+        for claims in (
+            {"identity_id": identity_id + 1, "nested": nested, "tenant": 1},
+            {"identity_id": float(identity_id + 1), "nested": nested, "tenant": 1},
+            {
+                "identity_id": identity_id,
+                "nested": {"ids": [identity_id + 1, {"id": identity_id}]},
+                "tenant": 1,
+            },
+            {
+                "identity_id": identity_id,
+                "nested": {"ids": [identity_id, {"id": identity_id + 1}]},
+                "tenant": 1,
+            },
+            {
+                "identity_id": identity_id,
+                "nested": nested,
+                "tenant": identity_id + 1,
+            },
+        ):
+            with service_error("InvalidAuthenticationInfo"):
+                submit(auth_token=valid_issuer.create_token(claims))
+
     @pytest.mark.parametrize(
         "invalid_schema",
         [
