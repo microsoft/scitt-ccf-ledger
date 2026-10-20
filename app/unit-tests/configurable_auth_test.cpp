@@ -19,13 +19,12 @@ namespace
       error_reason);
   }
 
-  bool check_any_of_claims(
-    std::string_view claims, std::string_view any_of_claims)
+  bool check_jwt_claims(std::string_view claims, std::string_view jwt_config)
   {
     std::string error_reason;
-    return ConfigurableJwtAuthnPolicy::check_any_of_claims(
+    return ConfigurableJwtAuthnPolicy::check_jwt_claims(
       nlohmann::json::parse(claims),
-      nlohmann::json::parse(any_of_claims),
+      nlohmann::json::parse(jwt_config),
       error_reason);
   }
 
@@ -114,58 +113,68 @@ namespace
       R"({ "data": [ "foo" ] })"));
   }
 
-  TEST(ConfigurableJwtAuthnPolicy, CheckAnyOfClaims)
+  TEST(ConfigurableJwtAuthnPolicy, CheckClaimsSchema)
   {
-    const std::string_view alternatives =
-      R"([{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }])";
-    EXPECT_TRUE(check_any_of_claims(
-      R"({ "appid": "identity-a", "tid": "tenant-a", "extra": true })",
-      alternatives));
-    EXPECT_TRUE(check_any_of_claims(
-      R"({ "appid": "identity-b", "tid": "tenant-b" })", alternatives));
-    EXPECT_FALSE(check_any_of_claims(
-      R"({ "appid": "identity-a", "tid": "tenant-b" })", alternatives));
-    EXPECT_FALSE(check_any_of_claims(
-      R"({ "appid": "identity-b", "tid": "tenant-a" })", alternatives));
+    const std::string_view schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"}},"required":["aud"],"anyOf":[{"type":"object","properties":{"appid":{"const":"identity-a"},"tid":{"const":"tenant-a"}},"required":["appid","tid"]},{"type":"object","properties":{"appid":{"const":"identity-b"},"tid":{"const":"tenant-b"}},"required":["appid","tid"]}]})";
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a","extra":true})",
+      schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-b","tid":"tenant-b"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-b"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-b","tid":"tenant-a"})", schema));
     EXPECT_FALSE(
-      check_any_of_claims(R"({ "appid": "identity-a" })", alternatives));
-    EXPECT_FALSE(check_any_of_claims(
-      R"({ "appid": "identity-c", "tid": "tenant-a" })", alternatives));
-    EXPECT_TRUE(check_any_of_claims(
-      R"({ "appid": "identity-a", "tid": "tenant-a" })",
-      R"([{ "appid": "identity-a" }, { "tid": "tenant-a" }])"));
+      check_jwt_claims(R"({"aud":"scitt","appid":"identity-a"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"other","appid":"identity-a","tid":"tenant-a"})", schema));
 
-    EXPECT_FALSE(check_any_of_claims(R"({ "appid": "identity-a" })", R"([])"));
-    EXPECT_FALSE(check_any_of_claims(R"({ "appid": "identity-a" })", R"({})"));
-    EXPECT_FALSE(
-      check_any_of_claims(R"({ "appid": "identity-a" })", R"([{}])"));
-    EXPECT_FALSE(check_any_of_claims(
-      R"({ "appid": "identity-a" })", R"([[ "identity-a" ]])"));
-    EXPECT_FALSE(
-      check_any_of_claims(R"({ "appid": "identity-a" })", R"([null])"));
-    EXPECT_FALSE(check_any_of_claims(
-      R"({ "appid": "identity-a" })", R"([{ "appid": "identity-a" }, {}])"));
+    const std::string_view updated_schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"appid":{"const":"identity-c"}},"required":["appid"]})";
+    EXPECT_TRUE(check_jwt_claims(R"({"appid":"identity-c"})", updated_schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})",
+      updated_schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})",
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"},"appid":{"const":"identity-b"}},"required":["aud","appid"]})"));
   }
 
-  TEST(ConfigurableJwtAuthnPolicy, AnyOfClaimsConfiguration)
+  TEST(ConfigurableJwtAuthnPolicy, LegacyAndInvalidConfiguration)
   {
-    using JWT = Configuration::Authentication::JWT;
-    const auto old_config =
-      nlohmann::json::parse(R"({ "requiredClaims": { "aud": "scitt" } })")
-        .get<JWT>();
-    EXPECT_FALSE(old_config.any_of_claims.has_value());
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","extra":true})",
+      R"({"requiredClaims":{"aud":"scitt"}})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"other"})", R"({"requiredClaims":{"aud":"scitt"}})"));
+    EXPECT_TRUE(check_jwt_claims(R"({})", R"({"requiredClaims":{}})"));
+    EXPECT_FALSE(check_jwt_claims(R"({})", R"({})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{"aud":"scitt"},"anyOfClaims":[{"appid":"a"}]})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{"aud":"scitt"},"$schema":"http://json-schema.org/draft-07/schema#"})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{},"anyOf":[{"type":"object"}]})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})", R"({"$schema":null,"requiredClaims":{}})"));
 
-    const auto config =
-      nlohmann::json::parse(
-        R"({ "requiredClaims": { "aud": "scitt" }, "anyOfClaims": [{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }] })")
-        .get<JWT>();
+    const auto jwt = nlohmann::json::parse(
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"}},"required":["aud"]})");
+    auto auth = nlohmann::json::parse(R"({"jwt":{}})")
+                  .get<Configuration::Authentication>();
+    auth.jwt = jwt;
+    EXPECT_EQ(nlohmann::json(auth).at("jwt"), jwt);
     EXPECT_EQ(
-      config.any_of_claims,
-      nlohmann::json::parse(
-        R"([{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }])"));
-    EXPECT_EQ(
-      nlohmann::json(config),
-      nlohmann::json::parse(
-        R"({ "requiredClaims": { "aud": "scitt" }, "anyOfClaims": [{ "appid": "identity-a", "tid": "tenant-a" }, { "appid": "identity-b", "tid": "tenant-b" }] })"));
+      nlohmann::json(auth).get<Configuration::Authentication>().jwt, jwt);
   }
 }

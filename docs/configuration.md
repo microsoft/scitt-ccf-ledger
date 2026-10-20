@@ -88,7 +88,9 @@ If JWT authentication is enabled then API requests must include a header contain
 - JWT providers can be configured via the `set_jwt_issuer` action as explained in the [CCF documentation](https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html#setting-up-a-token-issuer-with-manual-key-refresh).
 
 Extra `requiredClaims` can be configured which must then be present in an API request's JWT for authentication to succeed.
-To allow alternative sets of claims, use `anyOfClaims`: the JWT must match at least one non-empty claim set in its non-empty array. Each claim within a set is matched by exact equality, and the token may include additional claims. `requiredClaims` also must match, regardless of the alternative selected. Overlapping alternatives are permitted. An absent `anyOfClaims` has no effect; arrays in `requiredClaims` still mean exact array equality, not allow-lists.
+Without `$schema`, JWT authentication continues to use `requiredClaims`: each named claim must match its configured value exactly, and `{}` accepts any JWT from a trusted issuer. Arrays are compared as values, not as allow-lists.
+
+Alternatively, a JWT configuration beginning with `$schema` validates the token claims with JSON Schema draft-07. The supported profile is limited to `type: "object"`, `properties` with `const` values, `required`, and a top-level `anyOf` of object schemas with required `const` claims. All configured claims must be required; additional JWT claims are allowed. Each `anyOf` alternative is a complete claim set, and overlapping alternatives are allowed. Schema mode cannot be combined with `requiredClaims`. Invalid or unsupported schema features are rejected by governance; schema validation runs after CCF verifies the JWT and its issuer.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json
@@ -108,18 +110,35 @@ For example, to allow two managed identities in different tenants while requirin
 "authentication": {
   "allowUnauthenticated": false,
   "jwt": {
-    "requiredClaims": {
-      "aud": "api://<ledger-app-id>"
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "aud": { "const": "api://<ledger-app-id>" }
     },
-    "anyOfClaims": [
-      { "appid": "<first-mi-client-id>", "tid": "<tenant-a-id>" },
-      { "appid": "<second-mi-client-id>", "tid": "<tenant-b-id>" }
+    "required": ["aud"],
+    "anyOf": [
+      {
+        "properties": {
+          "iss": { "const": "https://login.microsoftonline.com/<tenant-a-id>/v2.0" },
+          "azp": { "const": "<first-mi-client-id>" },
+          "tid": { "const": "<tenant-a-id>" }
+        },
+        "required": ["iss", "azp", "tid"]
+      },
+      {
+        "properties": {
+          "iss": { "const": "https://login.microsoftonline.com/<tenant-b-id>/v2.0" },
+          "azp": { "const": "<second-mi-client-id>" },
+          "tid": { "const": "<tenant-b-id>" }
+        },
+        "required": ["iss", "azp", "tid"]
+      }
     ]
   }
 }
 ```
 
-Use the claim names and exact values from the tokens your identities actually obtain (for example, some tokens use `azp` rather than `appid`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` does not establish trust in the issuer. To constrain each identity to a specific issuer, include `iss` in the corresponding `anyOfClaims` alternative.
+Use the claim names and exact values from the tokens your identities actually obtain (some tokens use `appid` rather than `azp`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` or `iss` in the schema does not establish trust in the issuer. Nodes running an older version that does not understand `$schema` will reject schema-only JWT configurations; deploy the new application everywhere before setting such a policy.
 
 ### Per-Endpoint Authentication (Write-Only JWT)
 

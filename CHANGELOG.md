@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- Allow multiple managed identities to authenticate using JWT `anyOfClaims`
-  alongside the existing exact-match `requiredClaims`.
+- Allow JWT claims to be validated with a constrained JSON Schema draft-07
+  profile, supporting alternative managed-identity and issuer claim sets
+  while preserving existing `requiredClaims` configurations.
 - Remove the QCBOR build dependency; SCITT now uses CCF's TAV CBOR API.
 - Registrations admitted without HTTP authentication are capped at 64 KiB
   before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated

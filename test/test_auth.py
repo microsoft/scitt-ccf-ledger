@@ -16,12 +16,12 @@ def configure_authentication(
     *,
     allow_unauthenticated: bool,
     required_claims=None,
-    any_of_claims=None,
+    jwt_schema=None,
     allow_unauthenticated_reads=None,
 ):
-    jwt_config = {"requiredClaims": required_claims}
-    if any_of_claims is not None:
-        jwt_config["anyOfClaims"] = any_of_claims
+    jwt_config = (
+        jwt_schema if jwt_schema is not None else {"requiredClaims": required_claims}
+    )
     auth_config = {
         "allowUnauthenticated": allow_unauthenticated,
         "jwt": jwt_config,
@@ -34,6 +34,24 @@ def configure_authentication(
             "policy": {"policyScript": "export function apply(phdr) { return true; }"},
         }
     )
+
+
+def claims_schema(required_claims, alternatives):
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {key: {"const": value} for key, value in required_claims.items()},
+        "required": list(required_claims),
+    }
+    if alternatives is not None:
+        schema["anyOf"] = [
+            {
+                "properties": {key: {"const": value} for key, value in claims.items()},
+                "required": list(claims),
+            }
+            for claims in alternatives
+        ]
+    return schema
 
 
 def application_read_requests(client: Client, tx: str):
@@ -132,14 +150,16 @@ class TestAuthentication:
         with service_error("InvalidAuthenticationInfo"):
             submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
 
-    def test_any_of_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
+    def test_schema_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
         setup(
             allow_unauthenticated=False,
-            required_claims={"aud": "scitt", "iss": valid_issuer.name},
-            any_of_claims=[
-                {"appid": "identity-a", "tid": "tenant-a"},
-                {"appid": "identity-b", "tid": "tenant-b"},
-            ],
+            jwt_schema=claims_schema(
+                {"aud": "scitt", "iss": valid_issuer.name},
+                [
+                    {"appid": "identity-a", "tid": "tenant-a"},
+                    {"appid": "identity-b", "tid": "tenant-b"},
+                ],
+            ),
         )
 
         for appid, tid in (("identity-a", "tenant-a"), ("identity-b", "tenant-b")):
@@ -169,8 +189,9 @@ class TestAuthentication:
 
         setup(
             allow_unauthenticated=False,
-            required_claims={"aud": "scitt"},
-            any_of_claims=[{"appid": "identity-a"}, {"tid": "tenant-a"}],
+            jwt_schema=claims_schema(
+                {"aud": "scitt"}, [{"appid": "identity-a"}, {"tid": "tenant-a"}]
+            ),
         )
         submit(
             auth_token=valid_issuer.create_token(
@@ -178,7 +199,7 @@ class TestAuthentication:
             )
         )
 
-    def test_any_of_claims_with_multiple_issuers(
+    def test_schema_with_multiple_issuers(
         self, setup, client: Client, signed_statement, valid_issuer
     ):
         issuer_a = JwtIssuer("https://tenant-a.example.com")
@@ -188,11 +209,13 @@ class TestAuthentication:
 
         setup(
             allow_unauthenticated=False,
-            required_claims={"aud": "scitt"},
-            any_of_claims=[
-                {"iss": issuer_a.name, "appid": "identity-a", "tid": "tenant-a"},
-                {"iss": issuer_b.name, "appid": "identity-b", "tid": "tenant-b"},
-            ],
+            jwt_schema=claims_schema(
+                {"aud": "scitt"},
+                [
+                    {"iss": issuer_a.name, "appid": "identity-a", "tid": "tenant-a"},
+                    {"iss": issuer_b.name, "appid": "identity-b", "tid": "tenant-b"},
+                ],
+            ),
         )
 
         for issuer, appid, tid in (
@@ -220,24 +243,108 @@ class TestAuthentication:
             with service_error("InvalidAuthenticationInfo"):
                 client.replace(auth_token=token).get("/entries/txIds")
 
+    def test_schema_switch_preserves_existing_claim_checks(
+        self, setup, submit, valid_issuer
+    ):
+        token_a = valid_issuer.create_token({"aud": "scitt", "azp": "identity-a"})
+        token_b = valid_issuer.create_token({"aud": "scitt", "azp": "identity-b"})
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        submit(auth_token=token_a)
+        submit(auth_token=token_b)
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema({"aud": "scitt", "azp": "identity-a"}, None),
+        )
+        submit(auth_token=token_a)
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=token_b)
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema({"aud": "scitt", "azp": "identity-b"}, None),
+        )
+        submit(auth_token=token_b)
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=token_a)
+
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        submit(auth_token=token_a)
+        submit(auth_token=token_b)
+
     @pytest.mark.parametrize(
-        "invalid_alternatives",
+        "invalid_schema",
         [
-            [],
-            {},
-            [{}],
-            [[]],
-            [None],
-            ["identity-a"],
-            [{"appid": "identity-a"}, {}],
+            claims_schema({"aud": "scitt"}, []),
+            claims_schema({}, [{}]),
+            claims_schema({}, None),
+            {**claims_schema({"aud": "scitt"}, None), "type": "array"},
+            {**claims_schema({"aud": "scitt"}, None), "patternProperties": {}},
+            {**claims_schema({"aud": "scitt"}, None), "required": []},
+            {**claims_schema({"aud": "scitt"}, None), "required": ["missing"]},
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "required": ["aud", "aud"],
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "properties": {"aud": {"type": "string"}},
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "properties": {"aud": {"const": "scitt", "type": "string"}},
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "anyOf": [True],
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+            },
+            {**claims_schema({"aud": "scitt"}, None), "requiredClaims": {}},
         ],
     )
-    def test_reject_invalid_any_of_claims(self, setup, invalid_alternatives):
-        with service_error("anyOfClaims"):
+    def test_reject_invalid_schema(self, setup, submit, valid_issuer, invalid_schema):
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        with service_error("configuration.authentication.jwt"):
             setup(
                 allow_unauthenticated=False,
-                required_claims={},
-                any_of_claims=invalid_alternatives,
+                jwt_schema=invalid_schema,
+            )
+        submit(auth_token=valid_issuer.create_token({"aud": "scitt"}))
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=valid_issuer.create_token({"aud": "other"}))
+
+    def test_reject_schema_without_dialect(self, configure_service):
+        with service_error("$schema"):
+            configure_service(
+                {
+                    "authentication": {
+                        "jwt": {
+                            "requiredClaims": {},
+                            "anyOf": [
+                                {
+                                    "properties": {"aud": {"const": "scitt"}},
+                                    "required": ["aud"],
+                                }
+                            ],
+                        }
+                    }
+                }
+            )
+
+    def test_reject_retired_any_of_claims(self, configure_service):
+        with service_error("anyOfClaims"):
+            configure_service(
+                {
+                    "authentication": {
+                        "jwt": {
+                            "requiredClaims": {},
+                            "anyOfClaims": [{"appid": "identity-a"}],
+                        }
+                    }
+                }
             )
 
     def test_allow_anything(self, setup, submit, valid_issuer, invalid_issuer):

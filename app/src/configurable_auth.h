@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "jwt_claims_schema.h"
 #include "kv_types.h"
 
 #include <ccf/common_auth_policies.h>
@@ -41,19 +42,15 @@ namespace scitt
 
       auto handle = tx.template ro<ConfigurationTable>(CONFIGURATION_TABLE);
       auto cfg = handle->get().value_or(Configuration{});
-      const auto& required_claims = cfg.authentication.jwt.required_claims;
-      if (!required_claims.is_object())
+      const auto& jwt_config = cfg.authentication.jwt;
+      if (!jwt_config.is_object())
       {
         error_reason = "JWT authentication is not enabled";
         log_auth_error(ctx, error_reason);
         return nullptr;
       }
 
-      if (
-        check_claims(jwt->payload, required_claims, error_reason) &&
-        (!cfg.authentication.jwt.any_of_claims.has_value() ||
-         check_any_of_claims(
-           jwt->payload, *cfg.authentication.jwt.any_of_claims, error_reason)))
+      if (check_jwt_claims(jwt->payload, jwt_config, error_reason))
       {
         return identity;
       }
@@ -62,6 +59,48 @@ namespace scitt
         log_auth_error(ctx, error_reason);
         return nullptr;
       }
+    }
+
+    static bool check_jwt_claims(
+      const nlohmann::json& claims,
+      const nlohmann::json& jwt_config,
+      std::string& error_reason)
+    {
+      if (
+        !jwt_config.is_object() || jwt_config.contains("anyOfClaims") ||
+        jwt_config.contains("oneOfClaims"))
+      {
+        error_reason = "Unsupported JWT authentication configuration";
+        return false;
+      }
+
+      if (jwt_config.contains("$schema"))
+      {
+        if (jwt_config.contains("requiredClaims"))
+        {
+          error_reason = "Cannot mix JWT claims schema and requiredClaims";
+          return false;
+        }
+        static thread_local JwtClaimsSchema schema_validator;
+        return schema_validator.validate(jwt_config, claims, error_reason);
+      }
+
+      if (
+        jwt_config.contains("type") || jwt_config.contains("properties") ||
+        jwt_config.contains("required") || jwt_config.contains("anyOf"))
+      {
+        error_reason = "JWT claims schema requires $schema";
+        return false;
+      }
+
+      const auto required_claims =
+        jwt_config.value("requiredClaims", nlohmann::json());
+      if (!required_claims.is_object())
+      {
+        error_reason = "JWT authentication is not enabled";
+        return false;
+      }
+      return check_claims(claims, required_claims, error_reason);
     }
 
     static bool check_claims(
@@ -85,44 +124,6 @@ namespace scitt
         }
       }
       return true;
-    }
-
-    static bool check_any_of_claims(
-      const nlohmann::json& claims,
-      const nlohmann::json& any_of_claims,
-      std::string& error_reason)
-    {
-      if (!claims.is_object())
-      {
-        throw std::logic_error("Ill-formed JWT claims");
-      }
-
-      if (!any_of_claims.is_array() || any_of_claims.empty())
-      {
-        error_reason = "Invalid anyOfClaims configuration";
-        return false;
-      }
-
-      bool matches = false;
-      for (const auto& alternative : any_of_claims)
-      {
-        if (!alternative.is_object() || alternative.empty())
-        {
-          error_reason = "Invalid anyOfClaims alternative";
-          return false;
-        }
-
-        std::string ignored_error_reason;
-        if (check_claims(claims, alternative, ignored_error_reason))
-        {
-          matches = true;
-        }
-      }
-      if (!matches)
-      {
-        error_reason = "No matching anyOfClaims alternative";
-      }
-      return matches;
     }
 
     static void log_auth_error(
