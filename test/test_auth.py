@@ -212,17 +212,17 @@ class TestAuthentication:
             jwt_schema=claims_schema(
                 {"aud": "scitt"},
                 [
-                    {"iss": issuer_a.name, "appid": "identity-a", "tid": "tenant-a"},
-                    {"iss": issuer_b.name, "appid": "identity-b", "tid": "tenant-b"},
+                    {"iss": issuer_a.name, "azp": "identity-a", "tid": "tenant-a"},
+                    {"iss": issuer_b.name, "azp": "identity-b", "tid": "tenant-b"},
                 ],
             ),
         )
 
-        for issuer, appid, tid in (
+        for issuer, azp, tid in (
             (issuer_a, "identity-a", "tenant-a"),
             (issuer_b, "identity-b", "tenant-b"),
         ):
-            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            token = issuer.create_token({"aud": "scitt", "azp": azp, "tid": tid})
             authenticated_client = client.replace(auth_token=token)
             tx = authenticated_client.submit_signed_statement_and_wait(
                 signed_statement
@@ -230,18 +230,19 @@ class TestAuthentication:
             assert_application_reads_succeed(authenticated_client, tx)
             assert_application_reads_require_authentication(client, tx)
 
-        for issuer, appid, tid in (
+        for issuer, azp, tid in (
             (issuer_a, "identity-b", "tenant-b"),
             (issuer_b, "identity-a", "tenant-a"),
             (valid_issuer, "identity-a", "tenant-a"),
         ):
-            token = issuer.create_token({"aud": "scitt", "appid": appid, "tid": tid})
+            token = issuer.create_token({"aud": "scitt", "azp": azp, "tid": tid})
             with service_error("InvalidAuthenticationInfo"):
                 client.replace(auth_token=token).submit_signed_statement_and_wait(
                     signed_statement
                 )
-            with service_error("InvalidAuthenticationInfo"):
-                client.replace(auth_token=token).get("/entries/txIds")
+            assert_application_reads_require_authentication(
+                client.replace(auth_token=token), tx
+            )
 
     def test_schema_switch_preserves_existing_claim_checks(
         self, setup, submit, valid_issuer
@@ -317,7 +318,7 @@ class TestAuthentication:
             submit(auth_token=valid_issuer.create_token({"aud": "other"}))
 
     def test_reject_schema_without_dialect(self, configure_service):
-        with service_error("$schema"):
+        with service_error(r"\$schema"):
             configure_service(
                 {
                     "authentication": {
