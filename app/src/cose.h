@@ -451,12 +451,14 @@ namespace scitt::cose
     try
     {
       const auto header = tav::cbor::nondet_parse(encoded, CBOR_MAX_DEPTH);
+      std::set<std::variant<int64_t, std::string>> labels;
       detail::for_each_entry(
         header,
         "protected header",
         [&](const Value& label, const Value& value) {
           if (label.kind() == Kind::SIGNED)
           {
+            labels.insert(label.as_signed());
             switch (label.as_signed())
             {
               case COSE_HEADER_PARAM_ALG:
@@ -509,6 +511,7 @@ namespace scitt::cose
           else if (label.kind() == Kind::STRING)
           {
             const auto name = label.as_string();
+            labels.insert(std::string(name));
             if (name == SVN_HEADER_PARAM)
             {
               parsed.svn = detail::as_int(value, SVN_HEADER_PARAM);
@@ -519,6 +522,28 @@ namespace scitt::cose
             }
           }
         });
+
+      // https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1
+      // If the "crit" value list includes a label for which the header
+      // parameter is not in the protected-header-parameters bucket, this is
+      // a fatal error in processing the message.
+      if (parsed.crit.has_value())
+      {
+        for (const auto& critical : *parsed.crit)
+        {
+          if (!labels.contains(critical))
+          {
+            const auto repr = std::holds_alternative<int64_t>(critical) ?
+              std::to_string(std::get<int64_t>(critical)) :
+              fmt::format("\"{}\"", std::get<std::string>(critical));
+            throw COSEDecodeError(fmt::format(
+              "crit({}) lists label {} which is not present in the protected "
+              "header",
+              COSE_HEADER_PARAM_CRIT,
+              repr));
+          }
+        }
+      }
     }
     catch (const COSEDecodeError& e)
     {

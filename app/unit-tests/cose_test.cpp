@@ -97,6 +97,43 @@ namespace
     }
   }
 
+  TEST(CoseTest, DecodeProtectedHeaderRejectsCritLabelNotPresent)
+  {
+    // RFC 9052 3.1: a label listed in crit must be present in the protected
+    // header. Labels are matched by type, so text "15" is not integer 15.
+    // {1: -7, 2: [15]}
+    EXPECT_THAT(
+      [] { cose::decode_protected_header(from_hex_string("a2012602810f")); },
+      ThrowsMessage<cose::COSEDecodeError>(HasSubstr(
+        "crit(2) lists label 15 which is not present in the protected "
+        "header")));
+    // {1: -7, 2: ["attestedsvc"]}
+    EXPECT_THAT(
+      [] {
+        cose::decode_protected_header(
+          from_hex_string("a2012602816b6174746573746564737663"));
+      },
+      ThrowsMessage<cose::COSEDecodeError>(
+        HasSubstr("lists label \"attestedsvc\" which is not present")));
+    // {1: -7, 2: ["15"], 15: {1: "x"}}
+    EXPECT_THAT(
+      [] {
+        cose::decode_protected_header(
+          from_hex_string("a3012602816231350fa1016178"));
+      },
+      ThrowsMessage<cose::COSEDecodeError>(
+        HasSubstr("lists label \"15\" which is not present")));
+
+    // {1: -7, 2: [15], 15: {1: "x"}}
+    auto phdr =
+      cose::decode_protected_header(from_hex_string("a3012602810f0fa1016178"));
+    EXPECT_EQ(phdr.crit, cose::CritValuesContent{int64_t(15)});
+    // {1: -7, 2: ["svn"], "svn": 1}
+    phdr = cose::decode_protected_header(
+      from_hex_string("a3012602816373766e6373766e01"));
+    EXPECT_EQ(phdr.crit, cose::CritValuesContent{std::string("svn")});
+  }
+
   // add a test case to use payloads from test/payloads directory
   // NOLINTBEGIN(bugprone-unchecked-optional-access)
 
