@@ -74,7 +74,6 @@ namespace testutils
     UsefulBuf output_buf{output.data(), output.size()};
     QCBOREncodeContext ectx;
     QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_BstrWrap(&ectx);
     QCBOREncode_OpenMap(&ectx);
 
     // main top level headers
@@ -178,8 +177,6 @@ namespace testutils
     QCBOREncode_CloseMap(&ectx);
 
     QCBOREncode_CloseMap(&ectx);
-    UsefulBufC Wrapped;
-    QCBOREncode_CloseBstrWrap(&ectx, &Wrapped);
     UsefulBufC encoded_cbor;
     QCBORError err;
     err = QCBOREncode_Finish(&ectx, &encoded_cbor);

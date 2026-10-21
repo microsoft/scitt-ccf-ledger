@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Registrations admitted without HTTP authentication are capped at 64 KiB
+  before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated
+  registrations retain their configured size limit.
+- COSE_Sign1 headers are decoded with the TAV CBOR API that CCF installs
+  rather than QCBOR, so decoding now enforces the CBOR rules that CCF's
+  signature verification already applied: the COSE_Sign1 tag must be the
+  outermost tag, the protected header, payload and signature must be byte
+  strings, and indefinite-length items, floating-point values, integers
+  outside the signed 64-bit range and duplicate map labels are rejected
+  anywhere in the message. Such statements were never accepted; they are now
+  rejected with a decode error. Envelopes with other than four elements are
+  now rejected, and a zero-length protected header is decoded as an empty map.
+- A `crit` header parameter that lists a label absent from the protected
+  header is now rejected when decoding, as required by
+  [RFC 9052 Section 3.1](https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1).
+  The verifier already rejected such statements for every label it accepts in
+  `crit`, so no previously accepted statement is affected.
 - Signed statements with an EdDSA (Ed25519) `x5chain` are now accepted, as
   CCF's COSE verifier supports them since 7.0.19.
 - x509-signed statements are verified with CCF's COSE key API, and `did:x509`

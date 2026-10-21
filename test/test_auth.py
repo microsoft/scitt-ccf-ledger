@@ -6,6 +6,7 @@ import pytest
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from .constants import MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES
 from .infra.assertions import service_error
 from .infra.jwt_issuer import JwtIssuer
 
@@ -134,6 +135,30 @@ class TestAuthentication:
         submit()
         submit(auth_token=valid_issuer.create_token())
         submit(auth_token=invalid_issuer.create_token())
+
+    @pytest.mark.parametrize(
+        "body_size, supply_token, expected_error",
+        [
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES, False, "InvalidInput"),
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES + 1, False, "PayloadTooLarge"),
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES + 1, True, "PayloadTooLarge"),
+        ],
+    )
+    def test_unauthenticated_statement_size_limit(
+        self,
+        setup,
+        client: Client,
+        valid_issuer,
+        body_size,
+        supply_token,
+        expected_error,
+    ):
+        setup(allow_unauthenticated=True, required_claims={})
+        if supply_token:
+            client = client.replace(auth_token=valid_issuer.create_token())
+
+        with service_error(expected_error):
+            client.submit_signed_statement(b"\x00" * body_size)
 
 
 class TestPerEndpointAuthentication:

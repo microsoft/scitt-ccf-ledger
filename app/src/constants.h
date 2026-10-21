@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 namespace scitt
 {
   const uint64_t MAX_ENTRY_SIZE_BYTES_DEFAULT = 1024 * 1024;
+  const size_t MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES = 64 * 1024;
 
   const std::chrono::seconds OPERATION_EXPIRY{60 * 60};
 

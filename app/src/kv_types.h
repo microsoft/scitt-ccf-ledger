@@ -155,6 +155,8 @@ namespace scitt
     /**
      * Optional maximum size in bytes for signed statements.
      * If set, overrides the default MAX_ENTRY_SIZE_BYTES_DEFAULT constant.
+     * HTTP-unauthenticated registrations are additionally capped by
+     * MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES.
      */
     std::optional<size_t> max_signed_statement_bytes;
 
