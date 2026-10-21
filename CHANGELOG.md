@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Pin OneBranch PR image builds to the exact merge commit verified by GitHub
+  Actions, avoiding missing comparison records when the merge ref is regenerated.
 - Signed statements with an EdDSA (Ed25519) `x5chain` are now accepted, as
   CCF's COSE verifier supports them since 7.0.19.
 - x509-signed statements are verified with CCF's COSE key API, and `did:x509`

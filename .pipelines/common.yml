@@ -95,7 +95,8 @@ stages:
 - stage: docker
   dependsOn:
   - setup
-  # official images wait for the tests; PR images build early to get the merge commit GitHub Actions built
+  # Official images wait for the tests; PR images resolve GitHub's verified
+  # merge commit independently of the functional tests.
   - ${{ if parameters.IsOfficialBuild }}:
     - build
   jobs:
