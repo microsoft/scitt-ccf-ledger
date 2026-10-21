@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changes
 - Allow JWT claims to be validated with a constrained JSON Schema draft-07
   profile, supporting alternative managed-identity and issuer claim sets
-  while preserving existing `requiredClaims` configurations.
+  while preserving existing `requiredClaims` configurations. Existing services
+  must also update their SCITT constitution before enabling schema policies:
+  the new constitution restricts the supported schema profile at proposal time.
 - Remove the QCBOR build dependency; SCITT now uses CCF's TAV CBOR API.
 - Registrations admitted without HTTP authentication are capped at 64 KiB
   before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated

@@ -139,7 +139,7 @@ For example, to allow two managed identities in different tenants while requirin
 }
 ```
 
-Use the claim names and exact values from the tokens your identities actually obtain (some tokens use `appid` rather than `azp`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` or `iss` in the schema does not establish trust in the issuer. Nodes running an older version that does not understand `$schema` will reject schema-only JWT configurations; deploy the new application everywhere before setting such a policy.
+Use the claim names and exact values from the tokens your identities actually obtain (some tokens use `appid` rather than `azp`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` or `iss` in the schema does not establish trust in the issuer. For existing services, update the SCITT constitution to this release's `app/constitution/scitt.js` before enabling schema policies; the old constitution does not restrict the schema profile at proposal time. Deploy the new application to every node before applying a schema policy, since older nodes reject schema-only JWT configurations.
 
 ### Per-Endpoint Authentication (Write-Only JWT)
 
