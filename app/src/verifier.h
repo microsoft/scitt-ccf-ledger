@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "cert_der_to_pem.h"
 #include "cose.h"
 #include "didx509cpp/didx509cpp.h"
 #include "kv_types.h"
@@ -16,6 +15,7 @@
 #include <ccf/crypto/eddsa_key_pair.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
+#include <ccf/crypto/verifier.h>
 #include <ccf/ds/hex.h>
 #include <ccf/ds/quote_info.h>
 #include <ccf/pal/attestation.h>
@@ -181,7 +181,7 @@ namespace scitt::verifier
         std::vector<std::string> pem_certs;
         for (auto const& c : phdr.x5chain.value())
         {
-          pem_certs.push_back(cert_der_to_pem(c).str());
+          pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
         }
         auto resolved_jwk_str = didx509::resolve_jwk(
           pem_certs,
