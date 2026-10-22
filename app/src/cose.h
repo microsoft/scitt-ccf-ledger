@@ -21,8 +21,6 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <optional>
-#include <qcbor/qcbor.h>
-#include <qcbor/qcbor_spiffy_decode.h>
 #include <set>
 #include <span>
 #include <stdexcept>
