@@ -22,7 +22,7 @@ set(CMAKE_CXX_STANDARD 23)
 option(BUILD_TESTS "Whether to build tests" ON)
 option(ENABLE_CLANG_TIDY "Run clang-tidy on the codebase" OFF)
 
-find_package(ccf REQUIRED)
+find_package(ccf 7.0.22 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
