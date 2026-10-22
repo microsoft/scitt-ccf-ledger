@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Pin OneBranch PR image builds to the exact merge commit verified by GitHub
+  Actions, avoiding missing comparison records when the merge ref is regenerated.
 - Allow JWT claims to be validated with a constrained JSON Schema draft-07
   profile, supporting alternative managed-identity and issuer claim sets
   while preserving existing `requiredClaims` configurations. Existing services
