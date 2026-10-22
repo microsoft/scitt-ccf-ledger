@@ -81,7 +81,7 @@ jobs:
       run: |
         cd app
         cmake --preset codeql --fresh
-        cmake --build --preset codeql --target rego qcbor
+        cmake --build --preset codeql --target rego
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
