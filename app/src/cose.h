@@ -21,11 +21,14 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <optional>
-#include <qcbor/qcbor.h>
-#include <qcbor/qcbor_spiffy_decode.h>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <tav/cbor.hpp>
+#include <tuple>
+#include <variant>
 #include <vector>
 
 namespace scitt::cose
@@ -75,6 +78,14 @@ namespace scitt::cose
   };
 
   static constexpr const char* SVN_HEADER_PARAM = "svn";
+
+  // https://www.rfc-editor.org/rfc/rfc9052#section-4.2
+  static constexpr uint64_t COSE_SIGN1_TAG = 18;
+  static constexpr size_t COSE_SIGN1_SIZE = 4;
+  static constexpr size_t CBOR_MAX_DEPTH = 15;
+
+  // https://www.rfc-editor.org/rfc/rfc8949#section-3.4.2
+  static constexpr uint64_t CBOR_TAG_EPOCH_DATE = 1;
 
   struct COSEDecodeError : public std::runtime_error
   {
@@ -138,562 +149,505 @@ namespace scitt::cose
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
   };
 
-  static std::vector<std::vector<uint8_t>> decode_x5chain(
-    QCBORDecodeContext& ctx, const QCBORItem& x5chain)
+  namespace detail
   {
-    std::vector<std::vector<uint8_t>> parsed;
+    using tav::cbor::Kind;
+    using tav::cbor::Value;
 
-    if (x5chain.uDataType == QCBOR_TYPE_ARRAY)
+    /**
+     * Call f(key, value) for each entry of a map, in encoding order. Entries
+     * with labels that are not recognised are left to f to ignore.
+     */
+    template <typename F>
+    static void for_each_entry(const Value& map, std::string_view name, F&& f)
     {
-      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_X5CHAIN);
-      while (true)
+      if (map.kind() != Kind::MAP)
       {
-        QCBORItem item;
-        auto result = QCBORDecode_GetNext(&ctx, &item);
-        if (result == QCBOR_ERR_NO_MORE_ITEMS)
-        {
-          break;
-        }
-        if (result != QCBOR_SUCCESS)
-        {
-          throw COSEDecodeError("Item in x5chain is not well-formed.");
-        }
-        if (item.uDataType == QCBOR_TYPE_BYTE_STRING)
-        {
-          parsed.push_back(cbor::as_vector(item.val.string));
-        }
-        else
-        {
-          throw COSEDecodeError(
-            "Next item in x5chain was not of type byte string.");
-        }
+        throw COSEDecodeError(fmt::format("{} must be a map", name));
       }
-      QCBORDecode_ExitArray(&ctx);
-      if (parsed.empty())
+      const auto size = map.size();
+      for (size_t i = 0; i < size; ++i)
       {
-        throw COSEDecodeError("x5chain array length was 0 in COSE header.");
-      }
-      if (parsed.size() == 1)
-      {
-        // IETF-COSE-X509 Draft mandates a single cert is placed in a CBOR
-        // byte string, not an array.
-        // But other implementations mistakenly serialise single certs as bstrs
-        // in arrays, so we are not strict here.
-        SCITT_DEBUG("Single cert found in x5chain array in COSE header.");
+        f(map.map_key_at(i), map.map_value_at(i));
       }
     }
-    else if (x5chain.uDataType == QCBOR_TYPE_BYTE_STRING)
+
+    static int64_t as_int(const Value& value, std::string_view name)
     {
-      parsed.push_back(cbor::as_vector(x5chain.val.string));
+      if (value.kind() != Kind::SIGNED)
+      {
+        throw COSEDecodeError(fmt::format("{} must be an integer", name));
+      }
+      return value.as_signed();
     }
-    else
+
+    static std::string as_text(const Value& value, std::string_view name)
     {
-      SCITT_DEBUG("Unsupported x5chain value type: {}", x5chain.uDataType);
+      if (value.kind() != Kind::STRING)
+      {
+        throw COSEDecodeError(fmt::format("{} must be a text string", name));
+      }
+      return std::string(value.as_string());
+    }
+
+    static std::vector<uint8_t> as_bytes(
+      const Value& value, std::string_view name)
+    {
+      if (value.kind() != Kind::BYTES)
+      {
+        throw COSEDecodeError(fmt::format("{} must be a byte string", name));
+      }
+      return cbor::as_vector(value.as_bytes());
+    }
+  }
+
+  static std::vector<std::vector<uint8_t>> decode_x5chain(
+    const tav::cbor::Value& x5chain)
+  {
+    using tav::cbor::Kind;
+
+    if (x5chain.kind() == Kind::BYTES)
+    {
+      return {cbor::as_vector(x5chain.as_bytes())};
+    }
+    if (x5chain.kind() != Kind::ARRAY)
+    {
       throw COSEDecodeError(
         "Value type of x5chain in COSE header is not array or byte "
         "string.");
     }
 
+    const auto size = x5chain.size();
+    std::vector<std::vector<uint8_t>> parsed;
+    parsed.reserve(size);
+    for (size_t i = 0; i < size; ++i)
+    {
+      const auto item = x5chain.array_at(i);
+      if (item.kind() != Kind::BYTES)
+      {
+        throw COSEDecodeError(
+          "Next item in x5chain was not of type byte string.");
+      }
+      parsed.push_back(cbor::as_vector(item.as_bytes()));
+    }
+    if (parsed.empty())
+    {
+      throw COSEDecodeError("x5chain array length was 0 in COSE header.");
+    }
+    if (parsed.size() == 1)
+    {
+      // IETF-COSE-X509 Draft mandates a single cert is placed in a CBOR
+      // byte string, not an array.
+      // But other implementations mistakenly serialise single certs as bstrs
+      // in arrays, so we are not strict here.
+      SCITT_DEBUG("Single cert found in x5chain array in COSE header.");
+    }
     return parsed;
   }
 
-  static ProtectedHeader decode_protected_header(QCBORDecodeContext& ctx)
+  static CritValuesContent decode_crit(const tav::cbor::Value& crit)
   {
+    using tav::cbor::Kind;
+
+    if (crit.kind() != Kind::ARRAY)
+    {
+      throw COSEDecodeError(
+        fmt::format("crit({}) must be an array", COSE_HEADER_PARAM_CRIT));
+    }
+
+    const auto size = crit.size();
+    CritValuesContent parsed;
+    parsed.reserve(size);
+    for (size_t i = 0; i < size; ++i)
+    {
+      const auto item = crit.array_at(i);
+      if (item.kind() == Kind::STRING)
+      {
+        parsed.emplace_back(std::string(item.as_string()));
+      }
+      else if (item.kind() == Kind::SIGNED)
+      {
+        parsed.emplace_back(item.as_signed());
+      }
+      else
+      {
+        throw COSEDecodeError(
+          "Next item in crit was not of type text string or int64.");
+      }
+    }
+    if (parsed.empty())
+    {
+      throw COSEDecodeError(
+        "Cannot have crit array of length 0 in COSE protected header.");
+    }
+    return parsed;
+  }
+
+  // The correct expected type for iat(6) is an _untagged_ date epoch,
+  // i.e. an integer representing seconds since epoch.
+  // https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.6
+  // The "iat" (issued at) claim [...] except that the value is a
+  // NumericDate, as defined in Section 2 of this specification.
+  // https://www.rfc-editor.org/rfc/rfc8392.html#section-2
+  // except that it is represented as a CBOR numeric date
+  // (from Section 2.4.1 of [RFC7049])
+  // https://www.rfc-editor.org/rfc/rfc7049#section-2.4.1
+  // The encoding is modified so that the leading tag 1
+  // (epoch-based date/time) MUST be omitted.
+  // However, some implementations tag iat(6) as an epoch-based date.
+  static int64_t decode_iat(const tav::cbor::Value& iat)
+  {
+    using tav::cbor::Kind;
+
+    if (iat.kind() == Kind::SIGNED)
+    {
+      return iat.as_signed();
+    }
+    if (iat.kind() == Kind::TAGGED && iat.as_tag() == CBOR_TAG_EPOCH_DATE)
+    {
+      const auto date = iat.tag_at(CBOR_TAG_EPOCH_DATE);
+      if (date.kind() == Kind::SIGNED)
+      {
+        return date.as_signed();
+      }
+    }
+    throw COSEDecodeError(fmt::format(
+      "CWT claim iat({}) must be an integer or a tag {}-wrapped integer",
+      COSE_CWT_CLAIM_IAT,
+      CBOR_TAG_EPOCH_DATE));
+  }
+
+  static CWTClaims decode_cwt_claims(const tav::cbor::Value& claims)
+  {
+    using tav::cbor::Kind;
+    using tav::cbor::Value;
+
+    CWTClaims parsed;
+    detail::for_each_entry(
+      claims,
+      fmt::format("CWT claims({})", COSE_HEADER_PARAM_CWT_CLAIMS),
+      [&](const Value& label, const Value& value) {
+        if (label.kind() == Kind::SIGNED)
+        {
+          switch (label.as_signed())
+          {
+            case COSE_CWT_CLAIM_ISS:
+              parsed.iss = detail::as_text(
+                value, fmt::format("CWT claim iss({})", COSE_CWT_CLAIM_ISS));
+              break;
+            case COSE_CWT_CLAIM_SUB:
+              parsed.sub = detail::as_text(
+                value, fmt::format("CWT claim sub({})", COSE_CWT_CLAIM_SUB));
+              break;
+            case COSE_CWT_CLAIM_IAT:
+              parsed.iat = decode_iat(value);
+              break;
+            default:
+              break;
+          }
+        }
+        else if (
+          label.kind() == Kind::STRING && label.as_string() == SVN_HEADER_PARAM)
+        {
+          parsed.svn = detail::as_int(
+            value, fmt::format("CWT claim {}", SVN_HEADER_PARAM));
+        }
+      });
+    return parsed;
+  }
+
+  static ccf::crypto::COSEKey decode_cose_key(
+    const tav::cbor::Value& cose_key, std::string_view name)
+  {
+    const auto key = [&]() {
+      try
+      {
+        return ccf::crypto::COSEKey::from_cbor(cose_key.nondet_serialize());
+      }
+      catch (const std::invalid_argument& e)
+      {
+        throw COSEDecodeError(fmt::format("{}: {}", name, e.what()));
+      }
+    }();
+
+    // Only EC2 and RSA keys are supported, whatever CCF accepts
+    const auto kty = key.kty();
+    if (
+      kty != ccf::crypto::COSEKeyType::EC2 &&
+      kty != ccf::crypto::COSEKeyType::RSA)
+    {
+      throw COSEDecodeError(fmt::format(
+        "{}: Invalid COSE_Key: unsupported kty {}",
+        name,
+        static_cast<int>(kty)));
+    }
+    return key;
+  }
+
+  static TSSMap decode_tss_map(const tav::cbor::Value& tss)
+  {
+    using tav::cbor::Kind;
+    using tav::cbor::Value;
+
+    TSSMap parsed;
+    detail::for_each_entry(
+      tss, COSE_HEADER_PARAM_TSS, [&](const Value& label, const Value& value) {
+        if (label.kind() != Kind::STRING)
+        {
+          return;
+        }
+        const auto name = label.as_string();
+        const auto field = fmt::format("{}.{}", COSE_HEADER_PARAM_TSS, name);
+        if (name == COSE_HEADER_PARAM_TSS_SVC_ID)
+        {
+          parsed.svc_id = detail::as_text(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_ATTESTATION)
+        {
+          parsed.attestation = detail::as_bytes(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE)
+        {
+          parsed.attestation_type = detail::as_text(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS)
+        {
+          parsed.snp_endorsements = detail::as_bytes(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS)
+        {
+          parsed.uvm_endorsements = detail::as_bytes(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_VER)
+        {
+          parsed.ver = detail::as_int(value, field);
+        }
+        else if (name == COSE_HEADER_PARAM_TSS_COSE_KEY)
+        {
+          parsed.cose_key = decode_cose_key(value, field);
+        }
+      });
+    return parsed;
+  }
+
+  /**
+   * Decode a serialized protected header map. A zero-length protected header
+   * stands for an empty map.
+   */
+  static ProtectedHeader decode_protected_header(
+    std::span<const uint8_t> encoded)
+  {
+    using tav::cbor::Kind;
+    using tav::cbor::Value;
+
     ProtectedHeader parsed;
-
-    QCBORError qcbor_result;
-
-    QCBORDecode_EnterBstrWrapped(&ctx, QCBOR_TAG_REQUIREMENT_NOT_A_TAG, NULL);
-    QCBORDecode_EnterMap(&ctx, NULL);
-
-    enum
+    if (encoded.empty())
     {
-      ALG_INDEX,
-      CRIT_INDEX,
-      ISSUER_INDEX,
-      FEED_INDEX,
-      SVN_INDEX,
-      KID_INDEX,
-      CTY_INDEX,
-      X5CHAIN_INDEX,
-      CWT_CLAIMS_INDEX,
-      TSS_INDEX,
-      END_INDEX,
-    };
-    QCBORItem header_items[END_INDEX + 1];
-
-    header_items[ALG_INDEX].label.int64 = COSE_HEADER_PARAM_ALG;
-    header_items[ALG_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[ALG_INDEX].uDataType = QCBOR_TYPE_INT64;
-
-    header_items[CRIT_INDEX].label.int64 = COSE_HEADER_PARAM_CRIT;
-    header_items[CRIT_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[CRIT_INDEX].uDataType = QCBOR_TYPE_ARRAY;
-
-    header_items[ISSUER_INDEX].label.int64 = COSE_HEADER_PARAM_ISSUER;
-    header_items[ISSUER_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[ISSUER_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    header_items[FEED_INDEX].label.int64 = COSE_HEADER_PARAM_FEED;
-    header_items[FEED_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[FEED_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    header_items[SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
-    header_items[SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    header_items[SVN_INDEX].uDataType = QCBOR_TYPE_INT64;
-
-    header_items[KID_INDEX].label.int64 = COSE_HEADER_PARAM_KID;
-    header_items[KID_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[KID_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    header_items[CTY_INDEX].label.int64 = COSE_HEADER_PARAM_CTY;
-    header_items[CTY_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[CTY_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
-    header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    header_items[CWT_CLAIMS_INDEX].label.int64 = COSE_HEADER_PARAM_CWT_CLAIMS;
-    header_items[CWT_CLAIMS_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[CWT_CLAIMS_INDEX].uDataType = QCBOR_TYPE_MAP;
-
-    enum
-    {
-      CWT_ISS_INDEX,
-      CWT_SUB_INDEX,
-      CWT_IAT_INDEX,
-      CWT_SVN_INDEX,
-      CWT_END_INDEX,
-    };
-    QCBORItem cwt_items[CWT_END_INDEX + 1];
-
-    cwt_items[CWT_ISS_INDEX].label.int64 = COSE_CWT_CLAIM_ISS;
-    cwt_items[CWT_ISS_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cwt_items[CWT_ISS_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    cwt_items[CWT_SUB_INDEX].label.int64 = COSE_CWT_CLAIM_SUB;
-    cwt_items[CWT_SUB_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cwt_items[CWT_SUB_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    cwt_items[CWT_IAT_INDEX].label.int64 = COSE_CWT_CLAIM_IAT;
-    cwt_items[CWT_IAT_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    cwt_items[CWT_IAT_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    cwt_items[CWT_SVN_INDEX].label.string = UsefulBuf_FromSZ(SVN_HEADER_PARAM);
-    cwt_items[CWT_SVN_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    cwt_items[CWT_SVN_INDEX].uDataType = QCBOR_TYPE_INT64;
-
-    cwt_items[CWT_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
-
-    header_items[TSS_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS);
-    header_items[TSS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    header_items[TSS_INDEX].uDataType = QCBOR_TYPE_MAP;
-
-    enum
-    {
-      TSS_SVC_ID_INDEX,
-      TSS_ATTESTATION_INDEX,
-      TSS_ATTESTATION_TYPE_INDEX,
-      TSS_SNP_ENDORSEMENTS_INDEX,
-      TSS_UVM_ENDORSEMENTS_INDEX,
-      TSS_VER_INDEX,
-      TSS_COSE_KEY_INDEX,
-      TSS_END_INDEX,
-    };
-    QCBORItem tss_items[TSS_END_INDEX + 1];
-
-    tss_items[TSS_SVC_ID_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_SVC_ID);
-    tss_items[TSS_SVC_ID_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_SVC_ID_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    tss_items[TSS_ATTESTATION_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION);
-    tss_items[TSS_ATTESTATION_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_ATTESTATION_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    tss_items[TSS_ATTESTATION_TYPE_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE);
-    tss_items[TSS_ATTESTATION_TYPE_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_ATTESTATION_TYPE_INDEX].uDataType = QCBOR_TYPE_TEXT_STRING;
-
-    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS);
-    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS);
-    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uDataType = QCBOR_TYPE_BYTE_STRING;
-
-    tss_items[TSS_VER_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_VER);
-    tss_items[TSS_VER_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_VER_INDEX].uDataType = QCBOR_TYPE_INT64;
-
-    tss_items[TSS_COSE_KEY_INDEX].label.string =
-      UsefulBuf_FromSZ(COSE_HEADER_PARAM_TSS_COSE_KEY);
-    tss_items[TSS_COSE_KEY_INDEX].uLabelType = QCBOR_TYPE_TEXT_STRING;
-    tss_items[TSS_COSE_KEY_INDEX].uDataType = QCBOR_TYPE_MAP;
-
-    tss_items[TSS_END_INDEX].uLabelType = QCBOR_TYPE_NONE;
-
-    header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
-
-    QCBORDecode_GetItemsInMap(&ctx, header_items);
-
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
-    {
-      throw COSEDecodeError(fmt::format(
-        "Failed to decode protected header: {}",
-        qcbor_err_to_str(qcbor_result)));
+      return parsed;
     }
 
-    if (header_items[ALG_INDEX].uDataType != QCBOR_TYPE_NONE)
+    try
     {
-      parsed.alg = header_items[ALG_INDEX].val.int64;
-    }
-    if (header_items[ISSUER_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.issuer = cbor::as_string(header_items[ISSUER_INDEX].val.string);
-    }
-    if (header_items[CRIT_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.crit = std::vector<std::variant<int64_t, std::string>>();
-      QCBORItem critItem = header_items[CRIT_INDEX];
-      QCBORDecode_EnterArrayFromMapN(&ctx, COSE_HEADER_PARAM_CRIT);
-      while (true)
+      const auto header = tav::cbor::nondet_parse(encoded, CBOR_MAX_DEPTH);
+      std::set<std::variant<int64_t, std::string>> labels;
+      detail::for_each_entry(
+        header,
+        "protected header",
+        [&](const Value& label, const Value& value) {
+          if (label.kind() == Kind::SIGNED)
+          {
+            labels.insert(label.as_signed());
+            switch (label.as_signed())
+            {
+              case COSE_HEADER_PARAM_ALG:
+                parsed.alg = detail::as_int(
+                  value, fmt::format("alg({})", COSE_HEADER_PARAM_ALG));
+                break;
+              case COSE_HEADER_PARAM_CRIT:
+                parsed.crit = decode_crit(value);
+                break;
+              case COSE_HEADER_PARAM_CTY:
+                if (value.kind() == Kind::STRING)
+                {
+                  parsed.cty = std::string(value.as_string());
+                }
+                else if (value.kind() == Kind::SIGNED)
+                {
+                  parsed.cty = value.as_signed();
+                }
+                else
+                {
+                  throw COSEDecodeError(
+                    "Content-type must be of type text string or int64");
+                }
+                break;
+              case COSE_HEADER_PARAM_KID:
+              {
+                const auto kid = detail::as_bytes(
+                  value, fmt::format("kid({})", COSE_HEADER_PARAM_KID));
+                parsed.kid = std::string(kid.begin(), kid.end());
+                break;
+              }
+              case COSE_HEADER_PARAM_CWT_CLAIMS:
+                parsed.cwt_claims = decode_cwt_claims(value);
+                break;
+              case COSE_HEADER_PARAM_X5CHAIN:
+                parsed.x5chain = decode_x5chain(value);
+                break;
+              case COSE_HEADER_PARAM_ISSUER:
+                parsed.issuer = detail::as_text(
+                  value, fmt::format("issuer({})", COSE_HEADER_PARAM_ISSUER));
+                break;
+              case COSE_HEADER_PARAM_FEED:
+                parsed.feed = detail::as_text(
+                  value, fmt::format("feed({})", COSE_HEADER_PARAM_FEED));
+                break;
+              default:
+                break;
+            }
+          }
+          else if (label.kind() == Kind::STRING)
+          {
+            const auto name = label.as_string();
+            labels.insert(std::string(name));
+            if (name == SVN_HEADER_PARAM)
+            {
+              parsed.svn = detail::as_int(value, SVN_HEADER_PARAM);
+            }
+            else if (name == COSE_HEADER_PARAM_TSS)
+            {
+              parsed.tss_map = decode_tss_map(value);
+            }
+          }
+        });
+
+      // https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1
+      // If the "crit" value list includes a label for which the header
+      // parameter is not in the protected-header-parameters bucket, this is
+      // a fatal error in processing the message.
+      if (parsed.crit.has_value())
       {
-        auto result = QCBORDecode_GetNext(&ctx, &critItem);
-        if (result == QCBOR_ERR_NO_MORE_ITEMS)
+        for (const auto& critical : *parsed.crit)
         {
-          break;
-        }
-        if (result != QCBOR_SUCCESS)
-        {
-          throw COSEDecodeError("Item in crit is not well-formed.");
-        }
-        if (critItem.uDataType == QCBOR_TYPE_TEXT_STRING)
-        {
-          parsed.crit->push_back(
-            std::string(cbor::as_string(critItem.val.string)));
-        }
-        else if (critItem.uDataType == QCBOR_TYPE_INT64)
-        {
-          parsed.crit->push_back(critItem.val.int64);
-        }
-        else
-        {
-          throw COSEDecodeError(
-            "Next item in crit was not of type text string or "
-            "int64.");
+          if (!labels.contains(critical))
+          {
+            const auto repr = std::holds_alternative<int64_t>(critical) ?
+              std::to_string(std::get<int64_t>(critical)) :
+              fmt::format("\"{}\"", std::get<std::string>(critical));
+            throw COSEDecodeError(fmt::format(
+              "crit({}) lists label {} which is not present in the protected "
+              "header",
+              COSE_HEADER_PARAM_CRIT,
+              repr));
+          }
         }
       }
-      QCBORDecode_ExitArray(&ctx);
-      if (parsed.crit->empty())
-      {
-        throw COSEDecodeError(
-          "Cannot have crit array of length 0 in COSE protected header.");
-      }
     }
-    if (header_items[KID_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.kid = cbor::as_string(header_items[KID_INDEX].val.string);
-    }
-    if (header_items[FEED_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.feed = cbor::as_string(header_items[FEED_INDEX].val.string);
-    }
-    if (header_items[SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.svn = header_items[SVN_INDEX].val.int64;
-    }
-
-    if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_TEXT_STRING)
-    {
-      parsed.cty =
-        std::string(cbor::as_string(header_items[CTY_INDEX].val.string));
-    }
-    else if (header_items[CTY_INDEX].uDataType == QCBOR_TYPE_INT64)
-    {
-      parsed.cty = header_items[CTY_INDEX].val.int64;
-    }
-    else if (header_items[CTY_INDEX].uDataType != QCBOR_TYPE_NONE)
+    catch (const COSEDecodeError& e)
     {
       throw COSEDecodeError(
-        "Content-type must be of type text string or int64");
+        fmt::format("Failed to decode protected header: {}", e.what()));
     }
-
-    // If a CWT claims map is present, parse it
-    if (header_items[CWT_CLAIMS_INDEX].uDataType != QCBOR_TYPE_NONE)
+    catch (const tav::cbor::CborError& e)
     {
-      QCBORDecode_EnterMapFromMapN(&ctx, COSE_HEADER_PARAM_CWT_CLAIMS);
-      auto decode_error = QCBORDecode_GetError(&ctx);
-      if (decode_error != QCBOR_SUCCESS)
-      {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode CWT claims: {}", decode_error));
-      }
-
-      QCBORDecode_GetItemsInMap(&ctx, cwt_items);
-      decode_error = QCBORDecode_GetError(&ctx);
-      if (decode_error != QCBOR_SUCCESS)
-      {
-        throw COSEDecodeError(
-          fmt::format("Failed to decode CWT claim contents: {}", decode_error));
-      }
-
-      if (cwt_items[CWT_ISS_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.cwt_claims.iss =
-          cbor::as_string(cwt_items[CWT_ISS_INDEX].val.string);
-      }
-      if (cwt_items[CWT_SUB_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.cwt_claims.sub =
-          cbor::as_string(cwt_items[CWT_SUB_INDEX].val.string);
-      }
-      // The correct expected type for iat(6) is an _untagged_ date epoch,
-      // i.e. an integer representing seconds since epoch.
-      // https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.6
-      // The "iat" (issued at) claim [...] except that the value is a
-      // NumericDate, as defined in Section 2 of this specification.
-      // https://www.rfc-editor.org/rfc/rfc8392.html#section-2
-      // except that it is represented as a CBOR numeric date
-      // (from Section 2.4.1 of [RFC7049])
-      // https://www.rfc-editor.org/rfc/rfc7049#section-2.4.1
-      // The encoding is modified so that the leading tag 1
-      // (epoch-based date/time) MUST be omitted.
-      if (cwt_items[CWT_IAT_INDEX].uDataType == QCBOR_TYPE_INT64)
-      {
-        parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.int64;
-      }
-      // However, some implementations tag iat(6) it as date epoch.
-      if (cwt_items[CWT_IAT_INDEX].uDataType == QCBOR_TYPE_DATE_EPOCH)
-      {
-        parsed.cwt_claims.iat = cwt_items[CWT_IAT_INDEX].val.epochDate.nSeconds;
-      }
-      if (cwt_items[CWT_SVN_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.cwt_claims.svn = cwt_items[CWT_SVN_INDEX].val.int64;
-      }
-      QCBORDecode_ExitMap(&ctx);
-    }
-
-    if (header_items[TSS_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      QCBORDecode_EnterMapFromMapSZ(&ctx, COSE_HEADER_PARAM_TSS);
-      auto tss_error = QCBORDecode_GetError(&ctx);
-      if (tss_error != QCBOR_SUCCESS)
-      {
-        throw COSEDecodeError(fmt::format(
-          "Failed to decode {} map: {}", COSE_HEADER_PARAM_TSS, tss_error));
-      }
-
-      QCBORDecode_GetItemsInMap(&ctx, tss_items);
-      tss_error = QCBORDecode_GetError(&ctx);
-      if (tss_error != QCBOR_SUCCESS)
-      {
-        throw COSEDecodeError(fmt::format(
-          "Failed to decode {} map contents: {}",
-          COSE_HEADER_PARAM_TSS,
-          tss_error));
-      }
-
-      if (tss_items[TSS_SVC_ID_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.svc_id =
-          cbor::as_string(tss_items[TSS_SVC_ID_INDEX].val.string);
-      }
-      if (tss_items[TSS_ATTESTATION_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.attestation =
-          cbor::as_vector(tss_items[TSS_ATTESTATION_INDEX].val.string);
-      }
-      if (tss_items[TSS_ATTESTATION_TYPE_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.attestation_type =
-          cbor::as_string(tss_items[TSS_ATTESTATION_TYPE_INDEX].val.string);
-      }
-      if (tss_items[TSS_SNP_ENDORSEMENTS_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.snp_endorsements =
-          cbor::as_vector(tss_items[TSS_SNP_ENDORSEMENTS_INDEX].val.string);
-      }
-      if (tss_items[TSS_UVM_ENDORSEMENTS_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.uvm_endorsements =
-          cbor::as_vector(tss_items[TSS_UVM_ENDORSEMENTS_INDEX].val.string);
-      }
-      if (tss_items[TSS_VER_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        parsed.tss_map.ver = tss_items[TSS_VER_INDEX].val.int64;
-      }
-
-      if (tss_items[TSS_COSE_KEY_INDEX].uDataType != QCBOR_TYPE_NONE)
-      {
-        QCBORItem cose_key_item;
-        UsefulBufC cose_key_cbor{};
-        QCBORDecode_GetMapFromMapSZ(
-          &ctx, COSE_HEADER_PARAM_TSS_COSE_KEY, &cose_key_item, &cose_key_cbor);
-        auto cose_key_error = QCBORDecode_GetError(&ctx);
-        if (cose_key_error != QCBOR_SUCCESS)
-        {
-          throw COSEDecodeError(fmt::format(
-            "Failed to decode {} map: {}",
-            COSE_HEADER_PARAM_TSS_COSE_KEY,
-            qcbor_err_to_str(cose_key_error)));
-        }
-
-        try
-        {
-          parsed.tss_map.cose_key =
-            ccf::crypto::COSEKey::from_cbor(cbor::as_vector(cose_key_cbor));
-        }
-        catch (const std::invalid_argument& e)
-        {
-          throw COSEDecodeError(fmt::format(
-            "Failed to decode protected header: {}.{}: {}",
-            COSE_HEADER_PARAM_TSS,
-            COSE_HEADER_PARAM_TSS_COSE_KEY,
-            e.what()));
-        }
-
-        // Only EC2 and RSA keys are supported, whatever CCF accepts
-        const auto kty = parsed.tss_map.cose_key->kty();
-        if (
-          kty != ccf::crypto::COSEKeyType::EC2 &&
-          kty != ccf::crypto::COSEKeyType::RSA)
-        {
-          throw COSEDecodeError(fmt::format(
-            "Failed to decode protected header: {}.{}: Invalid COSE_Key: "
-            "unsupported kty {}",
-            COSE_HEADER_PARAM_TSS,
-            COSE_HEADER_PARAM_TSS_COSE_KEY,
-            static_cast<int>(kty)));
-        }
-      }
-
-      QCBORDecode_ExitMap(&ctx);
-    }
-
-    if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
-    }
-
-    QCBORDecode_ExitMap(&ctx);
-    QCBORDecode_ExitBstrWrapped(&ctx);
-
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
-    {
-      throw COSEDecodeError(fmt::format(
-        "Failed to decode protected header: {}",
-        qcbor_err_to_str(qcbor_result)));
+      throw COSEDecodeError(
+        fmt::format("Failed to decode protected header: {}", e.what()));
     }
 
     return parsed;
   }
 
-  static UnprotectedHeader decode_unprotected_header(QCBORDecodeContext& ctx)
+  static UnprotectedHeader decode_unprotected_header(
+    const tav::cbor::Value& header)
   {
+    using tav::cbor::Kind;
+    using tav::cbor::Value;
+
     UnprotectedHeader parsed;
-
-    QCBORError qcbor_result;
-
-    QCBORDecode_EnterMap(&ctx, NULL);
-
-    enum
+    try
     {
-      X5CHAIN_INDEX,
-      END_INDEX,
-    };
-    QCBORItem header_items[END_INDEX + 1];
-    header_items[X5CHAIN_INDEX].label.int64 = COSE_HEADER_PARAM_X5CHAIN;
-    header_items[X5CHAIN_INDEX].uLabelType = QCBOR_TYPE_INT64;
-    header_items[X5CHAIN_INDEX].uDataType = QCBOR_TYPE_ANY;
-
-    header_items[END_INDEX].uLabelType = QCBOR_TYPE_NONE;
-
-    QCBORDecode_GetItemsInMap(&ctx, header_items);
-
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
+      detail::for_each_entry(
+        header,
+        "unprotected header",
+        [&](const Value& label, const Value& value) {
+          if (
+            label.kind() == Kind::SIGNED &&
+            label.as_signed() == COSE_HEADER_PARAM_X5CHAIN)
+          {
+            parsed.x5chain = decode_x5chain(value);
+          }
+        });
+    }
+    catch (const COSEDecodeError& e)
     {
       throw COSEDecodeError(
-        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
+        fmt::format("Failed to decode unprotected header: {}", e.what()));
     }
-    if (header_items[X5CHAIN_INDEX].uDataType != QCBOR_TYPE_NONE)
-    {
-      parsed.x5chain = decode_x5chain(ctx, header_items[X5CHAIN_INDEX]);
-    }
-    QCBORDecode_ExitMap(&ctx);
-
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
+    catch (const tav::cbor::CborError& e)
     {
       throw COSEDecodeError(
-        fmt::format("Failed to decode unprotected header: {}", qcbor_result));
+        fmt::format("Failed to decode unprotected header: {}", e.what()));
     }
-
     return parsed;
   }
 
   static std::tuple<ProtectedHeader, UnprotectedHeader> decode_headers(
     const std::vector<uint8_t>& cose_sign1)
   {
-    QCBORError qcbor_result;
+    using tav::cbor::Kind;
 
-    QCBORDecodeContext ctx;
-    QCBORDecode_Init(
-      &ctx, cbor::from_bytes(cose_sign1), QCBOR_DECODE_MODE_NORMAL);
-
-    QCBORDecode_EnterArray(&ctx, nullptr);
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
+    try
     {
-      throw COSEDecodeError("Failed to parse COSE_Sign1 outer array");
-    }
+      const auto document = tav::cbor::nondet_parse(cose_sign1, CBOR_MAX_DEPTH);
+      if (
+        document.kind() != Kind::TAGGED || document.as_tag() != COSE_SIGN1_TAG)
+      {
+        throw COSEDecodeError("COSE_Sign1 is not tagged");
+      }
 
-    uint64_t tag = QCBORDecode_GetNthTagOfLast(&ctx, 0);
-    if (tag != CBOR_TAG_COSE_SIGN1)
-    {
-      throw COSEDecodeError("COSE_Sign1 is not tagged");
-    }
+      const auto envelope = document.tag_at(COSE_SIGN1_TAG);
+      if (envelope.kind() != Kind::ARRAY || envelope.size() != COSE_SIGN1_SIZE)
+      {
+        throw COSEDecodeError("Failed to parse COSE_Sign1 outer array");
+      }
 
-    auto phdr = decode_protected_header(ctx);
-    auto uhdr = decode_unprotected_header(ctx);
+      const auto phdr = envelope.array_at(0);
+      if (phdr.kind() != Kind::BYTES)
+      {
+        throw COSEDecodeError(
+          "Failed to decode protected header: not a byte string");
+      }
+      auto protected_header = decode_protected_header(phdr.as_bytes());
+      auto unprotected_header = decode_unprotected_header(envelope.array_at(1));
 
-    // Check that the payload is present and not nil (detached).
-    // A COSE_Sign1 payload must be a bstr; a nil value indicates a
-    // detached payload which is not supported.
-    QCBORItem payload_item;
-    QCBORDecode_VGetNext(&ctx, &payload_item);
-    qcbor_result = QCBORDecode_GetError(&ctx);
-    if (qcbor_result != QCBOR_SUCCESS)
-    {
-      throw COSEDecodeError("Detached or empty payloads are not supported");
-    }
-    if (
-      payload_item.uDataType == QCBOR_TYPE_NULL ||
-      (payload_item.uDataType == QCBOR_TYPE_BYTE_STRING &&
-       payload_item.val.string.len == 0))
-    {
-      throw COSEDecodeError("Detached or empty payloads are not supported");
-    }
+      // A COSE_Sign1 payload must be a bstr; a nil value indicates a
+      // detached payload which is not supported.
+      const auto payload = envelope.array_at(2);
+      const bool detached = payload.kind() == Kind::SIMPLE &&
+        payload.as_simple() == tav::cbor::SimpleValue::Null;
+      if (
+        detached ||
+        (payload.kind() == Kind::BYTES && payload.as_bytes().empty()))
+      {
+        throw COSEDecodeError("Detached or empty payloads are not supported");
+      }
+      if (payload.kind() != Kind::BYTES)
+      {
+        throw COSEDecodeError("COSE_Sign1 payload is not a byte string");
+      }
 
-    QCBORDecode_ExitArray(&ctx);
-    auto error = QCBORDecode_Finish(&ctx);
-    if (error)
-    {
-      throw COSEDecodeError("Failed to decode COSE_Sign1");
+      if (envelope.array_at(3).kind() != Kind::BYTES)
+      {
+        throw COSEDecodeError("COSE_Sign1 signature is not a byte string");
+      }
+
+      return {std::move(protected_header), std::move(unprotected_header)};
     }
-    return std::make_tuple(phdr, uhdr);
+    catch (const tav::cbor::CborError& e)
+    {
+      throw COSEDecodeError(
+        fmt::format("Failed to decode COSE_Sign1: {}", e.what()));
+    }
   }
 
   struct COSESignatureValidationError : public std::runtime_error

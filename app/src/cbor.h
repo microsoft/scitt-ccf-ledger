@@ -3,12 +3,10 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
-#include <qcbor/UsefulBuf.h>
-#include <qcbor/qcbor_encode.h>
 #include <span>
-#include <stdexcept>
-#include <string_view>
+#include <string>
 #include <tav/cbor.hpp>
 #include <vector>
 
@@ -19,26 +17,9 @@ namespace scitt::cbor
   static constexpr const char* CBOR_ERROR_CONTENT_TYPE =
     "application/concise-problem-details+cbor";
 
-  inline UsefulBufC from_bytes(std::span<const uint8_t> v)
+  inline std::vector<uint8_t> as_vector(std::span<const uint8_t> bytes)
   {
-    return UsefulBufC{v.data(), v.size()};
-  }
-
-  inline UsefulBufC from_string(std::string_view v)
-  {
-    return UsefulBufC{v.data(), v.size()};
-  }
-
-  inline std::vector<uint8_t> as_vector(UsefulBufC buf)
-  {
-    return std::vector<uint8_t>(
-      static_cast<const uint8_t*>(buf.ptr),
-      static_cast<const uint8_t*>(buf.ptr) + buf.len);
-  }
-
-  inline std::string_view as_string(UsefulBufC buf)
-  {
-    return {static_cast<const char*>(buf.ptr), buf.len};
+    return {bytes.begin(), bytes.end()};
   }
 
   /**
@@ -98,74 +79,6 @@ namespace scitt::cbor
       fields.emplace_back(make_string("Error"), make_map(std::move(error)));
     }
     return make_map(std::move(fields)).nondet_serialize();
-  }
-
-  // see https://www.ietf.org/rfc/rfc9679.html#section-4.2
-  inline std::vector<uint8_t> ec_cose_key_to_cbor(
-    const int64_t kty,
-    const int64_t crv,
-    const std::vector<uint8_t>& x,
-    const std::vector<uint8_t>& y)
-  {
-    /**
-     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     */
-    size_t approx_buff_size = (1 + 4 + 4) * QCBOR_HEAD_BUFFER_SIZE +
-      sizeof(kty) + sizeof(crv) + x.size() + y.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, 1, kty);
-    QCBOREncode_AddInt64ToMapN(&ectx, -1, crv);
-    QCBOREncode_AddBytesToMapN(&ectx, -2, from_bytes(x));
-    QCBOREncode_AddBytesToMapN(&ectx, -3, from_bytes(y));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
-  }
-
-  // see https://www.ietf.org/rfc/rfc9679.html#section-4.3
-  inline std::vector<uint8_t> rsa_cose_key_to_cbor(
-    const int64_t kty,
-    const std::vector<uint8_t>& n,
-    const std::vector<uint8_t>& e)
-  {
-    /**
-     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     */
-    size_t approx_buff_size =
-      (1 + 3 + 3) * QCBOR_HEAD_BUFFER_SIZE + sizeof(kty) + n.size() + e.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, 1, kty);
-    QCBOREncode_AddBytesToMapN(&ectx, -1, from_bytes(n));
-    QCBOREncode_AddBytesToMapN(&ectx, -2, from_bytes(e));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
   }
 
   /**

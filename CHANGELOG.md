@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - JSON adapter input and content-negotiation errors retain their intended HTTP
   status and JSON/OData response, and are logged as expected errors rather than
   unhandled server failures. JSON failures inside handlers remain server errors.
+- Remove the QCBOR build dependency; SCITT now uses CCF's TAV CBOR API.
+- Registrations admitted without HTTP authentication are capped at 64 KiB
+  before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated
+  registrations retain their configured size limit.
+- COSE_Sign1 headers are decoded with the TAV CBOR API that CCF installs
+  rather than QCBOR, so decoding now enforces the CBOR rules that CCF's
+  signature verification already applied: the COSE_Sign1 tag must be the
+  outermost tag, the protected header, payload and signature must be byte
+  strings, and indefinite-length items, floating-point values, integers
+  outside the signed 64-bit range and duplicate map labels are rejected
+  anywhere in the message. Such statements were never accepted; they are now
+  rejected with a decode error. Envelopes with other than four elements are
+  now rejected, and a zero-length protected header is decoded as an empty map.
+- A `crit` header parameter that lists a label absent from the protected
+  header is now rejected when decoding, as required by
+  [RFC 9052 Section 3.1](https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1).
+  The verifier already rejected such statements for every label it accepts in
+  `crit`, so no previously accepted statement is affected.
 - Signed statements with an EdDSA (Ed25519) `x5chain` are now accepted, as
   CCF's COSE verifier supports them since 7.0.19.
 - x509-signed statements are verified with CCF's COSE key API, and `did:x509`
@@ -20,7 +38,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
-- Update CCF to 7.0.20.
+- Update CCF to 7.0.21.
 - Align the bundled `set_member` constitution action with CCF's explicit state
   digest update flow, fixing member creation on COSE-only ledgers and clearing
   stale acknowledgements when resetting a member.
