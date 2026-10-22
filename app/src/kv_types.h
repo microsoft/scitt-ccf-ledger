@@ -127,13 +127,7 @@ namespace scitt
 
     struct Authentication
     {
-      struct JWT
-      {
-        nlohmann::json required_claims;
-        bool operator==(const JWT& other) const = default;
-      };
-
-      JWT jwt;
+      nlohmann::json jwt = nlohmann::json::object();
       bool allow_unauthenticated = false;
 
       // When set, controls whether selected SCITT retrieval endpoints allow
@@ -176,11 +170,6 @@ namespace scitt
     "policyRego",
     policy_rego_statement_limit,
     "policyRegoStatementLimit");
-
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication::JWT);
-  DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication::JWT);
-  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    Configuration::Authentication::JWT, required_claims, "requiredClaims");
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(Configuration::Authentication);
   DECLARE_JSON_REQUIRED_FIELDS(Configuration::Authentication);

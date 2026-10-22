@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changes
 - Pin OneBranch PR image builds to the exact merge commit verified by GitHub
   Actions, avoiding missing comparison records when the merge ref is regenerated.
+- Allow JWT claims to be validated with a constrained JSON Schema draft-07
+  profile, supporting alternative managed-identity and issuer claim sets
+  while preserving existing `requiredClaims` configurations. Existing services
+  must also update their SCITT constitution before enabling schema policies:
+  the new constitution restricts the supported schema profile at proposal time.
+- JSON adapter input and content-negotiation errors retain their intended HTTP
+  status and JSON/OData response, and are logged as expected errors rather than
+  unhandled server failures. JSON failures inside handlers remain server errors.
+- Remove the QCBOR build dependency; SCITT now uses CCF's TAV CBOR API.
 - Registrations admitted without HTTP authentication are capped at 64 KiB
   before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated
   registrations retain their configured size limit.
@@ -36,7 +45,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
-- Update CCF to 7.0.21.
+- Update CCF to 7.0.22 and use its exported Valijson headers for JWT claims
+  schema validation instead of fetching Valijson separately.
 - Align the bundled `set_member` constitution action with CCF's explicit state
   digest update flow, fixing member creation on COSE-only ledgers and clearing
   stale acknowledgements when resetting a member.

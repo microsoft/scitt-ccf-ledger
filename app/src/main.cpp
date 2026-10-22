@@ -9,6 +9,7 @@
 #include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
+#include "json_adapter.h"
 #include "kv_types.h"
 #include "operations_endpoints.h"
 #include "policy_engine.h"
@@ -30,7 +31,6 @@
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
-#include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
 #include <ccf/node/quote.h>
 #include <ccf/run.h>
@@ -699,7 +699,7 @@ namespace scitt
       make_endpoint(
         get_entries_tx_ids_path,
         HTTP_GET,
-        ccf::json_adapter(get_entries_tx_ids),
+        scitt::json_adapter(get_entries_tx_ids),
         read_authn_policy)
         .set_auto_schema<void, GetEntriesTransactionIds::Out>()
         .add_query_parameter<size_t>(

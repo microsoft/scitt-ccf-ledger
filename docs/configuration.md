@@ -88,6 +88,10 @@ If JWT authentication is enabled then API requests must include a header contain
 - JWT providers can be configured via the `set_jwt_issuer` action as explained in the [CCF documentation](https://microsoft.github.io/CCF/main/build_apps/auth/jwt.html#setting-up-a-token-issuer-with-manual-key-refresh).
 
 Extra `requiredClaims` can be configured which must then be present in an API request's JWT for authentication to succeed.
+Without `$schema`, JWT authentication continues to use `requiredClaims`: each named claim must match its configured value exactly, and `{}` accepts any JWT from a trusted issuer. Arrays are compared as values, not as allow-lists.
+
+Alternatively, a JWT configuration beginning with `$schema` validates the token claims with JSON Schema draft-07. The supported profile is limited to `type: "object"`, `properties` with `const` values, `required`, and a top-level `anyOf` of object schemas with required `const` claims. All configured claims must be required; additional JWT claims are allowed. Each `anyOf` alternative is a complete claim set, and overlapping alternatives are allowed. Schema mode cannot be combined with `requiredClaims`. Invalid or unsupported schema features are rejected by governance; schema validation runs after CCF verifies the JWT and its issuer.
+Numeric constants are compared without rounding integers through floating point, including numbers nested in arrays or objects. Floating-point claim values with magnitude at or above 2^53 are rejected because parsing them cannot reliably distinguish adjacent integers; use integer or string claims for identity identifiers.
 
 To enable JWT authentication in SCITT, add the following config to a `set_scitt_configuration` action:
 ```json
@@ -95,11 +99,47 @@ To enable JWT authentication in SCITT, add the following config to a `set_scitt_
   "allowUnauthenticated": false,
   "jwt": {
     "requiredClaims": {
-      "foo": "bar",
+      "foo": "bar"
     }
   }
 }
 ```
+
+For example, to allow two managed identities in different tenants while requiring the same audience:
+
+```json
+"authentication": {
+  "allowUnauthenticated": false,
+  "jwt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "aud": { "const": "api://<ledger-app-id>" }
+    },
+    "required": ["aud"],
+    "anyOf": [
+      {
+        "properties": {
+          "iss": { "const": "https://login.microsoftonline.com/<tenant-a-id>/v2.0" },
+          "azp": { "const": "<first-mi-client-id>" },
+          "tid": { "const": "<tenant-a-id>" }
+        },
+        "required": ["iss", "azp", "tid"]
+      },
+      {
+        "properties": {
+          "iss": { "const": "https://login.microsoftonline.com/<tenant-b-id>/v2.0" },
+          "azp": { "const": "<second-mi-client-id>" },
+          "tid": { "const": "<tenant-b-id>" }
+        },
+        "required": ["iss", "azp", "tid"]
+      }
+    ]
+  }
+}
+```
+
+Use the claim names and exact values from the tokens your identities actually obtain (some tokens use `appid` rather than `azp`). Each JWT issuer and its signing keys must also be configured via `set_jwt_issuer`; checking `tid` or `iss` in the schema does not establish trust in the issuer. For existing services, update the SCITT constitution to this release's `app/constitution/scitt.js` before enabling schema policies; the old constitution does not restrict the schema profile at proposal time. Deploy the new application to every node before applying a schema policy, since older nodes reject schema-only JWT configurations.
 
 ### Per-Endpoint Authentication (Write-Only JWT)
 

@@ -20,7 +20,9 @@ concurrency:
 jobs:
   checks:
     name: Format and License Checks
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=checks-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
       - run: |
@@ -34,7 +36,7 @@ jobs:
   build-test:
     name: CI
     needs: checks
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=build-test-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
       options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
@@ -82,7 +84,7 @@ jobs:
     # opt-in: label the pull request with run-test-on-mult-nodes, or trigger the
     # workflow manually.
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-test-on-mult-nodes') || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=build-test-multi-node-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     env:
       SCITT_CI: 1
       # Run the tests against a cluster fronted by a round robin load balancer,

@@ -24,7 +24,9 @@ jobs:
     # extractor otherwise occupies a pool agent for the 6h default.
     timeout-minutes: 60
 
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label (with the matrix index) makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=analyze-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}-${{ strategy.job-index }}"]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
       options: --user root --publish-all --cap-add NET_ADMIN --cap-add NET_RAW --cap-add SYS_PTRACE -v /lib/modules:/lib/modules:ro
@@ -81,7 +83,7 @@ jobs:
       run: |
         cd app
         cmake --preset codeql --fresh
-        cmake --build --preset codeql --target rego qcbor
+        cmake --build --preset codeql --target rego
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
