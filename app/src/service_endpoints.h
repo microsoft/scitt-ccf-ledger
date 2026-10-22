@@ -5,6 +5,7 @@
 
 #include "cbor.h"
 #include "did/document.h"
+#include "json_adapter.h"
 #include "signature_algorithms.h"
 #include "utf8.h"
 #include "visit_each_entry_in_value.h"
@@ -15,7 +16,6 @@
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
 #include <ccf/http_accept.h>
-#include <ccf/json_handler.h>
 #include <ccf/network_identity_interface.h>
 #include <ccf/service/tables/service.h>
 
@@ -140,7 +140,7 @@ namespace scitt
       .make_endpoint(
         "/configuration",
         HTTP_GET,
-        ccf::json_adapter(endpoints::get_configuration),
+        scitt::json_adapter(endpoints::get_configuration),
         no_authn_policy)
       .set_auto_schema<void, Configuration>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -156,7 +156,7 @@ namespace scitt
       .make_endpoint(
         "/version",
         HTTP_GET,
-        ccf::json_adapter(endpoints::get_version),
+        scitt::json_adapter(endpoints::get_version),
         no_authn_policy)
       .set_auto_schema<void, GetVersion::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
