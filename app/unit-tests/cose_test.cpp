@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 #include <tav/cbor.hpp>
+#include <tuple>
 
 using namespace testing;
 using namespace scitt;
@@ -49,7 +50,7 @@ namespace
     envelope.push_back(make_map({}));
     envelope.push_back(make_bytes(payload));
     envelope.push_back(make_bytes(signature));
-    return make_tagged(CBOR_TAG_COSE_SIGN1, make_array(std::move(envelope)))
+    return make_tagged(cose::COSE_SIGN1_TAG, make_array(std::move(envelope)))
       .nondet_serialize();
   }
 
@@ -59,11 +60,78 @@ namespace
     {
       auto phdr_b = create_valid_protected_header_bytes(iat_is_tagged);
 
-      QCBORDecodeContext ctx;
-      QCBORDecode_Init(
-        &ctx, cbor::from_bytes(phdr_b), QCBOR_DECODE_MODE_NORMAL);
-      EXPECT_NO_THROW(cose::decode_protected_header(ctx));
+      cose::ProtectedHeader phdr;
+      EXPECT_NO_THROW(phdr = cose::decode_protected_header(phdr_b));
+      EXPECT_EQ(phdr.alg, -35);
+      EXPECT_EQ(phdr.cwt_claims.iss, "did:example:issuer");
+      EXPECT_EQ(phdr.cwt_claims.iat, 1622547800);
+      EXPECT_EQ(phdr.cwt_claims.svn, 1);
+      EXPECT_EQ(phdr.svn, 1);
+      EXPECT_EQ(phdr.tss_map.svc_id, "msft-css-dev");
+      EXPECT_EQ(phdr.tss_map.ver, 0);
+      EXPECT_TRUE(phdr.tss_map.cose_key.has_value());
+      EXPECT_EQ(
+        phdr.crit,
+        cose::CritValuesContent{std::string(cose::COSE_HEADER_PARAM_TSS)});
     }
+  }
+
+  TEST(CoseTest, DecodeEmptyProtectedHeader)
+  {
+    // A zero-length protected header stands for an empty map (RFC 9052).
+    const auto phdr = cose::decode_protected_header({});
+    EXPECT_FALSE(phdr.alg.has_value());
+    EXPECT_FALSE(phdr.cwt_claims.iss.has_value());
+  }
+
+  TEST(CoseTest, DecodeProtectedHeaderRejectsInvalidIat)
+  {
+    // {15: {6: value}} with text, bytes, null, or tag 1 wrapping text.
+    for (const auto& hex :
+         {"a10fa1066161", "a10fa1064161", "a10fa106f6", "a10fa106c16161"})
+    {
+      SCOPED_TRACE(hex);
+      EXPECT_THROW(
+        cose::decode_protected_header(from_hex_string(hex)),
+        cose::COSEDecodeError);
+    }
+  }
+
+  TEST(CoseTest, DecodeProtectedHeaderRejectsCritLabelNotPresent)
+  {
+    // RFC 9052 3.1: a label listed in crit must be present in the protected
+    // header. Labels are matched by type, so text "15" is not integer 15.
+    // {1: -7, 2: [15]}
+    EXPECT_THAT(
+      [] { cose::decode_protected_header(from_hex_string("a2012602810f")); },
+      ThrowsMessage<cose::COSEDecodeError>(HasSubstr(
+        "crit(2) lists label 15 which is not present in the protected "
+        "header")));
+    // {1: -7, 2: ["attestedsvc"]}
+    EXPECT_THAT(
+      [] {
+        cose::decode_protected_header(
+          from_hex_string("a2012602816b6174746573746564737663"));
+      },
+      ThrowsMessage<cose::COSEDecodeError>(
+        HasSubstr("lists label \"attestedsvc\" which is not present")));
+    // {1: -7, 2: ["15"], 15: {1: "x"}}
+    EXPECT_THAT(
+      [] {
+        cose::decode_protected_header(
+          from_hex_string("a3012602816231350fa1016178"));
+      },
+      ThrowsMessage<cose::COSEDecodeError>(
+        HasSubstr("lists label \"15\" which is not present")));
+
+    // {1: -7, 2: [15], 15: {1: "x"}}
+    auto phdr =
+      cose::decode_protected_header(from_hex_string("a3012602810f0fa1016178"));
+    EXPECT_EQ(phdr.crit, cose::CritValuesContent{int64_t(15)});
+    // {1: -7, 2: ["svn"], "svn": 1}
+    phdr = cose::decode_protected_header(
+      from_hex_string("a3012602816373766e6373766e01"));
+    EXPECT_EQ(phdr.crit, cose::CritValuesContent{std::string("svn")});
   }
 
   // add a test case to use payloads from test/payloads directory
@@ -205,12 +273,12 @@ namespace
   TEST(CoseTest, DecodeTSSHeadersFailsDueToInvalidMap)
   {
     const std::vector<uint8_t>& signed_statement = from_hex_string(
-      "D284590111A801382202816B6174746573746564737663045820A3FC5DF291C866D1AE7F"
+      "D284590100A801382202816B6174746573746564737663045820A3FC5DF291C866D1AE7F"
       "E90519384EEE2B84D412ED4ABE22C71395B6FDE3057D0FA40178596469643A6174746573"
       "7465647376633A6D7366742D6373732D6465763A3A33643739363163392D383462322D34"
       "3464322D613965302D3333633034306431363862333A746573742D6163636F756E74313A"
-      "70726F66696C653102716578706572696D656E74616C2F7465737406C074323032352D30"
-      "362D31385431373A34373A33305A6373766E001901022F190103706170706C6963617469"
+      "70726F66696C653102716578706572696D656E74616C2F74657374061A6852FBB2"
+      "6373766E001901022F190103706170706C6963617469"
       "6F6E2F6A736F6E19010477687474703A2F2F706174682D746F2D636F6E74656E742F6B61"
       "747465737465647376636F73686F756C642062652061206D6170A0A0A0");
 
@@ -229,7 +297,82 @@ namespace
     EXPECT_THAT(
       error_message,
       HasSubstr(
-        "Failed to decode protected header: QCBOR_ERR_UNEXPECTED_TYPE"));
+        "Failed to decode protected header: attestedsvc must be a map"));
+  }
+
+  // The COSEDecodeError message for a hex-encoded COSE_Sign1, or empty.
+  std::string decode_headers_error(const std::string& hex)
+  {
+    try
+    {
+      cose::decode_headers(from_hex_string(hex));
+    }
+    catch (const cose::COSEDecodeError& e)
+    {
+      return {e.what()};
+    }
+    return {};
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsMalformedEnvelopes)
+  {
+    // Untagged [bstr({1:-7}), {}, h'00', h'00']
+    EXPECT_THAT(
+      decode_headers_error("8443a10126a041004100"),
+      HasSubstr("COSE_Sign1 is not tagged"));
+    // 55799(18([...])): the COSE_Sign1 tag must be the outermost one
+    EXPECT_THAT(
+      decode_headers_error("d9d9f7d28443a10126a041004100"),
+      HasSubstr("COSE_Sign1 is not tagged"));
+    // COSE_Sign1 with three elements
+    EXPECT_THAT(
+      decode_headers_error("d28343a10126a04100"),
+      HasSubstr("Failed to parse COSE_Sign1 outer array"));
+    // COSE_Sign1 with a fifth element
+    EXPECT_THAT(
+      decode_headers_error("d28543a10126a04100410000"),
+      HasSubstr("Failed to parse COSE_Sign1 outer array"));
+    // Protected header given as a map rather than a byte string
+    EXPECT_THAT(
+      decode_headers_error("d284a10126a041004100"),
+      HasSubstr("Failed to decode protected header: not a byte string"));
+    // Text string payload
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a061614100"),
+      HasSubstr("COSE_Sign1 payload is not a byte string"));
+    // COSE_Sign1 with a nil signature
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a04100f6"),
+      HasSubstr("COSE_Sign1 signature is not a byte string"));
+    // Not CBOR
+    EXPECT_THAT(
+      decode_headers_error("d284ff"), HasSubstr("Failed to decode COSE_Sign1"));
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsDuplicateLabels)
+  {
+    // Protected header {1: -7, 1: -35}: a repeated label is rejected by the
+    // CBOR parser rather than resolved to either value.
+    EXPECT_THAT(
+      decode_headers_error("d28446a20126013822a041004100"),
+      HasSubstr("Failed to decode protected header"));
+    // Unprotected header {1: -7, 1: -7}
+    EXPECT_THAT(
+      decode_headers_error("d28443a10126a20126012641004100"),
+      HasSubstr("Failed to decode COSE_Sign1"));
+  }
+
+  TEST(CoseTest, DecodeHeadersRejectsExcessiveNesting)
+  {
+    // An unknown header containing 16 nested single-element arrays.
+    const std::string header = "a1008181818181818181818181818181818100";
+
+    EXPECT_THROW(
+      cose::decode_protected_header(from_hex_string(header)),
+      cose::COSEDecodeError);
+    EXPECT_THAT(
+      decode_headers_error("d28440" + header + "41004100"),
+      HasSubstr("Failed to decode COSE_Sign1"));
   }
 
   TEST(CoseTest, DecodeDidX509Headers)
@@ -300,14 +443,9 @@ namespace
       std::vector<MapItem> phdr;
       phdr.emplace_back(
         make_string(cose::COSE_HEADER_PARAM_TSS), make_map(std::move(tss)));
-      // Wrapped in a byte string, as the protected header of a COSE_Sign1
-      const auto phdr_bytes = make_map(std::move(phdr)).nondet_serialize();
-      const auto wrapped_phdr = make_bytes(phdr_bytes).nondet_serialize();
-
-      QCBORDecodeContext ctx;
-      QCBORDecode_Init(
-        &ctx, cbor::from_bytes(wrapped_phdr), QCBOR_DECODE_MODE_NORMAL);
-      return cose::decode_protected_header(ctx).tss_map.cose_key.value();
+      return cose::decode_protected_header(
+               make_map(std::move(phdr)).nondet_serialize())
+        .tss_map.cose_key.value();
     };
     const auto error_of = [&decode](std::vector<MapItem>&& cose_key) {
       try

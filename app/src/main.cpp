@@ -17,6 +17,7 @@
 #include "util.h"
 #include "verifier.h"
 
+#include <algorithm>
 #include <ccf/app_interface.h>
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/common_auth_policies.h>
@@ -24,6 +25,7 @@
 #include <ccf/crypto/cose.h>
 #include <ccf/ds/logger.h>
 #include <ccf/endpoint.h>
+#include <ccf/endpoints/authentication/empty_auth.h>
 #include <ccf/historical_queries_adapter.h>
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
@@ -310,8 +312,13 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
-        const auto max_entry_size =
+        auto max_entry_size =
           cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES_DEFAULT);
+        if (ctx.try_get_caller<ccf::EmptyAuthnIdentity>() != nullptr)
+        {
+          max_entry_size =
+            std::min(max_entry_size, MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES);
+        }
         SCITT_TRACE(
           "Signed statement size={} bytes, maximum allowed size={} bytes",
           body.size(),

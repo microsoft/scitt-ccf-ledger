@@ -401,6 +401,8 @@ The default value is 10000, if registration policy execution exceeds the limit, 
 
 By default, signed statements larger than 1MB (1,048,576 bytes) are rejected. This limit can be configured using the `maxSignedStatementBytes` parameter in the `set_scitt_configuration` action.
 
+Registrations admitted without HTTP authentication are additionally capped at 64 KiB (65,536 bytes), before COSE/CBOR decoding. Their effective limit is the smaller of `maxSignedStatementBytes` (or its default) and 64 KiB. This cap also applies when `allowUnauthenticated` is `true` and a JWT is supplied, because JWT authentication is skipped in that mode. To submit larger statements, disable `allowUnauthenticated` and configure JWT authentication.
+
 Example `set_scitt_configuration` snippet to allow signed statements up to 2MB:
 ```json
 "maxSignedStatementBytes": 2097152

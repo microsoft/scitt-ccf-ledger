@@ -11,7 +11,9 @@
 #include <cstdlib>
 #include <iomanip> // setw
 #include <string>
+#include <string_view>
 #include <tav/cbor.hpp>
+#include <utility>
 #include <vector>
 
 using namespace scitt;
@@ -69,128 +71,95 @@ namespace testutils
   static std::vector<uint8_t> create_valid_protected_header_bytes(
     bool iat_is_tagged = false)
   {
-    // create protected header
-    std::vector<uint8_t> output(2200);
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_BstrWrap(&ectx);
-    QCBOREncode_OpenMap(&ectx);
+    using namespace tav::cbor;
 
-    // main top level headers
-    // ----------------------
-    // alg
-    QCBOREncode_AddInt64ToMapN(&ectx, cose::COSE_HEADER_PARAM_ALG, -35);
-    // iss
-    QCBOREncode_AddTextToMapN(
-      &ectx,
-      cose::COSE_HEADER_PARAM_ISSUER,
-      cbor::from_string(
-        "did:attestedsvc:msft-css-dev::3d7961c9-84b2-44d2-a9e0-33c040d168b3:"
-        "test-account1:profile1"));
-    // feed
-    QCBOREncode_AddTextToMapN(
-      &ectx, cose::COSE_HEADER_PARAM_FEED, cbor::from_string("some feed"));
-    // svn
-    QCBOREncode_AddInt64ToMap(&ectx, cose::SVN_HEADER_PARAM, 1);
-    // kid
-    QCBOREncode_AddBytesToMapN(
-      &ectx,
-      cose::COSE_HEADER_PARAM_KID,
-      cbor::from_bytes(
-        from_hex_string("6D2ECFA295A4FEAB4DF1715E9978B13A335AA3468013A6B1933A20"
-                        "205FB0943C3115EDBA2DADBC6EAC64403904347B23")));
-    // cty
-    QCBOREncode_AddTextToMapN(
-      &ectx,
-      cose::COSE_HEADER_PARAM_CTY,
-      cbor::from_string("application/attestedsvc+json"));
-    // crit
-    QCBOREncode_OpenArrayInMapN(&ectx, cose::COSE_HEADER_PARAM_CRIT);
-    QCBOREncode_AddText(&ectx, cbor::from_string(cose::COSE_HEADER_PARAM_TSS));
-    QCBOREncode_CloseArray(&ectx);
+    const auto to_bytes = [](std::string_view text) {
+      return std::vector<uint8_t>(text.begin(), text.end());
+    };
 
-    // X5Chain
-    // ----------------------
-    QCBOREncode_OpenArrayInMapN(&ectx, cose::COSE_HEADER_PARAM_X5CHAIN);
-    QCBOREncode_AddBytes(
-      &ectx,
-      cbor::from_bytes(
-        from_hex_string("6D2ECFA295A4FEAB4DF1715E9978B13A335AA3468013A6B1933A20"
-                        "205FB0943C3115EDBA2DADBC6EAC64403904347B23")));
-    QCBOREncode_CloseArray(&ectx);
-
-    // CWT Claims
-    // ----------------------
-    QCBOREncode_OpenMapInMapN(&ectx, cose::COSE_HEADER_PARAM_CWT_CLAIMS);
-    QCBOREncode_AddTextToMapN(
-      &ectx, cose::COSE_CWT_CLAIM_ISS, cbor::from_string("did:example:issuer"));
-    QCBOREncode_AddTextToMapN(
-      &ectx,
-      cose::COSE_CWT_CLAIM_SUB,
-      cbor::from_string("did:example:subject"));
-    if (iat_is_tagged)
-    {
-      QCBOREncode_AddDateEpochToMapN(
-        &ectx, cose::COSE_CWT_CLAIM_IAT, 1622547800);
-    }
-    else
-    {
-      QCBOREncode_AddInt64ToMapN(&ectx, cose::COSE_CWT_CLAIM_IAT, 1622547800);
-    }
-    QCBOREncode_AddInt64ToMap(&ectx, cose::SVN_HEADER_PARAM, 1);
-    QCBOREncode_CloseMap(&ectx);
-
-    // TSS map
-    // ----------------------
-    QCBOREncode_OpenMapInMap(&ectx, cose::COSE_HEADER_PARAM_TSS);
-    QCBOREncode_AddTextToMap(
-      &ectx,
-      cose::COSE_HEADER_PARAM_TSS_SVC_ID,
-      cbor::from_string("msft-css-dev"));
-    QCBOREncode_AddBytesToMap(
-      &ectx,
-      cose::COSE_HEADER_PARAM_TSS_ATTESTATION,
-      cbor::from_string("attestation data"));
-    QCBOREncode_AddTextToMap(
-      &ectx,
-      cose::COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE,
-      cbor::from_string("SEV-SNP:ContainerPlat-AMD-UVM"));
-    QCBOREncode_AddBytesToMap(
-      &ectx,
-      cose::COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS,
-      cbor::from_string("snp endoresements data"));
-    QCBOREncode_AddBytesToMap(
-      &ectx,
-      cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS,
-      cbor::from_string("uvm endoresements data"));
-    QCBOREncode_AddInt64ToMap(&ectx, cose::COSE_HEADER_PARAM_TSS_VER, 0);
-    // TSS map -> COSE Key, which must be a valid public key
+    // TAV values borrow these buffers until the header is serialized.
+    const auto kid = from_hex_string(
+      "6D2ECFA295A4FEAB4DF1715E9978B13A335AA3468013A6B1933A20"
+      "205FB0943C3115EDBA2DADBC6EAC64403904347B23");
+    const auto attestation = to_bytes("attestation data");
+    const auto snp_endorsements = to_bytes("snp endoresements data");
+    const auto uvm_endorsements = to_bytes("uvm endoresements data");
     const auto cose_key =
       ccf::crypto::COSEKey(
         ccf::crypto::make_ec_public_key(
           ccf::crypto::make_ec_key_pair(ccf::crypto::CurveID::SECP384R1)
             ->public_key_der()))
         .to_cbor(COSE_ALGORITHM_ES384);
-    QCBOREncode_AddEncodedToMapSZ(
-      &ectx, cose::COSE_HEADER_PARAM_TSS_COSE_KEY, cbor::from_bytes(cose_key));
 
-    QCBOREncode_CloseMap(&ectx);
-
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC Wrapped;
-    QCBOREncode_CloseBstrWrap(&ectx, &Wrapped);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
+    std::vector<MapItem> claims;
+    claims.emplace_back(
+      make_signed(cose::COSE_CWT_CLAIM_ISS), make_string("did:example:issuer"));
+    claims.emplace_back(
+      make_signed(cose::COSE_CWT_CLAIM_SUB),
+      make_string("did:example:subject"));
+    static constexpr int64_t issued_at = 1622547800;
+    auto iat = make_signed(issued_at);
+    if (iat_is_tagged)
     {
-      throw std::runtime_error(
-        fmt::format("Failed to encode protected header: {}", err));
+      iat = make_tagged(cose::CBOR_TAG_EPOCH_DATE, std::move(iat));
     }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
+    claims.emplace_back(make_signed(cose::COSE_CWT_CLAIM_IAT), std::move(iat));
+    claims.emplace_back(make_string(cose::SVN_HEADER_PARAM), make_signed(1));
 
-    return output;
+    std::vector<MapItem> tss;
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_SVC_ID),
+      make_string("msft-css-dev"));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_ATTESTATION),
+      make_bytes(attestation));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_ATTESTATION_TYPE),
+      make_string("SEV-SNP:ContainerPlat-AMD-UVM"));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_SNP_ENDORSEMENTS),
+      make_bytes(snp_endorsements));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_UVM_ENDORSEMENTS),
+      make_bytes(uvm_endorsements));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_VER), make_signed(0));
+    tss.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS_COSE_KEY),
+      nondet_parse(cose_key));
+
+    std::vector<Value> crit;
+    crit.push_back(make_string(cose::COSE_HEADER_PARAM_TSS));
+    std::vector<Value> x5chain;
+    x5chain.push_back(make_bytes(kid));
+
+    std::vector<MapItem> header;
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_ALG),
+      make_signed(COSE_ALGORITHM_ES384));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_ISSUER),
+      make_string(
+        "did:attestedsvc:msft-css-dev::3d7961c9-84b2-44d2-a9e0-33c040d168b3:"
+        "test-account1:profile1"));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_FEED), make_string("some feed"));
+    header.emplace_back(make_string(cose::SVN_HEADER_PARAM), make_signed(1));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_KID), make_bytes(kid));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_CTY),
+      make_string("application/attestedsvc+json"));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_CRIT), make_array(std::move(crit)));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_X5CHAIN),
+      make_array(std::move(x5chain)));
+    header.emplace_back(
+      make_signed(cose::COSE_HEADER_PARAM_CWT_CLAIMS),
+      make_map(std::move(claims)));
+    header.emplace_back(
+      make_string(cose::COSE_HEADER_PARAM_TSS), make_map(std::move(tss)));
+    return make_map(std::move(header)).nondet_serialize();
   }
 }
