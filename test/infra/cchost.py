@@ -80,10 +80,12 @@ class CCHost(EventLoopThread):
         rpc_port: int = 0,
         node_port: int = 0,
         snp_attestation_config: Optional[Path] = None,
+        log_level: str = "info",
     ):
         super().__init__()
 
         self.binary = binary
+        self.log_level = log_level
         self.listen_rpc_port = rpc_port
         # A predictable port is needed for the SCITT issuer name to be resolvable
         if self.listen_rpc_port == 0:
@@ -174,7 +176,7 @@ class CCHost(EventLoopThread):
             "--config",
             self.workspace / "config.json",
             "--log-level",
-            "info",
+            self.log_level,
             cwd=self.workspace,
             start_new_session=True,
             stdin=subprocess.DEVNULL,
