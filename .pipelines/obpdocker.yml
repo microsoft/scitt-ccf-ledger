@@ -51,6 +51,15 @@ jobs:
           context_dir="$(Build.SourcesDirectory)/out"
           context_archive="$(Agent.TempDirectory)/docker-context.tar"
 
+          # The merge ref can be regenerated between the two CI checkouts.
+          # Pin GitHub's verified commit for these exact parents and source tree.
+          case "${BUILD_SOURCEBRANCH}" in
+            refs/pull/*/merge)
+              SOURCE_COMMIT=$(python3 ./scripts/resolve-github-pr-source.py "$(git rev-parse HEAD)")
+              export SOURCE_COMMIT
+              ;;
+          esac
+
           ./scripts/reproduce-image.sh context "${context_archive}"
 
           # Checked here as well as in the GitHub gate, so both systems prove
