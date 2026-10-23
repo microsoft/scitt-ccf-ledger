@@ -233,6 +233,17 @@ than the branch head. GitHub rebuilds that merge commit whenever the head or
 the target branch moves, so comparing anything else would compare two builds of
 different sources.
 
+The merge ref can also be regenerated with identical parents and source tree
+but a different timestamp and commit hash. Since the hash and timestamp are
+build inputs, those commits do not produce interchangeable images. For PRs,
+after recording the verified layers, GitHub also records the built merge SHA
+on the PR head under `reproducibility/merge/<BASE-COMMIT>`. Before creating its
+build context, OneBranch waits for that record and selects the immutable commit
+using `scripts/resolve-github-pr-source.py`. The resolver verifies both parents
+and the source tree against its checkout. It fails if the record is missing or
+does not match; it never falls back to building the mutable merge ref. Main
+and release-tag builds continue to use their checked-out commit directly.
+
 It reads the record over the network, so it needs to reach
 `https://api.github.com`. If it cannot, it fails rather than passing: a check
 that read nothing has not shown the two builds to agree. It exits 0 on a match,

@@ -4,12 +4,14 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <string>
 #include <vector>
 
 namespace scitt
 {
   const uint64_t MAX_ENTRY_SIZE_BYTES_DEFAULT = 1024 * 1024;
+  const size_t MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES = 64 * 1024;
 
   // Idle time before a cached historical state is dropped (CCF default: 30m).
   const std::chrono::seconds HISTORICAL_CACHE_EXPIRY{60};

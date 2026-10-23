@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.20.tar.gz
-    tar xvzf ccf-7.0.20.tar.gz
-    cd CCF-ccf-7.0.20/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.22.tar.gz
+    tar xvzf ccf-7.0.22.tar.gz
+    cd CCF-ccf-7.0.22/scripts/
     ./setup-dev.sh
     ```
 
@@ -49,8 +49,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 The CCF release is named in five files: `docker/Dockerfile`,
 `.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh` and this
-document. Change all five together. Also update the CCF minimum version in
-`pyscitt/setup.py` and `test/requirements.txt`, preserving the `<8` upper bound.
+document. Change all five together. Only raise the Python CCF minimum in
+`pyscitt/setup.py` and `test/requirements.txt` if the older Python package no
+longer works, preserving the `<8` upper bound.
 The image build reads the tdnf snapshot time out of the release's own
 `reproduce.json` rather than repeating it.
 

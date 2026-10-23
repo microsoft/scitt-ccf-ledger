@@ -13,7 +13,9 @@ permissions: read-all
 jobs:
   run_benchmarks:
     name: Performance Regression Tests
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=run_benchmarks-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:

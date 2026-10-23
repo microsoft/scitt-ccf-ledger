@@ -1,6 +1,7 @@
 ---
 on:
   permissions:
+    contents: read
     issues: read
     pull-requests: read
   schedule: daily
@@ -9,6 +10,9 @@ on:
         # The repository's CCF major: bump it in the change that moves the repository to a new major (once that
         # major has a stable release), and close any open [CCF] PR for the old one.
         CCF_MAJOR: "7"
+        # The file whose ARG CCF_VERSION line pins the repository's CCF release on the default branch
+        # (scripts/check-ccf-version.sh keeps the other pins in step with it); update it when copying this workflow.
+        CCF_PIN_FILE: docker/Dockerfile
       id: select_ccf_release
       name: Select the CCF release to propose
       uses: actions/github-script@v9.0.0
@@ -37,10 +41,10 @@ on:
           const target = latest.join(".");
           // Matches "v1.2.3" but not "11.2.3", "1.2.30", "1.2.3rc1", or "1.2.3-rc1".
           const namesTarget = new RegExp(`\\bCCF\\b.*(?<![\\d.])${target.replaceAll(".", "\\.")}(?!\\w|[.-]\\w)`, "i");
-          // A version counts as proposed once the title of a same-repo PR into the default branch (dependency bots
-          // included) or of an issue labelled ccf-update names it, in any state; the repository needs Issues enabled.
-          // To skip a version, open and close such an issue titled like "Skip CCF 1.2.3". Title manual upgrades the same
-          // way, and close any [CCF] PR they supersede.
+          // A version counts as proposed once the default branch pins it, or once the title of a same-repo PR into the
+          // default branch (dependency bots included) or of an issue labelled ccf-update names it, in any state; the
+          // repository needs Issues enabled. To skip a version, open and close such an issue titled like
+          // "Skip CCF 1.2.3". Title manual upgrades the same way, and close any [CCF] PR they supersede.
           const pulls = (await github.paginate(github.rest.pulls.list, {
             ...context.repo,
             state: "all",
@@ -68,14 +72,26 @@ on:
             });
             if (commits.some(c => namesTarget.test(c.commit.message)) && (p !== pr || namesTarget.test(p.title))) proposedIn = p;
           }
+          // A merged manual upgrade counts even when no title names the target.
+          const { data: pinFile } = await github.rest.repos.getContent({
+            ...context.repo,
+            path: process.env.CCF_PIN_FILE,
+            ref: context.payload.repository.default_branch,
+          });
+          const pinned = /^ARG CCF_VERSION="([^"]*)"/m.exec(Buffer.from(pinFile.content ?? "", "base64").toString())?.[1];
+          if (!pinned) {
+            throw new Error(`${process.env.CCF_PIN_FILE} on the default branch has no ARG CCF_VERSION line.`);
+          }
+          const landed = pinned === target;
           // Pushing to a PR with auto-merge enabled could merge changes nobody reviewed.
           const paused = Boolean(pr?.auto_merge);
           core.setOutput("target", target);
           core.setOutput("pr_number", pr ? String(pr.number) : "");
           core.setOutput("pr_branch", pr ? pr.head.ref : "");
-          core.setOutput("should_run", String(!proposedIn && !paused));
+          core.setOutput("should_run", String(!proposedIn && !landed && !paused));
           core.notice(proposedIn
             ? `CCF ${target} has already been proposed in #${proposedIn.number}.`
+            : landed ? `The default branch already pins CCF ${target}${pr ? `; close #${pr.number}, which it supersedes` : ""}.`
             : paused ? `#${pr.number} has auto-merge enabled, so it is not updated to CCF ${target}.`
             : pr ? `Updating #${pr.number} to CCF ${target}.` : `Opening a pull request for CCF ${target}.`);
   workflow_dispatch:

@@ -19,6 +19,15 @@ namespace
       error_reason);
   }
 
+  bool check_jwt_claims(std::string_view claims, std::string_view jwt_config)
+  {
+    std::string error_reason;
+    return ConfigurableJwtAuthnPolicy::check_jwt_claims(
+      nlohmann::json::parse(claims),
+      nlohmann::json::parse(jwt_config),
+      error_reason);
+  }
+
   TEST(ConfigurableJwtAuthnPolicy, CheckClaims)
   {
     // The trailing comments on every assertion forces clang-format's hand into
@@ -102,5 +111,103 @@ namespace
     EXPECT_FALSE(check_claims( //
       R"({ "data": [ "foo", "bar" ] })",
       R"({ "data": [ "foo" ] })"));
+  }
+
+  TEST(ConfigurableJwtAuthnPolicy, CheckClaimsSchema)
+  {
+    const std::string_view schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"}},"required":["aud"],"anyOf":[{"type":"object","properties":{"appid":{"const":"identity-a"},"tid":{"const":"tenant-a"}},"required":["appid","tid"]},{"type":"object","properties":{"appid":{"const":"identity-b"},"tid":{"const":"tenant-b"}},"required":["appid","tid"]}]})";
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a","extra":true})",
+      schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-b","tid":"tenant-b"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-b"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-b","tid":"tenant-a"})", schema));
+    EXPECT_FALSE(
+      check_jwt_claims(R"({"aud":"scitt","appid":"identity-a"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"other","appid":"identity-a","tid":"tenant-a"})", schema));
+
+    const std::string_view updated_schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"appid":{"const":"identity-c"}},"required":["appid"]})";
+    EXPECT_TRUE(check_jwt_claims(R"({"appid":"identity-c"})", updated_schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})",
+      updated_schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})", schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt","appid":"identity-a","tid":"tenant-a"})",
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"},"appid":{"const":"identity-b"}},"required":["aud","appid"]})"));
+  }
+
+  TEST(ConfigurableJwtAuthnPolicy, SchemaConstNumbersAreExact)
+  {
+    const std::string_view schema =
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"identity_id":{"const":9007199254740992},"nested":{"const":{"ids":[9007199254740992,{"id":9007199254740992}]}}},"required":["identity_id","nested"],"anyOf":[{"properties":{"tenant":{"const":1}},"required":["tenant"]},{"properties":{"tenant":{"const":9007199254740992}},"required":["tenant"]}]})";
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740992})",
+      schema));
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1.0})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740993,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740993.0,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740993,{"id":9007199254740992}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740993}]},"tenant":1})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740993})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":9007199254740993.0})",
+      schema));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"identity_id":9007199254740992,"nested":{"ids":[9007199254740992,{"id":9007199254740992}]},"tenant":true})",
+      schema));
+  }
+
+  TEST(ConfigurableJwtAuthnPolicy, LegacyAndInvalidConfiguration)
+  {
+    EXPECT_TRUE(check_jwt_claims(
+      R"({"aud":"scitt","extra":true})",
+      R"({"requiredClaims":{"aud":"scitt"}})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"other"})", R"({"requiredClaims":{"aud":"scitt"}})"));
+    EXPECT_TRUE(check_jwt_claims(R"({})", R"({"requiredClaims":{}})"));
+    EXPECT_FALSE(check_jwt_claims(R"({})", R"({})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{"aud":"scitt"},"anyOfClaims":[{"appid":"a"}]})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{"aud":"scitt"},"$schema":"http://json-schema.org/draft-07/schema#"})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})",
+      R"({"requiredClaims":{},"anyOf":[{"type":"object"}]})"));
+    EXPECT_FALSE(check_jwt_claims(
+      R"({"aud":"scitt"})", R"({"$schema":null,"requiredClaims":{}})"));
+
+    const auto jwt = nlohmann::json::parse(
+      R"({"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"aud":{"const":"scitt"}},"required":["aud"]})");
+    auto auth = nlohmann::json::parse(R"({"jwt":{}})")
+                  .get<Configuration::Authentication>();
+    auth.jwt = jwt;
+    EXPECT_EQ(nlohmann::json(auth).at("jwt"), jwt);
+    EXPECT_EQ(
+      nlohmann::json(auth).get<Configuration::Authentication>().jwt, jwt);
   }
 }

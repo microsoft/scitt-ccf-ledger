@@ -6,6 +6,7 @@ import pytest
 from pyscitt import crypto
 from pyscitt.client import Client
 
+from .constants import MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES
 from .infra.assertions import service_error
 from .infra.jwt_issuer import JwtIssuer
 
@@ -15,11 +16,15 @@ def configure_authentication(
     *,
     allow_unauthenticated: bool,
     required_claims=None,
+    jwt_schema=None,
     allow_unauthenticated_reads=None,
 ):
+    jwt_config = (
+        jwt_schema if jwt_schema is not None else {"requiredClaims": required_claims}
+    )
     auth_config = {
         "allowUnauthenticated": allow_unauthenticated,
-        "jwt": {"requiredClaims": required_claims},
+        "jwt": jwt_config,
     }
     if allow_unauthenticated_reads is not None:
         auth_config["allowUnauthenticatedReads"] = allow_unauthenticated_reads
@@ -29,6 +34,24 @@ def configure_authentication(
             "policy": {"policyScript": "export function apply(phdr) { return true; }"},
         }
     )
+
+
+def claims_schema(required_claims, alternatives):
+    schema = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {key: {"const": value} for key, value in required_claims.items()},
+        "required": list(required_claims),
+    }
+    if alternatives is not None:
+        schema["anyOf"] = [
+            {
+                "properties": {key: {"const": value} for key, value in claims.items()},
+                "required": list(claims),
+            }
+            for claims in alternatives
+        ]
+    return schema
 
 
 def application_read_requests(client: Client, tx: str):
@@ -125,6 +148,242 @@ class TestAuthentication:
         with service_error("InvalidAuthenticationInfo"):
             submit(auth_token=invalid_issuer.create_token({"aud": "foo"}))
 
+    def test_schema_jwt_claims(self, setup, submit, valid_issuer, invalid_issuer):
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema(
+                {"aud": "scitt", "iss": valid_issuer.name},
+                [
+                    {"appid": "identity-a", "tid": "tenant-a"},
+                    {"appid": "identity-b", "tid": "tenant-b"},
+                ],
+            ),
+        )
+
+        for appid, tid in (("identity-a", "tenant-a"), ("identity-b", "tenant-b")):
+            submit(
+                auth_token=valid_issuer.create_token(
+                    {"aud": "scitt", "appid": appid, "tid": tid}
+                )
+            )
+
+        for claims in (
+            {"aud": "scitt"},
+            {"aud": "scitt", "appid": "identity-a"},
+            {"aud": "scitt", "appid": "identity-a", "tid": "tenant-b"},
+            {"aud": "scitt", "appid": "identity-b", "tid": "tenant-a"},
+            {"aud": "scitt", "appid": "identity-c", "tid": "tenant-a"},
+            {"aud": "other", "appid": "identity-a", "tid": "tenant-a"},
+        ):
+            with service_error("InvalidAuthenticationInfo"):
+                submit(auth_token=valid_issuer.create_token(claims))
+
+        with service_error("InvalidAuthenticationInfo"):
+            submit(
+                auth_token=invalid_issuer.create_token(
+                    {"aud": "scitt", "appid": "identity-a", "tid": "tenant-a"}
+                )
+            )
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema(
+                {"aud": "scitt"}, [{"appid": "identity-a"}, {"tid": "tenant-a"}]
+            ),
+        )
+        submit(
+            auth_token=valid_issuer.create_token(
+                {"aud": "scitt", "appid": "identity-a", "tid": "tenant-a"}
+            )
+        )
+
+    def test_schema_with_multiple_issuers(
+        self, setup, client: Client, signed_statement, valid_issuer
+    ):
+        issuer_a = JwtIssuer("https://tenant-a.example.com")
+        issuer_b = JwtIssuer("https://tenant-b.example.com")
+        for issuer in (issuer_a, issuer_b):
+            client.governance.propose(issuer.create_proposal(), must_pass=True)
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema(
+                {"aud": "scitt"},
+                [
+                    {"iss": issuer_a.name, "azp": "identity-a", "tid": "tenant-a"},
+                    {"iss": issuer_b.name, "azp": "identity-b", "tid": "tenant-b"},
+                ],
+            ),
+        )
+
+        for issuer, azp, tid in (
+            (issuer_a, "identity-a", "tenant-a"),
+            (issuer_b, "identity-b", "tenant-b"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "azp": azp, "tid": tid})
+            authenticated_client = client.replace(auth_token=token)
+            tx = authenticated_client.submit_signed_statement_and_wait(
+                signed_statement
+            ).tx
+            assert_application_reads_succeed(authenticated_client, tx)
+            assert_application_reads_require_authentication(client, tx)
+
+        for issuer, azp, tid in (
+            (issuer_a, "identity-b", "tenant-b"),
+            (issuer_b, "identity-a", "tenant-a"),
+            (valid_issuer, "identity-a", "tenant-a"),
+        ):
+            token = issuer.create_token({"aud": "scitt", "azp": azp, "tid": tid})
+            with service_error("InvalidAuthenticationInfo"):
+                client.replace(auth_token=token).submit_signed_statement_and_wait(
+                    signed_statement
+                )
+            assert_application_reads_require_authentication(
+                client.replace(auth_token=token), tx
+            )
+
+    def test_schema_switch_preserves_existing_claim_checks(
+        self, setup, submit, valid_issuer
+    ):
+        token_a = valid_issuer.create_token({"aud": "scitt", "azp": "identity-a"})
+        token_b = valid_issuer.create_token({"aud": "scitt", "azp": "identity-b"})
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        submit(auth_token=token_a)
+        submit(auth_token=token_b)
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema({"aud": "scitt", "azp": "identity-a"}, None),
+        )
+        submit(auth_token=token_a)
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=token_b)
+
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema({"aud": "scitt", "azp": "identity-b"}, None),
+        )
+        submit(auth_token=token_b)
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=token_a)
+
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        submit(auth_token=token_a)
+        submit(auth_token=token_b)
+
+    def test_schema_numeric_constants_are_exact(self, setup, submit, valid_issuer):
+        identity_id = 9007199254740992
+        nested = {"ids": [identity_id, {"id": identity_id}]}
+        setup(
+            allow_unauthenticated=False,
+            jwt_schema=claims_schema(
+                {"identity_id": identity_id, "nested": nested},
+                [{"tenant": 1}, {"tenant": identity_id}],
+            ),
+        )
+        submit(
+            auth_token=valid_issuer.create_token(
+                {"identity_id": identity_id, "nested": nested, "tenant": identity_id}
+            )
+        )
+
+        for claims in (
+            {"identity_id": identity_id + 1, "nested": nested, "tenant": 1},
+            {"identity_id": float(identity_id + 1), "nested": nested, "tenant": 1},
+            {
+                "identity_id": identity_id,
+                "nested": {"ids": [identity_id + 1, {"id": identity_id}]},
+                "tenant": 1,
+            },
+            {
+                "identity_id": identity_id,
+                "nested": {"ids": [identity_id, {"id": identity_id + 1}]},
+                "tenant": 1,
+            },
+            {
+                "identity_id": identity_id,
+                "nested": nested,
+                "tenant": identity_id + 1,
+            },
+        ):
+            with service_error("InvalidAuthenticationInfo"):
+                submit(auth_token=valid_issuer.create_token(claims))
+
+    @pytest.mark.parametrize(
+        "invalid_schema",
+        [
+            claims_schema({"aud": "scitt"}, []),
+            claims_schema({}, [{}]),
+            claims_schema({}, None),
+            {**claims_schema({"aud": "scitt"}, None), "type": "array"},
+            {**claims_schema({"aud": "scitt"}, None), "patternProperties": {}},
+            {**claims_schema({"aud": "scitt"}, None), "required": []},
+            {**claims_schema({"aud": "scitt"}, None), "required": ["missing"]},
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "required": ["aud", "aud"],
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "properties": {"aud": {"type": "string"}},
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "properties": {"aud": {"const": "scitt", "type": "string"}},
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "anyOf": [True],
+            },
+            {
+                **claims_schema({"aud": "scitt"}, None),
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+            },
+            {**claims_schema({"aud": "scitt"}, None), "requiredClaims": {}},
+        ],
+    )
+    def test_reject_invalid_schema(self, setup, submit, valid_issuer, invalid_schema):
+        setup(allow_unauthenticated=False, required_claims={"aud": "scitt"})
+        with service_error("configuration.authentication.jwt"):
+            setup(
+                allow_unauthenticated=False,
+                jwt_schema=invalid_schema,
+            )
+        submit(auth_token=valid_issuer.create_token({"aud": "scitt"}))
+        with service_error("InvalidAuthenticationInfo"):
+            submit(auth_token=valid_issuer.create_token({"aud": "other"}))
+
+    def test_reject_schema_without_dialect(self, configure_service):
+        with service_error(r"\$schema"):
+            configure_service(
+                {
+                    "authentication": {
+                        "jwt": {
+                            "requiredClaims": {},
+                            "anyOf": [
+                                {
+                                    "properties": {"aud": {"const": "scitt"}},
+                                    "required": ["aud"],
+                                }
+                            ],
+                        }
+                    }
+                }
+            )
+
+    def test_reject_retired_any_of_claims(self, configure_service):
+        with service_error("anyOfClaims"):
+            configure_service(
+                {
+                    "authentication": {
+                        "jwt": {
+                            "requiredClaims": {},
+                            "anyOfClaims": [{"appid": "identity-a"}],
+                        }
+                    }
+                }
+            )
+
     def test_allow_anything(self, setup, submit, valid_issuer, invalid_issuer):
         # Allow anything
         setup(allow_unauthenticated=True)
@@ -132,6 +391,30 @@ class TestAuthentication:
         submit()
         submit(auth_token=valid_issuer.create_token())
         submit(auth_token=invalid_issuer.create_token())
+
+    @pytest.mark.parametrize(
+        "body_size, supply_token, expected_error",
+        [
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES, False, "InvalidInput"),
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES + 1, False, "PayloadTooLarge"),
+            (MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES + 1, True, "PayloadTooLarge"),
+        ],
+    )
+    def test_unauthenticated_statement_size_limit(
+        self,
+        setup,
+        client: Client,
+        valid_issuer,
+        body_size,
+        supply_token,
+        expected_error,
+    ):
+        setup(allow_unauthenticated=True, required_claims={})
+        if supply_token:
+            client = client.replace(auth_token=valid_issuer.create_token())
+
+        with service_error(expected_error):
+            client.submit_signed_statement(b"\x00" * body_size)
 
 
 class TestPerEndpointAuthentication:

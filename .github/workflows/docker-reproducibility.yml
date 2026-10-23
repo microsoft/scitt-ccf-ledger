@@ -34,7 +34,7 @@ jobs:
         run: ./scripts/reproduce-image.sh context "${PWD}/docker-context.tar"
 
       - name: Upload deterministic build context
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docker-build-context
           path: |
@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download deterministic build context
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: docker-build-context
           path: repro-input
@@ -148,7 +148,7 @@ jobs:
             /var/lib/rpm/rpmdb.sqlite > repro-input/rpmdb-sha256.txt
 
       - name: Upload image ID
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docker-image-id-${{ matrix.build }}
           path: |
@@ -171,7 +171,7 @@ jobs:
       statuses: write
     steps:
       - name: Download image IDs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: docker-image-id-*
           path: image-ids
@@ -225,7 +225,7 @@ jobs:
           cat "${first_layers}"
 
       - name: Upload reproduction manifest
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docker-reproduce-manifest
           path: image-ids/docker-image-id-one/reproduce.json
@@ -245,6 +245,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
 
@@ -264,7 +266,8 @@ jobs:
           description="L:${layers_digest} C:${context_sha256}"
           echo "Recording for ${built_commit}: ${description}"
 
-          STATUS_DESCRIPTION="${description}" python3 - /tmp/status-request.json <<'PY'
+          record_status() {
+          STATUS_CONTEXT="$2" STATUS_DESCRIPTION="$3" python3 - /tmp/status-request.json <<'PY'
           import json
           import os
           import sys
@@ -272,7 +275,7 @@ jobs:
           with open(sys.argv[1], "w", encoding="utf-8") as handle:
               json.dump({
                   "state": "success",
-                  "context": "reproducibility/layers",
+                  "context": os.environ["STATUS_CONTEXT"],
                   "description": os.environ["STATUS_DESCRIPTION"],
                   "target_url": "{}/{}/actions/runs/{}".format(
                       os.environ["GITHUB_SERVER_URL"],
@@ -295,18 +298,27 @@ jobs:
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --data @/tmp/status-request.json \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${built_commit}")
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/$1")
 
           if [ "${status}" != "201" ]; then
             # A silent failure here would leave the other build system waiting
             # for a record that never arrives, and reporting that as "not
             # compared" rather than as a fault would hide it indefinitely.
-            echo "::error::Could not record the verified layers (HTTP ${status}). The cross-system comparison has nothing to read for ${built_commit}."
+            echo "::error::Could not record $2 for $1 (HTTP ${status})."
             cat /tmp/status-response.json
             exit 1
           fi
 
-          echo "Recorded ${description} for ${built_commit}."
+          echo "Recorded $2 for $1."
+          }
+
+          record_status "${built_commit}" reproducibility/layers "${description}"
+          # GitHub can regenerate refs/pull/N/merge with the same parents and
+          # tree but a different timestamp. Let OneBranch pin this exact commit
+          # only after its layers have passed the gate and been recorded.
+          if [ -n "${PR_HEAD_SHA}" ]; then
+            record_status "${PR_HEAD_SHA}" "reproducibility/merge/${PR_BASE_SHA}" "M:${built_commit}"
+          fi
 
   publish-manifest:
     name: Publish reproduction manifest
@@ -319,7 +331,7 @@ jobs:
       # Attached to the release because workflow artifacts expire, while
       # reproducing it years from now needs the exact inputs this build used.
       - name: Download verified build outputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: docker-image-id-one
           path: manifest

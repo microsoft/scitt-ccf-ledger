@@ -15,7 +15,9 @@ jobs:
   long-asan:
     name: ASAN
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-long-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=long-asan-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     env:
       # Fast unwinder only gives us partial stack traces in LeakSanitzer
@@ -44,7 +46,7 @@ jobs:
 
       - name: "Upload logs"
         if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: logs-asan
           path: |
@@ -54,7 +56,7 @@ jobs:
   fuzz-api:
     name: fuzz
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=fuzz-api-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
       - name: Setup environment
@@ -79,7 +81,7 @@ jobs:
 
       - name: "Upload logs"
         if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: boofuzz-results
           path: |

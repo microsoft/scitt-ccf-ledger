@@ -4,13 +4,13 @@ httpx
 pytest
 loguru
 aiotools
-ccf>=7.0.16,<8
+ccf>=7.0.18,<8
 cryptography==50.*
 jwcrypto==1.5.*
 types-jwcrypto
 cbor2
 polars
-black==26.3.1
+black==26.10.1
 isort==6.1.0
 mypy==1.19.1
 matplotlib
