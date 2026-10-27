@@ -302,14 +302,11 @@ class DynamicTrustStoreClient:
             raise ValueError(f"JWKS URI {jwks_uri} must use HTTPS")
         if parsed.username or parsed.password:
             raise ValueError(f"JWKS URI {jwks_uri} must not include credentials")
-        if parsed.port not in (None, 443):
-            raise ValueError(f"JWKS URI {jwks_uri} must use the default HTTPS port")
         if not parsed.hostname:
             raise ValueError(f"JWKS URI {jwks_uri} does not include a hostname")
 
-        issuer_host = issuer.lower().rstrip(".")
-        jwks_host = parsed.hostname.lower().rstrip(".")
-        if jwks_host != issuer_host:
+        # Compare the full authority so the port must match the issuer's too.
+        if parsed.netloc.lower().rstrip(".") != issuer.lower().rstrip("."):
             raise ValueError(
                 f"JWKS URI {jwks_uri} host does not match issuer {issuer}"
             )
@@ -378,10 +375,11 @@ class DynamicTrustStore(TrustStore):
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
 
-    When `authorized_domains` is set, only issuers matching one of those
-    patterns are resolved; any other issuer is rejected rather than implicitly
-    trusted. Patterns are hostnames, optionally with a leading wildcard, e.g.
-    "*.confidential-ledger.azure.com".
+    By default only issuers matching `DEFAULT_AUTHORIZED_DOMAINS` are resolved;
+    any other issuer is rejected rather than implicitly trusted. Pass
+    `authorized_domains` to override the patterns, which are hostnames
+    optionally with a leading wildcard, e.g. "*.confidential-ledger.azure.com".
+    Pass ["*"] to explicitly allow any issuer.
     """
 
     def __init__(
@@ -392,7 +390,12 @@ class DynamicTrustStore(TrustStore):
         if client is None:
             client = DynamicTrustStoreClient()
         self.client = client
-        self.authorized_domains = authorized_domains
+        # Check before merge!!
+        self.authorized_domains = (
+            DEFAULT_AUTHORIZED_DOMAINS
+            if authorized_domains is None
+            else authorized_domains
+        )
 
     @property
     def services(self):
@@ -405,8 +408,6 @@ class DynamicTrustStore(TrustStore):
         # match "*.example.com" while addressing evil.com.
         if not is_hostname(issuer):
             return False
-        if self.authorized_domains is None:
-            return True
         return any(
             fnmatch.fnmatch(issuer.lower(), pattern.lower())
             for pattern in self.authorized_domains

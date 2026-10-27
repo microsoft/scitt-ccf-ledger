@@ -70,7 +70,7 @@ class TestDynamicTrustStore:
         }
 
         # Create instance and call method
-        trust_store = DynamicTrustStore(mock_client)
+        trust_store = DynamicTrustStore(mock_client, authorized_domains=["*"])
         result = trust_store.get_key(mock_receipt)
 
         # Assertions
@@ -86,7 +86,8 @@ class TestDynamicTrustStore:
         "issuer,authorized,expected",
         [
             ("ledger.confidential-ledger.azure.com", None, True),
-            ("evil.example.com", None, True),
+            ("evil.example.com", None, False),
+            ("ledger.confidential-ledger.azure.com:8443", None, False),
             ("ledger.confidential-ledger.azure.com", DEFAULT_AUTHORIZED_DOMAINS, True),
             ("Ledger.Confidential-Ledger.Azure.Com", DEFAULT_AUTHORIZED_DOMAINS, True),
             ("evil.example.com", DEFAULT_AUTHORIZED_DOMAINS, False),
@@ -154,6 +155,12 @@ class TestDynamicTrustStore:
             ("example.com", "http://example.com/.well-known/jwks", ValueError),
             ("example.com", "https://evil.example.com/.well-known/jwks", ValueError),
             ("example.com", "https://example.com:8443/.well-known/jwks", ValueError),
+            (
+                "example.com:8443",
+                "https://example.com:8443/.well-known/jwks",
+                "https://example.com:8443/.well-known/jwks",
+            ),
+            ("example.com:8443", "https://example.com/.well-known/jwks", ValueError),
             ("example.com", "https://user@example.com/.well-known/jwks", ValueError),
         ],
     )
