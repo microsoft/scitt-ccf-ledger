@@ -315,12 +315,13 @@ class BaseClient:
         values.update(kwargs)
         return self.__class__(**values)
 
-    '''
+    """
     Verified at client.py:398-408: on 307/308, `url = str(httpx.URL(location))` then `self.session.request(method, url, **kwargs)`
     loops. Absolute Location URLs bypass `base_url`, and the httpx.Client session headers (set at construction, line 254-263:
     `headers['Authorization'] = 'Bearer ' + auth_token`) are attached to every request regardless of host. `kwargs['content']`
     still holds the COSE-signed member payload (line 381). Nothing strips credentials cross-origin; up to 5 redirect hops (`max_redirects = 5`).
-    '''
+    """
+
     def _resolve_redirect(self, response: httpx.Response, location: str) -> str:
         """
         Resolve a redirect Location against the request URL and check that it

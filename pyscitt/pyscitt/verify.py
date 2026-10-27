@@ -307,9 +307,7 @@ class DynamicTrustStoreClient:
 
         # Compare the full authority so the port must match the issuer's too.
         if parsed.netloc.lower().rstrip(".") != issuer.lower().rstrip("."):
-            raise ValueError(
-                f"JWKS URI {jwks_uri} host does not match issuer {issuer}"
-            )
+            raise ValueError(f"JWKS URI {jwks_uri} host does not match issuer {issuer}")
 
         return jwks_uri
 

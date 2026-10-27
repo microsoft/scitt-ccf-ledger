@@ -192,7 +192,9 @@ class TestDynamicTrustStore:
     def test_get_jwks_rejects_nonmatching_host(self):
         http_client = Mock(spec=httpx.Client)
         response = Mock()
-        response.content = cbor2.dumps({"jwks_uri": "https://evil.example.com/.well-known/jwks"})
+        response.content = cbor2.dumps(
+            {"jwks_uri": "https://evil.example.com/.well-known/jwks"}
+        )
         response.raise_for_status.return_value = None
         http_client.get.return_value = response
 
