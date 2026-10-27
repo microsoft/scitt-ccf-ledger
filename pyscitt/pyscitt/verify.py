@@ -348,6 +348,9 @@ class DynamicTrustStoreClient:
         """
         if not issuer:
             raise ValueError("Issuer cannot be empty")
+        if not is_hostname(issuer):
+            raise ValueError(f"Issuer {issuer} is not a bare hostname")
+
         return self._client_for_issuer(issuer).get(
             "https://" + issuer + "/.well-known/transparency-configuration",
             headers={"Accept": "application/cbor"},

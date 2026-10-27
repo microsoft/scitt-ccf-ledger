@@ -165,6 +165,23 @@ class TestDynamicTrustStore:
         else:
             assert client._validate_jwks_uri(issuer, jwks_uri) == expected
 
+    @pytest.mark.parametrize(
+        "issuer",
+        [
+            "evil.com/x",
+            "user@evil.com",
+            "evil.com?x=",
+            "evil.com#x",
+            "169.254.169.254/latest",
+        ],
+    )
+    def test_get_configuration_rejects_non_hostname_issuer(self, issuer):
+        http_client = Mock(spec=httpx.Client)
+        client = DynamicTrustStoreClient(http_client)
+        with pytest.raises(ValueError, match="not a bare hostname"):
+            client.get_configuration(issuer)
+        http_client.get.assert_not_called()
+
     def test_get_jwks_rejects_nonmatching_host(self):
         http_client = Mock(spec=httpx.Client)
         response = Mock()
