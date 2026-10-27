@@ -315,6 +315,34 @@ class BaseClient:
         values.update(kwargs)
         return self.__class__(**values)
 
+    '''
+    Verified at client.py:398-408: on 307/308, `url = str(httpx.URL(location))` then `self.session.request(method, url, **kwargs)`
+    loops. Absolute Location URLs bypass `base_url`, and the httpx.Client session headers (set at construction, line 254-263:
+    `headers['Authorization'] = 'Bearer ' + auth_token`) are attached to every request regardless of host. `kwargs['content']`
+    still holds the COSE-signed member payload (line 381). Nothing strips credentials cross-origin; up to 5 redirect hops (`max_redirects = 5`).
+    '''
+    def _resolve_redirect(self, response: httpx.Response, location: str) -> str:
+        """
+        Resolve a redirect Location against the request URL and check that it
+        is safe to follow.
+
+        Redirects may point at another node (CCF redirects writes to the
+        primary), but must not downgrade the scheme of the client's base URL
+        or embed credentials, as the session's Authorization header and the
+        request body are sent to whatever host is named.
+        """
+        target = response.request.url.join(location)
+        if target.scheme != self.session.base_url.scheme:
+            raise ValueError(
+                f"Refusing redirect to {target.scheme} URL; "
+                f"expected {self.session.base_url.scheme}"
+            )
+        if target.userinfo:
+            raise ValueError("Refusing redirect to a URL containing credentials")
+        if not target.host:
+            raise ValueError("Refusing redirect to a URL without a host")
+        return str(target)
+
     def parse_response_error(self, response: httpx.Response) -> Optional[ServiceError]:
         """
         Parse the error response from the server and return a ServiceError instance.
@@ -481,7 +509,7 @@ class BaseClient:
                             kwargs["headers"].pop("Content-Type", None)
                             kwargs["headers"].pop("content-type", None)
 
-                    url = str(httpx.URL(location))
+                    url = self._resolve_redirect(response, location)
                     LOG.debug(f"Following {response.status_code} redirect to {url}")
                     continue
 
