@@ -138,6 +138,46 @@ class TestDynamicTrustStore:
 
         client.get_jwks.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "issuer,jwks_uri,expected",
+        [
+            (
+                "example.com",
+                "https://example.com/.well-known/jwks",
+                "https://example.com/.well-known/jwks",
+            ),
+            (
+                "Example.com",
+                "https://example.com/.well-known/jwks",
+                "https://example.com/.well-known/jwks",
+            ),
+            ("example.com", "http://example.com/.well-known/jwks", ValueError),
+            ("example.com", "https://evil.example.com/.well-known/jwks", ValueError),
+            ("example.com", "https://example.com:8443/.well-known/jwks", ValueError),
+            ("example.com", "https://user@example.com/.well-known/jwks", ValueError),
+        ],
+    )
+    def test_validate_jwks_uri(self, issuer, jwks_uri, expected):
+        client = DynamicTrustStoreClient()
+        if expected is ValueError:
+            with pytest.raises(ValueError):
+                client._validate_jwks_uri(issuer, jwks_uri)
+        else:
+            assert client._validate_jwks_uri(issuer, jwks_uri) == expected
+
+    def test_get_jwks_rejects_nonmatching_host(self):
+        http_client = Mock(spec=httpx.Client)
+        response = Mock()
+        response.content = cbor2.dumps({"jwks_uri": "https://evil.example.com/.well-known/jwks"})
+        response.raise_for_status.return_value = None
+        http_client.get.return_value = response
+
+        client = DynamicTrustStoreClient(http_client)
+        with pytest.raises(ValueError, match="host does not match issuer"):
+            client.get_jwks("example.com")
+
+        assert http_client.get.call_count == 1
+
 
 class TestFallbackTrustStore:
     def _receipt(self) -> bytes:
