@@ -4,7 +4,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 #include <tav/cbor.hpp>
@@ -38,46 +37,6 @@ namespace scitt::cbor
     fields.emplace_back(make_signed(CBOR_ERROR_TITLE), make_string(code));
     fields.emplace_back(
       make_signed(CBOR_ERROR_DETAIL), make_string(error_message));
-    return make_map(std::move(fields)).nondet_serialize();
-  }
-
-  inline std::vector<uint8_t> operation_props_to_cbor(
-    const std::string& operation_id,
-    const std::string& status,
-    const std::optional<std::string>& entry_id,
-    const std::optional<std::string>& error_code,
-    const std::optional<std::string>& error_message)
-  {
-    using namespace tav::cbor;
-    // All inputs are valid UTF-8 already: the IDs are TxID strings, the status
-    // is an enum name, the error code is an errors:: constant and the error
-    // message was JSON-serialised into the operations table, which rejects
-    // invalid UTF-8.
-
-    // Entries are serialized in insertion order.
-    std::vector<MapItem> fields;
-    fields.emplace_back(make_string("OperationId"), make_string(operation_id));
-    fields.emplace_back(make_string("Status"), make_string(status));
-    if (entry_id.has_value())
-    {
-      fields.emplace_back(
-        make_string("EntryId"), make_string(entry_id.value()));
-    }
-    if (error_code.has_value() || error_message.has_value())
-    {
-      std::vector<MapItem> error;
-      if (error_code.has_value())
-      {
-        error.emplace_back(
-          make_signed(CBOR_ERROR_TITLE), make_string(error_code.value()));
-      }
-      if (error_message.has_value())
-      {
-        error.emplace_back(
-          make_signed(CBOR_ERROR_DETAIL), make_string(error_message.value()));
-      }
-      fields.emplace_back(make_string("Error"), make_map(std::move(error)));
-    }
     return make_map(std::move(fields)).nondet_serialize();
   }
 

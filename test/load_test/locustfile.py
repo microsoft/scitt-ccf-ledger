@@ -11,12 +11,11 @@ from locust import FastHttpUser, events, task
 
 CT_COSE = "application/cose"
 
-# The api-version has to be sent for the service to answer a waitForCommit
-# submission with the COSE receipt, rather than with the legacy operation body.
+# The api-version selects the SCITT media types of the responses.
 SCITT_API_VERSION = "2026-03-26"
 
 # Submitting with waitForCommit makes POST /entries return once the transaction
-# is committed, so the operation does not have to be polled afterwards.
+# is committed, so the entry does not have to be polled afterwards.
 SUBMIT_PATH = f"/entries?waitForCommit=true&api-version={SCITT_API_VERSION}"
 SUBMIT_NAME = "POST /entries"
 

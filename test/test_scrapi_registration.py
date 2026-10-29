@@ -28,12 +28,14 @@ def scrapi_client(client: Client) -> Client:
     return client.replace(api_version=SCITT_API_VERSION_2026_03_26)
 
 
+@pytest.mark.parametrize("api_version", [SCITT_API_VERSION_2026_03_26, None])
 def test_async_registration_returns_303(
-    scrapi_client: Client, cert_authority, configure_service
+    client: Client, api_version, cert_authority, configure_service
 ):
     """
     POST /entries returns 303 See Other with a Location header pointing
-    to /entries/{txid} per SCRAPI v09 section 2.3.2.
+    to /entries/{txid} per SCRAPI v09 section 2.3.2, with or without the
+    api-version.
     """
     identity = cert_authority.create_identity(
         alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
@@ -52,7 +54,7 @@ def test_async_registration_returns_303(
     # response can be inspected. Redirect following is disabled so that the 303
     # is returned rather than followed, while a 307 sending the write from a
     # backup to the primary is still followed transparently.
-    resp = scrapi_client.request(
+    resp = client.replace(api_version=api_version).request(
         "POST",
         "/entries",
         headers={"Content-Type": CT_APPLICATION_COSE},
