@@ -39,19 +39,19 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.22.tar.gz
-    tar xvzf ccf-7.0.22.tar.gz
-    cd CCF-ccf-7.0.22/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.23.tar.gz
+    tar xvzf ccf-7.0.23.tar.gz
+    cd CCF-ccf-7.0.23/scripts/
     ./setup-dev.sh
     ```
 
 ## Updating the CCF version
 
-The CCF release is named in five files: `docker/Dockerfile`,
-`.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh` and this
-document. Change all five together. Only raise the Python CCF minimum in
-`pyscitt/setup.py` and `test/requirements.txt` if the older Python package no
-longer works, preserving the `<8` upper bound.
+The CCF release is named in six files: `docker/Dockerfile`,
+`.devcontainer/Dockerfile`, `scripts/setup-env.sh`, `build.sh`,
+`app/CMakeLists.txt` and this document. Change all six together. Only raise the
+Python CCF minimum in `pyscitt/setup.py` and `test/requirements.txt` if the
+older Python package no longer works, preserving the `<8` upper bound.
 The image build reads the tdnf snapshot time out of the release's own
 `reproduce.json` rather than repeating it.
 
@@ -59,7 +59,7 @@ Then confirm they agree, and that the new release publishes what the build
 fetches:
 
 ```sh
-./scripts/check-ccf-version.sh   # the five files name the same release
+./scripts/check-ccf-version.sh   # the six files name the same release
 ./scripts/check-build-inputs.sh  # that release serves reproduce.json and the RPM
 ```
 

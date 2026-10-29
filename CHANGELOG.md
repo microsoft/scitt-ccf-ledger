@@ -56,8 +56,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
-- Update CCF to 7.0.22 and use its exported Valijson headers for JWT claims
-  schema validation instead of fetching Valijson separately.
+- Update CCF to 7.0.23, retaining its exported Valijson headers for JWT claims
+  schema validation and gaining fixes for service certificate renewal,
+  recovery and snapshots larger than 2 GiB.
 - `attestedsvc` COSE keys are parsed and validated with CCF's COSE key API when
   decoding, and their signatures are verified with CCF's COSE verifier. Only
   EC2 and RSA keys are accepted, as before, but validation is stricter: the
