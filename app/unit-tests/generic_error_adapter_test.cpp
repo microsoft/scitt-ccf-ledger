@@ -115,6 +115,22 @@ namespace
     throw BadRequestCborError(errors::PolicyError, "Invalid configured policy");
   }
 
+  TEST(HTTPErrorTest, ToCborErrorDoesNotEchoInvalidUtf8)
+  {
+    // The message may quote unverified request bytes, for example a
+    // URL-unescaped did:x509 issuer, which cannot be encoded as CBOR text
+    const BadRequestCborError error(
+      errors::InvalidInput,
+      "Failed to resolve did:x509 issuer: invalid subject key/value: CN=\xff");
+
+    const auto body = error.to_cbor_error();
+
+    const auto parsed = tav::cbor::nondet_parse(body);
+    EXPECT_EQ(parsed.map_value_at(0).as_string(), errors::InvalidInput);
+    EXPECT_EQ(
+      parsed.map_value_at(1).as_string(), "Error message is not valid UTF-8");
+  }
+
   // Unit test for generic_error_adapter
   TEST(GenericErrorAdapterTest, HandlesHTTPError)
   {
@@ -135,28 +151,14 @@ namespace
         ccf::http::headers::CONTENT_TYPE, cbor::CBOR_ERROR_CONTENT_TYPE));
     EXPECT_CALL(*ctx.rpc_ctx, set_response_body(_))
       .WillOnce([](const std::vector<uint8_t>& body) {
-        // Decode the CBOR body and check its contents
-        QCBORDecodeContext decode_ctx;
-        const UsefulBufC input_buf{body.data(), body.size()};
-        QCBORDecode_Init(&decode_ctx, input_buf, QCBOR_DECODE_MODE_NORMAL);
-        QCBORDecode_EnterMap(&decode_ctx, nullptr);
-        QCBORItem item;
-        QCBORDecode_GetNext(&decode_ctx, &item);
-        EXPECT_EQ(item.uLabelType, QCBOR_TYPE_INT64);
-        EXPECT_EQ(item.label.int64, -1);
-        EXPECT_EQ(item.uDataType, QCBOR_TYPE_TEXT_STRING);
-        EXPECT_STREQ(
-          std::string(cbor::as_string(item.val.string)).c_str(), "BadRequest");
-        QCBORDecode_GetNext(&decode_ctx, &item);
-        EXPECT_EQ(item.uLabelType, QCBOR_TYPE_INT64);
-        EXPECT_EQ(item.label.int64, -2);
-        EXPECT_EQ(item.uDataType, QCBOR_TYPE_TEXT_STRING);
-        EXPECT_STREQ(
-          std::string(cbor::as_string(item.val.string)).c_str(),
-          "This is a bad request");
-        QCBORDecode_ExitMap(&decode_ctx);
-        QCBORError err = QCBORDecode_Finish(&decode_ctx);
-        EXPECT_EQ(err, QCBOR_SUCCESS);
+        // Decode the CBOR body and check its contents, in encoding order
+        const auto error = tav::cbor::nondet_parse(body);
+        ASSERT_EQ(error.kind(), tav::cbor::Kind::MAP);
+        ASSERT_EQ(error.size(), 2U);
+        EXPECT_EQ(error.map_key_at(0).as_signed(), -1);
+        EXPECT_EQ(error.map_value_at(0).as_string(), "BadRequest");
+        EXPECT_EQ(error.map_key_at(1).as_signed(), -2);
+        EXPECT_EQ(error.map_value_at(1).as_string(), "This is a bad request");
       });
 
     adapted_function(ctx);

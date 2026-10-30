@@ -11,10 +11,11 @@
 #include "tracing.h"
 #include "verified_details.h"
 
+#include <ccf/crypto/cose_key.h>
 #include <ccf/crypto/eddsa_key_pair.h>
-#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
+#include <ccf/crypto/verifier.h>
 #include <ccf/ds/hex.h>
 #include <ccf/ds/quote_info.h>
 #include <ccf/pal/attestation.h>
@@ -22,9 +23,6 @@
 #include <ccf/pal/uvm_endorsements.h>
 #include <ccf/service/tables/cert_bundles.h>
 #include <fmt/format.h>
-#include <openssl/core_names.h>
-#include <openssl/encoder.h>
-#include <openssl/param_build.h>
 
 namespace scitt::verifier
 {
@@ -155,13 +153,21 @@ namespace scitt::verifier
       check_is_accepted_algorithm(phdr, configuration);
 
       // Verify the signature using the key of the leaf in the x5chain
-      ccf::crypto::OpenSSL::Unique_X509 leaf =
-        parse_certificate(phdr.x5chain.value()[0]);
-      PublicKey key(leaf, std::nullopt);
+      const auto leaf_key = [&]() {
+        try
+        {
+          return ccf::crypto::COSEKey::from_der_cert(phdr.x5chain.value()[0]);
+        }
+        catch (const std::exception& e)
+        {
+          throw VerificationError(
+            fmt::format("Could not parse certificate: {}", e.what()));
+        }
+      }();
       std::span<uint8_t> payload;
       try
       {
-        payload = cose::verify(data, key);
+        payload = cose::verify(data, leaf_key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -169,16 +175,14 @@ namespace scitt::verifier
       }
 
       // Then authenticate the did:x509 claim against the x5chain
-      std::vector<std::string> pem_certs;
-      for (auto const& c : phdr.x5chain.value())
-      {
-        pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
-      }
-      auto signing_key_pem =
-        ccf::crypto::make_verifier(phdr.x5chain.value()[0])->public_key_pem();
-      ccf::crypto::Pem resolved_pem;
+      ccf::crypto::Sha256Hash resolved_thumbprint;
       try
       {
+        std::vector<std::string> pem_certs;
+        for (auto const& c : phdr.x5chain.value())
+        {
+          pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
+        }
         auto resolved_jwk_str = didx509::resolve_jwk(
           pem_certs,
           phdr.cwt_claims.iss.value(),
@@ -192,24 +196,30 @@ namespace scitt::verifier
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyECPublic>();
-            resolved_pem =
-              ccf::crypto::make_ec_public_key(specific_jwk)->public_key_pem();
+            resolved_thumbprint =
+              ccf::crypto::COSEKey(
+                ccf::crypto::make_ec_public_key(specific_jwk))
+                .thumbprint_sha256();
             break;
           }
           case ccf::crypto::JsonWebKeyType::RSA:
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyRSAPublic>();
-            resolved_pem =
-              ccf::crypto::make_rsa_public_key(specific_jwk)->public_key_pem();
+            resolved_thumbprint =
+              ccf::crypto::COSEKey(
+                ccf::crypto::make_rsa_public_key(specific_jwk))
+                .thumbprint_sha256();
             break;
           }
           case ccf::crypto::JsonWebKeyType::OKP:
           {
             auto specific_jwk =
               resolved_jwk_json.get<ccf::crypto::JsonWebKeyEdDSAPublic>();
-            resolved_pem = ccf::crypto::make_eddsa_public_key(specific_jwk)
-                             ->public_key_pem();
+            resolved_thumbprint =
+              ccf::crypto::COSEKey(
+                ccf::crypto::make_eddsa_public_key(specific_jwk))
+                .thumbprint_sha256();
             break;
           }
           default:
@@ -230,7 +240,7 @@ namespace scitt::verifier
           fmt::format("Failed to resolve did:x509 issuer: {}", e.what()));
       }
 
-      if (resolved_pem != signing_key_pem)
+      if (resolved_thumbprint != leaf_key.thumbprint_sha256())
       {
         throw VerificationError(
           "Resolved verification method public key does not match signing key");
@@ -258,25 +268,24 @@ namespace scitt::verifier
       {
         throw VerificationError("Protected header KID is missing");
       }
-      auto cose_key_thumb = phdr.tss_map.cose_key->to_sha256_thumb();
+      const auto& cose_key = phdr.tss_map.cose_key.value();
+      const auto cose_key_thumb = cose_key.thumbprint_sha256();
       std::vector<uint8_t> kid_bytes(phdr.kid->begin(), phdr.kid->end());
       if (!std::equal(
-            cose_key_thumb.begin(),
-            cose_key_thumb.end(),
+            cose_key_thumb.h.begin(),
+            cose_key_thumb.h.end(),
             kid_bytes.begin(),
             kid_bytes.end()))
       {
         throw VerificationError("COSE key thumbprint does not match KID");
       }
 
-      PublicKey public_key = phdr.tss_map.cose_key->to_public_key();
-
       // First verify the signature to then trust the structure integrity
       // and the attestation contained in the protected header.
       std::span<uint8_t> payload;
       try
       {
-        payload = cose::verify(data, public_key);
+        payload = cose::verify(data, cose_key);
       }
       catch (const cose::COSESignatureValidationError& e)
       {
@@ -365,16 +374,8 @@ namespace scitt::verifier
           report_data.data.size()));
       }
 
-      std::vector<uint8_t> cose_key_hash;
-      try
-      {
-        cose_key_hash = phdr.tss_map.cose_key->to_sha256_thumb();
-      }
-      catch (const std::exception& e)
-      {
-        throw VerificationError(
-          fmt::format("Failed to compute COSE key hash: {}", e.what()));
-      }
+      std::vector<uint8_t> cose_key_hash(
+        cose_key_thumb.h.begin(), cose_key_thumb.h.end());
 
       // create a span of data which starts with cose_key_hash bytes and then is
       // padded with zeros to match the report data bytes
@@ -413,7 +414,6 @@ namespace scitt::verifier
       std::optional<VerifiedSevSnpAttestationDetails>>
     verify_signed_statement(
       const std::vector<uint8_t>& signed_statement,
-      ccf::kv::ReadOnlyTx& tx,
       ::timespec current_time,
       const Configuration& configuration)
     {
@@ -501,41 +501,6 @@ namespace scitt::verifier
       }
 
       return {phdr, uhdr, payload, details};
-    }
-
-  private:
-    /** Parse a PEM certificate */
-    static ccf::crypto::OpenSSL::Unique_X509 parse_certificate(
-      const ccf::crypto::Pem& pem)
-    {
-      ccf::crypto::OpenSSL::Unique_BIO bio(pem);
-      ccf::crypto::OpenSSL::Unique_X509 cert(bio, true);
-      if (!cert)
-      {
-        unsigned long ec = ERR_get_error();
-        SCITT_DEBUG(
-          "Could not parse PEM certificate: {}",
-          ccf::crypto::OpenSSL::error_string(ec));
-        throw VerificationError("Could not parse certificate");
-      }
-      return cert;
-    }
-
-    /** Parse a DER certificate */
-    static ccf::crypto::OpenSSL::Unique_X509 parse_certificate(
-      std::span<const uint8_t> der)
-    {
-      ccf::crypto::OpenSSL::Unique_BIO bio(der.data(), der.size());
-      ccf::crypto::OpenSSL::Unique_X509 cert(bio, false);
-      if (!cert)
-      {
-        unsigned long ec = ERR_get_error();
-        SCITT_DEBUG(
-          "Could not parse DER certificate: {}",
-          ccf::crypto::OpenSSL::error_string(ec));
-        throw VerificationError("Could not parse certificate");
-      }
-      return cert;
     }
   };
 }

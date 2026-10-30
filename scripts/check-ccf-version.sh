@@ -3,10 +3,10 @@
 # Licensed under the MIT License.
 
 # Check that the Dockerfile, devcontainer, environment setup script, build
-# script and docs all name the same pinned CCF release, because letting them
-# drift is how the devcontainer ends up on a different release than the image
-# and reproduces differently for no visible reason; it only reads files, so it
-# is safe to run on every CI job.
+# script, CMake requirement and docs all name the same pinned CCF release,
+# because letting them drift is how development or builds end up on a different
+# release than the image and reproduce differently for no visible reason; it
+# only reads files, so it is safe to run on every CI job.
 
 set -euo pipefail
 
@@ -15,6 +15,7 @@ dockerfile="${root}/docker/Dockerfile"
 devcontainer="${root}/.devcontainer/Dockerfile"
 setup_env="${root}/scripts/setup-env.sh"
 build_sh="${root}/build.sh"
+cmake_lists="${root}/app/CMakeLists.txt"
 development_md="${root}/DEVELOPMENT.md"
 
 usage() {
@@ -45,6 +46,10 @@ version_in_build_sh() {
     sed -n 's/^[[:space:]]*CCF_SOURCE_VERSION="\(.*\)"$/\1/p' "${build_sh}" | head -n1
 }
 
+version_in_cmake_lists() {
+    sed -n 's/^[[:space:]]*find_package(ccf \([^ ]*\) REQUIRED)$/\1/p' "${cmake_lists}" | head -n1
+}
+
 # A file naming no release at all is something to report, not to die on, and
 # grep exits non-zero in exactly that case, so the status has to be dropped
 # here rather than tripping errexit.
@@ -66,11 +71,13 @@ check_consistency() {
         ".devcontainer/Dockerfile"
         "scripts/setup-env.sh"
         "build.sh"
+        "app/CMakeLists.txt"
     )
     local -a readers=(
         version_in_devcontainer
         version_in_setup_env
         version_in_build_sh
+        version_in_cmake_lists
     )
     local i
     for i in "${!names[@]}"; do

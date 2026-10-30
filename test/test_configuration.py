@@ -26,6 +26,7 @@ from pyscitt.client import Client
 
 from . import policies
 from .infra.assertions import service_error
+from .infra.jwt_issuer import JwtIssuer
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
@@ -110,6 +111,12 @@ class TestPolicyEngine:
 
         return f
 
+    @pytest.fixture(scope="class")
+    def jwt_client(self, client: Client):
+        issuer = JwtIssuer()
+        client.governance.propose(issuer.create_proposal(), must_pass=True)
+        return client.replace(auth_token=issuer.create_token())
+
     @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
         self,
@@ -164,7 +171,7 @@ class TestPolicyEngine:
 
         invalid_issuer = "Invalid issuer"
         eku_not_found = "EKU not found"
-        openssl_error = "OpenSSL error"
+        invalid_eku = "invalid EKU"
         invalid_did = "invalid DID string"
         not_supported = "CWT_Claims issuer is unsupported"
 
@@ -181,7 +188,7 @@ class TestPolicyEngine:
                     identities[2], statement, feed=feed, cwt=True
                 ),
             ],
-            openssl_error: [
+            invalid_eku: [
                 crypto.sign_json_statement(
                     identities[3], statement, feed=feed, cwt=True
                 ),
@@ -480,7 +487,7 @@ return true;
         client.submit_signed_statement_and_wait(signed_statement())
 
     def test_payload_policy_with_large_payload(
-        self, client: Client, configure_service, signed_statement
+        self, jwt_client: Client, configure_service, signed_statement
     ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
@@ -491,7 +498,15 @@ return true;
             return true; 
         }
         """
-        configure_service({"policy": {"policyScript": policy_script}})
+        configure_service(
+            {
+                "authentication": {
+                    "allowUnauthenticated": False,
+                    "jwt": {"requiredClaims": {}},
+                },
+                "policy": {"policyScript": policy_script},
+            }
+        )
 
         # Create a large JSON payload
         big_json: dict = {"foo": []}
@@ -501,10 +516,10 @@ return true;
         statement = signed_statement(big_json)
         print(f"Signed statement size: {len(statement)} bytes")
 
-        client.submit_signed_statement_and_wait(statement)
+        jwt_client.submit_signed_statement_and_wait(statement)
 
     def test_configurable_max_signed_statement_bytes_larger(
-        self, client: Client, configure_service, signed_statement
+        self, jwt_client: Client, configure_service, signed_statement
     ):
         """
         Configure the service with a maxSignedStatementBytes larger than the
@@ -522,6 +537,10 @@ return true;
         """
         configure_service(
             {
+                "authentication": {
+                    "allowUnauthenticated": False,
+                    "jwt": {"requiredClaims": {}},
+                },
                 "policy": {"policyScript": policy_script},
                 "maxSignedStatementBytes": max_size,
             }
@@ -542,7 +561,7 @@ return true;
         assert (
             len(statement) < max_size
         ), "Statement should be smaller than configured 2MB limit"
-        client.submit_signed_statement_and_wait(statement)
+        jwt_client.submit_signed_statement_and_wait(statement)
 
     def test_configurable_max_signed_statement_bytes_smaller(
         self, client: Client, configure_service, signed_statement

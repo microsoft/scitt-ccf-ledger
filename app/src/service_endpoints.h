@@ -5,14 +5,17 @@
 
 #include "cbor.h"
 #include "did/document.h"
+#include "json_adapter.h"
+#include "signature_algorithms.h"
+#include "utf8.h"
 #include "visit_each_entry_in_value.h"
 
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/cose_signatures_config_interface.h>
+#include <ccf/crypto/cose_key.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/endpoint.h>
 #include <ccf/http_accept.h>
-#include <ccf/json_handler.h>
 #include <ccf/network_identity_interface.h>
 #include <ccf/service/tables/service.h>
 
@@ -33,14 +36,25 @@ namespace scitt
   }
 
   /**
-   * Encode an EC public key as a COSE_Key with kid.
+   * The COSE algorithm that CCF signs with using a service key of this curve,
+   * published as the "alg" of the key's COSE_Key.
    */
-  static std::vector<uint8_t> key_to_cose_key(
-    const ccf::crypto::ECPublicKeyPtr& key, const std::string& kid)
+  static int64_t cose_alg_from_key(const ccf::crypto::ECPublicKeyPtr& key)
   {
-    auto coords = key->coordinates();
-    auto crv = cbor::curve_id_to_cose_crv(key->get_curve_id());
-    return cbor::ec_cose_key_with_kid_to_cbor(crv, coords.x, coords.y, kid);
+    const auto curve = key->get_curve_id();
+    if (curve == ccf::crypto::CurveID::SECP256R1)
+    {
+      return COSE_ALGORITHM_ES256;
+    }
+    if (curve == ccf::crypto::CurveID::SECP384R1)
+    {
+      return COSE_ALGORITHM_ES384;
+    }
+    if (curve == ccf::crypto::CurveID::SECP521R1)
+    {
+      return COSE_ALGORITHM_ES512;
+    }
+    throw std::logic_error("Unsupported service key curve");
   }
 
   static void set_cbor_response(
@@ -126,7 +140,7 @@ namespace scitt
       .make_endpoint(
         "/configuration",
         HTTP_GET,
-        ccf::json_adapter(endpoints::get_configuration),
+        scitt::json_adapter(endpoints::get_configuration),
         no_authn_policy)
       .set_auto_schema<void, Configuration>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -142,7 +156,7 @@ namespace scitt
       .make_endpoint(
         "/version",
         HTTP_GET,
-        ccf::json_adapter(endpoints::get_version),
+        scitt::json_adapter(endpoints::get_version),
         no_authn_policy)
       .set_auto_schema<void, GetVersion::Out>()
       .set_forwarding_required(ccf::endpoints::ForwardingRequired::Never)
@@ -220,7 +234,8 @@ namespace scitt
       std::vector<std::vector<uint8_t>> cose_keys;
       for (const auto& [seq_no, key] : trusted_keys)
       {
-        cose_keys.push_back(key_to_cose_key(key, kid_from_key(key)));
+        cose_keys.push_back(ccf::crypto::COSEKey(key).to_cbor(
+          cose_alg_from_key(key), kid_from_key(key)));
       }
 
       set_cbor_response(
@@ -263,18 +278,24 @@ namespace scitt
           {
             // Return a single COSE Key (map), not a COSE Key Set (array)
             // per Section 2.2 of draft-ietf-scitt-scrapi-09
-            set_cbor_response(ctx, HTTP_STATUS_OK, key_to_cose_key(key, kid));
+            auto cose_key =
+              ccf::crypto::COSEKey(key).to_cbor(cose_alg_from_key(key), kid);
+            set_cbor_response(ctx, HTTP_STATUS_OK, std::move(cose_key));
             return;
           }
         }
 
+        // The kid is a raw path parameter, so it is only echoed back if it is
+        // valid UTF-8
+        std::string message =
+          "No key could be found for this value, which is not valid UTF-8";
+        if (is_valid_utf8(kid_value))
+        {
+          message =
+            fmt::format("No key could be found for this '{}' value", kid_value);
+        }
         set_cbor_error_response(
-          ctx,
-          HTTP_STATUS_NOT_FOUND,
-          cbor::cbor_error(
-            "No such key",
-            fmt::format(
-              "No key could be found for this '{}' value", kid_value)));
+          ctx, HTTP_STATUS_NOT_FOUND, cbor::cbor_error("No such key", message));
       };
 
     registry

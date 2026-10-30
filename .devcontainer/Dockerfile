@@ -1,4 +1,4 @@
-ARG CCF_VERSION="7.0.17"
+ARG CCF_VERSION="7.0.23"
 
 FROM mcr.microsoft.com/azurelinux/base/core:3.0
 
@@ -7,6 +7,7 @@ ARG CCF_VERSION
 RUN tdnf update -y && \
     tdnf install -y \
     git \
+    gh \
     build-essential \
     python3-pip \
     ca-certificates \

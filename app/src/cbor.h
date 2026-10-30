@@ -3,13 +3,11 @@
 
 #pragma once
 
-#include <ccf/crypto/curve.h>
+#include <cstdint>
 #include <optional>
-#include <qcbor/UsefulBuf.h>
-#include <qcbor/qcbor_encode.h>
 #include <span>
-#include <stdexcept>
-#include <string_view>
+#include <string>
+#include <tav/cbor.hpp>
 #include <vector>
 
 namespace scitt::cbor
@@ -19,67 +17,28 @@ namespace scitt::cbor
   static constexpr const char* CBOR_ERROR_CONTENT_TYPE =
     "application/concise-problem-details+cbor";
 
-  inline UsefulBufC from_bytes(std::span<const uint8_t> v)
+  inline std::vector<uint8_t> as_vector(std::span<const uint8_t> bytes)
   {
-    return UsefulBufC{v.data(), v.size()};
-  }
-
-  inline UsefulBufC from_string(std::string_view v)
-  {
-    return UsefulBufC{v.data(), v.size()};
-  }
-
-  inline std::vector<uint8_t> as_vector(UsefulBufC buf)
-  {
-    return std::vector<uint8_t>(
-      static_cast<const uint8_t*>(buf.ptr),
-      static_cast<const uint8_t*>(buf.ptr) + buf.len);
-  }
-
-  inline std::string_view as_string(UsefulBufC buf)
-  {
-    return {static_cast<const char*>(buf.ptr), buf.len};
+    return {bytes.begin(), bytes.end()};
   }
 
   /**
    * A CBOR-encoded byte array.
    * Follow rfc9290 for error encoding but use only
    * title and detail and encode them cbor text.
+   * Both must be valid UTF-8 (RFC 8949 section 3.1): callers check unverified
+   * text, such as an exception message or a request parameter, with
+   * is_valid_utf8 first and do not echo it back otherwise.
    */
   inline std::vector<uint8_t> cbor_error(
     const std::string& code, const std::string& error_message)
   {
-    // The size of the buffer must be equal or larger than the data,
-    // otherwise decoding will fail
-    size_t buff_size = QCBOR_HEAD_BUFFER_SIZE + // map
-      QCBOR_HEAD_BUFFER_SIZE + // key
-      sizeof(CBOR_ERROR_TITLE) + // key
-      QCBOR_HEAD_BUFFER_SIZE + // value
-      code.size() + // value
-      QCBOR_HEAD_BUFFER_SIZE + // key
-      sizeof(CBOR_ERROR_DETAIL) + // key
-      QCBOR_HEAD_BUFFER_SIZE + // value
-      error_message.size(); // value
-    std::vector<uint8_t> output(buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddTextToMapN(&ectx, CBOR_ERROR_TITLE, from_string(code));
-    QCBOREncode_AddTextToMapN(
-      &ectx, CBOR_ERROR_DETAIL, from_string(error_message));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
+    using namespace tav::cbor;
+    std::vector<MapItem> fields;
+    fields.emplace_back(make_signed(CBOR_ERROR_TITLE), make_string(code));
+    fields.emplace_back(
+      make_signed(CBOR_ERROR_DETAIL), make_string(error_message));
+    return make_map(std::move(fields)).nondet_serialize();
   }
 
   inline std::vector<uint8_t> operation_props_to_cbor(
@@ -89,207 +48,37 @@ namespace scitt::cbor
     const std::optional<std::string>& error_code,
     const std::optional<std::string>& error_message)
   {
-    /**
-     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     * max 6 key values in operation and 2 maps (outer and submap for error).
-     * The size of data will be less than struct because error keys will shrink
-     */
-    size_t approx_buff_size =
-      14 * QCBOR_HEAD_BUFFER_SIZE + operation_id.size() + status.size();
-    if (entry_id.has_value())
-    {
-      approx_buff_size += entry_id.value().size();
-    }
-    if (error_code.has_value())
-    {
-      approx_buff_size += error_code.value().size();
-    }
-    if (error_message.has_value())
-    {
-      approx_buff_size += error_message.value().size();
-    }
-    std::vector<uint8_t> output(approx_buff_size);
+    using namespace tav::cbor;
+    // All inputs are valid UTF-8 already: the IDs are TxID strings, the status
+    // is an enum name, the error code is an errors:: constant and the error
+    // message was JSON-serialised into the operations table, which rejects
+    // invalid UTF-8.
 
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddTextToMap(&ectx, "OperationId", from_string(operation_id));
-    QCBOREncode_AddTextToMap(&ectx, "Status", from_string(status));
+    // Entries are serialized in insertion order.
+    std::vector<MapItem> fields;
+    fields.emplace_back(make_string("OperationId"), make_string(operation_id));
+    fields.emplace_back(make_string("Status"), make_string(status));
     if (entry_id.has_value())
     {
-      QCBOREncode_AddTextToMap(&ectx, "EntryId", from_string(entry_id.value()));
+      fields.emplace_back(
+        make_string("EntryId"), make_string(entry_id.value()));
     }
     if (error_code.has_value() || error_message.has_value())
     {
-      QCBOREncode_OpenMapInMap(&ectx, "Error");
+      std::vector<MapItem> error;
       if (error_code.has_value())
       {
-        QCBOREncode_AddTextToMapN(
-          &ectx, CBOR_ERROR_TITLE, from_string(error_code.value()));
+        error.emplace_back(
+          make_signed(CBOR_ERROR_TITLE), make_string(error_code.value()));
       }
       if (error_message.has_value())
       {
-        QCBOREncode_AddTextToMapN(
-          &ectx, CBOR_ERROR_DETAIL, from_string(error_message.value()));
+        error.emplace_back(
+          make_signed(CBOR_ERROR_DETAIL), make_string(error_message.value()));
       }
-      QCBOREncode_CloseMap(&ectx);
+      fields.emplace_back(make_string("Error"), make_map(std::move(error)));
     }
-    QCBOREncode_CloseMap(&ectx);
-
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
-  }
-
-  // see https://www.ietf.org/rfc/rfc9679.html#section-4.2
-  inline std::vector<uint8_t> ec_cose_key_to_cbor(
-    const int64_t kty,
-    const int64_t crv,
-    const std::vector<uint8_t>& x,
-    const std::vector<uint8_t>& y)
-  {
-    /**
-     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     */
-    size_t approx_buff_size = (1 + 4 + 4) * QCBOR_HEAD_BUFFER_SIZE +
-      sizeof(kty) + sizeof(crv) + x.size() + y.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, 1, kty);
-    QCBOREncode_AddInt64ToMapN(&ectx, -1, crv);
-    QCBOREncode_AddBytesToMapN(&ectx, -2, from_bytes(x));
-    QCBOREncode_AddBytesToMapN(&ectx, -3, from_bytes(y));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
-  }
-
-  // see https://www.ietf.org/rfc/rfc9679.html#section-4.3
-  inline std::vector<uint8_t> rsa_cose_key_to_cbor(
-    const int64_t kty,
-    const std::vector<uint8_t>& n,
-    const std::vector<uint8_t>& e)
-  {
-    /**
-     * QCBOR_HEAD_BUFFER_SIZE is for each map for each key and for each value
-     */
-    size_t approx_buff_size =
-      (1 + 3 + 3) * QCBOR_HEAD_BUFFER_SIZE + sizeof(kty) + n.size() + e.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, 1, kty);
-    QCBOREncode_AddBytesToMapN(&ectx, -1, from_bytes(n));
-    QCBOREncode_AddBytesToMapN(&ectx, -2, from_bytes(e));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode CBOR error");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
-  }
-
-  // COSE Key type constants (RFC 9052)
-  static constexpr int64_t COSE_KEY_TYPE_EC2 = 2;
-
-  // COSE EC curve constants (RFC 9052)
-  static constexpr int64_t COSE_EC_CURVE_P256 = 1;
-  static constexpr int64_t COSE_EC_CURVE_P384 = 2;
-  static constexpr int64_t COSE_EC_CURVE_P521 = 3;
-
-  // COSE Key parameter labels (RFC 9052)
-  static constexpr int64_t COSE_KEY_PARAM_KTY = 1;
-  static constexpr int64_t COSE_KEY_PARAM_KID = 2;
-  static constexpr int64_t COSE_KEY_PARAM_CRV = -1;
-  static constexpr int64_t COSE_KEY_PARAM_X = -2;
-  static constexpr int64_t COSE_KEY_PARAM_Y = -3;
-
-  /**
-   * Map a CCF CurveID to its COSE curve identifier.
-   * See RFC 9053 Section 7.1.
-   */
-  inline int64_t curve_id_to_cose_crv(ccf::crypto::CurveID curve_id)
-  {
-    switch (curve_id)
-    {
-      case ccf::crypto::CurveID::SECP256R1:
-        return COSE_EC_CURVE_P256;
-      case ccf::crypto::CurveID::SECP384R1:
-        return COSE_EC_CURVE_P384;
-      case ccf::crypto::CurveID::SECP521R1:
-        return COSE_EC_CURVE_P521;
-      case ccf::crypto::CurveID::NONE:
-      case ccf::crypto::CurveID::CURVE25519:
-      case ccf::crypto::CurveID::X25519:
-        throw std::runtime_error(
-          "Unsupported curve ID: " +
-          std::to_string(static_cast<uint8_t>(curve_id)));
-    }
-  }
-
-  /**
-   * Encode an EC COSE_Key with kid to CBOR.
-   * See RFC 9052 Section 7.
-   */
-  inline std::vector<uint8_t> ec_cose_key_with_kid_to_cbor(
-    const int64_t crv,
-    const std::vector<uint8_t>& x,
-    const std::vector<uint8_t>& y,
-    const std::string& kid)
-  {
-    size_t approx_buff_size = (1 + 5 + 5) * QCBOR_HEAD_BUFFER_SIZE +
-      sizeof(COSE_KEY_TYPE_EC2) + sizeof(crv) + x.size() + y.size() +
-      kid.size();
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenMap(&ectx);
-    QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_KTY, COSE_KEY_TYPE_EC2);
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_KID, from_string(kid));
-    QCBOREncode_AddInt64ToMapN(&ectx, COSE_KEY_PARAM_CRV, crv);
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_X, from_bytes(x));
-    QCBOREncode_AddBytesToMapN(&ectx, COSE_KEY_PARAM_Y, from_bytes(y));
-    QCBOREncode_CloseMap(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode COSE Key to CBOR");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
+    return make_map(std::move(fields)).nondet_serialize();
   }
 
   /**
@@ -299,31 +88,12 @@ namespace scitt::cbor
   inline std::vector<uint8_t> cose_key_set_to_cbor(
     const std::vector<std::vector<uint8_t>>& cose_keys)
   {
-    size_t approx_buff_size = QCBOR_HEAD_BUFFER_SIZE;
+    std::vector<tav::cbor::Value> keys;
+    keys.reserve(cose_keys.size());
     for (const auto& key : cose_keys)
     {
-      approx_buff_size += key.size();
+      keys.push_back(tav::cbor::nondet_parse(key));
     }
-    std::vector<uint8_t> output(approx_buff_size);
-
-    UsefulBuf output_buf{output.data(), output.size()};
-    QCBOREncodeContext ectx;
-    QCBOREncode_Init(&ectx, output_buf);
-    QCBOREncode_OpenArray(&ectx);
-    for (const auto& key : cose_keys)
-    {
-      QCBOREncode_AddEncoded(&ectx, from_bytes(key));
-    }
-    QCBOREncode_CloseArray(&ectx);
-    UsefulBufC encoded_cbor;
-    QCBORError err;
-    err = QCBOREncode_Finish(&ectx, &encoded_cbor);
-    if (err != QCBOR_SUCCESS)
-    {
-      throw std::logic_error("Failed to encode COSE Key Set to CBOR");
-    }
-    output.resize(encoded_cbor.len);
-    output.shrink_to_fit();
-    return output;
+    return tav::cbor::make_array(std::move(keys)).nondet_serialize();
   }
 }

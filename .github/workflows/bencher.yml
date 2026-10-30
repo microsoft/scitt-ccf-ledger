@@ -13,7 +13,9 @@ permissions: read-all
 jobs:
   run_benchmarks:
     name: Performance Regression Tests
-    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool]
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=run_benchmarks-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container:
       image: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
@@ -36,7 +38,7 @@ jobs:
           ./run_functional_tests.sh -m bencher
         shell: bash
 
-      - uses: bencherdev/bencher@main
+      - uses: bencherdev/bencher@f80847436d7157936b40525db4c2a1064124f04a # v0.6.13
       - name: Track base branch benchmarks with Bencher
         run: |
           bencher run \

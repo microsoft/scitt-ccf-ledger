@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
 ### Changes
 - Add `scitt sign-gha-fulcio` to create SCITT-ready COSE statements with GitHub
   Actions OIDC and short-lived Fulcio certificates. The composite signing Action
@@ -17,18 +18,86 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   compatibility with the current CCF resolver.
 - Add `scitt validate --expected-payload` to check the exact embedded payload
   against an input file; the GitHub signing Action enables this check.
+
+## [0.21.0]
+### Upgrade notes
+- Ledger signatures now use `CoseOnly`. Nodes using CCF's default `Dual`
+  mode (0.19.0 and earlier) can no longer join. To upgrade an existing service
+  from 0.19.0 or earlier, first upgrade it to 0.20.0 or 0.20.1.
+- Existing services must update their SCITT constitution before enabling JWT
+  schema policies. The new constitution restricts the supported schema
+  profile at proposal time.
+
+### Changes
+- Pin OneBranch PR image builds to the exact merge commit verified by GitHub
+  Actions, avoiding missing comparison records when the merge ref is regenerated.
+- Add a daily CCF version updater that proposes upgrades within the current
+  CCF major version as draft pull requests. Upgrades still require review
+  and merging; publishing a SCITT release does not run the updater.
+- Allow JWT claims to be validated with a constrained JSON Schema draft-07
+  profile, supporting alternative managed-identity and issuer claim sets
+  while preserving existing `requiredClaims` configurations.
+- JSON adapter input and content-negotiation errors retain their intended HTTP
+  status and JSON/OData response, and are logged as expected errors rather than
+  unhandled server failures. JSON failures inside handlers remain server errors.
+- Remove the QCBOR build dependency; SCITT now uses CCF's TAV CBOR API.
+- Registrations admitted without HTTP authentication are capped at 64 KiB
+  before decoding, or `maxSignedStatementBytes` if lower. JWT-authenticated
+  registrations retain their configured size limit.
+- COSE_Sign1 headers are decoded with the TAV CBOR API that CCF installs
+  rather than QCBOR, so decoding now enforces the CBOR rules that CCF's
+  signature verification already applied: the COSE_Sign1 tag must be the
+  outermost tag, the protected header, payload and signature must be byte
+  strings, and indefinite-length items, floating-point values, integers
+  outside the signed 64-bit range and duplicate map labels are rejected
+  anywhere in the message. Such statements were never accepted; they are now
+  rejected with a decode error. Envelopes with other than four elements are
+  now rejected, and a zero-length protected header is decoded as an empty map.
+- A `crit` header parameter that lists a label absent from the protected
+  header is now rejected when decoding, as required by
+  [RFC 9052 Section 3.1](https://www.rfc-editor.org/rfc/rfc9052.html#section-3.1).
+  The verifier already rejected such statements for every label it accepts in
+  `crit`, so no previously accepted statement is affected.
+- Signed statements with an EdDSA (Ed25519) `x5chain` are now accepted, as
+  CCF's COSE verifier supports them since 7.0.19.
+- x509-signed statements are verified with CCF's COSE key API, and `did:x509`
+  keys are matched by COSE key thumbprint.
+- CBOR error responses, operation statuses and COSE_Key sets are encoded with
+  the TAV CBOR API that CCF installs, rather than QCBOR. Error messages that
+  are not valid UTF-8 (for example, quoting bytes from the request) are no
+  longer echoed back, so that error responses are always valid CBOR.
 - Update the `Azure.Security.CodeTransparency` .NET SDK used by the end-to-end
   tests to the stable 1.0.0 release (no longer a prerelease package).
+- Update CCF to 7.0.23, retaining its exported Valijson headers for JWT claims
+  schema validation and gaining fixes for service certificate renewal,
+  recovery and snapshots larger than 2 GiB.
+- `attestedsvc` COSE keys are parsed and validated with CCF's COSE key API when
+  decoding, and their signatures are verified with CCF's COSE verifier. Only
+  EC2 and RSA keys are accepted, as before, but validation is stricter: the
+  key's `alg`, `key_ops` and `kid` are checked, EC2 points must be on the
+  curve, RSA keys must be canonical and 2048 to 16384 bits long.
+- The COSE_Keys served by `/.well-known/scitt-keys` and
+  `/.well-known/scitt-keys/{kid}` now include `alg`.
+- Cached historical states (used to serve receipts and transparent statements)
+  now expire after 1 minute without a request, instead of CCF's default of
+  30 minutes.
+
+## [0.20.1]
+### Changes
 - Update CCF to 7.0.17 and align the Python CCF minimum version.
 - Align the bundled `set_member` constitution action with CCF's explicit state
   digest update flow, fixing member creation on COSE-only ledgers and clearing
   stale acknowledgements when resetting a member.
-- Use C++23, remove the retired `evercbor` link dependency, and use CCF's owning
-  SNP attestation report API while preserving the verified policy details.
 - pyscitt 0.15.0: `scitt validate` and `scitt pretty-receipt` report what was verified
   as a structured document including the receipt and transparent statement URLs, and
   `scitt validate` downloads missing verification keys from authorized issuers
   (breaking: JSON output by default, see `--output text` and `--offline`).
+
+## [0.20.0]
+### Changes
+- Update CCF to 7.0.16 and align the Python CCF minimum version.
+- Use C++23, remove the retired `evercbor` link dependency, and use CCF's owning
+  SNP attestation report API while preserving the verified policy details.
 
 ## [0.19.0]
 ### Changes
@@ -451,7 +520,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Initial release.
 
-[Unreleased]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.19.0...HEAD
+[Unreleased]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.21.0...HEAD
+[0.21.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.20.1...0.21.0
+[0.20.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.20.0...0.20.1
+[0.20.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.19.0...0.20.0
 [0.4.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/microsoft/scitt-ccf-ledger/compare/0.2.0...0.2.1

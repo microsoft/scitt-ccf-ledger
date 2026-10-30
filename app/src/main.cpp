@@ -9,6 +9,7 @@
 #include "generated/constants.h"
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
+#include "json_adapter.h"
 #include "kv_types.h"
 #include "operations_endpoints.h"
 #include "policy_engine.h"
@@ -17,6 +18,7 @@
 #include "util.h"
 #include "verifier.h"
 
+#include <algorithm>
 #include <ccf/app_interface.h>
 #include <ccf/base_endpoint_registry.h>
 #include <ccf/common_auth_policies.h>
@@ -24,11 +26,11 @@
 #include <ccf/crypto/cose.h>
 #include <ccf/ds/logger.h>
 #include <ccf/endpoint.h>
+#include <ccf/endpoints/authentication/empty_auth.h>
 #include <ccf/historical_queries_adapter.h>
 #include <ccf/historical_queries_interface.h>
 #include <ccf/http_query.h>
 #include <ccf/indexing/strategies/seqnos_by_key_bucketed.h>
-#include <ccf/json_handler.h>
 #include <ccf/kv/value.h>
 #include <ccf/node/quote.h>
 #include <ccf/run.h>
@@ -238,6 +240,7 @@ namespace scitt
 
       SCITT_DEBUG("Get historical state from CCF");
       auto& state_cache = context.get_historical_state();
+      state_cache.set_default_expiry_duration(HISTORICAL_CACHE_EXPIRY);
 
       SCITT_DEBUG("Install custom indexing strategy");
       entry_seqno_index = std::make_shared<EntrySeqnoIndexingStrategy>(
@@ -309,8 +312,13 @@ namespace scitt
                      ->get()
                      .value_or(Configuration{});
 
-        const auto max_entry_size =
+        auto max_entry_size =
           cfg.max_signed_statement_bytes.value_or(MAX_ENTRY_SIZE_BYTES_DEFAULT);
+        if (ctx.try_get_caller<ccf::EmptyAuthnIdentity>() != nullptr)
+        {
+          max_entry_size =
+            std::min(max_entry_size, MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES);
+        }
         SCITT_TRACE(
           "Signed statement size={} bytes, maximum allowed size={} bytes",
           body.size(),
@@ -342,7 +350,7 @@ namespace scitt
         {
           SCITT_TRACE("Verify submitted signed statement");
           std::tie(phdr, uhdr, payload, details) =
-            verifier->verify_signed_statement(body, ctx.tx, host_time, cfg);
+            verifier->verify_signed_statement(body, host_time, cfg);
         }
         catch (const verifier::VerificationError& e)
         {
@@ -691,7 +699,7 @@ namespace scitt
       make_endpoint(
         get_entries_tx_ids_path,
         HTTP_GET,
-        ccf::json_adapter(get_entries_tx_ids),
+        scitt::json_adapter(get_entries_tx_ids),
         read_authn_policy)
         .set_auto_schema<void, GetEntriesTransactionIds::Out>()
         .add_query_parameter<size_t>(
