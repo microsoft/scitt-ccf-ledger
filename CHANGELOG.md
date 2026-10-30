@@ -13,9 +13,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   registers and verifies in separate steps, reporting receipt URLs and the
   registration transaction ID from `scitt validate`. It uses unique output
   directories per invocation and supports Windows and POSIX runners.
-- Include the certificate-bound GitHub OIDC `fulcio-issuer` predicate in generated
-  issuers. Require matching modern and legacy Fulcio issuer extensions for
-  compatibility with the current CCF resolver.
+- Bind generated issuers to GitHub OIDC using `fulcio:issuer` and the modern
+  Fulcio Issuer V2 extension, independently of the deprecated legacy extension.
+  This requires a ledger built with CCF 7.0.19 or later; exact-match issuer
+  policies must use the new DID, including the percent-encoded `https://` scheme.
 - Add `scitt validate --expected-payload` to check the exact embedded payload
   against an input file; the GitHub signing Action enables this check.
 

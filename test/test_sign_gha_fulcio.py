@@ -44,6 +44,7 @@ ENVIRONMENT = {
     "ACTIONS_ID_TOKEN_REQUEST_URL": "https://oidc.example/token?existing=1&audience=old",
     "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "runner-request-credential",
 }
+LEGACY_ISSUER_OID = "1.3.6.1.4.1.57264.1.1"
 ARCHIVED_FULCIO_ISSUER = (
     "did:x509:0:sha256:O6e2zE6VRp1NM0tJyyV62FNwdvqEsMqH_07P5qVGgME"
     "::eku:1.3.6.1.5.5.7.3.3"
@@ -129,7 +130,7 @@ class FulcioCA:
         public_key,
         *,
         oidc_issuer: str | None = sign.GITHUB_ISSUER,
-        legacy_oidc_issuer: str | None = sign.GITHUB_ISSUER,
+        legacy_oidc_issuer: str | None = None,
         oidc_issuer_critical: bool = False,
         legacy_oidc_issuer_critical: bool = False,
         san: str = WORKFLOW,
@@ -179,7 +180,7 @@ class FulcioCA:
         if legacy_oidc_issuer is not None:
             builder = builder.add_extension(
                 x509.UnrecognizedExtension(
-                    ObjectIdentifier(sign.GITHUB_ISSUER_LEGACY_OID),
+                    ObjectIdentifier(LEGACY_ISSUER_OID),
                     legacy_oidc_issuer.encode("utf-8"),
                 ),
                 legacy_oidc_issuer_critical,
@@ -301,7 +302,7 @@ class TestSignGhaFulcioOffline:
         assert sign.signing_issuer(fulcio_ca.pem, workflow) == (
             f"did:x509:0:sha256:{fingerprint}"
             "::eku:1.3.6.1.5.5.7.3.3"
-            "::fulcio-issuer:token.actions.githubusercontent.com"
+            "::fulcio:issuer:https%3A%2F%2Ftoken.actions.githubusercontent.com"
             "::san:uri:https%3A%2F%2Fgithub.com%2Focto%2Fexample"
             f"%2F.github%2Fworkflows%2F{encoded_filename}%40refs%2Fheads%2Fmain"
         )
@@ -344,6 +345,23 @@ class TestSignGhaFulcioOffline:
         assert b"test-github-jwt" not in statement
         assert b"PRIVATE KEY" not in statement
         assert capsys.readouterr().out == "::add-mask::test-github-jwt\n"
+
+    @pytest.mark.parametrize(
+        "legacy_oidc_issuer",
+        [None, sign.GITHUB_ISSUER, "https://accounts.google.com"],
+    )
+    def test_issuer_v2_does_not_depend_on_legacy(self, fulcio_ca, legacy_oidc_issuer):
+        statement = action_statement(
+            MockFulcio(
+                fulcio_ca,
+                certificate_options={"legacy_oidc_issuer": legacy_oidc_issuer},
+            )
+        )
+        message = Sign1Message.decode(statement)
+        assert message.phdr[crypto.CWTClaims][crypto.CWT_ISS] == sign.signing_issuer(
+            fulcio_ca.pem, WORKFLOW
+        )
+        sign.verify_statement(statement, PAYLOAD)
 
     @pytest.mark.parametrize("failure", [None, "fulcio", "payload", "signature"])
     @pytest.mark.parametrize("basic_constraints", [False, True])
@@ -577,12 +595,7 @@ class TestSignGhaFulcioOffline:
                 "GitHub Actions identity",
             ),
             (
-                {"legacy_oidc_issuer": "https://other.example"},
-                False,
-                "GitHub Actions identity",
-            ),
-            (
-                {"legacy_oidc_issuer": sign.GITHUB_ISSUER + "\x00"},
+                {"oidc_issuer": sign.GITHUB_ISSUER + "\x00"},
                 False,
                 "GitHub Actions identity",
             ),
@@ -592,7 +605,10 @@ class TestSignGhaFulcioOffline:
                 "must not be critical",
             ),
             (
-                {"legacy_oidc_issuer_critical": True},
+                {
+                    "legacy_oidc_issuer": sign.GITHUB_ISSUER,
+                    "legacy_oidc_issuer_critical": True,
+                },
                 False,
                 "must not be critical",
             ),
@@ -609,10 +625,6 @@ class TestSignGhaFulcioOffline:
         [
             ({"eku": False}, x509.ExtendedKeyUsage.oid),
             ({"oidc_issuer": None}, ObjectIdentifier(sign.GITHUB_ISSUER_OID)),
-            (
-                {"legacy_oidc_issuer": None},
-                ObjectIdentifier(sign.GITHUB_ISSUER_LEGACY_OID),
-            ),
         ],
     )
     @pytest.mark.parametrize("basic_constraints", [False, True])
@@ -775,7 +787,7 @@ class TestSignGhaFulcioOffline:
         )
         for oid, expected in (
             (sign.GITHUB_ISSUER_OID, sign.der_utf8(sign.GITHUB_ISSUER)),
-            (sign.GITHUB_ISSUER_LEGACY_OID, sign.GITHUB_ISSUER.encode("utf-8")),
+            (LEGACY_ISSUER_OID, sign.GITHUB_ISSUER.encode("utf-8")),
         ):
             issuer_extension = leaf.extensions.get_extension_for_oid(
                 ObjectIdentifier(oid)
@@ -1331,25 +1343,57 @@ class TestSignGhaFulcioLedger:
 
     @pytest.mark.parametrize("language", ["js", "rego"])
     @pytest.mark.parametrize(
-        "options,error",
-        [
-            ({"legacy_oidc_issuer": None}, "invalid fulcio-issuer"),
-            (
-                {"legacy_oidc_issuer": "https://accounts.google.com"},
-                "invalid fulcio-issuer",
-            ),
-            (
-                {"legacy_oidc_issuer_critical": True},
-                "unhandled critical extension",
-            ),
-        ],
+        "legacy_oidc_issuer",
+        [None, sign.GITHUB_ISSUER, "https://accounts.google.com"],
     )
-    def test_reject_invalid_fulcio_issuer(
-        self, fulcio_ca, client: Client, configure_service, language, options, error
+    def test_issuer_v2_does_not_depend_on_legacy(
+        self, fulcio_ca, client: Client, configure_service, language, legacy_oidc_issuer
     ):
         issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW)
         configure_service({"policy": policies.DID_X509[language](issuer)})
-        with service_error(f"InvalidInput:.*{error}"):
+        client.submit_signed_statement_and_wait(
+            fulcio_ca.statement(legacy_oidc_issuer=legacy_oidc_issuer)
+        )
+
+    @pytest.mark.parametrize("language", ["js", "rego"])
+    def test_legacy_fulcio_issuer_remains_independent(
+        self, fulcio_ca, client: Client, configure_service, language
+    ):
+        issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW).replace(
+            "::fulcio:issuer:https%3A%2F%2Ftoken.actions.githubusercontent.com",
+            "::fulcio-issuer:token.actions.githubusercontent.com",
+        )
+        configure_service({"policy": policies.DID_X509[language](issuer)})
+        client.submit_signed_statement_and_wait(
+            fulcio_ca.statement(
+                issuer=issuer,
+                oidc_issuer="https://accounts.google.com",
+                legacy_oidc_issuer=sign.GITHUB_ISSUER,
+            )
+        )
+
+    @pytest.mark.parametrize("language", ["js", "rego"])
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"oidc_issuer": None, "legacy_oidc_issuer": sign.GITHUB_ISSUER},
+            {
+                "oidc_issuer": "https://accounts.google.com",
+                "legacy_oidc_issuer": sign.GITHUB_ISSUER,
+            },
+            {"oidc_issuer_critical": True},
+            {
+                "legacy_oidc_issuer": sign.GITHUB_ISSUER,
+                "legacy_oidc_issuer_critical": True,
+            },
+        ],
+    )
+    def test_reject_invalid_fulcio_issuer(
+        self, fulcio_ca, client: Client, configure_service, language, options
+    ):
+        issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW)
+        configure_service({"policy": policies.DID_X509[language](issuer)})
+        with service_error("InvalidInput:.*Failed to resolve did:x509 issuer"):
             client.submit_signed_statement_and_wait(fulcio_ca.statement(**options))
 
     @pytest.mark.parametrize("language", ["js", "rego"])
@@ -1357,11 +1401,11 @@ class TestSignGhaFulcioLedger:
         self, fulcio_ca, client: Client, configure_service, language
     ):
         issuer = sign.signing_issuer(fulcio_ca.pem, WORKFLOW).replace(
-            "::fulcio-issuer:token.actions.githubusercontent.com",
-            "::fulcio-issuer:accounts.google.com",
+            "::fulcio:issuer:https%3A%2F%2Ftoken.actions.githubusercontent.com",
+            "::fulcio:issuer:https%3A%2F%2Faccounts.google.com",
         )
         configure_service({"policy": policies.DID_X509[language](issuer)})
-        with service_error("InvalidInput:.*invalid fulcio-issuer"):
+        with service_error("InvalidInput:.*Failed to resolve did:x509 issuer"):
             client.submit_signed_statement_and_wait(fulcio_ca.statement(issuer=issuer))
 
     @pytest.mark.parametrize("offset", [-1200, 300])
