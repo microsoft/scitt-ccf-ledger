@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changes
+- Add `scitt sign-gha-fulcio` to create SCITT-ready COSE statements with GitHub
+  Actions OIDC and short-lived Fulcio certificates. The composite signing Action
+  registers and verifies in separate steps, reporting receipt URLs and the
+  registration transaction ID from `scitt validate`. It uses unique output
+  directories per invocation and supports Windows and POSIX runners.
+- Bind generated issuers to GitHub OIDC using `fulcio:issuer` and the modern
+  Fulcio Issuer V2 extension, independently of the deprecated legacy extension.
+  This requires a ledger built with CCF 7.0.19 or later; exact-match issuer
+  policies must use the new DID, including the percent-encoded `https://` scheme.
+- Add `scitt validate --expected-payload` to check the exact embedded payload
+  against an input file; the GitHub signing Action enables this check.
+
 ## [0.21.0]
 ### Upgrade notes
 - Ledger signatures now use `CoseOnly`. Nodes using CCF's default `Dual`

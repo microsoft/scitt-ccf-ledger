@@ -20,6 +20,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=find_packages(),
+    package_data={"pyscitt.cli": ["fulcio-root.pem"]},
     entry_points={
         "console_scripts": ["scitt=pyscitt.cli.main:main"],
     },

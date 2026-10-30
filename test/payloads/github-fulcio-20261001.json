@@ -1,0 +1,12 @@
+{
+  "source": "https://github.com/microsoft/scitt-ccf-ledger/actions/runs/36909827822",
+  "job": "https://github.com/microsoft/scitt-ccf-ledger/actions/runs/36909827822/job/110549849940",
+  "commit": "bc85f9a61fdddc180379c02889c41ff2db26d86d",
+  "artifact_id": 11190350017,
+  "artifact_sha256": "28fe87abe5c6cee3f78dfc983419e3de93ad1466c349ef58dc03447056b39ece",
+  "statement_sha256": "8f0b1610aa8a0b16c6eba8a2e55391e09a04b093cf3c2995743ff953b94e26b2",
+  "workflow": "https://github.com/microsoft/scitt-ccf-ledger/.github/workflows/build-test.yml@refs/pull/462/merge",
+  "certificate_not_before": "2026-10-01T19:41:40+00:00",
+  "certificate_not_after": "2026-10-01T19:51:40+00:00",
+  "registration_policy": "Archived fixture tests authenticate the did:x509 issuer and signature without requiring the expired signing certificate to be currently valid."
+}
