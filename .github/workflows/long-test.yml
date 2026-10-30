@@ -1,6 +1,13 @@
 name: Long Test
 
 on:
+  # Verified: fuzz-api job is gated only by `contains(github.event.pull_request.labels.*.name, 'run-fuzz-test')`
+  # (line 56). Because the workflow triggers on synchronize, any commit pushed after the label is applied re-runs
+  # the job on the unreviewed PR head, executing PR-controlled `./scripts/setup-env.sh`, `./build.sh` (lines 68-70)
+  # and `./run_fuzz_tests.sh` (line 76) as root on the self-hosted gha-scitt-pool. Distinct label and sink from the
+  # long-asan job — independently exploitable.
+  # Same-repository PRs rerun automatically while labeled. Fork PRs require
+  # re-applying the matching label after reviewing each new revision.
   pull_request:
     types:
       - labeled
@@ -14,7 +21,16 @@ on:
 jobs:
   long-asan:
     name: ASAN
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-long-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'schedule' ||
+        (github.event_name == 'pull_request' &&
+          ((github.event.action == 'labeled' && github.event.label.name == 'run-long-test') ||
+           (github.event.action != 'labeled' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            contains(github.event.pull_request.labels.*.name, 'run-long-test'))))
+      }}
     # 1ES creates a runner for each queued job and removes it when that job ends.
     # The unique JobId label makes sure only that job can use it.
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=long-asan-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
@@ -33,6 +49,8 @@ jobs:
           tdnf install -y --disablerepo azurelinux-official-ms-non-oss build-essential ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Freeze the event's merge commit rather than a moving PR ref.
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build
         run: |
@@ -55,7 +73,16 @@ jobs:
           if-no-files-found: warn
   fuzz-api:
     name: fuzz
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-fuzz-test') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'schedule' ||
+        (github.event_name == 'pull_request' &&
+          ((github.event.action == 'labeled' && github.event.label.name == 'run-fuzz-test') ||
+           (github.event.action != 'labeled' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            contains(github.event.pull_request.labels.*.name, 'run-fuzz-test'))))
+      }}
     runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=fuzz-api-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
     container: mcr.microsoft.com/azurelinux/base/core:3.0
     steps:
@@ -66,6 +93,8 @@ jobs:
           tdnf install -y --disablerepo azurelinux-official-ms-non-oss build-essential ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Freeze the event's merge commit rather than a moving PR ref.
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build
         run: |

@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from hashlib import sha256
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlsplit
 
 import cbor2
 import ccf.cose
@@ -291,6 +292,25 @@ class DynamicTrustStoreClient:
         if cert_digest not in jwks_keys_digests:
             raise ValueError(f"TLS public key digest {cert_digest} not found in JWKS")
 
+    def _validate_jwks_uri(self, issuer: str, jwks_uri: str) -> str:
+        """Ensure a JWKS URI stays on the same HTTPS origin as the issuer."""
+        if not isinstance(jwks_uri, str):
+            raise ValueError("JWKS URI must be a string")
+
+        parsed = urlsplit(jwks_uri)
+        if parsed.scheme.lower() != "https":
+            raise ValueError(f"JWKS URI {jwks_uri} must use HTTPS")
+        if parsed.username or parsed.password:
+            raise ValueError(f"JWKS URI {jwks_uri} must not include credentials")
+        if not parsed.hostname:
+            raise ValueError(f"JWKS URI {jwks_uri} does not include a hostname")
+
+        # Compare the full authority so the port must match the issuer's too.
+        if parsed.netloc.lower().rstrip(".") != issuer.lower().rstrip("."):
+            raise ValueError(f"JWKS URI {jwks_uri} host does not match issuer {issuer}")
+
+        return jwks_uri
+
     def get_jwks(self, issuer: str) -> dict:
         """
         Retrieve the JWKS from the issuer.
@@ -298,7 +318,9 @@ class DynamicTrustStoreClient:
         transparency_configuration = self.get_configuration(issuer)
         transparency_configuration.raise_for_status()
         config_response = cbor2.loads(transparency_configuration.content)
-        jwks_uri = config_response["jwks_uri"]
+        if not isinstance(config_response, dict):
+            raise ValueError("Transparency configuration must decode to a dictionary")
+        jwks_uri = self._validate_jwks_uri(issuer, config_response["jwks_uri"])
         jwks_response = self._client_for_issuer(issuer).get(
             jwks_uri, headers={"Accept": "application/json"}
         )
@@ -321,6 +343,8 @@ class DynamicTrustStoreClient:
         """
         if not issuer:
             raise ValueError("Issuer cannot be empty")
+        if not is_hostname(issuer):
+            raise ValueError(f"Issuer {issuer} is not a bare hostname")
 
         return self._client_for_issuer(issuer).get(
             "https://" + issuer + "/.well-known/transparency-configuration",
@@ -349,10 +373,11 @@ class DynamicTrustStore(TrustStore):
     A dynamic trust store, based on a single service identity used to retrieve
     all keys from the service's transparency configuration endpoint.
 
-    When `authorized_domains` is set, only issuers matching one of those
-    patterns are resolved; any other issuer is rejected rather than implicitly
-    trusted. Patterns are hostnames, optionally with a leading wildcard, e.g.
-    "*.confidential-ledger.azure.com".
+    By default only issuers matching `DEFAULT_AUTHORIZED_DOMAINS` are resolved;
+    any other issuer is rejected rather than implicitly trusted. Pass
+    `authorized_domains` to override the patterns, which are hostnames
+    optionally with a leading wildcard, e.g. "*.confidential-ledger.azure.com".
+    Pass ["*"] to explicitly allow any issuer.
     """
 
     def __init__(
@@ -363,7 +388,12 @@ class DynamicTrustStore(TrustStore):
         if client is None:
             client = DynamicTrustStoreClient()
         self.client = client
-        self.authorized_domains = authorized_domains
+        # Check before merge!!
+        self.authorized_domains = (
+            DEFAULT_AUTHORIZED_DOMAINS
+            if authorized_domains is None
+            else authorized_domains
+        )
 
     @property
     def services(self):
@@ -376,8 +406,6 @@ class DynamicTrustStore(TrustStore):
         # match "*.example.com" while addressing evil.com.
         if not is_hostname(issuer):
             return False
-        if self.authorized_domains is None:
-            return True
         return any(
             fnmatch.fnmatch(issuer.lower(), pattern.lower())
             for pattern in self.authorized_domains

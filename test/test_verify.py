@@ -70,7 +70,7 @@ class TestDynamicTrustStore:
         }
 
         # Create instance and call method
-        trust_store = DynamicTrustStore(mock_client)
+        trust_store = DynamicTrustStore(mock_client, authorized_domains=["*"])
         result = trust_store.get_key(mock_receipt)
 
         # Assertions
@@ -86,7 +86,8 @@ class TestDynamicTrustStore:
         "issuer,authorized,expected",
         [
             ("ledger.confidential-ledger.azure.com", None, True),
-            ("evil.example.com", None, True),
+            ("evil.example.com", None, False),
+            ("ledger.confidential-ledger.azure.com:8443", None, False),
             ("ledger.confidential-ledger.azure.com", DEFAULT_AUTHORIZED_DOMAINS, True),
             ("Ledger.Confidential-Ledger.Azure.Com", DEFAULT_AUTHORIZED_DOMAINS, True),
             ("evil.example.com", DEFAULT_AUTHORIZED_DOMAINS, False),
@@ -137,6 +138,71 @@ class TestDynamicTrustStore:
             trust_store.get_key(receipt.encode(tag=True, sign=False))
 
         client.get_jwks.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "issuer,jwks_uri,expected",
+        [
+            (
+                "example.com",
+                "https://example.com/.well-known/jwks",
+                "https://example.com/.well-known/jwks",
+            ),
+            (
+                "Example.com",
+                "https://example.com/.well-known/jwks",
+                "https://example.com/.well-known/jwks",
+            ),
+            ("example.com", "http://example.com/.well-known/jwks", ValueError),
+            ("example.com", "https://evil.example.com/.well-known/jwks", ValueError),
+            ("example.com", "https://example.com:8443/.well-known/jwks", ValueError),
+            (
+                "example.com:8443",
+                "https://example.com:8443/.well-known/jwks",
+                "https://example.com:8443/.well-known/jwks",
+            ),
+            ("example.com:8443", "https://example.com/.well-known/jwks", ValueError),
+            ("example.com", "https://user@example.com/.well-known/jwks", ValueError),
+        ],
+    )
+    def test_validate_jwks_uri(self, issuer, jwks_uri, expected):
+        client = DynamicTrustStoreClient()
+        if expected is ValueError:
+            with pytest.raises(ValueError):
+                client._validate_jwks_uri(issuer, jwks_uri)
+        else:
+            assert client._validate_jwks_uri(issuer, jwks_uri) == expected
+
+    @pytest.mark.parametrize(
+        "issuer",
+        [
+            "evil.com/x",
+            "user@evil.com",
+            "evil.com?x=",
+            "evil.com#x",
+            "169.254.169.254/latest",
+        ],
+    )
+    def test_get_configuration_rejects_non_hostname_issuer(self, issuer):
+        http_client = Mock(spec=httpx.Client)
+        client = DynamicTrustStoreClient(http_client)
+        with pytest.raises(ValueError, match="not a bare hostname"):
+            client.get_configuration(issuer)
+        http_client.get.assert_not_called()
+
+    def test_get_jwks_rejects_nonmatching_host(self):
+        http_client = Mock(spec=httpx.Client)
+        response = Mock()
+        response.content = cbor2.dumps(
+            {"jwks_uri": "https://evil.example.com/.well-known/jwks"}
+        )
+        response.raise_for_status.return_value = None
+        http_client.get.return_value = response
+
+        client = DynamicTrustStoreClient(http_client)
+        with pytest.raises(ValueError, match="host does not match issuer"):
+            client.get_jwks("example.com")
+
+        assert http_client.get.call_count == 1
 
 
 class TestFallbackTrustStore:
