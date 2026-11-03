@@ -259,7 +259,7 @@ class DynamicTrustStoreClient:
             raise ValueError("TLS PEM certificate is required")
         if not jwks:
             raise ValueError("JWKS is required")
-        if not "keys" in jwks:
+        if "keys" not in jwks:
             raise ValueError("JWKS does not contain 'keys'")
         cert = x509.load_pem_x509_certificate(tls_pem.encode(), default_backend())
         cert_digest = (

@@ -3,19 +3,16 @@
 
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
-import pycose
 import pytest
 from polars import DataFrame
 
 from pyscitt import crypto
 from pyscitt.client import Client
 
-from .infra.assertions import service_error
 from .infra.bencher import Bencher, Latency, Throughput
-from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 X509_HASHV_POLICY_SCRIPT = f"""
 export function apply(phdr) {{
