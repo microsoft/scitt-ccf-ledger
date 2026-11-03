@@ -72,7 +72,7 @@ const RESERVED_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 // Reject keys that would modify Object.prototype behaviour when used as a
 // property name on a plain object (e.g. obj["__proto__"] = ...).
-function checkSafeObjectKey(value, field) {
+function checkAllowedStringValue(value, field) {
   checkType(value, "string", field);
   if (RESERVED_OBJECT_KEYS.has(value)) {
     throw new Error(`${field} must not be a reserved object key`);
@@ -1249,7 +1249,7 @@ const actions = new Map([
     new Action(
       function (args) {
         checkType(args.did, "string", "did");
-        checkSafeObjectKey(args.feed, "feed");
+        checkAllowedStringValue(args.feed, "feed");
         checkType(args.svn, "string", "svn");
       },
       function (args, proposalId) {
@@ -1379,7 +1379,7 @@ const actions = new Map([
     new Action(
       function (args) {
         checkType(args.did, "string", "did");
-        checkSafeObjectKey(args.feed, "feed");
+        checkAllowedStringValue(args.feed, "feed");
       },
       function (args) {
         let uvmEndorsementsForDID = ccf.kv[
