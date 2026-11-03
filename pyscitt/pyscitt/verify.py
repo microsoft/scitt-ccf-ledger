@@ -388,7 +388,6 @@ class DynamicTrustStore(TrustStore):
         if client is None:
             client = DynamicTrustStoreClient()
         self.client = client
-        # Check before merge!!
         self.authorized_domains = (
             DEFAULT_AUTHORIZED_DOMAINS
             if authorized_domains is None
