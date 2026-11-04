@@ -19,8 +19,6 @@ from pyscitt.verify import (
     verify_transparent_statement,
 )
 
-from .infra.assertions import service_error
-
 CURVE_TO_COSE_CRV = {
     "secp256r1": 1,  # P-256
     "secp384r1": 2,  # P-384

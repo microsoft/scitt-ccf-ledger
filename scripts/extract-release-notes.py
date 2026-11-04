@@ -81,7 +81,7 @@ def add_missing_tags(filename, git_tags):
                                         check=True,
                                     ).stdout.strip()
                                     if log_output:
-                                        newer.write(f"### Changes\n")
+                                        newer.write("### Changes\n")
                                         for change in log_output.split("\n"):
                                             newer.write(f"- {change}\n")
                                         newer.write("\n")

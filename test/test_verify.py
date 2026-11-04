@@ -2,20 +2,13 @@
 # Licensed under the MIT License.
 
 import json
-from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import ANY, DEFAULT, MagicMock, Mock, patch
+from unittest.mock import DEFAULT, MagicMock, Mock, patch
 
 import cbor2
 import httpx
 import pytest
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from cryptography.x509 import Certificate, load_pem_x509_certificate
-from cryptography.x509.oid import NameOID
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 

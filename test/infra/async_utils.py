@@ -4,7 +4,7 @@
 import asyncio
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Optional
+from typing import Any, Optional
 
 import aiotools
 from aiotools.types import CoroutineLike

@@ -449,7 +449,7 @@ class BaseClient:
                 kwargs["content"] = payload
                 kwargs.setdefault("headers", {})["content-type"] = CT_APPLICATION_COSE
             else:
-                raise ValueError(f"Cannot sign request")
+                raise ValueError("Cannot sign request")
 
         default_wait_time = 2
         timeout = 30
@@ -708,7 +708,7 @@ class Client(BaseClient):
         return self.get("/version").json()
 
     def get_jwks(self) -> dict:
-        resp = self.get(f"/jwks")
+        resp = self.get("/jwks")
         resp.raise_for_status()
         return resp.json()
 
