@@ -92,8 +92,15 @@ def validate_transparent_statement(
     service_trust_store_path: Optional[Path] = None,
     authorized_domains: Optional[List[str]] = None,
     offline: bool = False,
+    expected_payload: Optional[Path] = None,
 ) -> dict:
     transparent_statment_bytes = statement.read_bytes()
+    if expected_payload is not None:
+        payload = Sign1Message.decode(transparent_statment_bytes).payload
+        if payload != expected_payload.read_bytes():
+            raise ValueError(
+                f"Statement payload does not match expected payload: {expected_payload}"
+            )
     signed_statement = strip_uhdr(transparent_statment_bytes)
     service_trust_store = build_trust_store(
         service_trust_store_path, authorized_domains, offline
@@ -147,6 +154,11 @@ def cli(fn):
     parser = fn(description="Validate a Transparent Statement")
     parser.add_argument("statement", type=Path, help="Path to transparent statement")
     parser.add_argument(
+        "--expected-payload",
+        type=Path,
+        help="Optional file whose exact bytes must match the statement payload",
+    )
+    parser.add_argument(
         "--service-trust-store",
         type=Path,
         help="""Optional folder containing JSON parameter files of SCITT services to trust""",
@@ -184,6 +196,7 @@ def cli(fn):
                 args.service_trust_store,
                 args.authorized_domains,
                 args.offline,
+                args.expected_payload,
             )
         except Exception as error:
             result = build_error_result(args.statement, error)
