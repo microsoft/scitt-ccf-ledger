@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changes
+- Add an optional CI step that checks the receipts produced by the functional
+  tests offline with proofbundle 6.4.0 (CCF receipt profile, draft -06),
+  together with the receipt vectors from #500. It is off by default; set the
+  repository variable `PROOFBUNDLE_CHECK` to `1` to switch it on, and
+  `PROOFBUNDLE_CHECK_BLOCKING` to `1` to make it blocking.
 
 ## [0.21.0]
 ### Upgrade notes
