@@ -1,0 +1,4 @@
+# Installed into a virtual environment of its own by scripts/proofbundle-check.sh,
+# never into the environment of the functional tests: the scitt extra pins
+# cbor2==6.1.4, while the functional tests use cbor2 as pyscitt and ccf allow.
+proofbundle[scitt]==6.4.0
