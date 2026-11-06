@@ -25,7 +25,7 @@ LOCUST_RUNTIME_SEC = 120
 # is therefore used to approach the service's registration throughput. Batch size
 # and concurrency are tuned to the peak sustained rate of a single-node dev
 # service (which shares the host with the client); larger runs degrade as the
-# ledger and indexes grow, and higher concurrency saturates the shared CPU.
+# ledger grows, and higher concurrency saturates the shared CPU.
 DOTNET_LOAD_NUM_STATEMENTS = 8000
 DOTNET_LOAD_CONCURRENCY = 800
 

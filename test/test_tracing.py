@@ -15,8 +15,7 @@ from .infra.cchost import CCHost
 REQUEST_ID_HEADER = "x-ms-request-id"
 CLIENT_REQUEST_ID_HEADER = "x-ms-client-request-id"
 REQUEST_ID_REGEX = re.compile(r"[0-9a-f]+")
-JSON_ENDPOINTS = ["/version", "/configuration", "/entries/txIds"]
-INDEXING_RETRY = [(503, "IndexingInProgressRetryLater")]
+JSON_ENDPOINTS = ["/version", "/configuration"]
 
 
 def test_tracing_headers(client: Client):
@@ -30,7 +29,7 @@ def test_tracing_headers(client: Client):
 
 @pytest.mark.parametrize("path", JSON_ENDPOINTS)
 def test_tracing_json_content_negotiation_error(client: Client, path):
-    client.get(path, retry_on=INDEXING_RETRY)
+    client.get(path)
     response = client.session.get(
         path,
         headers={
@@ -52,7 +51,7 @@ def test_tracing_json_content_negotiation_error(client: Client, path):
 class TestJsonAdapterLogging:
     @pytest.mark.parametrize("path", JSON_ENDPOINTS)
     def test_json_error_logging(self, client: Client, cchost: CCHost, path):
-        client.get(path, retry_on=INDEXING_RETRY)
+        client.get(path)
         client_request_id = uuid4().hex
         response = client.session.get(
             path,

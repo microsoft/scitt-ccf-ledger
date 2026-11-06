@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changes
+- Remove the `GET /entries/txIds` endpoint and the entry and operations
+  indexing strategies. Registrations no longer write to
+  `public:scitt.operations`; entries already in the ledger are unaffected.
+- `GET /operations/{txid}` is now answered from the transaction's commit
+  status: the operation is running until the transaction commits, and then
+  succeeded with an entry of the same ID. It no longer returns `404` for
+  transaction IDs that aren't registrations or for operations older than
+  1 hour.
+- pyscitt 0.16.0: remove `Client.enumerate_statements`,
+  `Client.wait_for_operation`, the `operation` argument of `get_receipt` and
+  `get_transparent_statement`, and the `scitt retrieve` command. Submissions
+  without `waitForCommit` only accept the `303 See Other` response, which the
+  service returns for the client's default `api-version=2026-03-26`.
 
 ## [0.21.0]
 ### Upgrade notes
