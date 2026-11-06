@@ -235,8 +235,9 @@ def test_operation_status_follows_transaction_status(
     }
     assert "location" not in resp.headers
 
-    # A transaction ID the service doesn't know yet is still running.
-    resp = scrapi_client.get(f"/operations/{view}.{int(seqno) + 1000000}")
+    # A transaction ID the service doesn't know yet is still running. Its
+    # future view keeps it unknown even if an election happens meanwhile.
+    resp = scrapi_client.get(f"/operations/{int(view) + 1000}.{int(seqno) + 1000000}")
     assert resp.status_code == HTTPStatus.ACCEPTED
 
     with pytest.raises(ServiceError) as excinfo:
