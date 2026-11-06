@@ -259,7 +259,11 @@ class BaseClient:
         api_version:
             The api-version query parameter sent with SCITT requests.
             Defaults to SCITT_API_VERSION_2026_03_26.
-            Set to None for legacy behavior.
+            Set to None for legacy behavior. Submissions without waitForCommit
+            (submit_signed_statement and the submit_signed_statement_and_wait*
+            methods) require SCITT_API_VERSION_2026_03_26, as they only accept
+            the 303 See Other response the service returns for it; any other
+            value raises ValueError before the statement is sent.
         """
 
         # Even though these are passed to the httpx.Client and not used
@@ -745,7 +749,15 @@ class Client(BaseClient):
         Per SCRAPI v09, POST /entries returns 303 See Other with a Location
         header pointing to /entries/{txid}. The txid is extracted from the
         Location header.
+
+        The service only returns 303 for SCITT_API_VERSION_2026_03_26, so any
+        other api_version is rejected before the statement is sent.
         """
+        if self.api_version != SCITT_API_VERSION_2026_03_26:
+            raise ValueError(
+                "Asynchronous submission requires "
+                f"api_version={SCITT_API_VERSION_2026_03_26}, got {self.api_version}"
+            )
         headers = {"Content-Type": CT_APPLICATION_COSE}
         resp = self.post(
             "/entries",
