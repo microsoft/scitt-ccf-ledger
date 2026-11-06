@@ -58,6 +58,7 @@ def application_read_requests(client: Client, tx: str):
     return {
         "entry receipt": lambda: client.get_receipt(tx),
         "transparent statement": lambda: client.get_transparent_statement(tx),
+        "operation status": lambda: client.get(f"/operations/{tx}"),
     }
 
 

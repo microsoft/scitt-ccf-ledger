@@ -5,4 +5,3 @@
 # Make sure to keep them in sync.
 
 MAX_UNAUTHENTICATED_ENTRY_SIZE_BYTES = 64 * 1024
-OPERATION_EXPIRY_SECONDS = 60 * 60

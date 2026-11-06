@@ -5,18 +5,27 @@
 Tests for SCRAPI v09 registration flow (sections 2.3-2.5).
 
 These tests verify the HTTP-level behavior of the SCRAPI v09 registration
-endpoints, including status codes, Location headers, and polling behavior.
+endpoints, including status codes, Location headers, and polling behavior,
+as well as the legacy flow used by clients that don't send the api-version.
 """
 
 import re
 from http import HTTPStatus
 
+import cbor2
 import pytest
 from loguru import logger as LOG
 
 from pyscitt import crypto
-from pyscitt.client import SCITT_API_VERSION_2026_03_26, Client
+from pyscitt.client import (
+    CBOR_ERR_DETAIL_TAG,
+    CBOR_ERR_TITLE_TAG,
+    SCITT_API_VERSION_2026_03_26,
+    Client,
+    ServiceError,
+)
 
+CT_APPLICATION_CBOR = "application/cbor"
 CT_APPLICATION_COSE = "application/cose"
 CT_SCITT_RECEIPT = "application/scitt-receipt+cose"
 CT_SCITT_STATEMENT = "application/scitt-statement+cose"
@@ -28,14 +37,12 @@ def scrapi_client(client: Client) -> Client:
     return client.replace(api_version=SCITT_API_VERSION_2026_03_26)
 
 
-@pytest.mark.parametrize("api_version", [SCITT_API_VERSION_2026_03_26, None])
 def test_async_registration_returns_303(
-    client: Client, api_version, cert_authority, configure_service
+    scrapi_client: Client, cert_authority, configure_service
 ):
     """
     POST /entries returns 303 See Other with a Location header pointing
-    to /entries/{txid} per SCRAPI v09 section 2.3.2, with or without the
-    api-version.
+    to /entries/{txid} per SCRAPI v09 section 2.3.2.
     """
     identity = cert_authority.create_identity(
         alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
@@ -54,7 +61,7 @@ def test_async_registration_returns_303(
     # response can be inspected. Redirect following is disabled so that the 303
     # is returned rather than followed, while a 307 sending the write from a
     # backup to the primary is still followed transparently.
-    resp = client.replace(api_version=api_version).request(
+    resp = scrapi_client.request(
         "POST",
         "/entries",
         headers={"Content-Type": CT_APPLICATION_COSE},
@@ -97,6 +104,145 @@ def test_async_registration_returns_303(
     assert (
         len(resp.content) == 0
     ), f"303 response body must be empty, got {len(resp.content)} bytes"
+
+
+def test_legacy_registration_returns_202_then_operation_succeeds(
+    client: Client, cert_authority, configure_service
+):
+    """
+    Without the api-version, POST /entries returns 202 Accepted with a CBOR
+    operation body and a Location header pointing to /operations/{txid}.
+    GET /operations/{txid} then returns 202 while the transaction is pending,
+    and 200 with the entry ID once it is committed.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+
+    legacy_client = client.replace(api_version=None)
+    resp = legacy_client.request(
+        "POST",
+        "/entries",
+        headers={"Content-Type": CT_APPLICATION_COSE},
+        content=signed_statement,
+        follow_redirects=False,
+    )
+
+    LOG.info(f"POST /entries status: {resp.status_code}")
+    LOG.info(f"POST /entries headers: {dict(resp.headers)}")
+
+    assert (
+        resp.status_code == HTTPStatus.ACCEPTED
+    ), f"Expected 202 Accepted, got {resp.status_code}"
+    assert resp.headers.get("content-type") == CT_APPLICATION_CBOR
+
+    operation = cbor2.loads(resp.content)
+    tx = operation.get("OperationId")
+    assert operation == {"OperationId": tx, "Status": "running"}
+    assert re.fullmatch(r"\d+\.\d+", tx), f"Invalid operation ID: {tx}"
+    assert resp.headers.get("x-ms-ccf-transaction-id") == tx
+
+    location = resp.headers.get("location")
+    assert location is not None and location.endswith(
+        f"/operations/{tx}"
+    ), f"Location header must point to /operations/{{txid}}, got: {location}"
+
+    # Poll the operation, as legacy clients do, until it is no longer running.
+    resp = legacy_client.get(f"/operations/{tx}", retry_on=[HTTPStatus.ACCEPTED])
+    LOG.info(f"GET /operations/{tx} headers: {dict(resp.headers)}")
+
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.headers.get("content-type") == CT_APPLICATION_CBOR
+    assert cbor2.loads(resp.content) == {
+        "OperationId": tx,
+        "Status": "succeeded",
+        "EntryId": tx,
+    }
+
+    location = resp.headers.get("location")
+    assert location is not None and location.endswith(
+        f"/entries/{tx}"
+    ), f"Location header must point to /entries/{{txid}}, got: {location}"
+
+    # Reads are answered by whichever node serves the request, so give the
+    # whole network a chance to apply the transaction before reading it.
+    client.wait_for_confirmation_on_all_nodes(tx)
+
+    # The entry is readable without the api-version too.
+    assert legacy_client.get_historical(f"/entries/{tx}").status_code == HTTPStatus.OK
+    assert (
+        legacy_client.get_historical(f"/entries/{tx}/statement").status_code
+        == HTTPStatus.OK
+    )
+
+
+def test_operation_status_follows_transaction_status(
+    scrapi_client: Client, cert_authority, configure_service
+):
+    """
+    GET /operations/{txid} is answered from the status of the transaction:
+    succeeded once it is committed, failed if it can't be committed, and
+    running while it isn't known yet. A malformed operation ID is rejected.
+    """
+    identity = cert_authority.create_identity(
+        alg="ES256", kty="ec", ec_curve="P-256", add_eku="2.999"
+    )
+    configure_service(
+        {
+            "policy": {
+                "policyScript": f'export function apply(phdr) {{ return phdr.cwt.iss === "{identity.issuer}"; }}'
+            }
+        }
+    )
+
+    signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
+
+    tx = scrapi_client.submit_signed_statement_wait_for_commit(signed_statement).tx
+    scrapi_client.wait_for_confirmation_on_all_nodes(tx)
+
+    resp = scrapi_client.get(f"/operations/{tx}")
+    assert resp.status_code == HTTPStatus.OK
+    assert cbor2.loads(resp.content) == {
+        "OperationId": tx,
+        "Status": "succeeded",
+        "EntryId": tx,
+    }
+
+    # A view that doesn't match the one the seqno was committed in makes the
+    # transaction ID invalid.
+    view, seqno = tx.split(".")
+    invalid_tx = f"{int(view) + 1}.{seqno}"
+    resp = scrapi_client.get(f"/operations/{invalid_tx}")
+    LOG.info(f"GET /operations/{invalid_tx} headers: {dict(resp.headers)}")
+
+    assert resp.status_code == HTTPStatus.OK
+    assert cbor2.loads(resp.content) == {
+        "OperationId": invalid_tx,
+        "Status": "failed",
+        "Error": {
+            CBOR_ERR_TITLE_TAG: "TransactionInvalid",
+            CBOR_ERR_DETAIL_TAG: "Transaction is invalid",
+        },
+    }
+    assert "location" not in resp.headers
+
+    # A transaction ID the service doesn't know yet is still running.
+    resp = scrapi_client.get(f"/operations/{view}.{int(seqno) + 1000000}")
+    assert resp.status_code == HTTPStatus.ACCEPTED
+
+    with pytest.raises(ServiceError) as excinfo:
+        scrapi_client.get("/operations/not-a-txid")
+    assert excinfo.value.code == "InvalidInput"
+    assert "Invalid Operation ID" in excinfo.value.message
 
 
 def test_entry_polling_returns_302_then_200(
