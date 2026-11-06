@@ -155,6 +155,7 @@ The selected retrieval endpoints are:
 
 - `GET /entries/{txid}`
 - `GET /entries/{txid}/statement`
+- `GET /operations/{txid}`
 
 Example: require JWT for writes only, reads are open:
 ```json
