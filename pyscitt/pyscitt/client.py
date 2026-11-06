@@ -313,6 +313,28 @@ class BaseClient:
         values.update(kwargs)
         return self.__class__(**values)
 
+    def _resolve_redirect(self, response: httpx.Response, location: str) -> str:
+        """
+        Resolve a redirect Location against the request URL and check that it
+        is safe to follow.
+
+        Redirects may point at another node (CCF redirects writes to the
+        primary), but must not downgrade the scheme of the client's base URL
+        or embed credentials, as the session's Authorization header and the
+        request body are sent to whatever host is named.
+        """
+        target = response.request.url.join(location)
+        if target.scheme != self.session.base_url.scheme:
+            raise ValueError(
+                f"Refusing redirect to {target.scheme} URL; "
+                f"expected {self.session.base_url.scheme}"
+            )
+        if target.userinfo:
+            raise ValueError("Refusing redirect to a URL containing credentials")
+        if not target.host:
+            raise ValueError("Refusing redirect to a URL without a host")
+        return str(target)
+
     def parse_response_error(self, response: httpx.Response) -> Optional[ServiceError]:
         """
         Parse the error response from the server and return a ServiceError instance.
@@ -425,7 +447,7 @@ class BaseClient:
                 kwargs["content"] = payload
                 kwargs.setdefault("headers", {})["content-type"] = CT_APPLICATION_COSE
             else:
-                raise ValueError(f"Cannot sign request")
+                raise ValueError("Cannot sign request")
 
         default_wait_time = 2
         timeout = 30
@@ -479,7 +501,7 @@ class BaseClient:
                             kwargs["headers"].pop("Content-Type", None)
                             kwargs["headers"].pop("content-type", None)
 
-                    url = str(httpx.URL(location))
+                    url = self._resolve_redirect(response, location)
                     LOG.debug(f"Following {response.status_code} redirect to {url}")
                     continue
 
@@ -684,7 +706,7 @@ class Client(BaseClient):
         return self.get("/version").json()
 
     def get_jwks(self) -> dict:
-        resp = self.get(f"/jwks")
+        resp = self.get("/jwks")
         resp.raise_for_status()
         return resp.json()
 

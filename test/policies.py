@@ -69,7 +69,7 @@ FAIL = {
     "rego": {"policyRego": FAIL_POLICY_REGO},
 }
 
-PASS_POLICY_REGO = f"""
+PASS_POLICY_REGO = """
 package policy
 default allow := true
 """

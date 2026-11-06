@@ -19,8 +19,6 @@ from pyscitt.verify import (
     verify_transparent_statement,
 )
 
-from .infra.assertions import service_error
-
 CURVE_TO_COSE_CRV = {
     "secp256r1": 1,  # P-256
     "secp384r1": 2,  # P-384
@@ -171,7 +169,8 @@ def test_make_signed_statement_transparent(
     verify_transparent_statement(transparent_statement, trust_store, signed_statement)
 
     dynamic_trust_store = DynamicTrustStore(
-        client=DynamicTrustStoreClient(forced_httpclient=client.session)
+        client=DynamicTrustStoreClient(forced_httpclient=client.session),
+        authorized_domains=["*"],
     )
     verify_transparent_statement(
         transparent_statement, dynamic_trust_store, signed_statement
@@ -228,7 +227,8 @@ def test_recovery(client, cert_authority, restart_service, configure_service):
     assert new_cose_key in keys
 
     dynamic_trust_store = DynamicTrustStore(
-        client=DynamicTrustStoreClient(forced_httpclient=client.session)
+        client=DynamicTrustStoreClient(forced_httpclient=client.session),
+        authorized_domains=["*"],
     )
     verify_transparent_statement(
         first_transparent_statement, dynamic_trust_store, first_signed_statement

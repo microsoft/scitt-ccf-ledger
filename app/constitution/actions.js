@@ -61,6 +61,17 @@ function checkType(value, type, field) {
   }
 }
 
+const RESERVED_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+// Reject keys that would modify Object.prototype behaviour when used as a
+// property name on a plain object (e.g. obj["__proto__"] = ...).
+function checkAllowedStringValue(value, field) {
+  checkType(value, "string", field);
+  if (RESERVED_OBJECT_KEYS.has(value)) {
+    throw new Error(`${field} must not be a reserved object key`);
+  }
+}
+
 function checkEnum(value, members, field) {
   if (!members.includes(value)) {
     throw new Error(`${field} must be one of ${members}`);
@@ -1231,7 +1242,7 @@ const actions = new Map([
     new Action(
       function (args) {
         checkType(args.did, "string", "did");
-        checkType(args.feed, "string", "feed");
+        checkAllowedStringValue(args.feed, "feed");
         checkType(args.svn, "string", "svn");
       },
       function (args, proposalId) {
@@ -1361,7 +1372,7 @@ const actions = new Map([
     new Action(
       function (args) {
         checkType(args.did, "string", "did");
-        checkType(args.feed, "string", "feed");
+        checkAllowedStringValue(args.feed, "feed");
       },
       function (args) {
         let uvmEndorsementsForDID = ccf.kv[

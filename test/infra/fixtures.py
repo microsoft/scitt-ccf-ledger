@@ -5,7 +5,6 @@ import os
 from contextlib import contextmanager
 from http import HTTPStatus
 from pathlib import Path
-from urllib.parse import urlparse
 
 import pytest
 from loguru import logger as LOG
