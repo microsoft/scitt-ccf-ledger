@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+// When changing any of the values here, make sure to update the corresponding
+// entries in test/constants.py
 namespace scitt
 {
   const uint64_t MAX_ENTRY_SIZE_BYTES_DEFAULT = 1024 * 1024;
@@ -22,7 +24,7 @@ namespace scitt
   const std::string CT_SCITT_STATEMENT = "application/scitt-statement+cose";
 
   // API versioning for SCITT endpoints.
-  // SCRAPI v9 enables new behavior (302, new content types).
+  // SCRAPI v9 enables new behavior (303, 302, new content types).
   // Older versions (or absent api-version) get legacy behavior.
   const std::string SCITT_API_VERSION_2026_03_26 = "2026-03-26";
 

@@ -10,6 +10,7 @@
 #include "historical/historical_queries_adapter.h"
 #include "http_error.h"
 #include "kv_types.h"
+#include "operations_endpoints.h"
 #include "policy_engine.h"
 #include "service_endpoints.h"
 #include "tracing.h"
@@ -146,31 +147,6 @@ namespace scitt
     auto cose_receipt =
       ccf::cose::edit::set_unprotected_header(*signature, inclusion_desc);
     return cose_receipt;
-  }
-
-  namespace
-  {
-    /**
-     * Answers POST /entries with 303 See Other to /entries/{txid} (SCRAPI v09
-     * section 2.3.2), which the handler can't do before its TxID is assigned.
-     */
-    void entry_locally_committed_func(
-      ccf::endpoints::CommandEndpointContext& ctx, const ccf::TxID& tx_id)
-    {
-      std::string tx_str = tx_id.to_str();
-      SCITT_TRACE("New entry was locally committed with tx={}", tx_str);
-
-      ctx.rpc_ctx->set_response_header(ccf::http::headers::CCF_TX_ID, tx_str);
-
-      if (auto host = ctx.rpc_ctx->get_request_header(ccf::http::headers::HOST))
-      {
-        ctx.rpc_ctx->set_response_header(
-          ccf::http::headers::LOCATION,
-          fmt::format("https://{}/entries/{}", *host, tx_str));
-      }
-
-      ctx.rpc_ctx->set_response_status(HTTP_STATUS_SEE_OTHER);
-    }
   }
 
   class AppEndpoints : public ccf::UserEndpointRegistry
@@ -437,7 +413,7 @@ namespace scitt
         "/entries",
         HTTP_POST,
         register_signed_statement,
-        entry_locally_committed_func,
+        operation_locally_committed_func,
         authn_policy)
         .add_query_parameter<bool>(
           "waitForCommit",
@@ -558,6 +534,8 @@ namespace scitt
         .install();
 
       register_service_endpoints(context, *this);
+
+      register_operations_endpoints(*this, read_authn_policy);
     }
   };
 } // namespace scitt
