@@ -93,19 +93,6 @@ namespace scitt
             "Invalid value for query parameter '{}': {}", name, value));
       }
     }
-    else if constexpr (std::is_integral_v<T>)
-    {
-      T result;
-      const auto [p, ec] = std::from_chars(value.begin(), value.end(), result);
-      if (ec != std::errc() || p != value.end())
-      {
-        throw BadRequestJsonError(
-          errors::QueryParameterError,
-          fmt::format(
-            "Invalid value for query parameter '{}': {}", name, value));
-      }
-      return result;
-    }
     else
     {
       static_assert(ccf::nonstd::dependent_false<T>::value, "Unsupported type");
