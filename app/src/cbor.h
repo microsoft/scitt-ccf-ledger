@@ -50,9 +50,7 @@ namespace scitt::cbor
   {
     using namespace tav::cbor;
     // All inputs are valid UTF-8 already: the IDs are TxID strings, the status
-    // is an enum name, the error code is an errors:: constant and the error
-    // message was JSON-serialised into the operations table, which rejects
-    // invalid UTF-8.
+    // is an enum name, and the error code and message are fixed strings.
 
     // Entries are serialized in insertion order.
     std::vector<MapItem> fields;

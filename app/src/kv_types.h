@@ -3,66 +3,18 @@
 
 #pragma once
 #include "did/document.h"
-#include "odata_error.h"
 #include "policy_engine.h"
 #include "signature_algorithms.h"
 
-#include <ccf/crypto/hash_provider.h>
 #include <ccf/ds/json.h>
 #include <ccf/kv/map.h>
 #include <ccf/kv/value.h>
-#include <ccf/tx_id.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <vector>
 
 namespace scitt
 {
-  enum class OperationStatus
-  {
-    Running,
-    Failed,
-    Succeeded,
-  };
-  DECLARE_JSON_ENUM(
-    OperationStatus,
-    {{OperationStatus::Running, "running"},
-     {OperationStatus::Failed, "failed"},
-     {OperationStatus::Succeeded, "succeeded"}});
-
-  static std::string operationStatusToString(OperationStatus status)
-  {
-    switch (status)
-    {
-      case OperationStatus::Running:
-        return "running";
-      case OperationStatus::Failed:
-        return "failed";
-      case OperationStatus::Succeeded:
-        return "succeeded";
-      default:
-        throw std::invalid_argument("Invalid OperationStatus value");
-    }
-  }
-
-  struct OperationLog
-  {
-    OperationStatus status;
-
-    // This is populated for entries that update an existing operation. When
-    // creating a new one, the transaction ID of the entry is used as the new
-    // operation's ID.
-    std::optional<ccf::TxID> operation_id;
-
-    std::optional<time_t> created_at;
-    std::optional<ccf::crypto::Sha256Hash> context_digest;
-    std::optional<nlohmann::json> error;
-  };
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(OperationLog);
-  DECLARE_JSON_REQUIRED_FIELDS(OperationLog, status);
-  DECLARE_JSON_OPTIONAL_FIELDS(
-    OperationLog, operation_id, created_at, context_digest, error);
-
   /**
    * SCITT Service configuration. This is stored in the KV and updated
    * through a custom governance action.
@@ -198,9 +150,6 @@ namespace scitt
   // Tables
   static constexpr auto ENTRY_TABLE = "public:scitt.entry";
   using EntryTable = ccf::kv::RawCopySerialisedValue<std::vector<uint8_t>>;
-
-  static constexpr auto OPERATIONS_TABLE = "public:scitt.operations";
-  using OperationsTable = ccf::kv::Value<OperationLog>;
 
   // The `ccf.gov` prefix is necessary to make the table writable
   // through governance.

@@ -3,32 +3,17 @@
 
 #pragma once
 #include "cbor.h"
-#include "kv_types.h"
 #include "odata_error.h"
 
 #include <ccf/ds/json.h>
 #include <ccf/tx_id.h>
-#include <nlohmann/json.hpp>
-#include <unordered_map>
+#include <optional>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace scitt
 {
-  struct GetEntriesTransactionIds
-  {
-    struct Out
-    {
-      std::vector<std::string> transaction_ids;
-      std::optional<std::string> next_link;
-    };
-  };
-
-  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetEntriesTransactionIds::Out);
-  DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
-    GetEntriesTransactionIds::Out, transaction_ids, "transactionIds");
-  DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(
-    GetEntriesTransactionIds::Out, next_link, "nextLink");
-
   struct GetVersion
   {
     struct Out
@@ -39,6 +24,28 @@ namespace scitt
 
   DECLARE_JSON_TYPE(GetVersion::Out);
   DECLARE_JSON_REQUIRED_FIELDS(GetVersion::Out, version);
+
+  enum class OperationStatus
+  {
+    Running,
+    Failed,
+    Succeeded,
+  };
+
+  static std::string operationStatusToString(OperationStatus status)
+  {
+    switch (status)
+    {
+      case OperationStatus::Running:
+        return "running";
+      case OperationStatus::Failed:
+        return "failed";
+      case OperationStatus::Succeeded:
+        return "succeeded";
+      default:
+        throw std::invalid_argument("Invalid OperationStatus value");
+    }
+  }
 
   struct GetOperation
   {
@@ -71,5 +78,4 @@ namespace scitt
       error_code_opt,
       error_message_opt);
   }
-
 } // namespace scitt

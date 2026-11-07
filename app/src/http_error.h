@@ -73,13 +73,6 @@ namespace scitt
     {}
   };
 
-  struct ServiceUnavailableJsonError : public HTTPError
-  {
-    ServiceUnavailableJsonError(std::string code, std::string msg) :
-      HTTPError(HTTP_STATUS_SERVICE_UNAVAILABLE, code, msg, false)
-    {}
-  };
-
   struct ServiceUnavailableCborError : public HTTPError
   {
     ServiceUnavailableCborError(std::string code, std::string msg) :
@@ -93,13 +86,6 @@ namespace scitt
       std::string code, std::string msg, bool returns_cbor_error) :
       HTTPError(
         HTTP_STATUS_INTERNAL_SERVER_ERROR, code, msg, returns_cbor_error)
-    {}
-  };
-
-  struct InternalJsonError : public InternalServerError
-  {
-    InternalJsonError(std::string msg) :
-      InternalServerError(errors::InternalError, msg, false)
     {}
   };
 
