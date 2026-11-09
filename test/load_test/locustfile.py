@@ -1,13 +1,17 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import logging
+import os
 import random
 import time
 from http import HTTPStatus
 from pathlib import Path
 
 import cbor2
+import gevent
 from locust import FastHttpUser, events, task
+from locust.runners import MasterRunner, WorkerRunner
 
 CT_COSE = "application/cose"
 
@@ -18,6 +22,9 @@ SCITT_API_VERSION = "2026-03-26"
 # is committed, so the entry does not have to be polled afterwards.
 SUBMIT_PATH = f"/entries?waitForCommit=true&api-version={SCITT_API_VERSION}"
 SUBMIT_NAME = "POST /entries"
+
+# File to which a distributed master publishes its bound port for its workers.
+MASTER_READY_ENVIRONMENT_VARIABLE = "SCITT_LOCUST_MASTER_READY"
 
 # COSE_Sign1 unprotected header label carrying the CCF inclusion proofs, and
 # the label of the proof list within it.
@@ -46,6 +53,54 @@ def init_parser(parser):
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--measure-time-s",
+        help="Seconds to keep running once all users have spawned (0 to disable)",
+        type=int,
+        default=0,
+    )
+
+
+@events.init.add_listener
+def on_init(environment, **_kwargs):
+    """Measure for a fixed window after all users have spawned."""
+    # Workers receive spawning_complete too, but only the master ends runs.
+    if isinstance(environment.runner, WorkerRunner):
+        return
+
+    ready_path = os.environ.get(MASTER_READY_ENVIRONMENT_VARIABLE)
+    if ready_path and isinstance(environment.runner, MasterRunner):
+        # With --master-bind-port 0 the port is assigned by ZMQ's
+        # bind_to_random_port. Publish it atomically for the workers.
+        path = Path(ready_path)
+        staging_path = path.with_suffix(".pending")
+        staging_path.write_text(str(environment.runner.server.port), encoding="ascii")
+        staging_path.replace(path)
+
+    measure_time_s = environment.parsed_options.measure_time_s
+    if not measure_time_s:
+        return
+
+    spawning_completed = False
+
+    def stop_after_measurement_window(**_kwargs):
+        nonlocal spawning_completed
+        spawning_completed = True
+        # --reset-stats runs on this event, so this is the reported window.
+        gevent.spawn_later(measure_time_s, environment.runner.quit)
+
+    def check_spawning_completed(**_kwargs):
+        # A run ended by the --run-time backstop mid-ramp has plausible but
+        # invalid statistics, so fail rather than reporting them.
+        if not spawning_completed:
+            logging.error(
+                "Run ended before all users had spawned. "
+                "The statistics do not describe steady state."
+            )
+            environment.process_exit_code = 1
+
+    environment.events.spawning_complete.add_listener(stop_after_measurement_window)
+    environment.events.quitting.add_listener(check_spawning_completed)
 
 
 class Submitter(FastHttpUser):
