@@ -2,7 +2,7 @@ ARG CCF_VERSION="7.0.23"
 
 # Pin the Azure Linux base image by tag and digest for reproducibility;
 # Dependabot monitors and updates this FROM line.
-FROM mcr.microsoft.com/azurelinux/base/core:3.0.20261027@sha256:88fc2b4a425801b3b4d8fe5342e24fb6134669fb718ec970340bdd36dee50c35 AS base
+FROM mcr.microsoft.com/azurelinux/base/core:3.0.20261105@sha256:bfb630450e9c3d7428d59f25ce6df95ba5634d664d96b06017aa56f87da5ec0e AS base
 
 # The tdnf snapshot time CCF published for this release selects the package
 # version every stage below installs, and is read from the release rather than
