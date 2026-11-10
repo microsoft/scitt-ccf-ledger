@@ -6,8 +6,6 @@ on:
   push:
     branches:
       - main
-      # TEMPORARY: seed perf-bench-main history before merging. Remove.
-      - achamayou-ccf-style-benchmark-ci
   workflow_dispatch:
 
 permissions: read-all
@@ -41,12 +39,7 @@ jobs:
       - name: Update perf history
         run: |
           set -ex
-          branch="${GITHUB_REF_NAME}"
-          # TEMPORARY: seed perf-bench-main history before merging. Remove.
-          if [[ "$branch" == "achamayou-ccf-style-benchmark-ci" ]]; then
-            branch=main
-          fi
-          artifact="perf-bench-${branch//\//-}"
+          artifact="perf-bench-${GITHUB_REF_NAME//\//-}"
           echo "PERF_HISTORY_ARTIFACT=${artifact}" >> "$GITHUB_ENV"
           ./scripts/perf-history.sh restore "$artifact" perf
           ./scripts/perf-history.sh add results/bencher.json perf
