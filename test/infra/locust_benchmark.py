@@ -157,7 +157,7 @@ def run_locust(
 def parse_result(stats: dict[str, str]) -> tuple[Throughput, Latency]:
     """
     Turn a row of Locust statistics into requests per second and latency in
-    milliseconds (median, with p99 as high and minimum as low).
+    nanoseconds, as Bencher expects (median, with p99 as high and minimum as low).
     """
     request_count = int(stats["Request Count"])
     failure_count = int(stats["Failure Count"])
@@ -181,8 +181,8 @@ def parse_result(stats: dict[str, str]) -> tuple[Throughput, Latency]:
     return (
         Throughput(value=round(request_rate, 1)),
         Latency(
-            value=float(stats["Median Response Time"]),
-            high_value=float(stats["99%"]),
-            low_value=float(stats["Min Response Time"]),
+            value=float(stats["Median Response Time"]) * 1_000_000,
+            high_value=float(stats["99%"]) * 1_000_000,
+            low_value=float(stats["Min Response Time"]) * 1_000_000,
         ),
     )

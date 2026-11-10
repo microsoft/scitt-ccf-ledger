@@ -250,7 +250,7 @@ def run_locust_registration(
     """
     Drive concurrent Locust users, each repeatedly submitting with
     POST /entries?waitForCommit=true, and return committed registrations per
-    second and the per-request latency (p50, with p99 high and min low, in ms).
+    second and the per-request latency (p50, with p99 high and min low, in ns).
     """
     statements_dir = tmp_path / "statements"
     statements_dir.mkdir()
@@ -321,12 +321,14 @@ def test_write_throughput(
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
 
-    throughput, latency_ms = run_locust_registration(client, signed_statement, tmp_path)
+    throughput, registration_latency = run_locust_registration(
+        client, signed_statement, tmp_path
+    )
 
     bf = Bencher()
     label = f"Concurrent Registration {test_name}"
     bf.set(label, throughput)
-    bf.set(label, latency_ms)
+    bf.set(label, registration_latency)
 
 
 @pytest.mark.bencher
@@ -421,8 +423,10 @@ def test_wait_for_commit_throughput(
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
-    throughput, latency_ms = run_locust_registration(client, signed_statement, tmp_path)
+    throughput, registration_latency = run_locust_registration(
+        client, signed_statement, tmp_path
+    )
 
     bf = Bencher()
     bf.set("wait_for_commit Concurrent Registration", throughput)
-    bf.set("wait_for_commit Concurrent Registration", latency_ms)
+    bf.set("wait_for_commit Concurrent Registration", registration_latency)
