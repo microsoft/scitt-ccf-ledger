@@ -345,8 +345,8 @@ class CCHost(EventLoopThread):
             # Commit latency is mostly the time to the next signature, so match
             # the 100ms delay of the docker dev configs rather than CCF's 1s.
             "ledger_signatures": {"delay": "100ms"},
-            # CCF starts one more worker than configured, so this runs 4.
-            "worker_threads": 3,
+            # CCF starts one more worker than configured, so this runs 2.
+            "worker_threads": 1,
             "output_files": {
                 "rpc_addresses_file": str(self.workspace / "rpc_addresses.json"),
             },
