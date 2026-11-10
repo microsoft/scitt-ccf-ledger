@@ -10,9 +10,9 @@ Runs in its own virtual environment with the pinned proofbundle of
 requirements.txt (see scripts/proofbundle-check.sh), never in the environment
 of the functional tests. It checks, in this order:
 
-1. vectors/*.json: twelve receipt cases from microsoft/scitt-ccf-ledger#500
-   plus one separately assembled MIX fixture; each must give the overall
-   status and the receipt statuses it expects.
+1. vectors/*.json: two receipts this ledger issued, unchanged, from
+   microsoft/scitt-ccf-ledger#500; each must give the overall status and the
+   receipt status it expects.
 2. vectors/counter-check/*.json: fixtures with a deliberately wrong
    expectation; each must be reported as a mismatch.
 3. With --captures: every receipt and transparent statement recorded by

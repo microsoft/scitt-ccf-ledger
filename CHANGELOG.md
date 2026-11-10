@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changes
 - Add an optional CI step that checks the receipts produced by the functional
   tests offline with proofbundle 6.4.0 (CCF receipt profile, draft -06),
-  together with the receipt vectors from #500. It is off by default; set the
+  together with two unchanged receipts from #500, and add the signed statement
+  of #500 to the parameterized submit test. It is off by default; set the
   repository variable `PROOFBUNDLE_CHECK` to `1` to switch it on, and
   `PROOFBUNDLE_CHECK_BLOCKING` to `1` to make it blocking.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations

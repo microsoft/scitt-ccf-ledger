@@ -3,17 +3,16 @@
 An offline second reader for the receipts this ledger issues. It checks them
 with [`proofbundle.scitt_ccf`](https://pypi.org/project/proofbundle/) 6.4.0,
 which reads CCF receipts under the CCF receipt profile, draft -06
-(draft-ietf-scitt-receipts-ccf-profile-06). It does not change the functional
-tests and is not needed to run them.
+(draft-ietf-scitt-receipts-ccf-profile-06). The check does not change the
+functional tests and is not needed to run them; the signed statement of #500
+is one more payload of `test_submit_and_validate` in `test/test_cli.py`.
 
 ## What it checks
 
-1. `vectors/*.json`: twelve receipt cases from #500, plus one additional
-   `MIX` fixture assembled from an unchanged and a modified receipt. The
-   twelve cases are two unchanged receipts (`K23`, `K24`) and five changed
-   receipts from each of two days (`F23-1`..`F23-5`, `F24-1`..`F24-5`).
-   `MIX` places the unchanged and modified receipts in one statement. Each
-   fixture holds its expected overall status and receipt statuses.
+1. `vectors/*.json`: two receipts this ledger issued, unchanged, from #500
+   (`K23`, `K24`), each with its expected overall status and receipt status.
+   The changed receipts of #500 test the hardening of draft -06, which this
+   ledger does not have yet, so they are not part of this check.
 2. `vectors/counter-check/*.json`: one fixture with a deliberately wrong
    expectation; the check passes only if it reports the mismatch.
 3. With a capture directory: every receipt and transparent statement that the
@@ -74,5 +73,6 @@ appears only as a `NOTE`.
 
 `capture.py`, `capture_selftest.py`, `check.py`, `__init__.py` and
 `scripts/proofbundle-check.sh` carry the notice this repository requires.
-The vectors, the counter-check fixture and this README are MIT licensed,
+The vectors, the counter-check fixture, `test/payloads/proofbundle-s0-hash-envelope.cose`
+and this README are MIT licensed,
 Copyright (c) 2026 Konrad Gruszka, the same license as proofbundle.
