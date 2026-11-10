@@ -234,6 +234,17 @@ A basic set of performance indicators can be obtained by building the project, a
 ./run_functional_tests.sh -m bencher
 ```
 
+The policy latency benchmarks submit sequentially with
+`POST /entries?waitForCommit=true`, measuring latency through global commit and
+receipt delivery (`Register Signed Statement and Receive Receipt <policy>`).
+The throughput benchmarks (`Concurrent Registration <policy>`) drive the same
+blocking submissions with [Locust](https://locust.io), following the setup of
+CCF's `tests/infra/locust_benchmark.py`: 100 users spread across 4 worker
+processes, statistics reset once all users have spawned, and a 30 second
+measurement window. Each reports committed registrations per second, and
+latency under load (median, with p99 as high and minimum as low). A separate
+latency benchmark retains the blocking-versus-polling comparison.
+
 Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
 
 ### Load tests

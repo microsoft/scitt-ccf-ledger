@@ -1,9 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -13,7 +12,9 @@ from pyscitt import crypto
 from pyscitt.client import Client
 
 from .infra.bencher import Bencher, Latency, Throughput
+from .infra.locust_benchmark import parse_result, run_locust
 
+LOCUST_SUBMIT_ROW = "POST /entries"
 X509_HASHV_POLICY_SCRIPT = f"""
 export function apply(phdr) {{
 // Check exact issuer 
@@ -243,12 +244,34 @@ def latency(df: DataFrame) -> Latency:
     )
 
 
+def run_locust_registration(
+    client: Client, signed_statement: bytes, tmp_path: Path
+) -> tuple[Throughput, Latency]:
+    """
+    Drive concurrent Locust users, each repeatedly submitting with
+    POST /entries?waitForCommit=true, and return committed registrations per
+    second and the per-request latency (p50, with p99 high and min low, in ns).
+    """
+    statements_dir = tmp_path / "statements"
+    statements_dir.mkdir()
+    (statements_dir / "signed_statement.cose").write_bytes(signed_statement)
+
+    stats = run_locust(
+        client.url,
+        tmp_path,
+        ["--scitt-statements", str(statements_dir), "--skip-confirmation"],
+        LOCUST_SUBMIT_ROW,
+    )
+    print(f"Locust {LOCUST_SUBMIT_ROW} statistics: {stats}")
+    return parse_result(stats)
+
+
 @pytest.mark.parametrize("signed_statement_path, test_name", TEST_VECTORS)
 @pytest.mark.bencher
 def test_statement_latency(
     client: Client, configure_service, signed_statement_path: str, test_name: str
 ):
-    client.wait_time = 0.1
+    """Measure registration latency through global commit and receipt delivery."""
     policy = TEST_POLICIES[test_name]
     policy_config = (
         {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
@@ -262,42 +285,32 @@ def test_statement_latency(
     iterations = 50
 
     latency_ns = []
-    for i in range(iterations):
-        start = time.time()
-        client.submit_signed_statement(signed_statement)
-        latency_ns.append((time.time() - start) * 1_000_000_000)
+    for _ in range(iterations):
+        start = time.perf_counter_ns()
+        client.submit_signed_statement_wait_for_commit(signed_statement)
+        latency_ns.append(time.perf_counter_ns() - start)
 
     df = DataFrame({"latency (ns)": latency_ns})
-    print(f"Statement Registration {test_name}")
+    print(f"Statement Registration and Receipt {test_name}")
     print(df.describe())
 
     bf = Bencher()
-    bf.set(f"Register Signed Statement {test_name}", latency(df))
-
-    latency_ns = []
-    for i in range(iterations):
-        start = time.time()
-        client.submit_signed_statement_and_wait_for_receipt(signed_statement)
-        latency_ns.append((time.time() - start) * 1_000_000_000)
-
-    df = DataFrame({"latency (ns)": latency_ns})
-    print(f"Statement Receipt Fetching {test_name}")
-    print(df.describe())
-
-    bf.set(f"Fetch Receipt {test_name}", latency(df))
+    bf.set(f"Register Signed Statement and Receive Receipt {test_name}", latency(df))
 
 
 @pytest.mark.parametrize("signed_statement_path, test_name", TEST_VECTORS)
 @pytest.mark.bencher
 def test_write_throughput(
-    client: Client, configure_service, signed_statement_path: str, test_name: str
+    client: Client,
+    configure_service,
+    tmp_path: Path,
+    signed_statement_path: str,
+    test_name: str,
 ):
     """
-    Measure how many submissions can be made per second using concurrent
-    requests over a fixed time window.
+    Measure committed registrations per second, and their latency, with Locust
+    driving concurrent blocking submissions from distributed workers.
     """
-    client.wait_time = 0.001
-
     policy = TEST_POLICIES[test_name]
     policy_config = (
         {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
@@ -308,60 +321,14 @@ def test_write_throughput(
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
 
-    duration_s = 30
-    max_workers = 16
-    warmup_requests = max_workers
-    lock = threading.Lock()
-    completed_count = 0
-    errors = 0
-    last_error = None
-    stop = False
-
-    def _submit():
-        nonlocal completed_count, errors, last_error
-        while not stop:
-            try:
-                client.submit_signed_statement(signed_statement)
-                with lock:
-                    completed_count += 1
-            except Exception as e:
-                with lock:
-                    errors += 1
-                    last_error = e
-
-    # Warmup: establish connections and warm caches before measuring
-    for _ in range(warmup_requests):
-        client.submit_signed_statement(signed_statement)
-
-    start = time.monotonic()
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_submit) for _ in range(max_workers)]
-        time.sleep(duration_s)
-        stop = True
-        for fut in futures:
-            fut.result()  # propagate any unexpected exceptions
-    elapsed = time.monotonic() - start
-
-    submissions_per_second = completed_count / elapsed
-    error_rate = errors / max(completed_count + errors, 1)
-
-    print(f"Throughput {test_name}: {completed_count} submissions in {elapsed:.2f}s")
-    print(f"  Rate: {submissions_per_second:.2f} submissions/s")
-    print(f"  Errors: {errors} ({error_rate:.1%})")
-    if last_error:
-        print(f"  Last error: {last_error}")
-
-    assert error_rate < 0.01, (
-        f"Error rate too high: {error_rate:.1%} ({errors}/{completed_count + errors}). "
-        f"Last error: {last_error}"
+    throughput, registration_latency = run_locust_registration(
+        client, signed_statement, tmp_path
     )
-    assert submissions_per_second > 0, "No successful submissions"
 
     bf = Bencher()
-    bf.set(
-        f"Throughput {test_name}",
-        Throughput(value=submissions_per_second),
-    )
+    label = f"Concurrent Registration {test_name}"
+    bf.set(label, throughput)
+    bf.set(label, registration_latency)
 
 
 @pytest.mark.bencher
@@ -431,7 +398,9 @@ def test_wait_for_commit_latency(client: Client, cert_authority, configure_servi
 
 
 @pytest.mark.bencher
-def test_wait_for_commit_throughput(client: Client, cert_authority, configure_service):
+def test_wait_for_commit_throughput(
+    client: Client, cert_authority, configure_service, tmp_path: Path
+):
     """
     Measure throughput of concurrent POST /entries?waitForCommit=true requests.
     Each request blocks until consensus, so this measures how many receipts
@@ -454,59 +423,10 @@ def test_wait_for_commit_throughput(client: Client, cert_authority, configure_se
 
     signed_statement = crypto.sign_json_statement(identity, {"foo": "bar"}, cwt=True)
 
-    duration_s = 30
-    max_workers = 16
-    warmup_requests = max_workers
-    lock = threading.Lock()
-    completed_count = 0
-    errors = 0
-    last_error = None
-    stop = False
-
-    def _submit():
-        nonlocal completed_count, errors, last_error
-        while not stop:
-            try:
-                client.submit_signed_statement_wait_for_commit(signed_statement)
-                with lock:
-                    completed_count += 1
-            except Exception as e:
-                with lock:
-                    errors += 1
-                    last_error = e
-
-    # Warmup
-    for _ in range(warmup_requests):
-        client.submit_signed_statement_wait_for_commit(signed_statement)
-
-    start = time.monotonic()
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_submit) for _ in range(max_workers)]
-        time.sleep(duration_s)
-        stop = True
-        for fut in futures:
-            fut.result()
-    elapsed = time.monotonic() - start
-
-    submissions_per_second = completed_count / elapsed
-    error_rate = errors / max(completed_count + errors, 1)
-
-    print(
-        f"wait_for_commit throughput: {completed_count} submissions in {elapsed:.2f}s"
+    throughput, registration_latency = run_locust_registration(
+        client, signed_statement, tmp_path
     )
-    print(f"  Rate: {submissions_per_second:.2f} submissions/s")
-    print(f"  Errors: {errors} ({error_rate:.1%})")
-    if last_error:
-        print(f"  Last error: {last_error}")
-
-    assert error_rate < 0.01, (
-        f"Error rate too high: {error_rate:.1%} ({errors}/{completed_count + errors}). "
-        f"Last error: {last_error}"
-    )
-    assert submissions_per_second > 0, "No successful submissions"
 
     bf = Bencher()
-    bf.set(
-        "wait_for_commit Throughput",
-        Throughput(value=submissions_per_second),
-    )
+    bf.set("wait_for_commit Concurrent Registration", throughput)
+    bf.set("wait_for_commit Concurrent Registration", registration_latency)
