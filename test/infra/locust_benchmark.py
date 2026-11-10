@@ -18,8 +18,8 @@ from pathlib import Path
 from .bencher import Latency, Throughput
 
 LOCUST_FILE = "test/load_test/locustfile.py"
-LOCUST_USERS = 100
-LOCUST_SPAWN_RATE = 100
+LOCUST_USERS = 150
+LOCUST_SPAWN_RATE = 150
 LOCUST_WORKERS = 4
 LOCUST_MEASURE_TIME_S = 30
 RUN_TIME_MARGIN_S = 60
