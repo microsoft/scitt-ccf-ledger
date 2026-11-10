@@ -30,6 +30,14 @@ jobs:
       - name: Work around git safe.directory in container
         run: chown -R $(id -u):$(id -g) $PWD
 
+      - name: Machine info
+        run: |
+          set -x
+          uname -a
+          nproc
+          grep -m1 '^model name' /proc/cpuinfo
+          grep '^MemTotal' /proc/meminfo
+
       - name: Build and run perf tests
         run: |
           ./scripts/setup-env.sh
