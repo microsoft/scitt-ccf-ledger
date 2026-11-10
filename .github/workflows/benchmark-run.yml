@@ -1,0 +1,47 @@
+name: "Run Benchmarks"
+
+# Builds scitt-ccf-ledger and runs the performance tests, uploading the
+# results as the bencher-results artifact. Called by bencher.yml and
+# bencher-ab.yml, which keep a history of results and summarise them.
+on:
+  workflow_call:
+
+permissions: read-all
+
+jobs:
+  run_benchmarks:
+    name: Run benchmarks
+    # 1ES creates a runner for each queued job and removes it when that job ends.
+    # The unique JobId label makes sure only that job can use it.
+    runs-on: [self-hosted, 1ES.Pool=gha-scitt-pool, "JobId=run_benchmarks-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"]
+    container:
+      image: mcr.microsoft.com/azurelinux/base/core:3.0
+    steps:
+      - name: Setup environment
+        run: |
+          gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
+          tdnf update -y
+          tdnf install -y --disablerepo azurelinux-official-ms-non-oss build-essential ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Work-around for https://github.com/actions/runner/issues/2033
+      - name: Work around git safe.directory in container
+        run: chown -R $(id -u):$(id -g) $PWD
+
+      - name: Build and run perf tests
+        run: |
+          ./scripts/setup-env.sh
+          PRESET=bench ./build.sh
+          ./run_functional_tests.sh -m bencher
+        shell: bash
+
+      - name: Upload results
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bencher-results
+          path: bencher.json
+          if-no-files-found: ignore
+          retention-days: 1
+        if: success() || failure()

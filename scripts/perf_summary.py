@@ -2,8 +2,8 @@
 # Licensed under the MIT License.
 
 """
-Summarise a directory of perf data files (one bencher.json per run, named
-<run_id>-<run_number>-<run_attempt>.json) as markdown for a GitHub job summary.
+Summarise a directory of perf data files as markdown for a GitHub job summary,
+comparing the latest run with an EWMA baseline and charting the history.
 
 Adapted from CCF's scripts/perf_summary.py.
 """
@@ -13,71 +13,38 @@ import html
 import json
 import os
 import statistics
-from collections.abc import Sequence
-from typing import List, NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
-# Metric groups to chart over time: (metric, title, display unit, scale from the
-# recorded unit to the display unit). Latencies are recorded in nanoseconds.
-METRIC_GROUPS = [
-    ("throughput", "Throughput", "req/s", 1.0),
-    ("latency", "Latency", "ms", 1e-6),
-]
+from perf_common import (
+    DEFAULT_REPOSITORY,
+    EWMA_HALF_LIFE,
+    METADATA_KEY,
+    METRIC_GROUPS,
+    MetricGroup,
+    PerfData,
+    ewma,
+    list_perf_files,
+    load_json,
+    metric_label_value,
+    metric_value,
+)
+
 CHART_MAX_POINTS = 30
-DEFAULT_REPOSITORY = "microsoft/scitt-ccf-ledger"
-METADATA_KEY = "__metadata"
 
-EWMA_HALF_LIFE = 7
-EWMA_ALPHA = 1 - 0.5 ** (1 / EWMA_HALF_LIFE)
 
-PerfRun = Tuple[str, Optional[str], Optional[str], dict]
-ChartSeries = List[Tuple[str, float]]
+class PerfRun(NamedTuple):
+    label: str
+    run_url: str | None
+    commit_url: str | None
+    data: PerfData
 
 
 class MetricSummary(NamedTuple):
     benchmark: str
-    metric: str
-    unit: str
     latest: float
     baseline: float
     delta_percent: float
     sigma_percent: float
-
-
-def ewma(values: Sequence[float], alpha: float = EWMA_ALPHA) -> float:
-    """Return the exponentially weighted moving average of the values."""
-    if not values:
-        raise ValueError("Cannot calculate an EWMA without values")
-
-    average = values[0]
-    for value in values[1:]:
-        average = alpha * value + (1 - alpha) * average
-    return average
-
-
-def jobid_sort_key(name: str) -> Tuple[int, object]:
-    """Order perf files chronologically by their numeric job id.
-
-    File names have the form ``<run_id>-<run_number>-<run_attempt>.json`` where
-    each component increases over time, so ordering by the integer components
-    gives chronological order. Falls back to the name for unexpected formats.
-    """
-    stem = name[:-5] if name.endswith(".json") else name
-    try:
-        return (0, tuple(int(part) for part in stem.split("-")))
-    except ValueError:
-        return (1, name)
-
-
-def list_perf_files(directory: str) -> List[str]:
-    """Return perf files in the directory, ordered chronologically (oldest first)."""
-    if not os.path.isdir(directory):
-        return []
-    files = [
-        name
-        for name in os.listdir(directory)
-        if os.path.isfile(os.path.join(directory, name))
-    ]
-    return sorted(files, key=jobid_sort_key)
 
 
 def run_label(name: str) -> str:
@@ -87,7 +54,7 @@ def run_label(name: str) -> str:
     return parts[1] if len(parts) >= 2 else stem
 
 
-def run_url(name: str) -> Optional[str]:
+def run_url(name: str) -> str | None:
     """GitHub Actions URL for a perf file, when the run id can be parsed."""
     stem = name[:-5] if name.endswith(".json") else name
     parts = stem.split("-")
@@ -99,7 +66,7 @@ def run_url(name: str) -> Optional[str]:
     return f"{server_url}/{repository}/actions/runs/{parts[0]}"
 
 
-def commit_url(metadata: dict) -> Optional[str]:
+def commit_url(metadata: dict) -> str | None:
     """GitHub commit URL from perf metadata, when available."""
     commit = metadata.get("commit")
     if not isinstance(commit, str) or not commit:
@@ -116,78 +83,41 @@ def commit_url(metadata: dict) -> Optional[str]:
     return f"{server_url.rstrip('/')}/{repository}/commit/{commit}"
 
 
-def load_perf_data(directory: str, files: List[str]) -> List[PerfRun]:
-    """Load (label, run_url, commit_url, data) for each readable perf file."""
-    loaded: List[PerfRun] = []
+def load_perf_data(directory: str, files: list[str]) -> list[PerfRun]:
+    """Load each readable perf file, with its label and links."""
+    loaded: list[PerfRun] = []
     for name in files:
-        try:
-            with open(os.path.join(directory, name), "r") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError):
+        data = load_json(os.path.join(directory, name))
+        if data is None:
             continue
-        if isinstance(data, dict):
-            metadata = data.get(METADATA_KEY, {})
-            if not isinstance(metadata, dict):
-                metadata = {}
-            loaded.append((run_label(name), run_url(name), commit_url(metadata), data))
+        metadata = data.get(METADATA_KEY, {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        loaded.append(
+            PerfRun(run_label(name), run_url(name), commit_url(metadata), data)
+        )
     return loaded
 
 
-def metric_value(
-    data: dict, benchmark: str, metric: str, scale: float = 1.0
-) -> Optional[float]:
-    """Return the scaled numeric value of a benchmark metric, or None if absent."""
-    metrics = data.get(benchmark)
-    if not isinstance(metrics, dict):
-        return None
-    entry = metrics.get(metric)
-    if not isinstance(entry, dict):
-        return None
-    value = entry.get("value")
-    return value * scale if isinstance(value, (int, float)) else None
-
-
-def compact_number(value: float) -> str:
-    """Format a number compactly for summary tables."""
-    abs_value = abs(value)
-    if abs_value == 0:
-        return "0"
-    if abs_value >= 1000:
-        return f"{value:,.0f}"
-    if abs_value >= 100:
-        return f"{value:.0f}"
-    if abs_value >= 10:
-        return f"{value:.1f}".rstrip("0").rstrip(".")
-    if abs_value >= 1:
-        return f"{value:.2f}".rstrip("0").rstrip(".")
-    return f"{value:.3g}"
-
-
-def metric_label_value(value: float, unit: str) -> str:
-    """Format a metric value with its display unit."""
-    return f"{compact_number(value)} {unit}"
-
-
-def metric_summaries(
-    loaded: List[PerfRun], metric: str, unit: str, scale: float
-) -> List[MetricSummary]:
+def metric_summaries(loaded: list[PerfRun], group: MetricGroup) -> list[MetricSummary]:
     """Summarise one metric in the latest run against its historical baselines."""
     if not loaded:
         return []
 
-    latest_data = loaded[-1][3]
-    summaries: List[MetricSummary] = []
+    latest_data = loaded[-1].data
+    summaries: list[MetricSummary] = []
     for benchmark in sorted(latest_data):
         if benchmark == METADATA_KEY:
             continue
-        latest = metric_value(latest_data, benchmark, metric, scale)
+        latest = metric_value(latest_data, benchmark, group.metric, group.scale)
         if latest is None:
             continue
 
         values = [
             value
-            for _, _, _, data in loaded
-            if (value := metric_value(data, benchmark, metric, scale)) is not None
+            for run in loaded
+            if (value := metric_value(run.data, benchmark, group.metric, group.scale))
+            is not None
         ]
         baseline = ewma(values)
         if baseline <= 0:
@@ -197,8 +127,6 @@ def metric_summaries(
         summaries.append(
             MetricSummary(
                 benchmark,
-                metric,
-                unit,
                 latest,
                 baseline,
                 ((latest / baseline) - 1) * 100,
@@ -206,10 +134,7 @@ def metric_summaries(
             )
         )
 
-    return sorted(
-        summaries,
-        key=lambda summary: summary.benchmark,
-    )
+    return summaries
 
 
 def repeated_values(value: float, count: int) -> str:
@@ -217,7 +142,9 @@ def repeated_values(value: float, count: int) -> str:
     return ", ".join(f"{value:.2f}" for _ in range(count))
 
 
-def render_mermaid_xychart(series: ChartSeries, metric: str, unit: str) -> str:
+def render_mermaid_xychart(
+    series: list[tuple[str, float]], metric: str, unit: str
+) -> str:
     """Render a Mermaid xychart line chart for a single benchmark metric."""
     labels = ", ".join(json.dumps(label) for label, _ in series)
     raw_values = [value for _, value in series]
@@ -258,7 +185,7 @@ def render_mermaid_xychart(series: ChartSeries, metric: str, unit: str) -> str:
 
 
 def render_metric_table(
-    loaded: List[PerfRun], summaries: List[MetricSummary], scale: float
+    loaded: list[PerfRun], summaries: list[MetricSummary], group: MetricGroup
 ) -> str:
     """Render metric values with each historical chart in a spanning row."""
     lines = [
@@ -276,20 +203,23 @@ def render_metric_table(
         "<tbody>",
     ]
     for summary in summaries:
-        benchmark = html.escape(summary.benchmark)
         series = [
-            (label, value)
-            for label, _, _, data in loaded
-            if (value := metric_value(data, summary.benchmark, summary.metric, scale))
+            (run.label, value)
+            for run in loaded
+            if (
+                value := metric_value(
+                    run.data, summary.benchmark, group.metric, group.scale
+                )
+            )
             is not None
         ]
         lines.extend(
             [
                 "<tr>",
-                f"<td>{benchmark}</td>",
-                f"<td>{summary.metric.title()}</td>",
-                f'<td align="right">{metric_label_value(summary.latest, summary.unit)}</td>',
-                f'<td align="right">{metric_label_value(summary.baseline, summary.unit)}</td>',
+                f"<td>{html.escape(summary.benchmark)}</td>",
+                f"<td>{group.title}</td>",
+                f'<td align="right">{metric_label_value(summary.latest, group.unit)}</td>',
+                f'<td align="right">{metric_label_value(summary.baseline, group.unit)}</td>',
                 f'<td align="right">{summary.delta_percent:+.1f}%</td>',
                 f'<td align="right">{summary.sigma_percent:.1f}%</td>',
                 "</tr>",
@@ -298,7 +228,7 @@ def render_metric_table(
                 "<details>",
                 "<summary>History</summary>",
                 "",
-                render_mermaid_xychart(series, summary.metric, summary.unit),
+                render_mermaid_xychart(series, group.metric, group.unit),
                 "</details>",
                 "</td>",
                 "</tr>",
@@ -309,7 +239,7 @@ def render_metric_table(
     return "\n".join(lines)
 
 
-def render_runs_table(loaded: List[PerfRun]) -> str:
+def render_runs_table(loaded: list[PerfRun]) -> str:
     """Render a compact table of run labels, Actions runs, and commits."""
     lines = [
         "### Runs",
@@ -324,20 +254,24 @@ def render_runs_table(loaded: List[PerfRun]) -> str:
         "</thead>",
         "<tbody>",
     ]
-    for label, run, commit, data in reversed(loaded):
-        metadata = data.get(METADATA_KEY, {})
+    for run in reversed(loaded):
+        metadata = run.data.get(METADATA_KEY, {})
         commit_sha = metadata.get("commit") if isinstance(metadata, dict) else None
         short_commit = commit_sha[:8] if isinstance(commit_sha, str) else ""
-        run_link = f'<a href="{html.escape(run, quote=True)}">run</a>' if run else ""
+        run_link = (
+            f'<a href="{html.escape(run.run_url, quote=True)}">run</a>'
+            if run.run_url
+            else ""
+        )
         commit_link = (
-            f'<a href="{html.escape(commit, quote=True)}">{short_commit}</a>'
-            if commit and short_commit
+            f'<a href="{html.escape(run.commit_url, quote=True)}">{short_commit}</a>'
+            if run.commit_url and short_commit
             else ""
         )
         lines.extend(
             [
                 "<tr>",
-                f"<td>{html.escape(label)}</td>",
+                f"<td>{html.escape(run.label)}</td>",
                 f"<td>{run_link}</td>",
                 f"<td>{commit_link}</td>",
                 "</tr>",
@@ -347,22 +281,20 @@ def render_runs_table(loaded: List[PerfRun]) -> str:
     return "\n".join(lines)
 
 
-def render_metric_group(
-    loaded: List[PerfRun], metric: str, title: str, unit: str, scale: float
-) -> str:
+def render_metric_group(loaded: list[PerfRun], group: MetricGroup) -> str:
     """Render the summary and charts for benchmarks that report one metric."""
-    summaries = metric_summaries(loaded, metric, unit, scale)
-    lines = [f"## {title} ({unit})", ""]
+    summaries = metric_summaries(loaded, group)
+    lines = [f"## {group.title} ({group.unit})", ""]
     if not summaries:
-        lines.append(f"_No benchmarks with a `{metric}` metric found._")
+        lines.append(f"_No benchmarks with a `{group.metric}` metric found._")
         lines.append("")
         return "\n".join(lines)
 
-    lines.append(render_metric_table(loaded, summaries, scale))
+    lines.append(render_metric_table(loaded, summaries, group))
     return "\n".join(lines)
 
 
-def render_perf_summary(loaded: List[PerfRun]) -> str:
+def render_perf_summary(loaded: list[PerfRun]) -> str:
     """Render all perf metric groups as markdown."""
     lines = [
         "# Performance summary",
@@ -375,8 +307,8 @@ def render_perf_summary(loaded: List[PerfRun]) -> str:
         ),
         "",
     ]
-    for metric, title, unit, scale in METRIC_GROUPS:
-        lines.append(render_metric_group(loaded, metric, title, unit, scale))
+    for group in METRIC_GROUPS:
+        lines.append(render_metric_group(loaded, group))
     lines.append(render_runs_table(loaded))
     return "\n".join(lines)
 
@@ -393,11 +325,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    files = list_perf_files(args.directory)
-
-    recent = files[-CHART_MAX_POINTS:]
-    loaded = load_perf_data(args.directory, recent)
-    print(render_perf_summary(loaded))
+    recent = list_perf_files(args.directory)[-CHART_MAX_POINTS:]
+    print(render_perf_summary(load_perf_data(args.directory, recent)))
 
 
 if __name__ == "__main__":

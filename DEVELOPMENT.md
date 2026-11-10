@@ -255,6 +255,13 @@ throughput and latency charts. The same summary can be produced locally from a
 directory of results with `python3 scripts/perf_summary.py <directory>`. This
 is useful to understand the potential performance impact of changes.
 
+To compare a pull request against `main`, add the `bench-ab` label to it. The
+`Benchmark A/B Testing` workflow (`.github/workflows/bencher-ab.yml`) then runs
+the benchmarks on every push to the pull request, and posts radar charts
+comparing up to its last 5 runs with the last 30 runs on `main` as a job summary
+and a pull request comment (`python3 scripts/perf_compare_radar.py <main
+directory> <branch directory>`).
+
 ### Load tests
 
 #### HTTP based
