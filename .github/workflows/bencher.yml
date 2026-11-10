@@ -41,7 +41,7 @@ jobs:
           set -ex
           artifact="perf-bench-${GITHUB_REF_NAME//\//-}"
           echo "PERF_HISTORY_ARTIFACT=${artifact}" >> "$GITHUB_ENV"
-          ./scripts/perf-history.sh restore "$artifact" perf
+          ./scripts/perf-history.sh restore "$artifact" perf bencher.yml "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
           ./scripts/perf-history.sh add results/bencher.json perf
           ./scripts/perf-history.sh trim perf 180
         env:

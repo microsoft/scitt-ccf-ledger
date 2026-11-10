@@ -12,7 +12,8 @@ permissions: read-all
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  # Queue every run, so that a label event cannot replace a pending benchmark.
+  queue: max
 
 jobs:
   run_benchmarks:
@@ -27,6 +28,8 @@ jobs:
     env:
       BRANCH_PERF_ARTIFACT: perf-bench-pr-${{ github.event.pull_request.number }}
       GH_TOKEN: ${{ github.token }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -39,14 +42,14 @@ jobs:
       - name: Restore recent main perf results
         run: |
           set -ex
-          ./scripts/perf-history.sh restore perf-bench-main main_perf
+          ./scripts/perf-history.sh restore perf-bench-main main_perf bencher.yml "$GITHUB_REPOSITORY" main
           # perf_compare_radar.py uses every retained point
           ./scripts/perf-history.sh trim main_perf 30
 
       - name: Update branch perf history
         run: |
           set -ex
-          ./scripts/perf-history.sh restore "$BRANCH_PERF_ARTIFACT" branch_perf
+          ./scripts/perf-history.sh restore "$BRANCH_PERF_ARTIFACT" branch_perf bencher-ab.yml "$HEAD_REPO" "$HEAD_REF"
           ./scripts/perf-history.sh add results/bencher.json branch_perf
           ./scripts/perf-history.sh trim branch_perf 5
 
