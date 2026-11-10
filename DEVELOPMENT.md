@@ -245,7 +245,15 @@ measurement window. Each reports committed registrations per second, and
 latency under load (median, with p99 as high and minimum as low). A separate
 latency benchmark retains the blocking-versus-polling comparison.
 
-Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
+Results are written to `bencher.json` (in the
+[Bencher metric format](https://bencher.dev/docs/reference/bencher-metric-format/),
+with latencies in nanoseconds). The `Performance Regression Tests` workflow
+(`.github/workflows/bencher.yml`) runs these on every push to `main`, keeps a
+rolling history of results in a `perf-bench-<branch>` artifact, and publishes a
+job summary comparing the latest results with an EWMA baseline, with historical
+throughput and latency charts. The same summary can be produced locally from a
+directory of results with `python3 scripts/perf_summary.py <directory>`. This
+is useful to understand the potential performance impact of changes.
 
 ### Load tests
 

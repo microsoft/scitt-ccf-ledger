@@ -10,6 +10,12 @@ on:
 
 permissions: read-all
 
+# Each run extends the perf history restored from the previous run's artifact,
+# so runs on the same branch must not overlap.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  queue: max
+
 jobs:
   run_benchmarks:
     name: Performance Regression Tests
@@ -23,14 +29,35 @@ jobs:
         run: |
           gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY
           tdnf update -y
-          tdnf install -y --disablerepo azurelinux-official-ms-non-oss build-essential ca-certificates git
+          tdnf install -y --disablerepo azurelinux-official-ms-non-oss build-essential ca-certificates git gh
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # Work-around for https://github.com/actions/runner/issues/2033
       - name: Work around git safe.directory in container
-        run: chown -R $(id -u):$(id -g) $PWD          
+        run: chown -R $(id -u):$(id -g) $PWD
+
+      - name: Restore previous perf results
+        run: |
+          set -ex
+          slug="${GITHUB_REF_NAME//\//-}"
+          echo "BRANCH_SLUG=${slug}" >> "$GITHUB_ENV"
+          name="${ARTIFACT_PREFIX}-${slug}"
+          mkdir -p perf
+          run_ids=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${name}&per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0:20] | .[].workflow_run.id')
+          for run_id in $run_ids; do
+            if gh run download "$run_id" -R "$GITHUB_REPOSITORY" --name "$name" --dir prev_artifact; then
+              find prev_artifact -name '*.json' -exec cp {} perf/ \;
+              break
+            fi
+          done
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PREFIX: perf-bench
+
       - name: Build and run perf tests
         run: |
           ./scripts/setup-env.sh
@@ -38,14 +65,29 @@ jobs:
           ./run_functional_tests.sh -m bencher
         shell: bash
 
-      - uses: bencherdev/bencher@7de3c69a85380826613050826b4bce062be2f07d # v0.6.16
-      - name: Track base branch benchmarks with Bencher
+      - name: Collect perf results
         run: |
-          bencher run \
-          --project scitt-ccf-ledger \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --branch main \
-          --testbed gha-scitt-pool \
-          --adapter json \
-          --err \
-          --file bencher.json
+          set -exo pipefail
+          jobid="${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
+          mkdir -p perf
+          if [[ -f bencher.json ]]; then
+            cp bencher.json "perf/${jobid}.json"
+          fi
+          (cd perf && ls -1 | sort -t- -k1,1n -k2,2n -k3,3n | head -n -180 | xargs -r rm -f)
+        shell: bash
+        if: success() || failure()
+
+      - name: Summarise perf data files
+        run: |
+          set -ex
+          python3 scripts/perf_summary.py perf >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        if: success() || failure()
+
+      - name: Upload perf data
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-bench-${{ env.BRANCH_SLUG }}
+          path: perf
+          if-no-files-found: ignore
+        if: success() || failure()
