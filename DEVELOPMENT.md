@@ -234,7 +234,8 @@ A basic set of performance indicators can be obtained by building the project, a
 ./run_functional_tests.sh -m bencher
 ```
 
-The policy latency benchmarks submit sequentially with
+The benchmarks run for each policy (JS and Rego) and statement type (X.509
+hashv, attested service). The latency benchmarks submit sequentially with
 `POST /entries?waitForCommit=true`, measuring latency through global commit and
 receipt delivery (`Register Signed Statement and Receive Receipt <policy>`).
 The throughput benchmarks (`Concurrent Registration <policy>`) drive the same
@@ -242,10 +243,26 @@ blocking submissions with [Locust](https://locust.io), following the setup of
 CCF's `tests/infra/locust_benchmark.py`: 100 users spread across 4 worker
 processes, statistics reset once all users have spawned, and a 30 second
 measurement window. Each reports committed registrations per second, and
-latency under load (median, with p99 as high and minimum as low). A separate
-latency benchmark retains the blocking-versus-polling comparison.
+latency under load (median, with p99 as high and minimum as low). Commit
+latency is mostly the time to the next ledger signature, which the managed
+`cchost` emits every 100ms.
 
-Also see `.github/workflow/bencher.yml`, and the [dashboard](https://bencher.dev/console/projects/scitt-ccf-ledger/plots). This is useful to understand the potential performance impact of changes.
+Results are written to `bencher.json` (in the
+[Bencher metric format](https://bencher.dev/docs/reference/bencher-metric-format/),
+with latencies in nanoseconds). The `Performance Regression Tests` workflow
+(`.github/workflows/bencher.yml`) runs these on every push to `main`, keeps a
+rolling history of results in a `perf-bench-<branch>` artifact, and publishes a
+job summary comparing the latest results with an EWMA baseline, with historical
+throughput and latency charts. The same summary can be produced locally from a
+directory of results with `python3 scripts/perf_summary.py <directory>`. This
+is useful to understand the potential performance impact of changes.
+
+To compare a pull request against `main`, add the `bench-ab` label to it. The
+`Benchmark A/B Testing` workflow (`.github/workflows/bencher-ab.yml`) then runs
+the benchmarks on every push to the pull request, and posts radar charts
+comparing up to its last 5 runs with the last 30 runs on `main` as a job summary
+and a pull request comment (`python3 scripts/perf_compare_radar.py <main
+directory> <branch directory>`).
 
 ### Load tests
 

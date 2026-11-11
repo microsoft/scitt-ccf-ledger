@@ -1,0 +1,115 @@
+name: "Benchmark A/B Testing"
+
+on:
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+      - opened
+      - reopened
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # Queue every run, so that a label event cannot replace a pending benchmark.
+  queue: max
+
+jobs:
+  run_benchmarks:
+    name: Run benchmarks
+    if: ${{ (github.event.action == 'labeled' && github.event.label.name == 'bench-ab') || (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'bench-ab')) }}
+    uses: ./.github/workflows/benchmark-run.yml
+
+  compare:
+    name: Compare against main
+    needs: run_benchmarks
+    runs-on: ubuntu-latest
+    env:
+      BRANCH_PERF_ARTIFACT: perf-bench-pr-${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bencher-results
+          path: results
+
+      - name: Restore recent main perf results
+        run: |
+          set -ex
+          ./scripts/perf-history.sh restore perf-bench-main main_perf bencher.yml "$GITHUB_REPOSITORY" main
+          # perf_compare_radar.py uses every retained point
+          ./scripts/perf-history.sh trim main_perf 30
+
+      - name: Update branch perf history
+        run: |
+          set -ex
+          ./scripts/perf-history.sh restore "$BRANCH_PERF_ARTIFACT" branch_perf bencher-ab.yml "$HEAD_REPO" "$HEAD_REF"
+          ./scripts/perf-history.sh add results/bencher.json branch_perf
+          ./scripts/perf-history.sh trim branch_perf 5
+
+      - name: Upload branch perf history
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.BRANCH_PERF_ARTIFACT }}
+          path: branch_perf
+          if-no-files-found: error
+
+      - name: Summarise A/B comparison against main
+        run: |
+          set -o pipefail
+          python3 scripts/perf_compare_radar.py main_perf branch_perf \
+            --branch-label "#${{ github.event.pull_request.number }}" \
+            | tee benchmark-ab-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload A/B comparison summary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmark-ab-summary
+          path: benchmark-ab-summary.md
+          if-no-files-found: error
+          retention-days: 1
+
+  post_summary:
+    name: Post performance summary
+    needs: compare
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download A/B comparison summary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: benchmark-ab-summary
+
+      - name: Create or update PR comment
+        run: |
+          set -euo pipefail
+          marker="<!-- benchmark-ab-summary -->"
+          {
+            printf '%s\n\n' "$marker"
+            cat benchmark-ab-summary.md
+          } > benchmark-ab-comment.md
+          comment_ids=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"${marker}\"))) | .id")
+          comment_id=${comment_ids%%$'\n'*}
+
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              -F body=@benchmark-ab-comment.md > /dev/null
+          else
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -F body=@benchmark-ab-comment.md > /dev/null
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
