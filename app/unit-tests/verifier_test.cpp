@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <openssl/core_names.h>
 #include <openssl/encoder.h>
+#include <openssl/err.h>
 #include <openssl/param_build.h>
 #include <stdexcept>
 
@@ -147,4 +148,81 @@ namespace
       scitt::verifier::throw_if_invalid_crit_for_x509(invalid),
       scitt::verifier::VerificationError);
   }
+
+  std::vector<uint8_t> read_test_payload(const std::string& filepath)
+  {
+    std::ifstream file(filepath, std::ios::binary);
+    EXPECT_TRUE(file.is_open());
+    return {std::istreambuf_iterator<char>(file), {}};
+  }
+
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
+  TEST(VerifierTest, VerifyDidX509Statement)
+  {
+    const auto signed_statement =
+      read_test_payload("test_payloads/cts-hashv-cwtclaims-b64url.cose");
+
+    scitt::verifier::Verifier verifier;
+    scitt::Configuration configuration;
+    cose::ProtectedHeader phdr;
+    std::tie(phdr, std::ignore, std::ignore, std::ignore) =
+      verifier.verify_signed_statement(signed_statement, {0, 0}, configuration);
+
+    ASSERT_TRUE(phdr.x5chain.has_value());
+    EXPECT_GT(phdr.x5chain->size(), 1);
+    EXPECT_TRUE(phdr.x5chain_is_valid_der);
+
+    // The PEM written without parsing must be what parsing would have written
+    for (const auto& cert : phdr.x5chain.value())
+    {
+      EXPECT_EQ(
+        scitt::der_to_pem_certificate(cert),
+        ccf::crypto::cert_der_to_pem(cert).str());
+    }
+  }
+
+  TEST(VerifierTest, ParseX5ChainDetectsInvalidDer)
+  {
+    const auto signed_statement =
+      read_test_payload("test_payloads/cts-hashv-cwtclaims-b64url.cose");
+    auto x5chain = std::get<0>(cose::decode_headers(signed_statement)).x5chain;
+    ASSERT_TRUE(x5chain.has_value());
+
+    bool is_valid_der = false;
+    auto chain =
+      scitt::verifier::Verifier::parse_x5chain(*x5chain, is_valid_der);
+    EXPECT_EQ(chain.size(), x5chain->size());
+    EXPECT_TRUE(is_valid_der);
+
+    // Trailing bytes are ignored by the parser, as they always were, but the
+    // certificate is then no longer its own DER encoding.
+    auto with_trailing_bytes = *x5chain;
+    with_trailing_bytes.back().push_back(0);
+    chain = scitt::verifier::Verifier::parse_x5chain(
+      with_trailing_bytes, is_valid_der);
+    EXPECT_EQ(chain.size(), x5chain->size());
+    EXPECT_FALSE(is_valid_der);
+    EXPECT_NE(
+      scitt::der_to_pem_certificate(with_trailing_bytes.back()),
+      ccf::crypto::cert_der_to_pem(with_trailing_bytes.back()).str());
+
+    const std::vector<uint8_t> not_a_certificate = {0xde, 0xad, 0xbe, 0xef};
+    auto with_garbage = *x5chain;
+    with_garbage.back() = not_a_certificate;
+    is_valid_der = true;
+    ERR_clear_error();
+    EXPECT_THROW(
+      scitt::verifier::Verifier::parse_x5chain(with_garbage, is_valid_der),
+      std::invalid_argument);
+    // Not left set by the certificates which parsed before the failure
+    EXPECT_FALSE(is_valid_der);
+    // Nor are errors left queued for later OpenSSL calls on this thread
+    EXPECT_EQ(ERR_peek_error(), 0UL);
+
+    is_valid_der = true;
+    chain = scitt::verifier::Verifier::parse_x5chain({}, is_valid_der);
+    EXPECT_EQ(chain.size(), 0);
+    EXPECT_FALSE(is_valid_der);
+  }
+  // NOLINTEND(bugprone-unchecked-optional-access)
 }

@@ -219,6 +219,36 @@ class TestPolicyEngine:
                 with service_error(err):
                     client.submit_signed_statement_and_wait(signed_statement)
 
+    def test_x5chain_policy_input(
+        self,
+        client: Client,
+        configure_service,
+        cert_authority: X5ChainCertificateAuthority,
+    ):
+        identity = cert_authority.create_identity(
+            alg="ES256", kty="ec", add_eku="2.999"
+        )
+        signed_statement = crypto.sign_json_statement(
+            identity, {"foo": "bar"}, cwt=True
+        )
+
+        def policy(x5chain):
+            return f"""
+            export function apply(phdr) {{
+                const expected = {json.dumps(x5chain)};
+                return JSON.stringify(phdr.x5chain) === JSON.stringify(expected)
+                    || "Unexpected x5chain";
+            }}"""
+
+        # The policy is given each certificate as the PEM OpenSSL writes
+        assert identity.x5c is not None and len(identity.x5c) > 1
+        configure_service({"policy": {"policyScript": policy(identity.x5c)}})
+        client.submit_signed_statement_and_wait(signed_statement)
+
+        configure_service({"policy": {"policyScript": policy(identity.x5c[::-1])}})
+        with service_error("Unexpected x5chain"):
+            client.submit_signed_statement_and_wait(signed_statement)
+
     @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_svn_policy(
         self,
