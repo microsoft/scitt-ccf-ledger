@@ -243,12 +243,10 @@ namespace scitt::verifier
         const auto resolved_chain = didx509::resolve_chain(
           chain, phdr.cwt_claims.iss.value(), true /* Do not validate time */);
 
-        // The verification method is the key of the resolved leaf. Check it
-        // has a JWK representation, as resolving to a DID document requires.
-        (void)resolved_chain.front().public_jwk();
-
         // The signature was verified with the key of the first certificate of
         // the x5chain, so that must be the certificate resolved as the leaf.
+        // That key was accepted as a COSE key above, which admits only keys a
+        // DID document can express.
         resolved_leaf_is_signer =
           X509_cmp(resolved_chain.front(), chain.front()) == 0;
 

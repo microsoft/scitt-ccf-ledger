@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import datetime
 import struct
 from io import BytesIO
 
@@ -8,6 +9,15 @@ import cbor2
 import cbor2._encoder
 import pycose
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    load_pem_private_key,
+)
+from cryptography.x509.oid import NameOID
 from pycose.keys.cosekey import CoseKey
 from pycose.messages import Sign1Message
 
@@ -406,4 +416,141 @@ class TestHeaderParameters:
             submit(
                 {X5chain: [cert_pem_to_der(signer.x5c[0]), b"Garbage root"]},
                 signer=signer,
+            )
+
+    def test_x5chain_leaf_key(
+        self,
+        client: Client,
+        cert_authority: X5ChainCertificateAuthority,
+        configure_service,
+    ):
+        """
+        The verifier does not ask the did:x509 resolver whether the leaf key can
+        be expressed in a DID document, as a JWK. It relies on such keys being
+        rejected earlier, when the signing key is taken from the leaf
+        certificate. Each kind of key the resolver would refuse is submitted
+        here in an otherwise valid chain.
+        """
+        configure_service(
+            {"policy": {"policyScript": "export function apply() { return true; }"}}
+        )
+
+        root_cert = x509.load_pem_x509_certificate(
+            cert_authority.root_cert_pem.encode("ascii")
+        )
+        root_key = load_pem_private_key(
+            cert_authority.root_key_pem.encode("ascii"), None
+        )
+        assert isinstance(root_key, ec.EllipticCurvePrivateKey)
+        fingerprint = crypto.get_cert_fingerprint_b64url(cert_authority.root_cert_pem)
+        issuer = f"did:x509:0:sha256:{fingerprint}::eku:2.999"
+
+        def statement(leaf_public_key, algorithm, sign_tbs):
+            # pyscitt only issues certificates for keys it can sign with, so
+            # the leaf is issued here, with the extensions pyscitt would set.
+            now = datetime.datetime.now(datetime.UTC)
+            leaf = (
+                x509.CertificateBuilder()
+                .subject_name(
+                    x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "leaf")])
+                )
+                .issuer_name(root_cert.subject)
+                .public_key(leaf_public_key)
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(now)
+                .not_valid_after(now + datetime.timedelta(days=10))
+                .add_extension(
+                    x509.KeyUsage(
+                        digital_signature=True,
+                        content_commitment=False,
+                        key_encipherment=False,
+                        data_encipherment=False,
+                        key_agreement=False,
+                        key_cert_sign=False,
+                        crl_sign=False,
+                        encipher_only=False,
+                        decipher_only=False,
+                    ),
+                    critical=True,
+                )
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None), critical=True
+                )
+                .add_extension(
+                    x509.SubjectKeyIdentifier.from_public_key(leaf_public_key),
+                    critical=False,
+                )
+                .add_extension(
+                    x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                        root_key.public_key()
+                    ),
+                    critical=False,
+                )
+                .add_extension(
+                    x509.ExtendedKeyUsage([x509.ObjectIdentifier("2.999")]),
+                    critical=False,
+                )
+                .sign(root_key, hashes.SHA256())
+            )
+            encoded_headers = cbor_encode(
+                {
+                    Algorithm: algorithm,
+                    ContentType: "text/plain",
+                    X5chain: [
+                        leaf.public_bytes(Encoding.DER),
+                        root_cert.public_bytes(Encoding.DER),
+                    ],
+                    CWTClaims.identifier: {CWT_ISS: issuer},
+                }
+            )
+            payload = b"Hello"
+            tbs = cbor_encode(["Signature1", encoded_headers, b"", payload])
+            return cbor_encode(
+                cbor2.CBORTag(
+                    Sign1Message.cbor_tag,
+                    [encoded_headers, dict(), payload, sign_tbs(tbs)],
+                )
+            )
+
+        def ecdsa_sha256(key):
+            def sign_tbs(tbs):
+                r, s = decode_dss_signature(key.sign(tbs, ec.ECDSA(hashes.SHA256())))
+                return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+            return sign_tbs
+
+        es256 = pycose.algorithms.Es256.identifier
+        eddsa = pycose.algorithms.EdDSA.identifier
+
+        # The chain built here is accepted with a key the service supports.
+        p256_key = ec.generate_private_key(ec.SECP256R1())
+        client.submit_signed_statement_and_wait(
+            statement(p256_key.public_key(), es256, ecdsa_sha256(p256_key))
+        )
+
+        # An EC key on a curve other than P-256, P-384 and P-521. The signature
+        # is a valid ECDSA signature for that key.
+        k256_key = ec.generate_private_key(ec.SECP256K1())
+        with service_error("Could not parse certificate"):
+            client.submit_signed_statement_and_wait(
+                statement(k256_key.public_key(), es256, ecdsa_sha256(k256_key))
+            )
+
+        # A key which is not RSA, EC or Ed25519. The signature is a valid Ed448
+        # signature for that key.
+        ed448_key = ed448.Ed448PrivateKey.generate()
+        with service_error("Could not parse certificate"):
+            client.submit_signed_statement_and_wait(
+                statement(ed448_key.public_key(), eddsa, ed448_key.sign)
+            )
+
+        # An Ed25519 key with a non-canonical encoding: its y coordinate is the
+        # field prime, 2^255 - 19, rather than a value below it. There is no
+        # private key to sign with.
+        non_canonical = ed25519.Ed25519PublicKey.from_public_bytes(
+            (2**255 - 19).to_bytes(32, "little")
+        )
+        with service_error("Could not parse certificate"):
+            client.submit_signed_statement_and_wait(
+                statement(non_canonical, eddsa, lambda tbs: bytes(64))
             )
