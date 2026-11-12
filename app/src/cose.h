@@ -135,6 +135,10 @@ namespace scitt::cose
     std::optional<int64_t> svn;
     std::optional<std::variant<int64_t, std::string>> cty;
     std::optional<std::vector<std::vector<uint8_t>>> x5chain;
+    // Not a header. Set by the verifier once it has parsed every certificate
+    // of x5chain and found each to be exactly its DER encoding, so that their
+    // PEM form can be derived from the bytes without parsing them again.
+    bool x5chain_is_valid_der = false;
 
     // CWT Claims header, as defined in
     // https://datatracker.ietf.org/doc/rfc9597/
