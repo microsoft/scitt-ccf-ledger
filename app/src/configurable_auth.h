@@ -5,6 +5,7 @@
 
 #include "jwt_claims_schema.h"
 #include "kv_types.h"
+#include "tracing.h"
 
 #include <ccf/common_auth_policies.h>
 #include <ccf/rpc_context.h>
@@ -129,16 +130,23 @@ namespace scitt
     static void log_auth_error(
       const std::shared_ptr<ccf::RpcContext>& ctx, std::string& error_reason)
     {
-      // Authentication runs before the tracing adapter creates a server
-      // request ID, so emit a self-contained audit record using the optional
-      // client request ID. CCF returns all auth policy errors with status 401.
+      if (const auto scope = get_request_scope(*ctx))
+      {
+        const ScopedTracingContext correlation(scope);
+        scope->error_code = ccf::errors::InvalidAuthenticationInfo;
+        SCITT_DEBUG("JWT authentication failed: {}", error_reason);
+        return;
+      }
+
       CCF_APP_INFO(
         "ClientRequestId={} Verb={} URL={} Status=401 "
         "Code=InvalidAuthenticationInfo Reason={}",
-        ctx->get_request_header("x-ms-client-request-id").value_or(""),
+        escape_log_field(
+          ctx->get_request_header(CLIENT_REQUEST_ID_HEADER).value_or(""),
+          MAX_LOGGED_CLIENT_ID),
         ctx->get_request_verb().c_str(),
-        ctx->get_request_url(),
-        error_reason);
+        escape_log_field(ctx->get_request_url(), MAX_LOGGED_URL),
+        escape_log_field(error_reason, MAX_LOGGED_QUERY));
     }
   };
 
