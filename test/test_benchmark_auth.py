@@ -9,27 +9,29 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import jwt
+import pytest
 from cryptography import x509
 
 from . import test_perf
 from .infra import locust_benchmark
+from .test_perf import benchmark_tokens
 
 
-def test_benchmark_token_pool(monkeypatch):
-    monkeypatch.setattr(test_perf, "JWT_TOKEN_COUNT", 8)
-    proposals = []
-    client = SimpleNamespace(
-        governance=SimpleNamespace(
-            propose=lambda proposal, **kwargs: proposals.append(proposal)
-        )
-    )
-    tokens, expires_at = test_perf.benchmark_tokens.__wrapped__(client)
-    args = proposals[0]["actions"][0]["args"]
+@pytest.fixture(scope="module")
+def shared_benchmark_tokens(benchmark_tokens):
+    return benchmark_tokens
+
+
+@pytest.mark.parametrize("case", range(2))
+def test_benchmark_token_pool(benchmark_tokens, shared_benchmark_tokens, case):
+    assert benchmark_tokens is shared_benchmark_tokens
+    proposal, tokens, expires_at = benchmark_tokens
+    args = proposal["actions"][0]["args"]
     assert args["issuer"] == "https://benchmark.example.com"
     assert args["auto_refresh"] is False
     keys = {key["kid"]: key for key in args["jwks"]["keys"]}
     assert len(keys) == 4
-    assert len(set(tokens)) == 8
+    assert len(set(tokens)) == test_perf.JWT_TOKEN_COUNT
     assert 3590 < expires_at - time.time() <= 3600
 
     subjects = set()
@@ -51,9 +53,20 @@ def test_benchmark_token_pool(monkeypatch):
         assert claims["exp"] == expires_at
         assert claims["jti"] == claims["sub"].removeprefix("user-")
         key_ids.append(kid)
-    assert len(subjects) == 8
-    assert key_ids[:4] == key_ids[4:]
+    assert len(subjects) == test_perf.JWT_TOKEN_COUNT
+    assert key_ids == key_ids[:4] * (test_perf.JWT_TOKEN_COUNT // 4)
     assert len(set(key_ids[:4])) == 4
+
+
+def test_cached_benchmark_pool_rejects_near_expiry(benchmark_tokens):
+    proposal, tokens, _ = benchmark_tokens
+    client = Mock()
+    fixture = test_perf.authenticated_benchmark.__wrapped__(
+        client, Mock(), (proposal, tokens, time.time() + 60)
+    )
+    with pytest.raises(RuntimeError, match="too close to expiry"):
+        next(fixture)
+    client.governance.propose.assert_not_called()
 
 
 def test_locust_rotates_tokens_and_authenticates_follow_up_reads(monkeypatch):

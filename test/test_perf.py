@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import cast
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -24,41 +25,46 @@ JWT_TOKEN_COUNT = 1000
 JWT_AUDIENCE = "scitt-benchmark"
 
 
-@pytest.fixture(scope="class")
-def benchmark_tokens(client):
+@pytest.fixture(scope="module")
+def benchmark_tokens():
     issuers = [JwtIssuer("https://benchmark.example.com") for _ in range(JWT_KEY_COUNT)]
     proposal = issuers[0].create_proposal()
     jwks = proposal["actions"][0]["args"]["jwks"]
+    signing_keys = []
     for issuer in issuers:
         key = load_pem_private_key(issuer.key.encode("ascii"), None)
         assert isinstance(key, rsa.RSAPrivateKey)
         assert key.key_size == 2048
         assert key.public_key().public_numbers().e == 65537
+        signing_keys.append(key)
     for issuer in issuers[1:]:
         jwks["keys"].extend(crypto.create_jwks(issuer.cert, issuer.key_id)["keys"])
-    client.governance.propose(proposal, must_pass=True)
-
     now = int(time.time())
     tokens = [
-        issuers[i % JWT_KEY_COUNT].create_token(
+        jwt.encode(
             {
+                "iss": issuers[0].name,
                 "aud": JWT_AUDIENCE,
                 "sub": f"user-{i}",
                 "jti": str(i),
                 "nbf": now - 10,
                 "exp": now + 3600,
-            }
+            },
+            signing_keys[i % JWT_KEY_COUNT],
+            algorithm="RS256",
+            headers={"kid": issuers[i % JWT_KEY_COUNT].key_id},
         )
         for i in range(JWT_TOKEN_COUNT)
     ]
-    return tokens, now + 3600
+    return proposal, tokens, now + 3600
 
 
 @pytest.fixture
 def authenticated_benchmark(client, configure_service, benchmark_tokens):
-    tokens, expires_at = benchmark_tokens
+    proposal, tokens, expires_at = benchmark_tokens
     if expires_at - time.time() < 180:
         raise RuntimeError("Benchmark JWT pool is too close to expiry")
+    client.governance.propose(proposal, must_pass=True)
     authenticated_client = client.replace(auth_token=tokens[0])
 
     def configure(policy_config, signed_statement):

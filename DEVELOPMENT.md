@@ -251,8 +251,10 @@ Registration requires JWT authentication with the `scitt-benchmark` audience.
 Before measurement, the benchmarks register one issuer with four RSA signing
 keys (2048 bits, exponent 65537, matching current Microsoft Entra ID signing
 keys) and generate 1,000 distinct RS256 tokens, evenly distributed across keys.
-Tokens vary their subject and token ID and are valid for one hour. Each request
-rotates through the prepared pool, without signing tokens or recreating clients.
+Keys and tokens are generated once per benchmark module, using loaded private
+keys for signing. Tokens vary their subject and token ID and are valid for one
+hour. Each request rotates through the prepared pool, without signing tokens or
+recreating clients.
 Locust receives the pool over stdin at process startup and retains it once per
 process in memory; tokens and private keys are not written to artifacts.
 Setup verifies that unauthenticated submissions fail and every signing key works.
