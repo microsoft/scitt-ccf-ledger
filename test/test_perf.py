@@ -6,14 +6,83 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from polars import DataFrame
 
+from pyscitt import crypto
 from pyscitt.client import Client
 
+from .infra.assertions import service_error
 from .infra.bencher import Bencher, Latency, Throughput
+from .infra.jwt_issuer import JwtIssuer
 from .infra.locust_benchmark import parse_result, run_locust
 
 LOCUST_SUBMIT_ROW = "POST /entries"
+JWT_KEY_COUNT = 4
+JWT_TOKEN_COUNT = 1000
+JWT_AUDIENCE = "scitt-benchmark"
+
+
+@pytest.fixture(scope="class")
+def benchmark_tokens(client):
+    issuers = [JwtIssuer("https://benchmark.example.com") for _ in range(JWT_KEY_COUNT)]
+    proposal = issuers[0].create_proposal()
+    jwks = proposal["actions"][0]["args"]["jwks"]
+    for issuer in issuers:
+        key = load_pem_private_key(issuer.key.encode("ascii"), None)
+        assert isinstance(key, rsa.RSAPrivateKey)
+        assert key.key_size == 2048
+        assert key.public_key().public_numbers().e == 65537
+    for issuer in issuers[1:]:
+        jwks["keys"].extend(crypto.create_jwks(issuer.cert, issuer.key_id)["keys"])
+    client.governance.propose(proposal, must_pass=True)
+
+    now = int(time.time())
+    tokens = [
+        issuers[i % JWT_KEY_COUNT].create_token(
+            {
+                "aud": JWT_AUDIENCE,
+                "sub": f"user-{i}",
+                "jti": str(i),
+                "nbf": now - 10,
+                "exp": now + 3600,
+            }
+        )
+        for i in range(JWT_TOKEN_COUNT)
+    ]
+    return tokens, now + 3600
+
+
+@pytest.fixture
+def authenticated_benchmark(client, configure_service, benchmark_tokens):
+    tokens, expires_at = benchmark_tokens
+    if expires_at - time.time() < 180:
+        raise RuntimeError("Benchmark JWT pool is too close to expiry")
+    authenticated_client = client.replace(auth_token=tokens[0])
+
+    def configure(policy_config, signed_statement):
+        configure_service(
+            {
+                "authentication": {
+                    "allowUnauthenticated": False,
+                    "jwt": {"requiredClaims": {"aud": JWT_AUDIENCE}},
+                },
+                "policy": policy_config,
+            }
+        )
+        with service_error("InvalidAuthenticationInfo"):
+            client.submit_signed_statement_wait_for_commit(signed_statement)
+        for token in tokens[:JWT_KEY_COUNT]:
+            authenticated_client.session.headers["Authorization"] = f"Bearer {token}"
+            authenticated_client.submit_signed_statement_wait_for_commit(
+                signed_statement
+            )
+
+    yield authenticated_client, tokens, configure
+    authenticated_client.session.close()
+
+
 X509_HASHV_POLICY_SCRIPT = f"""
 export function apply(phdr) {{
 // Check exact issuer 
@@ -244,7 +313,7 @@ def latency(df: DataFrame) -> Latency:
 
 
 def run_locust_registration(
-    client: Client, signed_statement: bytes, tmp_path: Path
+    client: Client, signed_statement: bytes, tmp_path: Path, tokens: list[str]
 ) -> tuple[Throughput, Latency]:
     """
     Drive concurrent Locust users, each repeatedly submitting with
@@ -260,6 +329,7 @@ def run_locust_registration(
         tmp_path,
         ["--scitt-statements", str(statements_dir), "--skip-confirmation"],
         LOCUST_SUBMIT_ROW,
+        auth_tokens=tokens,
     )
     print(f"Locust {LOCUST_SUBMIT_ROW} statistics: {stats}")
     return parse_result(stats)
@@ -268,23 +338,24 @@ def run_locust_registration(
 @pytest.mark.parametrize("signed_statement_path, test_name", TEST_VECTORS)
 @pytest.mark.bencher
 def test_statement_latency(
-    client: Client, configure_service, signed_statement_path: str, test_name: str
+    authenticated_benchmark, signed_statement_path: str, test_name: str
 ):
     """Measure registration latency through global commit and receipt delivery."""
+    client, tokens, configure = authenticated_benchmark
     policy = TEST_POLICIES[test_name]
     policy_config = (
         {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
     )
 
-    configure_service({"policy": policy_config})
-
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
+    configure(policy_config, signed_statement)
 
     iterations = 50
 
     latency_ns = []
-    for _ in range(iterations):
+    for i in range(iterations):
+        client.session.headers["Authorization"] = f"Bearer {tokens[i % len(tokens)]}"
         start = time.perf_counter_ns()
         client.submit_signed_statement_wait_for_commit(signed_statement)
         latency_ns.append(time.perf_counter_ns() - start)
@@ -294,14 +365,15 @@ def test_statement_latency(
     print(df.describe())
 
     bf = Bencher()
-    bf.set(f"Register Signed Statement and Receive Receipt {test_name}", latency(df))
+    bf.set(
+        f"JWT Register Signed Statement and Receive Receipt {test_name}", latency(df)
+    )
 
 
 @pytest.mark.parametrize("signed_statement_path, test_name", TEST_VECTORS)
 @pytest.mark.bencher
 def test_write_throughput(
-    client: Client,
-    configure_service,
+    authenticated_benchmark,
     tmp_path: Path,
     signed_statement_path: str,
     test_name: str,
@@ -310,21 +382,21 @@ def test_write_throughput(
     Measure committed registrations per second, and their latency, with Locust
     driving concurrent blocking submissions from distributed workers.
     """
+    client, tokens, configure = authenticated_benchmark
     policy = TEST_POLICIES[test_name]
     policy_config = (
         {"policyRego": policy} if "rego" in test_name else {"policyScript": policy}
     )
 
-    configure_service({"policy": policy_config})
-
     with open(signed_statement_path, "rb") as f:
         signed_statement = f.read()
+    configure(policy_config, signed_statement)
 
     throughput, registration_latency = run_locust_registration(
-        client, signed_statement, tmp_path
+        client, signed_statement, tmp_path, tokens
     )
 
     bf = Bencher()
-    label = f"Concurrent Registration {test_name}"
+    label = f"JWT Concurrent Registration {test_name}"
     bf.set(label, throughput)
     bf.set(label, registration_latency)
