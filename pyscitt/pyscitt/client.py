@@ -1,8 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import base64
-import hashlib
 import json
 import re
 import time
@@ -50,20 +48,6 @@ class MemberAuthenticationMethod(ABC):
     cert: str
 
     @abstractmethod
-    def http_sign(self, data: bytes) -> bytes:
-        """
-        Generates a HTTP signing payload for the specified request with the specified headers.
-
-        https://microsoft.github.io/CCF/main/use_apps/issue_commands.html#signing
-
-        :param data: The intended body for the HTTP request.
-        :type data: bytes
-
-        :return: The full payload, with signature, to be sent to CCF.
-        :rtype: bytes
-        """
-
-    @abstractmethod
     def cose_sign(self, data: bytes, cose_headers: Optional[Dict] = None) -> bytes:
         """Generates a COSE payload for the specified request with the specified headers.
 
@@ -77,36 +61,6 @@ class MemberAuthenticationMethod(ABC):
         :return: The full payload, with signature, to be sent to CCF.
         :rtype: bytes
         """
-
-
-# copied from CCF/tests/infra/clients.py
-class HttpSig(httpx.Auth):
-    member_auth_client: MemberAuthenticationMethod
-    requires_request_body = True
-
-    def __init__(self, member_auth_client: MemberAuthenticationMethod):
-        self.member_auth_client = member_auth_client
-        self.key_id = crypto.get_cert_fingerprint(member_auth_client.cert)
-
-    def auth_flow(self, request):
-        body_digest = base64.b64encode(hashlib.sha256(request.content).digest()).decode(
-            "ascii"
-        )
-        request.headers["digest"] = f"SHA-256={body_digest}"
-        string_to_sign = "\n".join(
-            [
-                f"(request-target): {request.method.lower()} {request.url.raw_path.decode('utf-8')}",
-                f"digest: SHA-256={body_digest}",
-                f"content-length: {len(request.content)}",
-            ]
-        ).encode("utf-8")
-
-        signature = self.member_auth_client.http_sign(string_to_sign)
-        b64signature = base64.b64encode(signature).decode("ascii")
-        request.headers["authorization"] = (
-            f'Signature keyId="{self.key_id}",algorithm="hs2019",headers="(request-target) digest content-length",signature="{b64signature}"'
-        )
-        yield request
 
 
 @dataclass
@@ -224,7 +178,6 @@ class BaseClient:
     cacert: Optional[str]
 
     session: httpx.Client
-    member_http_sig: Optional[HttpSig]
 
     def __init__(
         self,
