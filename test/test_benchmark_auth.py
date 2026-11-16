@@ -4,6 +4,8 @@
 import base64
 import io
 import json
+import subprocess
+import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
@@ -32,7 +34,6 @@ def test_benchmark_token_pool(benchmark_tokens, shared_benchmark_tokens, case):
     keys = {key["kid"]: key for key in args["jwks"]["keys"]}
     assert len(keys) == 4
     assert len(set(tokens)) == test_perf.JWT_TOKEN_COUNT
-    assert 3590 < expires_at - time.time() <= 3600
 
     subjects = set()
     key_ids = []
@@ -51,6 +52,7 @@ def test_benchmark_token_pool(benchmark_tokens, shared_benchmark_tokens, case):
         )
         subjects.add(claims["sub"])
         assert claims["exp"] == expires_at
+        assert claims["exp"] - claims["nbf"] == 3610
         assert claims["jti"] == claims["sub"].removeprefix("user-")
         key_ids.append(kid)
     assert len(subjects) == test_perf.JWT_TOKEN_COUNT
@@ -107,34 +109,58 @@ def test_locust_rotates_tokens_and_authenticates_follow_up_reads(monkeypatch):
         assert call.kwargs["exception"] is None
 
 
-def test_launches_all_workers_before_delivering_tokens(monkeypatch, tmp_path):
+# Stands in for Locust: runs the given statement, then publishes a master port.
+CHILD_SCRIPT = """
+import json, os, sys, time
+{}
+ready = os.environ.get("SCITT_LOCUST_MASTER_READY")
+if ready:
+    with open(ready + ".pending", "w") as f:
+        f.write("12345")
+    os.replace(ready + ".pending", ready)
+    time.sleep(1)  # Outlive the poll which reads the port, as a master does.
+"""
+
+
+@pytest.mark.parametrize(
+    "child, error",
+    [
+        ("assert len(json.load(sys.stdin)) == 200", None),
+        ("time.sleep(600)", subprocess.TimeoutExpired),
+        ("sys.exit(3)", "exited with 3"),
+    ],
+)
+def test_token_delivery_cannot_block_startup(monkeypatch, tmp_path, child, error):
+    # Larger than a pipe buffer, so a child which does not read it blocks the write.
+    tokens = ["x" * 1000] * 200
     processes = []
-    pools = []
-    tokens = ["first", "second"]
-
-    class TokenInput(io.StringIO):
-        def write(self, text):
-            if processes and "--worker" in processes[-1].args:
-                assert len(processes) == 1 + locust_benchmark.LOCUST_WORKERS
-            return super().write(text)
-
-        def close(self):
-            if not self.closed:
-                pools.append(json.loads(self.getvalue()))
-            super().close()
+    popen = subprocess.Popen
 
     def start(command, **kwargs):
-        process = Mock(args=command, stdin=TokenInput())
-        process.poll.return_value = 0
-        process.wait.return_value = 0
-        processes.append(process)
-        return process
+        processes.append(
+            popen([sys.executable, "-c", CHILD_SCRIPT.format(child)], **kwargs)
+        )
+        return processes[-1]
+
+    def run():
+        return locust_benchmark.run_locust(
+            "https://scitt.example.com",
+            tmp_path,
+            [],
+            "POST /entries",
+            auth_tokens=tokens,
+        )
 
     monkeypatch.setattr(locust_benchmark.subprocess, "Popen", start)
-    monkeypatch.setattr(locust_benchmark, "wait_for_master", lambda *_: 12345)
     (tmp_path / "locust_stats.csv").write_text("Name,Request Count\nPOST /entries,1\n")
-    stats = locust_benchmark.run_locust(
-        "https://scitt.example.com", tmp_path, [], "POST /entries", auth_tokens=tokens
-    )
-    assert stats["Request Count"] == "1"
-    assert pools == [tokens] * (1 + locust_benchmark.LOCUST_WORKERS)
+    if error is None:
+        assert run()["Request Count"] == "1"
+        assert len(processes) == 1 + locust_benchmark.LOCUST_WORKERS
+    elif isinstance(error, str):
+        with pytest.raises(RuntimeError, match=error):
+            run()
+    else:
+        monkeypatch.setattr(locust_benchmark, "STARTUP_TIMEOUT_S", 1)
+        with pytest.raises(error):
+            run()
+    assert all(process.poll() is not None for process in processes)

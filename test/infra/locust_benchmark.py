@@ -13,6 +13,7 @@ import math
 import os
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -114,13 +115,22 @@ def run_locust(
             text=True,
         )
         processes.append(process)
+        # Each process loads the pool once, before publishing readiness or
+        # spawning. The pool is larger than a pipe buffer, so it is written from
+        # a thread: a child which stalls or exits without reading it is then
+        # caught by the startup deadlines and exit status checks below.
+        if process.stdin is not None:
+            threading.Thread(
+                target=send_tokens, args=(process.stdin,), daemon=True
+            ).start()
         return process
 
-    def send_tokens(process):
-        # Each process loads the pool once, before publishing readiness or spawning.
-        if process.stdin is not None:
-            with process.stdin:
-                json.dump(auth_tokens, process.stdin)
+    def send_tokens(stdin):
+        try:
+            with stdin:
+                json.dump(auth_tokens, stdin)
+        except OSError:
+            pass
 
     with tempfile.TemporaryDirectory(prefix="locust-", dir=output_dir) as ready_dir:
         try:
@@ -144,7 +154,6 @@ def run_locust(
                 ],
                 env={**environment, MASTER_READY_ENVIRONMENT_VARIABLE: str(ready_path)},
             )
-            send_tokens(master)
             # The master owns its bound socket before any worker can connect. A
             # probe-and-close port reservation could race.
             master_port = wait_for_master(master, ready_path)
@@ -156,12 +165,8 @@ def run_locust(
                 "--master-port",
                 str(master_port),
             ]
-            workers = [
+            for _ in range(LOCUST_WORKERS):
                 start_process(worker_cmd, env=environment)
-                for _ in range(LOCUST_WORKERS)
-            ]
-            for worker in workers:
-                send_tokens(worker)
 
             exit_code = master.wait(
                 timeout=STARTUP_TIMEOUT_S + run_time_ceiling_s + SHUTDOWN_TIMEOUT_S
