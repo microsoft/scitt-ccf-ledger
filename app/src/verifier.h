@@ -13,6 +13,7 @@
 
 #include <ccf/crypto/cose_key.h>
 #include <ccf/crypto/eddsa_key_pair.h>
+#include <ccf/crypto/openssl/cose_key.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/pem.h>
 #include <ccf/crypto/rsa_key_pair.h>
@@ -209,11 +210,24 @@ namespace scitt::verifier
     {
       check_is_accepted_algorithm(phdr, configuration);
 
-      // Verify the signature using the key of the leaf in the x5chain
+      // Parse the x5chain once and reuse the leaf certificate for signature
+      // verification and the whole chain for DID resolution.
+      bool x5chain_is_valid_der = false;
+      const auto chain = [&]() {
+        try
+        {
+          return parse_x5chain(phdr.x5chain.value(), x5chain_is_valid_der);
+        }
+        catch (const std::exception& e)
+        {
+          throw VerificationError(
+            fmt::format("Could not parse certificate: {}", e.what()));
+        }
+      }();
       const auto leaf_key = [&]() {
         try
         {
-          return ccf::crypto::COSEKey::from_der_cert(phdr.x5chain.value()[0]);
+          return ccf::crypto::OpenSSL::cose_key_from_x509(chain.front());
         }
         catch (const std::exception& e)
         {
@@ -235,11 +249,6 @@ namespace scitt::verifier
       bool resolved_leaf_is_signer = false;
       try
       {
-        // The chain is parsed here once and handed to the resolver as is,
-        // rather than as PEM for it to parse again.
-        bool x5chain_is_valid_der = false;
-        const auto chain =
-          parse_x5chain(phdr.x5chain.value(), x5chain_is_valid_der);
         const auto resolved_chain = didx509::resolve_chain(
           chain, phdr.cwt_claims.iss.value(), true /* Do not validate time */);
 
