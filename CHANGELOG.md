@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Update CCF to 7.0.25, gaining stricter COSE receipt handling and fixes for
+  snapshot, indexing and large-input processing.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations
   indexing strategies. Registrations no longer write to
   `public:scitt.operations`; entries already in the ledger are unaffected.
@@ -20,9 +22,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `get_transparent_statement`, and the `scitt retrieve` command. Submissions
   without `waitForCommit` only accept the `303 See Other` response, which the
   service returns for the client's default `api-version=2026-03-26`.
-- Update CCF to 7.0.25 and reuse the parsed `x5chain` certificates for signing
-  key extraction and did:x509 resolution, avoiding repeated certificate parses
-  during registration.
+- Parse the certificates of a did:x509 signed statement's `x5chain` once while
+  registering it, reusing them for the signing key, with CCF 7.0.25's
+  `cose_key_from_x509`, and for did:x509 resolution.
 
 ## [0.21.0]
 ### Upgrade notes
