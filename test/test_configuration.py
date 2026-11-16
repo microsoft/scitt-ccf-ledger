@@ -245,6 +245,22 @@ class TestPolicyEngine:
         configure_service({"policy": {"policyScript": policy(identity.x5c)}})
         client.submit_signed_statement_and_wait(signed_statement)
 
+        # A certificate followed by a trailing byte is not exactly its DER
+        # encoding, so its bytes cannot be written as PEM as they are. The
+        # policy is still given the PEM of the certificate alone.
+        leaf, *others = [crypto.cert_pem_to_der(pem) for pem in identity.x5c]
+        signer = crypto.Signer(
+            identity.private_key, issuer=identity.issuer, algorithm=identity.algorithm
+        )
+        client.submit_signed_statement_and_wait(
+            crypto.sign_json_statement(
+                signer,
+                {"foo": "bar"},
+                cwt=True,
+                additional_phdr={pycose.headers.X5chain: [leaf + b"\0", *others]},
+            )
+        )
+
         configure_service({"policy": {"policyScript": policy(identity.x5c[::-1])}})
         with service_error("Unexpected x5chain"):
             client.submit_signed_statement_and_wait(signed_statement)
