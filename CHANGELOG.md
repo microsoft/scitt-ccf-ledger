@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- Update CCF to 7.0.25, gaining stricter COSE receipt handling and fixes for
-  snapshot, indexing and large-input processing.
+- Update CCF to 7.0.25, rejecting unsupported pre-7.0 snapshot receipts and
+  improving snapshot fetch memory use, JWT verification and consensus commit
+  handling during reconfiguration and elections.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations
   indexing strategies. Registrations no longer write to
   `public:scitt.operations`; entries already in the ledger are unaffected.
