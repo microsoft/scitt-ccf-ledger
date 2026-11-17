@@ -1,9 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import itertools
+import json
 import logging
 import os
 import random
+import sys
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -49,6 +52,11 @@ RECONNECT_AFTER_ATTEMPTS = 4
 def init_parser(parser):
     parser.add_argument("--scitt-statements", help="Path to statements directory")
     parser.add_argument(
+        "--scitt-jwt-tokens-stdin",
+        action="store_true",
+        help="Read a pre-generated JSON token pool from stdin before starting",
+    )
+    parser.add_argument(
         "--skip-confirmation",
         action="store_true",
         default=False,
@@ -64,6 +72,17 @@ def init_parser(parser):
 @events.init.add_listener
 def on_init(environment, **_kwargs):
     """Measure for a fixed window after all users have spawned."""
+    if environment.parsed_options.scitt_jwt_tokens_stdin:
+        tokens = json.load(sys.stdin)
+        if (
+            not isinstance(tokens, list)
+            or not tokens
+            or not all(isinstance(token, str) and token for token in tokens)
+        ):
+            raise ValueError("Expected a non-empty JWT token pool")
+        environment.scitt_auth_headers = itertools.cycle(
+            [{"Authorization": f"Bearer {token}"} for token in tokens]
+        )
     # Workers receive spawning_complete too, but only the master ends runs.
     if isinstance(environment.runner, WorkerRunner):
         return
@@ -161,6 +180,8 @@ class Submitter(FastHttpUser):
         start = time.perf_counter()
         exception = None
         signed_statement = random.choice(self._signed_statements)
+        auth_headers = getattr(self.environment, "scitt_auth_headers", None)
+        headers = next(auth_headers) if auth_headers is not None else {}
 
         try:
             # The submission is synchronous: the response is only sent once the
@@ -170,7 +191,7 @@ class Submitter(FastHttpUser):
             with self.client.post(
                 SUBMIT_PATH,
                 data=signed_statement,
-                headers={"Content-Type": CT_COSE},
+                headers={"Content-Type": CT_COSE, **headers},
                 name=SUBMIT_NAME,
                 catch_response=True,
             ) as resp:
@@ -188,7 +209,7 @@ class Submitter(FastHttpUser):
                     return
 
             if not self.skip_confirmation:
-                self._wait_for_statement(entry_id)
+                self._wait_for_statement(entry_id, headers=headers)
         except Exception as e:
             exception = e
         finally:
@@ -203,13 +224,14 @@ class Submitter(FastHttpUser):
                 context={},
             )
 
-    def _wait_for_statement(self, entry_id, max_retries=20):
+    def _wait_for_statement(self, entry_id, max_retries=20, *, headers=None):
         import gevent
 
         for attempt in range(max_retries):
             with self.client.get(
                 f"/entries/{entry_id}/statement?api-version={SCITT_API_VERSION}",
                 name="GET /entries/[id]/statement",
+                headers=headers,
                 catch_response=True,
             ) as resp:
                 if resp.status_code == 200:
