@@ -257,7 +257,9 @@ class TestPolicyEngine:
                 signer,
                 {"foo": "bar"},
                 cwt=True,
-                additional_phdr={pycose.headers.X5chain: [leaf + b"\0", *others]},
+                additional_phdr={
+                    pycose.headers.X5chain.identifier: [leaf + b"\0", *others]
+                },
             )
         )
 
