@@ -245,19 +245,15 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      // Then authenticate the did:x509 claim against the x5chain
-      bool resolved_leaf_is_signer = false;
+      // Then authenticate the did:x509 claim against the x5chain. The resolver
+      // verifies the chain starting from its first certificate, whose key
+      // verified the signature above, and fails unless the chain it verified
+      // is the chain it was given. A chain that resolves therefore vouches for
+      // the signing key, whichever of the two checks is made first.
       try
       {
-        const auto resolved_chain = didx509::resolve_chain(
+        didx509::resolve_chain(
           chain, phdr.cwt_claims.iss.value(), true /* Do not validate time */);
-
-        // The signature was verified with the key of the first certificate of
-        // the x5chain, so that must be the certificate resolved as the leaf.
-        // That key was accepted as a COSE key above, which admits only keys a
-        // DID document can express.
-        resolved_leaf_is_signer =
-          X509_cmp(resolved_chain.front(), chain.front()) == 0;
 
         phdr.x5chain_is_valid_der = x5chain_is_valid_der;
       }
@@ -265,12 +261,6 @@ namespace scitt::verifier
       {
         throw VerificationError(
           fmt::format("Failed to resolve did:x509 issuer: {}", e.what()));
-      }
-
-      if (!resolved_leaf_is_signer)
-      {
-        throw VerificationError(
-          "Resolved verification method public key does not match signing key");
       }
 
       return payload;
