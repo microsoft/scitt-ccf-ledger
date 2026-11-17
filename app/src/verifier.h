@@ -12,11 +12,8 @@
 #include "verified_details.h"
 
 #include <ccf/crypto/cose_key.h>
-#include <ccf/crypto/eddsa_key_pair.h>
 #include <ccf/crypto/openssl/cose_key.h>
 #include <ccf/crypto/openssl/openssl_wrappers.h>
-#include <ccf/crypto/pem.h>
-#include <ccf/crypto/rsa_key_pair.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/ds/hex.h>
 #include <ccf/ds/quote_info.h>
