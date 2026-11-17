@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `get_transparent_statement`, and the `scitt retrieve` command. Submissions
   without `waitForCommit` only accept the `303 See Other` response, which the
   service returns for the client's default `api-version=2026-03-26`.
+- Parse the certificates of a did:x509 signed statement's `x5chain` once while
+  registering it, reusing them for the signing key, with CCF 7.0.25's
+  `cose_key_from_x509`, and for did:x509 resolution.
 
 ## [0.21.0]
 ### Upgrade notes
