@@ -8,10 +8,12 @@ statistics reset once all users have spawned and a fixed measurement window.
 """
 
 import csv
+import json
 import math
 import os
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -64,7 +66,12 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
 
 
 def run_locust(
-    host: str, output_dir: Path, workload_arguments: list[str], statistics_name: str
+    host: str,
+    output_dir: Path,
+    workload_arguments: list[str],
+    statistics_name: str,
+    *,
+    auth_tokens: list[str] | None = None,
 ) -> dict[str, str]:
     """Run Locust to completion and return the selected row of its statistics."""
     csv_prefix = output_dir / "locust"
@@ -86,6 +93,10 @@ def run_locust(
         "--reset-stats",
         *workload_arguments,
     ]
+    if auth_tokens is not None:
+        if not auth_tokens:
+            raise ValueError("Benchmark JWT pool must not be empty")
+        common_cmd.append("--scitt-jwt-tokens-stdin")
 
     # The locustfile ends the run after a full measurement window following the
     # ramp. Locust's own deadline is only a generous backstop for a stuck ramp.
@@ -95,10 +106,36 @@ def run_locust(
     environment = os.environ.copy()
     environment.pop(MASTER_READY_ENVIRONMENT_VARIABLE, None)
     processes: list[subprocess.Popen] = []
+
+    def start_process(command, env):
+        process = subprocess.Popen(
+            command,
+            env=env,
+            stdin=subprocess.PIPE if auth_tokens is not None else subprocess.DEVNULL,
+            text=True,
+        )
+        processes.append(process)
+        # Each process loads the pool once, before publishing readiness or
+        # spawning. The pool is larger than a pipe buffer, so it is written from
+        # a thread: a child which stalls or exits without reading it is then
+        # caught by the startup deadlines and exit status checks below.
+        if process.stdin is not None:
+            threading.Thread(
+                target=send_tokens, args=(process.stdin,), daemon=True
+            ).start()
+        return process
+
+    def send_tokens(stdin):
+        try:
+            with stdin:
+                json.dump(auth_tokens, stdin)
+        except OSError:
+            pass
+
     with tempfile.TemporaryDirectory(prefix="locust-", dir=output_dir) as ready_dir:
         try:
             ready_path = Path(ready_dir) / "master.port"
-            master = subprocess.Popen(
+            master = start_process(
                 [
                     *common_cmd,
                     "--run-time",
@@ -117,7 +154,6 @@ def run_locust(
                 ],
                 env={**environment, MASTER_READY_ENVIRONMENT_VARIABLE: str(ready_path)},
             )
-            processes.append(master)
             # The master owns its bound socket before any worker can connect. A
             # probe-and-close port reservation could race.
             master_port = wait_for_master(master, ready_path)
@@ -130,7 +166,7 @@ def run_locust(
                 str(master_port),
             ]
             for _ in range(LOCUST_WORKERS):
-                processes.append(subprocess.Popen(worker_cmd, env=environment))
+                start_process(worker_cmd, env=environment)
 
             exit_code = master.wait(
                 timeout=STARTUP_TIMEOUT_S + run_time_ceiling_s + SHUTDOWN_TIMEOUT_S
