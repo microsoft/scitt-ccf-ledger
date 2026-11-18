@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- Update CCF to 7.0.25, rejecting unsupported pre-7.0 snapshot receipts and
-  improving snapshot fetch memory use, JWT verification and consensus commit
-  handling during reconfiguration and elections.
+- Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
+  exception API, and CCF's clarified service-isolation requirements for
+  automatic recovery traffic.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations
   indexing strategies. Registrations no longer write to
   `public:scitt.operations`; entries already in the ledger are unaffected.
