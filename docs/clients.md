@@ -38,6 +38,10 @@ dotnet add package Azure.Security.CodeTransparency
 
 CoseSignTool can sign payloads in COSE format which is accepted by the service. Please refer to its [GitHub repository](https://github.com/microsoft/CoseSignTool) and section about [SCITT compliance](https://github.com/microsoft/CoseSignTool/blob/main/docs/SCITTCompliance.md).
 
+## scitt-verifier CLI
+
+[scitt-verifier](https://github.com/microsoft/scitt-verifier) is a standalone tool for relying parties. It verifies a transparent statement returned by the service, including its signature, its embedded receipt and the receipt's binding to that statement, and then applies a policy you supply. It works offline by default and does not need access to the service. Release binaries are available on its [releases page](https://github.com/microsoft/scitt-verifier/releases).
+
 ## Auditing tools
 
 To parse and verify the ledger files use the available ccf utilities, see [documentation](https://microsoft.github.io/CCF/main/audit/python_library.html):

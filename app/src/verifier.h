@@ -12,9 +12,8 @@
 #include "verified_details.h"
 
 #include <ccf/crypto/cose_key.h>
-#include <ccf/crypto/eddsa_key_pair.h>
-#include <ccf/crypto/pem.h>
-#include <ccf/crypto/rsa_key_pair.h>
+#include <ccf/crypto/openssl/cose_key.h>
+#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/ds/hex.h>
 #include <ccf/ds/quote_info.h>
@@ -22,7 +21,10 @@
 #include <ccf/pal/attestation_sev_snp.h>
 #include <ccf/pal/uvm_endorsements.h>
 #include <ccf/service/tables/cert_bundles.h>
+#include <cstring>
 #include <fmt/format.h>
+#include <limits>
+#include <openssl/x509.h>
 
 namespace scitt::verifier
 {
@@ -145,18 +147,84 @@ namespace scitt::verifier
       }
     }
 
+    /**
+     * Parse every certificate of an x5chain, once.
+     *
+     * is_valid_der is false until the whole chain has parsed, and is only then
+     * set if each certificate is exactly its DER encoding, i.e. serialising the
+     * parsed certificate gives back the same bytes. Its PEM form can then be
+     * derived from those bytes without parsing them again.
+     */
+    static didx509::UqSTACK_OF_X509 parse_x5chain(
+      const std::vector<std::vector<uint8_t>>& x5chain, bool& is_valid_der)
+    {
+      didx509::UqSTACK_OF_X509 chain;
+      is_valid_der = false;
+      bool all_valid_der = !x5chain.empty();
+      for (const auto& encoded : x5chain)
+      {
+        if (encoded.size() > std::numeric_limits<long>::max())
+        {
+          throw std::invalid_argument("Invalid certificate size");
+        }
+        const unsigned char* next = encoded.data();
+        ccf::crypto::OpenSSL::Unique_X509 cert(
+          d2i_X509(nullptr, &next, static_cast<long>(encoded.size())), false);
+        if (cert == nullptr)
+        {
+          // first_error() also clears the thread's error queue, which a
+          // failed parse otherwise leaves holding further errors
+          throw std::invalid_argument(fmt::format(
+            "OpenSSL error: {}", ccf::crypto::OpenSSL::first_error()));
+        }
+
+        unsigned char* reencoded = nullptr;
+        const int reencoded_size = i2d_X509(cert, &reencoded);
+        if (reencoded_size < 0)
+        {
+          throw std::invalid_argument(fmt::format(
+            "OpenSSL error: {}", ccf::crypto::OpenSSL::first_error()));
+        }
+        if (
+          static_cast<size_t>(reencoded_size) != encoded.size() ||
+          std::memcmp(reencoded, encoded.data(), encoded.size()) != 0)
+        {
+          all_valid_der = false;
+        }
+        OPENSSL_free(reencoded);
+
+        // The stack takes its own reference
+        chain.push(didx509::UqX509(cert));
+      }
+      is_valid_der = all_valid_der;
+      return chain;
+    }
+
     std::span<uint8_t> process_signed_statement_with_didx509_issuer(
-      const cose::ProtectedHeader& phdr,
+      cose::ProtectedHeader& phdr,
       const Configuration& configuration,
       const std::vector<uint8_t>& data)
     {
       check_is_accepted_algorithm(phdr, configuration);
 
-      // Verify the signature using the key of the leaf in the x5chain
+      // Parse the x5chain once and reuse the leaf certificate for signature
+      // verification and the whole chain for DID resolution.
+      bool x5chain_is_valid_der = false;
+      const auto chain = [&]() {
+        try
+        {
+          return parse_x5chain(phdr.x5chain.value(), x5chain_is_valid_der);
+        }
+        catch (const std::exception& e)
+        {
+          throw VerificationError(
+            fmt::format("Could not parse certificate: {}", e.what()));
+        }
+      }();
       const auto leaf_key = [&]() {
         try
         {
-          return ccf::crypto::COSEKey::from_der_cert(phdr.x5chain.value()[0]);
+          return ccf::crypto::OpenSSL::cose_key_from_x509(chain.front());
         }
         catch (const std::exception& e)
         {
@@ -174,76 +242,22 @@ namespace scitt::verifier
         throw VerificationError(e.what());
       }
 
-      // Then authenticate the did:x509 claim against the x5chain
-      ccf::crypto::Sha256Hash resolved_thumbprint;
+      // Then authenticate the did:x509 claim against the x5chain. The resolver
+      // verifies the chain starting from its first certificate, whose key
+      // verified the signature above, and fails unless the chain it verified
+      // is the chain it was given. A chain that resolves therefore vouches for
+      // the signing key, whichever of the two checks is made first.
       try
       {
-        std::vector<std::string> pem_certs;
-        for (auto const& c : phdr.x5chain.value())
-        {
-          pem_certs.push_back(ccf::crypto::cert_der_to_pem(c).str());
-        }
-        auto resolved_jwk_str = didx509::resolve_jwk(
-          pem_certs,
-          phdr.cwt_claims.iss.value(),
-          true /* Do not validate time */);
-        auto resolved_jwk_json = nlohmann::json::parse(resolved_jwk_str);
+        didx509::resolve_chain(
+          chain, phdr.cwt_claims.iss.value(), true /* Do not validate time */);
 
-        auto resolved_jwk = resolved_jwk_json.get<ccf::crypto::JsonWebKey>();
-        switch (resolved_jwk.kty)
-        {
-          case ccf::crypto::JsonWebKeyType::EC:
-          {
-            auto specific_jwk =
-              resolved_jwk_json.get<ccf::crypto::JsonWebKeyECPublic>();
-            resolved_thumbprint =
-              ccf::crypto::COSEKey(
-                ccf::crypto::make_ec_public_key(specific_jwk))
-                .thumbprint_sha256();
-            break;
-          }
-          case ccf::crypto::JsonWebKeyType::RSA:
-          {
-            auto specific_jwk =
-              resolved_jwk_json.get<ccf::crypto::JsonWebKeyRSAPublic>();
-            resolved_thumbprint =
-              ccf::crypto::COSEKey(
-                ccf::crypto::make_rsa_public_key(specific_jwk))
-                .thumbprint_sha256();
-            break;
-          }
-          case ccf::crypto::JsonWebKeyType::OKP:
-          {
-            auto specific_jwk =
-              resolved_jwk_json.get<ccf::crypto::JsonWebKeyEdDSAPublic>();
-            resolved_thumbprint =
-              ccf::crypto::COSEKey(
-                ccf::crypto::make_eddsa_public_key(specific_jwk))
-                .thumbprint_sha256();
-            break;
-          }
-          default:
-          {
-            throw VerificationError(fmt::format(
-              "Verification method public key (kty: {}) is unsupported",
-              resolved_jwk.kty));
-          }
-        }
-      }
-      catch (const VerificationError&)
-      {
-        throw;
+        phdr.x5chain_is_valid_der = x5chain_is_valid_der;
       }
       catch (const std::exception& e)
       {
         throw VerificationError(
           fmt::format("Failed to resolve did:x509 issuer: {}", e.what()));
-      }
-
-      if (resolved_thumbprint != leaf_key.thumbprint_sha256())
-      {
-        throw VerificationError(
-          "Resolved verification method public key does not match signing key");
       }
 
       return payload;

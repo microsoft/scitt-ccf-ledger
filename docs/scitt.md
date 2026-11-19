@@ -22,6 +22,8 @@ scitt-ccf-ledger returns Transparent Statement outputs as specified in Section 4
 
 scitt-ccf-ledger returns COSE Receipts, either standalone or embedded in Transparent Statement outputs, as specified in Section 4 of the [COSE Receipt Draft 8](https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/08/), using proofs that follow the [CCF Tree algorithm profile Draft 3](https://datatracker.ietf.org/doc/draft-birkholz-cose-receipts-ccf-profile/03/).
 
+Transparent Statements and their embedded receipts can be verified independently of the service, for example with [scitt-verifier](https://github.com/microsoft/scitt-verifier). See [Available clients](clients.md#scitt-verifier-cli).
+
 ## API
 
 scitt-ccf-ledger implements the [SCITT Reference API (SCRAPI) Draft 09](https://datatracker.ietf.org/doc/draft-ietf-scitt-scrapi/09/).

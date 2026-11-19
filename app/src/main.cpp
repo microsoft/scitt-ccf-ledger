@@ -53,54 +53,6 @@ namespace scitt
   using ccf::endpoints::EndpointContext;
 
   /**
-   * This is a re-implementation of CCF's get_query_value, but it throws a
-   * BadRequestJsonError if the query parameter cannot be parsed. Also supports
-   * boolean parameters as "true" and "false".
-   *
-   * Returns std::nullopt if the parameter is missing.
-   */
-  template <typename T>
-  std::optional<T> get_query_value(
-    const ccf::http::ParsedQuery& pq, std::string_view name)
-  {
-    SCITT_TRACE("Get parameter value from parsed query");
-    auto it = pq.find(name);
-    if (it == pq.end())
-    {
-      return std::nullopt;
-    }
-
-    std::string_view value = it->second;
-    if constexpr (std::is_same_v<T, std::string>)
-    {
-      return std::string(value);
-    }
-    else if constexpr (std::is_same_v<T, bool>)
-    {
-      if (value == "true")
-      {
-        return true;
-      }
-      else if (value == "false")
-      {
-        return false;
-      }
-      else
-      {
-        throw BadRequestJsonError(
-          errors::QueryParameterError,
-          fmt::format(
-            "Invalid value for query parameter '{}': {}", name, value));
-      }
-    }
-    else
-    {
-      static_assert(ccf::nonstd::dependent_false<T>::value, "Unsupported type");
-      return std::nullopt;
-    }
-  }
-
-  /**
    * Obtain COSE receipt in the format described in
    * https://datatracker.ietf.org/doc/draft-ietf-cose-merkle-tree-proofs/
    * from a CCF TxReceiptImplPtr obtained through a historical query.
@@ -207,8 +159,15 @@ namespace scitt
       auto register_signed_statement = [this, &context_](EndpointContext& ctx) {
         const auto parsed_query =
           ccf::http::parse_query(ctx.rpc_ctx->get_request_query());
-        const auto wait_for_commit =
-          get_query_value<bool>(parsed_query, "waitForCommit").value_or(false);
+        bool wait_for_commit = false;
+        std::string error_reason;
+        if (
+          !ccf::http::get_query_value(
+            parsed_query, "waitForCommit", wait_for_commit, error_reason) &&
+          parsed_query.find("waitForCommit") != parsed_query.end())
+        {
+          throw BadRequestJsonError(errors::QueryParameterError, error_reason);
+        }
         const bool scrapi = is_scrapi_v9(ctx);
         if (wait_for_commit)
         {
