@@ -552,7 +552,7 @@ namespace scitt::cose
       throw COSEDecodeError(
         fmt::format("Failed to decode protected header: {}", e.what()));
     }
-    catch (const tav::cbor::CborError& e)
+    catch (const tav::Exception& e)
     {
       throw COSEDecodeError(
         fmt::format("Failed to decode protected header: {}", e.what()));
@@ -587,7 +587,7 @@ namespace scitt::cose
       throw COSEDecodeError(
         fmt::format("Failed to decode unprotected header: {}", e.what()));
     }
-    catch (const tav::cbor::CborError& e)
+    catch (const tav::Exception& e)
     {
       throw COSEDecodeError(
         fmt::format("Failed to decode unprotected header: {}", e.what()));
@@ -647,7 +647,7 @@ namespace scitt::cose
 
       return {std::move(protected_header), std::move(unprotected_header)};
     }
-    catch (const tav::cbor::CborError& e)
+    catch (const tav::Exception& e)
     {
       throw COSEDecodeError(
         fmt::format("Failed to decode COSE_Sign1: {}", e.what()));
