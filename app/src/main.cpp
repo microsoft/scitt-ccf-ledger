@@ -14,6 +14,7 @@
 #include "policy_engine.h"
 #include "service_endpoints.h"
 #include "tracing.h"
+#include "tracing_endpoint_registry.h"
 #include "util.h"
 #include "verifier.h"
 
@@ -88,7 +89,7 @@ namespace scitt
     return cose_receipt;
   }
 
-  class AppEndpoints : public ccf::UserEndpointRegistry
+  class AppEndpoints : public TracingEndpointRegistry
   {
   private:
     std::unique_ptr<verifier::Verifier> verifier = nullptr;
@@ -118,25 +119,16 @@ namespace scitt
       const ccf::endpoints::LocallyCommittedEndpointFunction& l,
       const ccf::AuthnPolicies& ap)
     {
-      const std::function<ccf::ApiResult(timespec & time)> get_time =
-        [this](timespec& time) {
-          return this->get_untrusted_host_time_v1(time);
-        };
-
       auto endpoint =
         ccf::UserEndpointRegistry::make_endpoint(
-          method,
-          verb,
-          tracing_adapter_first(error_adapter(f), method, get_time),
-          ap)
-          .set_locally_committed_function(
-            tracing_adapter_last(l, method, get_time));
+          method, verb, tracing_adapter_first(error_adapter(f), method), ap)
+          .set_locally_committed_function(l);
       return endpoint;
     }
 
   public:
     AppEndpoints(ccf::AbstractNodeContext& context_) :
-      ccf::UserEndpointRegistry(context_)
+      TracingEndpointRegistry(context_)
     {
       const ccf::AuthnPolicies authn_policy = {
         std::make_shared<ConfigurableEmptyAuthnPolicy>(),
@@ -171,7 +163,8 @@ namespace scitt
         const bool scrapi = is_scrapi_v9(ctx);
         if (wait_for_commit)
         {
-          ctx.rpc_ctx->set_consensus_committed_function(
+          set_logged_consensus_committed_function(
+            *ctx.rpc_ctx,
             [&context_, scrapi](ccf::endpoints::CommittedTxInfo& info) {
               auto host =
                 info.rpc_ctx->get_request_header(ccf::http::headers::HOST);
