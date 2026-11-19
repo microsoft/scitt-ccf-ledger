@@ -35,8 +35,15 @@ namespace
   {
     // cbor_error does not sanitize: callers check unverified text with
     // is_valid_utf8 first, as HTTPError::to_cbor_error does
-    EXPECT_THROW(
-      scitt::cbor::cbor_error(scitt::errors::InvalidInput, "CN=\xff"),
-      tav::cbor::EncodeError);
+    try
+    {
+      scitt::cbor::cbor_error(scitt::errors::InvalidInput, "CN=\xff");
+      FAIL() << "Expected invalid UTF-8 to fail CBOR encoding";
+    }
+    catch (const tav::Exception& e)
+    {
+      EXPECT_EQ(e.code(), tav::ErrorCode::CBOR_ENCODE_FAILED);
+    }
   }
+
 }
