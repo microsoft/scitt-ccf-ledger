@@ -26,7 +26,6 @@ from pyscitt.client import Client
 
 from . import policies
 from .infra.assertions import service_error
-from .infra.jwt_issuer import JwtIssuer
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
@@ -110,12 +109,6 @@ class TestPolicyEngine:
             )
 
         return f
-
-    @pytest.fixture(scope="class")
-    def jwt_client(self, client: Client):
-        issuer = JwtIssuer()
-        client.governance.propose(issuer.create_proposal(), must_pass=True)
-        return client.replace(auth_token=issuer.create_token())
 
     @pytest.mark.parametrize("lang", ["js", "rego"])
     def test_ietf_didx509_policy(
@@ -535,7 +528,7 @@ return true;
         client.submit_signed_statement_and_wait(signed_statement())
 
     def test_payload_policy_with_large_payload(
-        self, jwt_client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement
     ):
         policy_script = """
         export function apply(phdr, uhdr, payload) {
@@ -546,15 +539,7 @@ return true;
             return true; 
         }
         """
-        configure_service(
-            {
-                "authentication": {
-                    "allowUnauthenticated": False,
-                    "jwt": {"requiredClaims": {}},
-                },
-                "policy": {"policyScript": policy_script},
-            }
-        )
+        configure_service({"policy": {"policyScript": policy_script}})
 
         # Create a large JSON payload
         big_json: dict = {"foo": []}
@@ -564,10 +549,10 @@ return true;
         statement = signed_statement(big_json)
         print(f"Signed statement size: {len(statement)} bytes")
 
-        jwt_client.submit_signed_statement_and_wait(statement)
+        client.submit_signed_statement_and_wait(statement)
 
     def test_configurable_max_signed_statement_bytes_larger(
-        self, jwt_client: Client, configure_service, signed_statement
+        self, client: Client, configure_service, signed_statement
     ):
         """
         Configure the service with a maxSignedStatementBytes larger than the
@@ -585,10 +570,6 @@ return true;
         """
         configure_service(
             {
-                "authentication": {
-                    "allowUnauthenticated": False,
-                    "jwt": {"requiredClaims": {}},
-                },
                 "policy": {"policyScript": policy_script},
                 "maxSignedStatementBytes": max_size,
             }
@@ -609,7 +590,7 @@ return true;
         assert (
             len(statement) < max_size
         ), "Statement should be smaller than configured 2MB limit"
-        jwt_client.submit_signed_statement_and_wait(statement)
+        client.submit_signed_statement_and_wait(statement)
 
     def test_configurable_max_signed_statement_bytes_smaller(
         self, client: Client, configure_service, signed_statement

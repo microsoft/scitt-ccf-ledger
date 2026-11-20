@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
   exception API, and CCF's clarified service-isolation requirements for
   automatic recovery traffic.
+- Remove the 64 KiB size cap for registrations admitted without HTTP
+  authentication. `maxSignedStatementBytes` (default 1 MiB) limits all
+  registrations.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations
   indexing strategies. Registrations no longer write to
   `public:scitt.operations`; entries already in the ledger are unaffected.
