@@ -139,9 +139,10 @@ safe-outputs:
     title-prefix: "[CCF] "
   # Holds CCF_UPDATE_APP_PRIVATE_KEY; allow only the default branch and add no required reviewers.
   environment: ccf-update
-  # Optional App with Contents, Issues, and Pull requests write; without it PR creation may fail and fall back to a
-  # handoff issue, which counts as proposed (act on it or remove its label to retry). PRs the App opens run CI on
-  # agent-written code: gate any CI that uses secrets, and dismiss stale approvals on push.
+  # Optional App with Contents, Issues, and Pull requests write and Actions read (the conclusion job requests it, so
+  # grant and approve it on existing installations, or token creation fails); without it PR creation may fail and fall
+  # back to a handoff issue, which counts as proposed (act on it or remove its label to retry). PRs the App opens run
+  # CI on agent-written code: gate any CI that uses secrets, and dismiss stale approvals on push.
   github-app:
     client-id: ${{ vars.CCF_UPDATE_APP_CLIENT_ID }}
     ignore-if-missing: true
