@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Add an optional CI step that checks the receipts produced by the functional
+  tests offline with proofbundle 6.4.0 (CCF receipt profile, draft -06),
+  together with two unchanged receipts from #500, and add the signed statement
+  of #500 to the parameterized submit test. It is off by default; set the
+  repository variable `PROOFBUNDLE_CHECK` to `1` to switch it on, and
+  `PROOFBUNDLE_CHECK_BLOCKING` to `1` to make it blocking.
 - Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
   exception API, and CCF's clarified service-isolation requirements for
   automatic recovery traffic.

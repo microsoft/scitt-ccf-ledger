@@ -67,6 +67,17 @@ jobs:
         run: |
           tdnf install -y dotnet-sdk-8.0.x86_64
       - run: ./run_functional_tests.sh
+        env:
+          # Off by default. Set the repository variable PROOFBUNDLE_CHECK to 1
+          # to record the receipts the tests produce for the check below.
+          PROOFBUNDLE_CHECK: ${{ vars.PROOFBUNDLE_CHECK == '1' && '1' || '0' }}
+          SCITT_PROOFBUNDLE_CAPTURE_DIR: /tmp/proofbundle-capture
+      - name: Check receipts with proofbundle (optional)
+        if: ${{ vars.PROOFBUNDLE_CHECK == '1' }}
+        # Non-blocking unless the repository variable
+        # PROOFBUNDLE_CHECK_BLOCKING is also set to 1.
+        continue-on-error: ${{ vars.PROOFBUNDLE_CHECK_BLOCKING != '1' }}
+        run: ./scripts/proofbundle-check.sh /tmp/proofbundle-capture
       - name: "Upload logs"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: success() || failure()

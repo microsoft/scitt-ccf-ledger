@@ -107,6 +107,26 @@ if [ -n "$ENABLE_PERF_TESTS" ]; then
     echo "Performance tests enabled"
 fi
 
+# Optional: record the receipts the tests produce, for an offline check with
+# proofbundle afterwards (scripts/proofbundle-check.sh). Off unless
+# PROOFBUNDLE_CHECK=1; the plugin returns every value unchanged.
+if [ "${PROOFBUNDLE_CHECK:-0}" = "1" ]; then
+    export SCITT_PROOFBUNDLE_CAPTURE_DIR=${SCITT_PROOFBUNDLE_CAPTURE_DIR:-"$PWD/proofbundle-capture"}
+    if [ -e "$SCITT_PROOFBUNDLE_CAPTURE_DIR" ] || [ -L "$SCITT_PROOFBUNDLE_CAPTURE_DIR" ]; then
+        echo "Refusing to overwrite an existing capture path: $SCITT_PROOFBUNDLE_CAPTURE_DIR" >&2
+        exit 2
+    fi
+    if ! mkdir -m 700 -- "$SCITT_PROOFBUNDLE_CAPTURE_DIR"; then
+        echo "Cannot create the capture directory: $SCITT_PROOFBUNDLE_CAPTURE_DIR" >&2
+        exit 2
+    fi
+    # pytest puts the repository root on sys.path when it loads
+    # test/conftest.py; -p loads the plugin before that.
+    export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+    TEST_ARGS="$TEST_ARGS -p test.proofbundle_check.capture"
+    echo "Recording receipts in $SCITT_PROOFBUNDLE_CAPTURE_DIR"
+fi
+
 echo "Running functional tests..."
 if [ -n "$ELEVATE_PRIVILEGES" ]; then
     sudo -E --preserve-env=PATH \
