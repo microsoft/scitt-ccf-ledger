@@ -137,6 +137,18 @@ def test_scitt_key_by_kid_not_found(client: Client):
 
 
 @pytest.mark.parametrize(
+    "path", ["/app/api", "/app/commit", "/app/tx", "/app/receipt", "/app/receipt/cose"]
+)
+def test_ccf_builtin_app_endpoints_not_installed(client: Client, path: str):
+    """
+    Test that the endpoints CCF installs on every application are not exposed.
+    """
+    with pytest.raises(ServiceError) as exc_info:
+        client.get(path)
+    assert exc_info.value.code == "ResourceNotFound"
+
+
+@pytest.mark.parametrize(
     "params",
     [
         {"alg": "ES256", "kty": "ec", "ec_curve": "P-256", "add_eku": "2.999"},
