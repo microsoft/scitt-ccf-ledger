@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Parse the certificates of a did:x509 signed statement's `x5chain` once while
   registering it, reusing them for the signing key, with CCF 7.0.25's
   `cose_key_from_x509`, and for did:x509 resolution.
+- Remove the endpoints CCF installs on every application: `GET /api`,
+  `/commit`, `/tx`, `/receipt` and `/receipt/cose`. Use `/node/commit` and
+  `/node/tx` for the commit state, and SCITT's own endpoints for entries and
+  receipts.
 
 ## [0.21.0]
 ### Upgrade notes
