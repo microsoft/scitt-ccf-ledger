@@ -9,11 +9,14 @@
 #include "verified_details.h"
 
 #include <ccf/_private/js/checks.h>
+#include <ccf/crypto/openssl/openssl_wrappers.h>
 #include <ccf/crypto/sha256_hash.h>
 #include <ccf/crypto/verifier.h>
 #include <ccf/ds/hex.h>
 #include <ccf/js/common_context.h>
 #include <chrono>
+#include <limits>
+#include <openssl/pem.h>
 #include <rego/rego.hh>
 #include <string>
 
@@ -117,6 +120,26 @@ namespace scitt
 {
   using PolicyScript = std::string;
 
+  /**
+   * Write a DER certificate as PEM, without parsing it. For a certificate
+   * which is exactly its DER encoding, this is the text OpenSSL would write,
+   * as it is the same writer given the same bytes.
+   */
+  static inline std::string der_to_pem_certificate(std::span<const uint8_t> der)
+  {
+    if (der.empty() || der.size() > std::numeric_limits<long>::max())
+    {
+      throw std::invalid_argument("Invalid certificate size");
+    }
+    ccf::crypto::OpenSSL::Unique_BIO mem;
+    ccf::crypto::OpenSSL::CHECKPOSITIVE(PEM_write_bio(
+      mem, PEM_STRING_X509, "", der.data(), static_cast<long>(der.size())));
+    BUF_MEM* buffer = nullptr;
+    ccf::crypto::OpenSSL::CHECKPOSITIVE(BIO_get_mem_ptr(mem, &buffer));
+    ccf::crypto::OpenSSL::CHECKNULL(buffer);
+    return {buffer->data, buffer->length};
+  }
+
   namespace js
   {
     static inline ccf::js::core::JSWrappedValue protected_header_to_js_val(
@@ -201,9 +224,12 @@ namespace scitt
 
           for (const auto& der_cert : phdr.x5chain.value())
           {
-            auto pem = ccf::crypto::cert_der_to_pem(der_cert);
-            JS_CHECK_OR_THROW(
-              x5_array.set_at_index(i++, ctx.new_string(pem.str())));
+            // A chain the verifier found to be valid DER needs no parsing to be
+            // written as PEM. Anything else is parsed, as it always was.
+            auto pem = phdr.x5chain_is_valid_der ?
+              der_to_pem_certificate(der_cert) :
+              ccf::crypto::cert_der_to_pem(der_cert).str();
+            JS_CHECK_OR_THROW(x5_array.set_at_index(i++, ctx.new_string(pem)));
           }
 
           JS_CHECK_OR_THROW(obj.set("x5chain", std::move(x5_array)));

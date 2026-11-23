@@ -39,9 +39,9 @@ It is expected that you have Azure Linux 3.0. Follow the steps below to setup yo
 
 2. Install dependencies:
     ```sh
-    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.24.tar.gz
-    tar xvzf ccf-7.0.24.tar.gz
-    cd CCF-ccf-7.0.24/scripts/
+    wget https://github.com/microsoft/CCF/archive/refs/tags/ccf-7.0.27.tar.gz
+    tar xvzf ccf-7.0.27.tar.gz
+    cd CCF-ccf-7.0.27/scripts/
     ./setup-dev.sh
     ```
 
@@ -237,8 +237,8 @@ A basic set of performance indicators can be obtained by building the project, a
 The benchmarks run for each policy (JS and Rego) and statement type (X.509
 hashv, attested service). The latency benchmarks submit sequentially with
 `POST /entries?waitForCommit=true`, measuring latency through global commit and
-receipt delivery (`Register Signed Statement and Receive Receipt <policy>`).
-The throughput benchmarks (`Concurrent Registration <policy>`) drive the same
+receipt delivery (`JWT Register Signed Statement and Receive Receipt <policy>`).
+The throughput benchmarks (`JWT Concurrent Registration <policy>`) drive the same
 blocking submissions with [Locust](https://locust.io), following the setup of
 CCF's `tests/infra/locust_benchmark.py`: 100 users spread across 4 worker
 processes, statistics reset once all users have spawned, and a 30 second
@@ -246,6 +246,19 @@ measurement window. Each reports committed registrations per second, and
 latency under load (median, with p99 as high and minimum as low). Commit
 latency is mostly the time to the next ledger signature, which the managed
 `cchost` emits every 100ms.
+
+Registration requires JWT authentication with the `scitt-benchmark` audience.
+Before measurement, the benchmarks register one issuer with four RSA signing
+keys (2048 bits, exponent 65537, matching current Microsoft Entra ID signing
+keys) and generate 1,000 distinct RS256 tokens, evenly distributed across keys.
+Keys and tokens are generated once per benchmark module, using loaded private
+keys for signing. Tokens vary their subject and token ID and are valid for one
+hour. Each request rotates through the prepared pool, without signing tokens or
+recreating clients.
+Locust receives the pool over stdin at process startup and retains it once per
+process in memory; tokens and private keys are not written to artifacts.
+Setup verifies that unauthenticated submissions fail and every signing key works.
+The `JWT` metric prefix separates these results from unauthenticated history.
 
 Results are written to `bencher.json` (in the
 [Bencher metric format](https://bencher.dev/docs/reference/bencher-metric-format/),

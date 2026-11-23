@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- Update CCF to 7.0.24, gaining stricter COSE receipt handling and fixes for
-  snapshot, indexing and large-input processing.
+- Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
+  exception API, and CCF's clarified service-isolation requirements for
+  automatic recovery traffic.
 - Remove the `GET /entries/txIds` endpoint and the entry and operations
   indexing strategies. Registrations no longer write to
   `public:scitt.operations`; entries already in the ledger are unaffected.
@@ -22,6 +23,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `get_transparent_statement`, and the `scitt retrieve` command. Submissions
   without `waitForCommit` only accept the `303 See Other` response, which the
   service returns for the client's default `api-version=2026-03-26`.
+- Parse the certificates of a did:x509 signed statement's `x5chain` once while
+  registering it, reusing them for the signing key, with CCF 7.0.25's
+  `cose_key_from_x509`, and for did:x509 resolution.
+- Remove the endpoints CCF installs on every application: `GET /api`,
+  `/commit`, `/tx`, `/receipt` and `/receipt/cose`. Use `/node/commit` and
+  `/node/tx` for the commit state, and SCITT's own endpoints for entries and
+  receipts.
 
 ## [0.21.0]
 ### Upgrade notes

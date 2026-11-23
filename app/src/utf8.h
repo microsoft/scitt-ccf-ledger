@@ -22,9 +22,13 @@ namespace scitt
       tav::cbor::make_string(text);
       return true;
     }
-    catch (const tav::cbor::EncodeError&)
+    catch (const tav::Exception& e)
     {
-      return false;
+      if (e.code() == tav::ErrorCode::CBOR_ENCODE_FAILED)
+      {
+        return false;
+      }
+      throw;
     }
   }
 }
