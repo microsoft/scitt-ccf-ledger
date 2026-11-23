@@ -275,6 +275,25 @@ def test_submit_and_validate(
     )
 
 
+def test_production_transparent_statement(run, capsys):
+    fixtures = Path(__file__).parent / "transparent_statements" / "esrp-cts-cp"
+    statement = fixtures / "1227.572226.cose"
+
+    run("validate", statement, "--offline", "--service-trust-store", fixtures)
+    result = json.loads(capsys.readouterr().out)
+    assert result["transparent"] is True
+    (receipt,) = result["receipts"]
+    assert receipt["verification_key_source"] == "trust_store"
+    assert receipt["issuer"] == "esrp-cts-cp.confidential-ledger.azure.com"
+    assert receipt["registration_txid"] == "1227.572226"
+    assert receipt["signature_txid"] == "1227.572227"
+
+    run("pretty-receipt", statement)
+    metadata = json.loads(capsys.readouterr().out)["extracted_metadata"]
+    assert metadata["kind"] == "transparent_statement"
+    assert metadata["receipts"][0]["registration_txid"] == receipt["registration_txid"]
+
+
 @pytest.mark.isolated_test
 class TestUpdateScittConstitution:
     # These tests run in an isolated cchost process. This ensures that if

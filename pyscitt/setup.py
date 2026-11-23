@@ -28,7 +28,8 @@ setup(
         "ccf>=7.0.18,<8",
         "cryptography>=48.0.1,<51",
         "httpx",
-        "cbor2>=5.8,<7",
+        # pycose 1.1.0 expects a list for a tagged COSE array; cbor2 6 returns a tuple.
+        "cbor2>=5.9,<6",
         "pycose==1.1.0",
         "pyjwt",
         "loguru",
