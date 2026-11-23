@@ -476,6 +476,18 @@ namespace scitt
 
       register_operations_endpoints(*this, read_authn_policy);
     }
+
+    /**
+     * Skip the endpoints that CCF installs on every application (/api,
+     * /commit, /tx, /receipt and /receipt/cose). SCITT serves entries and
+     * receipts through its own endpoints, and /node/commit and /node/tx
+     * report the commit state.
+     */
+    void init_handlers() override
+    {
+      // NOLINTNEXTLINE(bugprone-parent-virtual-call)
+      ccf::BaseEndpointRegistry::init_handlers();
+    }
   };
 } // namespace scitt
 
