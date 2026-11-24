@@ -20,18 +20,6 @@ the overall file tidy. In general and where possible, prefer writing multiple
 smaller tests, each interacting with a feature of the service differently, than
 one large test function.
 
-### Offline CLI receipt fixture
-
-The `1227.572226.cose` fixture is the unmodified statement from [issue #530](https://github.com/microsoft/scitt-ccf-ledger/issues/530).
-The adjacent `scitt-keys.cbor` contains only the P-384 public key for its receipt.
-For this test fixture, the key was recovered from the receipt signature and selected by
-its protected `kid` (SHA-256 of DER SubjectPublicKeyInfo):
-`b1f947ece3f6d0c1c4a5a9bd3372292b37ccf6fba2721bd22649ec9c3f70cc8d`.
-This is not an independently downloaded trust anchor. To cross-check it against
-the [issuer's published keys](https://esrp-cts-cp.confidential-ledger.azure.com/.well-known/scitt-keys),
-run `scitt validate` on the fixture **without**
-`--service-trust-store` from a machine that can reach Azure.
-
 ## Pytest Fixtures
 
 The tests are written using the pytest framework, and makes extensive use of
