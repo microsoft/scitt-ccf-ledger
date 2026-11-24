@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- Update CCF to 7.0.28, including QuickJS runtime fixes, application readiness
+  checks in CCF's sandbox tools, and hardened key unwrapping and snapshot recovery.
 - Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
   exception API, and CCF's clarified service-isolation requirements for
   automatic recovery traffic.

@@ -4,7 +4,7 @@
 
 set -ex
 
-CCF_VERSION=${CCF_VERSION:-"7.0.27"}
+CCF_VERSION=${CCF_VERSION:-"7.0.28"}
 
 tdnf update -y
 
