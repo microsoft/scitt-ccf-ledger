@@ -176,4 +176,3 @@ of that scope. In general, longer scopes create more interference between tests
 and result in a more fragile test suite. On the other hand, longer scopes can
 reduce total test time by amortizing expensive initialization costs across
 multiple tests.
-

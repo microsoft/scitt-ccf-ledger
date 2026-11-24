@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `/commit`, `/tx`, `/receipt` and `/receipt/cose`. Use `/node/commit` and
   `/node/tx` for the commit state, and SCITT's own endpoints for entries and
   receipts.
+- Fix fresh pyscitt installations rejecting valid transparent statements in
+  `scitt validate` and `scitt pretty-receipt` by requiring a `cbor2` version
+  compatible with `pycose`.
 
 ## [0.21.0]
 ### Upgrade notes
