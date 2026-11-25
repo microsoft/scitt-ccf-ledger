@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
-- pyscitt now verifies receipts with `ccf.receipt.verify_cose` (CCF 7.0.24
+- pyscitt 0.17.0 verifies receipts with `ccf.receipt.verify_cose` (CCF 7.0.24
   or later), rejecting malformed inclusion proofs and inconsistent roots.
 - `scitt validate statement.cose --receipt receipt.cose` verifies a raw
   receipt against the exact bytes of the original signed statement with an
