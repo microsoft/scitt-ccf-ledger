@@ -86,6 +86,9 @@ on:
           // Pushing to a PR with auto-merge enabled could merge changes nobody reviewed.
           const paused = Boolean(pr?.auto_merge);
           core.setOutput("target", target);
+          // The agent's GitHub tools return releases without assets, so the prompt gets the target's asset digests here.
+          const { assets } = releases.find(r => r.tag_name === `ccf-${target}`);
+          core.setOutput("target_assets", JSON.stringify(assets.map(a => ({ name: a.name, digest: a.digest }))));
           core.setOutput("pr_number", pr ? String(pr.number) : "");
           core.setOutput("pr_branch", pr ? pr.head.ref : "");
           core.setOutput("should_run", String(!proposedIn && !landed && !paused));
@@ -310,6 +313,7 @@ jobs:
       pr_number: ${{ steps.select_ccf_release.outputs.pr_number }}
       should_run: ${{ steps.select_ccf_release.outputs.should_run }}
       target: ${{ steps.select_ccf_release.outputs.target }}
+      target_assets: ${{ steps.select_ccf_release.outputs.target_assets }}
   # Publish only after a successful agent run; gh-aw's default also publishes after a failed one, such as a timeout.
   safe_outputs:
     if: >-
@@ -332,6 +336,7 @@ tools:
 # Prepare a CCF Upgrade
 
 Target CCF release: ${{ needs.pre_activation.outputs.target }}
+Its release assets and the digests GitHub publishes for them: ${{ needs.pre_activation.outputs.target_assets }}
 Open upgrade pull request (empty when there is none): ${{ needs.pre_activation.outputs.pr_number }}
 Its branch: ${{ needs.pre_activation.outputs.pr_branch }}
 
@@ -430,7 +435,8 @@ reading.
    refs, architectures, platforms, and reproducibility metadata actually required.
    Verify that the target release provides them and the checksum, digest, or
    signature evidence required by the repository's existing verification mechanism.
-   Check release assets for binary downloads, and read release metadata with the
+   Check release assets for binary downloads against the asset list above, which
+   the GitHub tools do not return, and read other release metadata with the
    GitHub tools; anonymous GitHub API requests are rate-limited. CCF publishes
    some packages, such as the Python `ccf` package on PyPI, separately, often
    later, and not for every release. Where the repository pins such a package to
