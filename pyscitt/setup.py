@@ -6,7 +6,7 @@ from os import path
 from setuptools import find_packages, setup
 
 PACKAGE_NAME = "pyscitt"
-PACKAGE_VERSION = "0.16.1"
+PACKAGE_VERSION = "0.17.0"
 
 path_here = path.abspath(path.dirname(__file__))
 
@@ -25,11 +25,10 @@ setup(
     },
     python_requires=">=3.12",
     install_requires=[
-        "ccf>=7.0.18,<8",
+        "ccf>=7.0.24,<8",
         "cryptography>=48.0.1,<51",
         "httpx",
-        # pycose 1.1.0 expects a list for a tagged COSE array; cbor2 6 returns a tuple.
-        "cbor2>=5.9,<6",
+        "cbor2>=6.1.5,<7",
         "pycose==1.1.0",
         "pyjwt",
         "loguru",

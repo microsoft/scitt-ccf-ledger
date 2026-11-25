@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 from urllib.parse import urlsplit
 
 import cbor2
-import ccf.cose
+import ccf.receipt
 import httpx
 from azure.confidentialledger.certificate import ConfidentialLedgerCertificateClient
 from cryptography import x509
@@ -27,7 +27,6 @@ from cryptography.x509 import load_der_x509_certificate
 from jwcrypto import jwk
 from pycose.headers import KID
 from pycose.keys.cosekey import CoseKey
-from pycose.messages import Sign1Message
 
 from . import crypto
 from .crypto import CWT_ISS, CWTClaims
@@ -55,10 +54,18 @@ class TrustStore(ABC):
 
 
 def verify_cose_sign1(buf: bytes, cert_pem: str):
-    msg = Sign1Message.decode(buf)
+    msg = crypto.decode_cose_sign1(buf)
     msg.key = msg.key = CoseKey.from_pem_public_key(cert_pem)
     if not msg.verify_signature():
         raise ValueError("signature is invalid")
+
+
+def verify_statement_receipt(
+    receipt: bytes, service_trust_store: TrustStore, signed_statement: bytes
+) -> dict:
+    service_key = service_trust_store.get_key(receipt)
+    ccf.receipt.verify_cose(receipt, service_key, sha256(signed_statement).digest())
+    return extract_receipt_details(crypto.decode_cose_sign1(receipt))
 
 
 def verify_transparent_statement(
@@ -66,24 +73,16 @@ def verify_transparent_statement(
     service_trust_store: TrustStore,
     input_signed_statement: bytes,
 ) -> list:
-    st = Sign1Message.decode(transparent_statement)
+    st = crypto.decode_cose_sign1(transparent_statement)
     receipts = st.uhdr.get(crypto.SCITTReceipts)
     if not receipts:
         raise ValueError(
             "The statement carries no receipt, so it is not a transparent statement"
         )
-    receipt_details = []
-    for receipt in receipts:
-        service_key = service_trust_store.get_key(receipt)
-        ccf.cose.verify_receipt(
-            receipt, service_key, sha256(input_signed_statement).digest()
-        )
-
-        # ccf.cose.verify_receipt should be improved to return full detail from the receipt
-        # at which point the following parsing can be removed and the details can be returned directly from the verify_receipt function.
-        receipt_details.append(extract_receipt_details(Sign1Message.decode(receipt)))
-
-    return receipt_details
+    return [
+        verify_statement_receipt(receipt, service_trust_store, input_signed_statement)
+        for receipt in receipts
+    ]
 
 
 class StaticTrustStore(TrustStore):
@@ -204,7 +203,7 @@ class StaticTrustStore(TrustStore):
         )
 
     def get_key(self, receipt: bytes) -> CertificatePublicKeyTypes:
-        parsed = Sign1Message.decode(receipt)
+        parsed = crypto.decode_cose_sign1(receipt)
         kid = parsed.phdr[KID]
         if kid not in self.trust_store_keys:
             try:
@@ -414,7 +413,7 @@ class DynamicTrustStore(TrustStore):
         """
         Look up a service's public key based on the protected headers from a receipt.
         """
-        parsed = Sign1Message.decode(receipt)
+        parsed = crypto.decode_cose_sign1(receipt)
         cwt = parsed.phdr[CWTClaims]
         key_id = parsed.phdr[KID]
         issuer = cwt[CWT_ISS]

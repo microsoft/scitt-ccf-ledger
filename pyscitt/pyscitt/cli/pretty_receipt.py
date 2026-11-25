@@ -69,7 +69,7 @@ def prettyprint_receipt(receipt_path: Path):
     with open(receipt_path, "rb") as f:
         buffer = f.read()
 
-    parsed = Sign1Message.decode(buffer)
+    parsed = crypto.decode_cose_sign1(buffer)
     metadata = extract_metadata(parsed)
     unprotected = decode_inclusion_proofs(parsed.uhdr)
     output_dict: dict = {

@@ -12,7 +12,7 @@ import pytest
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
-from pyscitt.cli.validate import build_trust_store
+from pyscitt.cli.validate import build_trust_store, validate_transparent_statement
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
     DEFAULT_AUTHORIZED_DOMAINS,
@@ -40,7 +40,7 @@ class TestDynamicTrustStore:
             _ = trust_store.services
 
     @patch("pyscitt.verify.jwk.JWK.from_json")
-    @patch("pyscitt.verify.Sign1Message")
+    @patch("pyscitt.verify.crypto.decode_cose_sign1")
     @patch("pyscitt.verify.load_pem_public_key")
     def test_get_key_retrieves_from_jwks(
         self, mock_load_key, mock_sign1, mock_jwk_from_json
@@ -51,7 +51,7 @@ class TestDynamicTrustStore:
         mock_cwt = {CWT_ISS: "example.com"}
         mock_kid = b"test_kid"
         mock_parsed.phdr = {CWTClaims: mock_cwt, KID: mock_kid}
-        mock_sign1.decode.return_value = mock_parsed
+        mock_sign1.return_value = mock_parsed
         mock_matched_jwk = MagicMock()
         mock_matched_jwk.export_to_pem.return_value = b"mock_pem"
         mock_jwk_from_json.return_value = mock_matched_jwk
@@ -67,7 +67,7 @@ class TestDynamicTrustStore:
         result = trust_store.get_key(mock_receipt)
 
         # Assertions
-        mock_sign1.decode.assert_called_once_with(mock_receipt)
+        mock_sign1.assert_called_once_with(mock_receipt)
         mock_client.get_jwks.assert_called_once_with("example.com")
         mock_load_key.assert_called_once_with(
             b"mock_pem",
@@ -526,6 +526,31 @@ class TestDynamicTrustStoreClient:
 
 
 class TestVerifyTransparentStatement:
+    # The original receipt and its five variants are from PR #508 (4b27e29).
+    def test_proofbundle_control(self):
+        fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
+        result = validate_transparent_statement(
+            fixtures / "valid-original-receipt-2026-10-24.cose", fixtures, offline=True
+        )
+        assert result["transparent"] is True
+
+    @pytest.mark.parametrize(
+        "case, error",
+        [
+            ("duplicate-proof-label", "(?i)duplicate map key"),
+            ("duplicate-leaf-label", "(?i)duplicate map key"),
+            ("trailing-proof-data", "Trailing data"),
+            ("trailing-receipt-data", "Trailing data"),
+            ("consistency-root-mismatch", "signed root"),
+        ],
+    )
+    def test_proofbundle_invalid_receipt(self, case, error):
+        fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
+        with pytest.raises(ValueError, match=error):
+            validate_transparent_statement(
+                fixtures / f"invalid-{case}-2026-10-24.cose", fixtures, offline=True
+            )
+
     def _build_receipt(self, issuer):
         """Build a sample COSE Sign1 receipt with CWT claims containing an issuer."""
         receipt = Sign1Message()
@@ -546,7 +571,7 @@ class TestVerifyTransparentStatement:
         ts._signature = b"fake_sig"
         return ts.encode(tag=True, sign=False)
 
-    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    @patch("pyscitt.verify.ccf.receipt.verify_cose")
     def test_returns_issuer_for_each_receipt(self, mock_verify_receipt):
         issuer = "test-issuer.example.com"
         receipt_bytes = self._build_receipt(issuer)
@@ -563,7 +588,7 @@ class TestVerifyTransparentStatement:
         assert len(details) == 1
         assert details[0]["iss"] == issuer
 
-    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    @patch("pyscitt.verify.ccf.receipt.verify_cose")
     def test_returns_issuers_for_multiple_receipts(self, mock_verify_receipt):
         issuers = ["issuer-a.example.com", "issuer-b.example.com"]
         receipts = [self._build_receipt(iss) for iss in issuers]
@@ -581,7 +606,7 @@ class TestVerifyTransparentStatement:
         assert details[0]["iss"] == issuers[0]
         assert details[1]["iss"] == issuers[1]
 
-    @patch("pyscitt.verify.ccf.cose.verify_receipt")
+    @patch("pyscitt.verify.ccf.receipt.verify_cose")
     def test_returns_none_issuer_when_no_cwt_claims(self, mock_verify_receipt):
         receipt = Sign1Message()
         receipt.phdr = {KID: b"test_kid"}
@@ -603,10 +628,7 @@ class TestVerifyTransparentStatement:
 
     def test_validate_structured_output(self):
         """Validate CLI output against a checked-in golden transparent statement."""
-        from pyscitt.cli.validate import (
-            format_validation_result,
-            validate_transparent_statement,
-        )
+        from pyscitt.cli.validate import format_validation_result
 
         golden_dir = Path(__file__).parent / "transparent_statements"
         golden_file = golden_dir / "uvm_0.2.10.cose"

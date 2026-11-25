@@ -281,7 +281,7 @@ def summarise_encoded_receipt(item: bytes) -> dict:
     format or the legacy CCF one.
     """
     try:
-        return receipt_summary(Sign1Message.decode(item))
+        return receipt_summary(crypto.decode_cose_sign1(item))
     except Exception:
         pass
     try:
@@ -302,7 +302,7 @@ def cbor_to_printable(cbor_obj: Any, cbor_obj_key: Any = None) -> Any:
             for item in cbor_obj:
                 if type(item) is bytes:
                     try:
-                        parsed = Sign1Message.decode(item)
+                        parsed = crypto.decode_cose_sign1(item)
                         receipt_as_dict = {
                             "protected": cbor_to_printable(parsed.phdr),
                             "unprotected": cbor_to_printable(

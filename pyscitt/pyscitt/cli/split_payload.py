@@ -5,13 +5,13 @@ import base64
 from pathlib import Path
 from typing import Optional
 
-from pycose.messages import Sign1Message
+from .. import crypto
 
 
 def split_payload(cose_path: Path, output: Optional[Path] = None):
     """Extract the payload from a COSE file and write it to a file or print it to stdout."""
     cose = cose_path.read_bytes()
-    decoded = Sign1Message.decode(cose)
+    decoded = crypto.decode_cose_sign1(cose)
     if not decoded.payload:
         raise ValueError("COSE object does not contain a payload")
     if not output:
