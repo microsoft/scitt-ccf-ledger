@@ -169,7 +169,10 @@ namespace scitt
       ccf::endpoints::EndpointContext>(
       fn,
       [](ccf::endpoints::EndpointContext& ctx, const std::string& error_code) {
-        get_app_data(ctx.rpc_ctx).error_code = error_code;
+        if (const auto scope = get_request_scope(*ctx.rpc_ctx))
+        {
+          scope->error_code = error_code;
+        }
       });
   }
 }
