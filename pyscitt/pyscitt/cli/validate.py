@@ -14,6 +14,7 @@ from ..verify import (
     FallbackTrustStore,
     StaticTrustStore,
     TrustStore,
+    verify_statement_receipt,
     verify_transparent_statement,
 )
 
@@ -91,16 +92,23 @@ def validate_transparent_statement(
     service_trust_store_path: Optional[Path] = None,
     authorized_domains: Optional[List[str]] = None,
     offline: bool = False,
+    receipt_path: Optional[Path] = None,
 ) -> dict:
-    transparent_statment_bytes = statement.read_bytes()
-    signed_statement = strip_uhdr(transparent_statment_bytes)
+    statement_bytes = statement.read_bytes()
     service_trust_store = build_trust_store(
         service_trust_store_path, authorized_domains, offline
     )
 
-    receipt_details = verify_transparent_statement(
-        transparent_statment_bytes, service_trust_store, signed_statement
-    )
+    if receipt_path is None:
+        receipt_details = verify_transparent_statement(
+            statement_bytes, service_trust_store, strip_uhdr(statement_bytes)
+        )
+    else:
+        receipt_details = [
+            verify_statement_receipt(
+                receipt_path.read_bytes(), service_trust_store, statement_bytes
+            )
+        ]
     result = build_validation_result(statement, receipt_details)
 
     verification_key_sources = getattr(
@@ -144,7 +152,16 @@ def format_validation_result(result: dict, output: str) -> str:
 
 def cli(fn):
     parser = fn(description="Validate a Transparent Statement")
-    parser.add_argument("statement", type=Path, help="Path to transparent statement")
+    parser.add_argument(
+        "statement",
+        type=Path,
+        help="Transparent statement, or original signed statement with --receipt",
+    )
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        help="Verify this raw receipt against the exact bytes of the signed statement (with an empty unprotected header)",
+    )
     parser.add_argument(
         "--service-trust-store",
         type=Path,
@@ -183,6 +200,7 @@ def cli(fn):
                 args.service_trust_store,
                 args.authorized_domains,
                 args.offline,
+                receipt_path=args.receipt,
             )
         except Exception as error:
             result = build_error_result(args.statement, error)

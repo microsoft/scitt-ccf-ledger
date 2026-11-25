@@ -3,6 +3,7 @@
 
 import json
 import shlex
+from hashlib import sha256
 from pathlib import Path
 
 import pycose.headers
@@ -18,6 +19,7 @@ from pyscitt.cli.governance import (
 from pyscitt.cli.main import main
 from pyscitt.client import Client
 from pyscitt.governance import ProposalNotAccepted
+from pyscitt.receipt import decode_inclusion_proofs
 
 from .infra.assertions import service_error
 from .infra.generate_cacert import generate_ca_cert_and_key
@@ -231,6 +233,16 @@ def test_submit_default_async_flow(run, tmp_path, cert_authority, configure_serv
     assert msg is not None
 
 
+@pytest.fixture
+def service_trust_store_dir(client: Client, tmp_path: Path) -> Path:
+    directory = tmp_path / "trust_store"
+    directory.mkdir()
+    keys = client.get("/.well-known/scitt-keys")
+    keys.raise_for_status()
+    (directory / "scitt-keys.cbor").write_bytes(keys.content)
+    return directory
+
+
 @pytest.mark.parametrize(
     "filepath",
     [
@@ -242,7 +254,7 @@ def test_submit_default_async_flow(run, tmp_path, cert_authority, configure_serv
     ],
 )
 def test_submit_and_validate(
-    run, tmp_path, client: Client, configure_service, filepath
+    run, tmp_path, client: Client, configure_service, filepath, service_trust_store_dir
 ):
     allow_all_policy_script = "export function apply(phdr) {return true}"
     configure_service({"policy": {"policyScript": allow_all_policy_script}})
@@ -256,22 +268,79 @@ def test_submit_and_validate(
 
     (tmp_path / "transparent_statement.cose").write_bytes(statement)
 
-    # Fetch service keys from /.well-known/scitt-keys (COSE_Key_Set in CBOR)
-    keys_resp = client.get("/.well-known/scitt-keys")
-    keys_resp.raise_for_status()
-    (tmp_path / "trust_store").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "trust_store" / "scitt-keys.cbor").write_bytes(keys_resp.content)
-
     run(
         "validate",
         tmp_path / "transparent_statement.cose",
         "--service-trust-store",
-        (tmp_path / "trust_store"),
+        service_trust_store_dir,
     )
 
     run(
         "pretty-receipt",
         tmp_path / "transparent_statement.cose",
+    )
+
+
+@pytest.mark.parametrize(
+    "variant, expected_digest",
+    [
+        # S0 uses the shortest length encoding for each byte string.
+        (
+            "s0-hash-envelope",
+            "2f83303fd413952b83b333f2149f22842a24b4c29be79bfe7e10876b8fb5e027",
+        ),
+        # S1 encodes the 64-byte signature length in two bytes instead of one.
+        (
+            "s1-hash-envelope-wide-signature-length",
+            "5bdc357014b21eb5520c85abd9305b331a6a23c01e6d39b625d7698b6c8abb4e",
+        ),
+        # S2 encodes the 32-byte payload length in two bytes instead of one.
+        (
+            "s2-hash-envelope-wide-payload-length",
+            "d1224d7591c72d4a0eba4f0ae2aab457dd6f67d1d6f82737c21bd34a245173df",
+        ),
+        # S3 encodes the 1024-byte protected-header length in four bytes instead of two.
+        (
+            "s3-hash-envelope-wide-protected-length",
+            "131105d07cb1add97c77f385cd76116b9843d4f5087ca96fc6a96d67b44c3f61",
+        ),
+    ],
+)
+def test_submit_preserves_statement_encoding(
+    run,
+    tmp_path,
+    client: Client,
+    configure_service,
+    service_trust_store_dir,
+    variant,
+    expected_digest,
+):
+    """Registration must not canonically re-encode differently encoded statements.
+
+    Each raw receipt must bind the original bytes to the distinct digest from #500.
+    """
+    configure_service(
+        {"policy": {"policyScript": "export function apply(phdr) {return true}"}}
+    )
+    path = Path(__file__).parent / "payloads" / f"proofbundle-{variant}.cose"
+    statement = path.read_bytes()
+    receipt = client.submit_signed_statement_and_wait_for_receipt(
+        statement
+    ).response_bytes
+    (proof,) = decode_inclusion_proofs(crypto.decode_cose_sign1(receipt).uhdr)[396][-1]
+    claims_digest = proof[1][2]  # Third field of the inclusion proof's leaf.
+    assert claims_digest == sha256(statement).digest() == bytes.fromhex(expected_digest)
+
+    receipt_path = tmp_path / "receipt.cose"
+    receipt_path.write_bytes(receipt)
+    run(
+        "validate",
+        path,
+        "--receipt",
+        receipt_path,
+        "--offline",
+        "--service-trust-store",
+        service_trust_store_dir,
     )
 
 

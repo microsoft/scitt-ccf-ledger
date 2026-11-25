@@ -60,6 +60,14 @@ def verify_cose_sign1(buf: bytes, cert_pem: str):
         raise ValueError("signature is invalid")
 
 
+def verify_statement_receipt(
+    receipt: bytes, service_trust_store: TrustStore, signed_statement: bytes
+) -> dict:
+    service_key = service_trust_store.get_key(receipt)
+    ccf.receipt.verify_cose(receipt, service_key, sha256(signed_statement).digest())
+    return extract_receipt_details(crypto.decode_cose_sign1(receipt))
+
+
 def verify_transparent_statement(
     transparent_statement: bytes,
     service_trust_store: TrustStore,
@@ -71,18 +79,10 @@ def verify_transparent_statement(
         raise ValueError(
             "The statement carries no receipt, so it is not a transparent statement"
         )
-    receipt_details = []
-    for receipt in receipts:
-        service_key = service_trust_store.get_key(receipt)
-        ccf.receipt.verify_cose(
-            receipt, service_key, sha256(input_signed_statement).digest()
-        )
-
-        receipt_details.append(
-            extract_receipt_details(crypto.decode_cose_sign1(receipt))
-        )
-
-    return receipt_details
+    return [
+        verify_statement_receipt(receipt, service_trust_store, input_signed_statement)
+        for receipt in receipts
+    ]
 
 
 class StaticTrustStore(TrustStore):
