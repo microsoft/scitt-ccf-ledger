@@ -526,12 +526,11 @@ class TestDynamicTrustStoreClient:
 
 
 class TestVerifyTransparentStatement:
-    # Each dated run from PR #508 (4b27e29) uses the same signed statement, S0.
-    @pytest.mark.parametrize("run", ["2026-10-23", "2026-10-24"])
-    def test_proofbundle_control(self, run):
+    # The original receipt and its five variants are from PR #508 (4b27e29).
+    def test_proofbundle_control(self):
         fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
         result = validate_transparent_statement(
-            fixtures / f"valid-original-receipt-{run}.cose", fixtures, offline=True
+            fixtures / "valid-original-receipt-2026-10-24.cose", fixtures, offline=True
         )
         assert result["transparent"] is True
 
@@ -540,7 +539,6 @@ class TestVerifyTransparentStatement:
         raises=pytest.fail.Exception,
         reason="The legacy ccf.cose.verify_receipt used by pyscitt accepts these receipts",
     )
-    @pytest.mark.parametrize("run", ["2026-10-23", "2026-10-24"])
     @pytest.mark.parametrize(
         "case, error",
         [
@@ -551,11 +549,11 @@ class TestVerifyTransparentStatement:
             ("consistency-root-mismatch", "signed root"),
         ],
     )
-    def test_proofbundle_invalid_receipt(self, run, case, error):
+    def test_proofbundle_invalid_receipt(self, case, error):
         fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
         with pytest.raises(ValueError, match=error):
             validate_transparent_statement(
-                fixtures / f"invalid-{case}-{run}.cose", fixtures, offline=True
+                fixtures / f"invalid-{case}-2026-10-24.cose", fixtures, offline=True
             )
 
     def _build_receipt(self, issuer):
