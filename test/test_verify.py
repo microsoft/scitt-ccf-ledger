@@ -12,7 +12,7 @@ import pytest
 from pycose.headers import KID
 from pycose.messages import Sign1Message
 
-from pyscitt.cli.validate import build_trust_store
+from pyscitt.cli.validate import build_trust_store, validate_transparent_statement
 from pyscitt.crypto import CWT_ISS, CWTClaims, SCITTReceipts
 from pyscitt.verify import (
     DEFAULT_AUTHORIZED_DOMAINS,
@@ -526,6 +526,39 @@ class TestDynamicTrustStoreClient:
 
 
 class TestVerifyTransparentStatement:
+    # PR #508 (4b27e29): K is the original receipt for each run; F1-F5
+    # are its five altered receipts. All wrap the same signed statement, S0.
+    @pytest.mark.parametrize("run", ["23", "24"])
+    def test_proofbundle_control(self, run):
+        fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
+        result = validate_transparent_statement(
+            fixtures / f"K{run}.cose", fixtures, offline=True
+        )
+        assert result["transparent"] is True
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=pytest.fail.Exception,
+        reason="The legacy ccf.cose.verify_receipt used by pyscitt accepts these receipts",
+    )
+    @pytest.mark.parametrize("run", ["23", "24"])
+    @pytest.mark.parametrize(
+        "case, error",
+        [
+            pytest.param(1, "duplicate", id="duplicate-proof-label"),
+            pytest.param(2, "duplicate", id="duplicate-leaf-label"),
+            pytest.param(3, "Trailing data", id="trailing-proof-data"),
+            pytest.param(4, "Trailing data", id="trailing-receipt-data"),
+            pytest.param(5, "signed root", id="consistency-root-mismatch"),
+        ],
+    )
+    def test_proofbundle_invalid_receipt(self, run, case, error):
+        fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
+        with pytest.raises(ValueError, match=error):
+            validate_transparent_statement(
+                fixtures / f"F{run}-{case}.cose", fixtures, offline=True
+            )
+
     def _build_receipt(self, issuer):
         """Build a sample COSE Sign1 receipt with CWT claims containing an issuer."""
         receipt = Sign1Message()
@@ -603,10 +636,7 @@ class TestVerifyTransparentStatement:
 
     def test_validate_structured_output(self):
         """Validate CLI output against a checked-in golden transparent statement."""
-        from pyscitt.cli.validate import (
-            format_validation_result,
-            validate_transparent_statement,
-        )
+        from pyscitt.cli.validate import format_validation_result
 
         golden_dir = Path(__file__).parent / "transparent_statements"
         golden_file = golden_dir / "uvm_0.2.10.cose"
