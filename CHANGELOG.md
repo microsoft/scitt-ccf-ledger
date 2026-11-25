@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 ### Changes
+- pyscitt now verifies receipts with `ccf.receipt.verify_cose` (CCF 7.0.24
+  or later), rejecting malformed inclusion proofs and inconsistent roots.
 - Update CCF to 7.0.28, including QuickJS runtime fixes, application readiness
   checks in CCF's sandbox tools, and hardened key unwrapping and snapshot recovery.
 - Update CCF to 7.0.27, adopting TAV 2.0's bounded CBOR parsing and unified
@@ -36,8 +38,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `/node/tx` for the commit state, and SCITT's own endpoints for entries and
   receipts.
 - Fix fresh pyscitt installations rejecting valid transparent statements in
-  `scitt validate` and `scitt pretty-receipt` by requiring a `cbor2` version
-  compatible with `pycose`.
+  `scitt validate` and `scitt pretty-receipt` by decoding COSE_Sign1 arrays
+  in a form compatible with `pycose` on `cbor2` 6.
 
 ## [0.21.0]
 ### Upgrade notes

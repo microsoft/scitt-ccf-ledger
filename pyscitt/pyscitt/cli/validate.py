@@ -6,8 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from pycose.messages import Sign1Message
-
+from .. import crypto
 from ..receipt import summarise_receipt_details
 from ..verify import (
     DEFAULT_AUTHORIZED_DOMAINS,
@@ -23,7 +22,7 @@ def strip_uhdr(cose: bytes) -> bytes:
     """
     Strip the uhdr from a COSE message.
     """
-    msg = Sign1Message.decode(cose)
+    msg = crypto.decode_cose_sign1(cose)
     msg.uhdr = {}
     return msg.encode(tag=True, sign=False)
 

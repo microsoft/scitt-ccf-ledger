@@ -9,7 +9,6 @@ import pycose.headers
 import pytest
 from cryptography.x509 import ExtendedKeyUsage, load_der_x509_certificate
 from loguru import logger as LOG
-from pycose.messages import CoseMessage
 
 from pyscitt import crypto
 from pyscitt.cli.governance import (
@@ -95,7 +94,7 @@ def test_adhoc_signer(run, tmp_path: Path):
     )
 
     data = (tmp_path / "signed_statement.cose").read_bytes()
-    msg = CoseMessage.decode(data)
+    msg = crypto.decode_cose_sign1(data)
     x5c = msg.get_attr(pycose.headers.X5chain)
     assert isinstance(x5c, list)
     assert len(x5c) == 2
@@ -188,7 +187,7 @@ def test_submit_wait_for_commit(run, tmp_path, cert_authority, configure_service
     assert len(receipt_bytes) > 0
 
     # Verify the output is valid COSE
-    msg = CoseMessage.decode(receipt_bytes)
+    msg = crypto.decode_cose_sign1(receipt_bytes)
     assert msg is not None
 
 
@@ -228,7 +227,7 @@ def test_submit_default_async_flow(run, tmp_path, cert_authority, configure_serv
     assert len(receipt_bytes) > 0
 
     # Verify the output is valid COSE
-    msg = CoseMessage.decode(receipt_bytes)
+    msg = crypto.decode_cose_sign1(receipt_bytes)
     assert msg is not None
 
 

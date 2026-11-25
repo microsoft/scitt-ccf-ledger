@@ -3,10 +3,8 @@
 
 import datetime
 import struct
-from io import BytesIO
 
 import cbor2
-import cbor2._encoder
 import pycose
 import pytest
 from cryptography import x509
@@ -30,46 +28,16 @@ from .infra.assertions import service_error
 from .infra.x5chain_certificate_authority import X5ChainCertificateAuthority
 
 
-class NonCanonicalEncoder(cbor2._encoder.CBOREncoder):  # type: ignore[name-defined]
-    """
-    A variant of cbor2's encoder that introduces deliberate non-canonical
-    encodings.
-
-    For most payloads, even setting the canonical flag on cbor2's encoder to
-    False produces messages that are canonical anyway, simply as these are also
-    the most compact encoding.
-
-    This class goes out of its way to produce inefficiently encoded message.
-
-    Note that this derives from cbor2.encoder.CBOREncoder, which is different
-    than cbor2.CBOREncoder. The former is the Python implementation, whereas
-    the latter may be implemented in C, and we can't override its
-    implementation.
-    """
-
-    def __init__(self, fp):
-        super().__init__(fp, canonical=False)
-
-        # There are two definitions in the C and Python modules. Make sure we support either.
-        self._encoders[cbor2.CBORTag] = self._encoders[cbor2._encoder.CBORTag]
-        self._encoders[cbor2.CBORSimpleValue] = self._encoders[
-            cbor2._encoder.CBORSimpleValue
-        ]
-
-    def encode_length(self, major_tag, length):
-        # All lengths are encoded using 8 bytes, regardless of the value, for
-        # maximum inefficiency. This function gets called to encode integer
-        # values too, so the same applies.
-        self._fp_write(struct.pack(">BQ", (major_tag << 5) | 27, length))
-
-
 def cbor_encode(obj, *, canonical=True):
-    with BytesIO() as fp:
-        if canonical:
-            cbor2.CBOREncoder(fp, canonical=canonical).encode(obj)
-        else:
-            NonCanonicalEncoder(fp).encode(obj)
-        return fp.getvalue()
+    data = cbor2.dumps(obj, canonical=canonical)
+    if canonical:
+        return data
+    # Give the outer item's argument a non-preferred eight-byte encoding.
+    major, arg = divmod(data[0], 32)
+    assert major < 7 and arg < 27
+    width = 0 if arg < 24 else 1 << (arg - 24)
+    value = int.from_bytes(data[1 : 1 + width]) if width else arg
+    return struct.pack(">BQ", major << 5 | 27, value) + data[1 + width :]
 
 
 @pytest.mark.parametrize(
@@ -228,7 +196,7 @@ class TestAdditionalProtectedHeaders:
 
         # The service and any other consumer sees a bstr, and has to decode it
         # explicitly to get at the map.
-        embedded = Sign1Message.decode(message).phdr["foo"]
+        embedded = crypto.decode_cose_sign1(message).phdr["foo"]
         assert isinstance(embedded, bytes)
         assert cbor2.loads(embedded) == {"bar": "baz"}
 
@@ -240,7 +208,7 @@ class TestAdditionalProtectedHeaders:
             additional_phdr={"foo": {"bar": "baz"}},
         )
 
-        decoded = Sign1Message.decode(message)
+        decoded = crypto.decode_cose_sign1(message)
         assert decoded.phdr["foo"] == {"bar": "baz"}
 
         decoded.key = CoseKey.from_pem_private_key(signer.private_key)
@@ -270,7 +238,7 @@ class TestAdditionalProtectedHeaders:
             == "a363666f6fa2014201022282182a637175780126036a746578742f706c61696e"
         )
 
-        assert Sign1Message.decode(message).phdr["foo"] == {
+        assert crypto.decode_cose_sign1(message).phdr["foo"] == {
             1: b"\x01\x02",
             -3: [42, "qux"],
         }
@@ -294,7 +262,7 @@ class TestAdditionalProtectedHeaders:
             "0fa1016d6469643a783530393a74657374"
         )
 
-        decoded = Sign1Message.decode(message)
+        decoded = crypto.decode_cose_sign1(message)
         assert decoded.phdr["foo"] == {"bar": "baz"}
         assert decoded.phdr[CWTClaims] == {CWT_ISS: "did:x509:test"}
 

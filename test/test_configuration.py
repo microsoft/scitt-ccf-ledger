@@ -472,8 +472,8 @@ class TestPolicyEngine:
 
         assert transparent_statement != input_statement
 
-        input_message = pycose.messages.CoseMessage.decode(input_statement)
-        output_message = pycose.messages.CoseMessage.decode(transparent_statement)
+        input_message = crypto.decode_cose_sign1(input_statement)
+        output_message = crypto.decode_cose_sign1(transparent_statement)
         input_receipts = input_message.uhdr.get(crypto.SCITTReceipts, [])
         output_receipts = output_message.uhdr.get(crypto.SCITTReceipts, [])
 
@@ -481,7 +481,7 @@ class TestPolicyEngine:
         if input_receipts:
             assert output_receipts[0] != input_receipts[0]
 
-        output_receipt = pycose.messages.Sign1Message.decode(output_receipts[0])
+        output_receipt = crypto.decode_cose_sign1(output_receipts[0])
         output_cwt = output_receipt.phdr[crypto.CWTClaims]
         assert output_cwt[crypto.CWT_ISS] == f"127.0.0.1:{urlparse(service_url).port}"
 

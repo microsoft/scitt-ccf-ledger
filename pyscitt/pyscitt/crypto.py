@@ -420,8 +420,26 @@ def cose_header_to_jws_header(cose_header: dict) -> dict:
     return jws_header
 
 
+def _load_cose(buf: bytes) -> Any:
+    # cbor2 6 freezes arrays and maps inside unknown tags. pycose consumes
+    # the four-element Sign1 array with pop() and expects mutable headers.
+    tag = Sign1Message.cbor_tag
+    return cbor2.loads(
+        buf, semantic_decoders={tag: lambda value, _: cbor2.CBORTag(tag, value)}
+    )
+
+
+def decode_cose_sign1(buf: bytes) -> Sign1Message:
+    message = _load_cose(buf)
+    if not isinstance(message, cbor2.CBORTag) or message.tag != Sign1Message.cbor_tag:
+        raise ValueError("Expected a tagged COSE_Sign1 message")
+    if not isinstance(message.value, list) or len(message.value) != 4:
+        raise ValueError("Expected a four-element COSE_Sign1 array")
+    return Sign1Message.from_cose_obj(message.value, allow_unknown_attributes=True)
+
+
 def parse_cose_sign1(buf: bytes) -> Tuple[dict, bytes]:
-    msg = Sign1Message.decode(buf)
+    msg = decode_cose_sign1(buf)
     header = cose_header_to_jws_header(msg.phdr)
     payload = msg.payload
     assert payload, "Payload is null"
@@ -443,7 +461,7 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
     # Need to parse the receipt to avoid wrapping it in a bstr.
     parsed_receipt = cbor2.loads(receipt)
 
-    outer = cbor2.loads(buf)
+    outer = _load_cose(buf)
     if hasattr(outer, "tag"):
         assert outer.tag == 18  # COSE_Sign1
         val = outer.value  # type: ignore[attr-defined]
@@ -459,7 +477,7 @@ def embed_receipt_in_cose(buf: bytes, receipt: bytes) -> bytes:
 
 def get_last_embedded_receipt_from_cose(buf: bytes) -> Union[bytes, None]:
     """Extract the last receipt from the unprotected header of a COSE_Sign1 message."""
-    outer = cbor2.loads(buf)
+    outer = _load_cose(buf)
     if hasattr(outer, "tag"):
         assert outer.tag == 18  # COSE_Sign1
         val = outer.value  # type: ignore[attr-defined]

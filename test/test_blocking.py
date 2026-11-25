@@ -6,9 +6,8 @@ from hashlib import sha256
 from http import HTTPStatus
 
 import cbor2
-import ccf.cose
+import ccf.receipt
 from loguru import logger as LOG
-from pycose.messages import CoseMessage
 
 from pyscitt import crypto
 from pyscitt.client import Client
@@ -47,7 +46,7 @@ def test_blocking_entries(
     )
 
     # Decode via pycose to show the raw COSE structure
-    cose_msg = CoseMessage.decode(submission.response_bytes)
+    cose_msg = crypto.decode_cose_sign1(submission.response_bytes)
     LOG.info(f"COSE message type: {type(cose_msg).__name__}")
     LOG.info(f"COSE protected headers: {cose_msg.phdr}")
     LOG.info(f"COSE unprotected headers: {cose_msg.uhdr}")
@@ -66,9 +65,9 @@ def test_blocking_entries(
     )
     LOG.info(f"Unprotected headers: {uhdr}")
 
-    # Verify the receipt against the signed statement using ccf.cose directly.
+    # Verify the receipt against the signed statement using CCF directly.
     service_key = trust_store.get_key(submission.response_bytes)
-    ccf.cose.verify_receipt(
+    ccf.receipt.verify_cose(
         submission.response_bytes,
         service_key,
         sha256(signed_statement).digest(),

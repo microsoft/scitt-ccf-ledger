@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-from pycose.messages import Sign1Message
 
 from pyscitt import crypto
 from pyscitt.cli.pretty_receipt import prettyprint_receipt
@@ -29,7 +28,7 @@ EXPECTED_SUMMARY = {
 @pytest.fixture
 def standalone_receipt(tmp_path: Path) -> Path:
     """The receipt embedded in the golden transparent statement, on its own."""
-    statement = Sign1Message.decode(GOLDEN_STATEMENT.read_bytes())
+    statement = crypto.decode_cose_sign1(GOLDEN_STATEMENT.read_bytes())
     receipt = statement.uhdr[crypto.SCITTReceipts][0]
     path = tmp_path / "receipt.cose"
     path.write_bytes(receipt)
