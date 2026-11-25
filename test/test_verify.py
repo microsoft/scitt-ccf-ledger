@@ -526,13 +526,12 @@ class TestDynamicTrustStoreClient:
 
 
 class TestVerifyTransparentStatement:
-    # PR #508 (4b27e29): K is the original receipt for each run; F1-F5
-    # are its five altered receipts. All wrap the same signed statement, S0.
-    @pytest.mark.parametrize("run", ["23", "24"])
+    # Each dated run from PR #508 (4b27e29) uses the same signed statement, S0.
+    @pytest.mark.parametrize("run", ["2026-10-23", "2026-10-24"])
     def test_proofbundle_control(self, run):
         fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
         result = validate_transparent_statement(
-            fixtures / f"K{run}.cose", fixtures, offline=True
+            fixtures / f"valid-original-receipt-{run}.cose", fixtures, offline=True
         )
         assert result["transparent"] is True
 
@@ -541,22 +540,22 @@ class TestVerifyTransparentStatement:
         raises=pytest.fail.Exception,
         reason="The legacy ccf.cose.verify_receipt used by pyscitt accepts these receipts",
     )
-    @pytest.mark.parametrize("run", ["23", "24"])
+    @pytest.mark.parametrize("run", ["2026-10-23", "2026-10-24"])
     @pytest.mark.parametrize(
         "case, error",
         [
-            pytest.param(1, "duplicate", id="duplicate-proof-label"),
-            pytest.param(2, "duplicate", id="duplicate-leaf-label"),
-            pytest.param(3, "Trailing data", id="trailing-proof-data"),
-            pytest.param(4, "Trailing data", id="trailing-receipt-data"),
-            pytest.param(5, "signed root", id="consistency-root-mismatch"),
+            ("duplicate-proof-label", "duplicate"),
+            ("duplicate-leaf-label", "duplicate"),
+            ("trailing-proof-data", "Trailing data"),
+            ("trailing-receipt-data", "Trailing data"),
+            ("consistency-root-mismatch", "signed root"),
         ],
     )
     def test_proofbundle_invalid_receipt(self, run, case, error):
         fixtures = Path(__file__).parent / "transparent_statements" / "proofbundle"
         with pytest.raises(ValueError, match=error):
             validate_transparent_statement(
-                fixtures / f"F{run}-{case}.cose", fixtures, offline=True
+                fixtures / f"invalid-{case}-{run}.cose", fixtures, offline=True
             )
 
     def _build_receipt(self, issuer):
